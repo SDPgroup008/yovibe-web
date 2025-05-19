@@ -1,0 +1,11 @@
+[build]
+  command = "expo export:web"
+  publish = "web-build"
+  
+[dev]
+  command = "npm run start"
+  
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
