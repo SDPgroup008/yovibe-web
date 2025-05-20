@@ -1,0 +1,9 @@
+{
+  "background_color": "#121212",
+  "display": "standalone",
+  "lang": "en",
+  "name": "yo-vibe",
+  "short_name": "yo-vibe",
+  "start_url": "/?utm_source=web_app_manifest",
+  "orientation": "portrait"
+}
