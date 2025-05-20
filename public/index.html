@@ -1,230 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <meta name="theme-color" content="#000000" />
   <title>YoVibe - Find the Best Nightlife</title>
   <style>
-    * {
+    html, body, #root {
+      width: 100%;
+      height: 100%;
       margin: 0;
       padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
       background-color: #121212;
-      color: #ffffff;
-      line-height: 1.6;
     }
     
-    .container {
-      max-width: 1200px;
-      margin: 0 auto;
-      padding: 0 20px;
-    }
-    
-    header {
-      padding: 30px 0;
-      text-align: center;
-    }
-    
-    .logo {
-      font-size: 36px;
-      font-weight: bold;
-      margin-bottom: 10px;
-      color: #2196F3;
-    }
-    
-    .tagline {
-      font-size: 18px;
-      color: #cccccc;
-      margin-bottom: 30px;
-    }
-    
-    .hero {
+    .loading {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      text-align: center;
-      padding: 60px 0;
-      min-height: 60vh;
-    }
-    
-    .hero h1 {
-      font-size: 48px;
-      margin-bottom: 20px;
-      background: linear-gradient(45deg, #2196F3, #6f42c1);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-    
-    .hero p {
-      font-size: 20px;
-      max-width: 700px;
-      margin: 0 auto 40px;
-      color: #aaaaaa;
-    }
-    
-    .cta-buttons {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
-    
-    .cta-button {
-      display: inline-block;
-      padding: 15px 30px;
-      background-color: #2196F3;
+      height: 100vh;
       color: white;
-      text-decoration: none;
-      border-radius: 5px;
-      font-weight: bold;
-      font-size: 18px;
-      transition: all 0.3s ease;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
-    .cta-button:hover {
-      background-color: #1976D2;
-      transform: translateY(-2px);
-      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
-    }
-    
-    .cta-button.secondary {
-      background-color: transparent;
-      border: 2px solid #2196F3;
-      color: #2196F3;
-    }
-    
-    .cta-button.secondary:hover {
-      background-color: rgba(33, 150, 243, 0.1);
-    }
-    
-    .features {
-      padding: 60px 0;
-      background-color: #1a1a1a;
-    }
-    
-    .features h2 {
-      text-align: center;
-      font-size: 36px;
-      margin-bottom: 50px;
-      color: #ffffff;
-    }
-    
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 30px;
-    }
-    
-    .feature-card {
-      background-color: #222222;
-      padding: 30px;
-      border-radius: 10px;
-      text-align: center;
-      transition: transform 0.3s ease;
-    }
-    
-    .feature-card:hover {
-      transform: translateY(-10px);
-    }
-    
-    .feature-icon {
-      font-size: 48px;
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-radius: 50%;
+      border-top-color: #2196F3;
+      animation: spin 1s ease-in-out infinite;
       margin-bottom: 20px;
-      color: #2196F3;
     }
     
-    .feature-card h3 {
-      font-size: 24px;
-      margin-bottom: 15px;
-      color: #ffffff;
-    }
-    
-    .feature-card p {
-      color: #aaaaaa;
-    }
-    
-    footer {
-      padding: 40px 0;
-      text-align: center;
-      background-color: #0a0a0a;
-    }
-    
-    footer p {
-      color: #777777;
-    }
-    
-    @media (max-width: 768px) {
-      .hero h1 {
-        font-size: 36px;
-      }
-      
-      .hero p {
-        font-size: 18px;
-      }
-      
-      .cta-buttons {
-        flex-direction: column;
-        gap: 15px;
-      }
-      
-      .feature-card {
-        padding: 20px;
-      }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container">
-      <div class="logo">YoVibe</div>
-      <div class="tagline">Find the Best Nightlife</div>
+  <div id="root">
+    <div class="loading">
+      <div class="loading-spinner"></div>
+      <p>Loading YoVibe...</p>
     </div>
-  </header>
-  
-  <section class="hero">
-    <div class="container">
-      <h1>Discover Amazing Events Near You</h1>
-      <p>YoVibe helps you find the hottest parties, concerts, and events in your area. Purchase tickets, connect with friends, and never miss out on the fun.</p>
-      <div class="cta-buttons">
-        <a href="#" class="cta-button">Download the App</a>
-        <a href="#" class="cta-button secondary">Learn More</a>
-      </div>
-    </div>
-  </section>
-  
-  <section class="features">
-    <div class="container">
-      <h2>Why Choose YoVibe?</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🎉</div>
-          <h3>Discover Events</h3>
-          <p>Find the best events happening near you with our curated recommendations.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎟️</div>
-          <h3>Easy Ticketing</h3>
-          <p>Purchase tickets directly in the app with just a few taps.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">👥</div>
-          <h3>Connect with Friends</h3>
-          <p>See which events your friends are attending and join them.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-  
-  <footer>
-    <div class="container">
-      <p>&copy; 2025 YoVibe. All rights reserved.</p>
-    </div>
-  </footer>
+  </div>
 </body>
 </html>
