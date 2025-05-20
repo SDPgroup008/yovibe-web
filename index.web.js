@@ -1,6 +1,6 @@
 import './polyfills';
 import React from 'react';
-import { AppRegistry, View, Text, StyleSheet } from 'react-native';
+import { AppRegistry, View, Text, StyleSheet, Platform } from 'react-native';
 import App from './App'; // Your regular App component
 
 // Fallback component in case the main app fails to render
@@ -8,10 +8,10 @@ const FallbackApp = () => (
   <View style={styles.container}>
     <Text style={styles.title}>Welcome to YoVibe</Text>
     <Text style={styles.subtitle}>
-      We're experiencing some technical difficulties with the web version.
+      Your ultimate nightlife discovery platform
     </Text>
     <Text style={styles.message}>
-      Please try again later or download our mobile app for the full experience.
+      For the best experience, please download our mobile app where you can browse events, purchase tickets, and more.
     </Text>
   </View>
 );
@@ -21,24 +21,24 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: '#121212',
     padding: 20,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#000000',
+    color: '#ffffff',
     marginBottom: 16,
   },
   subtitle: {
     fontSize: 16,
-    color: '#666666',
+    color: '#cccccc',
     marginBottom: 8,
     textAlign: 'center',
   },
   message: {
     fontSize: 14,
-    color: '#888888',
+    color: '#aaaaaa',
     textAlign: 'center',
   },
 });
@@ -50,7 +50,7 @@ AppRegistry.registerComponent('YoVibe', () => App);
 AppRegistry.registerComponent('YoVibeFallback', () => FallbackApp);
 
 // Initialize the app for web
-if (window.document) {
+if (Platform.OS === 'web' && typeof window !== 'undefined' && window.document) {
   try {
     AppRegistry.runApplication('YoVibe', {
       rootTag: document.getElementById('root')
@@ -58,8 +58,19 @@ if (window.document) {
   } catch (error) {
     console.error('Failed to run main app:', error);
     // Run fallback if main app fails
-    AppRegistry.runApplication('YoVibeFallback', {
-      rootTag: document.getElementById('root')
-    });
+    try {
+      AppRegistry.runApplication('YoVibeFallback', {
+        rootTag: document.getElementById('root')
+      });
+    } catch (fallbackError) {
+      console.error('Failed to run fallback app:', fallbackError);
+      // If all else fails, show the fallback HTML
+      if (document.getElementById('fallback')) {
+        document.getElementById('fallback').style.display = 'flex';
+        if (document.querySelector('.loading')) {
+          document.querySelector('.loading').style.display = 'none';
+        }
+      }
+    }
   }
 }
