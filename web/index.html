@@ -37,6 +37,47 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    
+    .fallback {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      color: white;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      text-align: center;
+      padding: 0 20px;
+    }
+    
+    .fallback h1 {
+      margin-bottom: 16px;
+      font-size: 28px;
+    }
+    
+    .fallback p {
+      margin-bottom: 12px;
+      font-size: 16px;
+      max-width: 600px;
+      line-height: 1.5;
+    }
+    
+    .cta-button {
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 24px;
+      text-decoration: none;
+    }
+    
+    .cta-button:hover {
+      background-color: #1976D2;
+    }
   </style>
 </head>
 <body>
@@ -46,5 +87,32 @@
       <p>Loading YoVibe...</p>
     </div>
   </div>
+  
+  <div id="fallback" class="fallback">
+    <h1>Welcome to YoVibe</h1>
+    <p>Your ultimate nightlife discovery platform</p>
+    <p>For the best experience, please download our mobile app where you can browse events, purchase tickets, and more.</p>
+    <a href="#" class="cta-button">Download the App</a>
+  </div>
+  
+  <script>
+    // Fix for touch events in React Native Web
+    document.addEventListener('touchstart', function() {}, { passive: true });
+    document.addEventListener('touchmove', function() {}, { passive: true });
+    document.addEventListener('touchend', function() {}, { passive: true });
+    
+    // Show fallback content if app doesn't render within 8 seconds
+    setTimeout(function() {
+      const rootContent = document.getElementById('root').innerHTML;
+      const loadingElement = document.querySelector('.loading');
+      
+      // If we still only have the loading element or nothing has rendered
+      if (!rootContent || 
+          (loadingElement && rootContent.includes(loadingElement.outerHTML))) {
+        document.getElementById('fallback').style.display = 'flex';
+        document.querySelector('.loading').style.display = 'none';
+      }
+    }, 8000);
+  </script>
 </body>
 </html>
