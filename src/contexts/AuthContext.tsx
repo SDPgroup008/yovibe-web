@@ -9,6 +9,7 @@ import FirebaseService from "../services/FirebaseService"
 import type { User, UserType } from "../models/User"
 import { reset, navigate } from "../utils/navigationRef"
 import { isDevelopment } from "../utils/env"
+import { Platform } from "react-native"
 
 interface AuthContextType {
   user: User | null
@@ -24,9 +25,32 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 // Key for storing user data in AsyncStorage
 const USER_STORAGE_KEY = "yovibe_user_data"
 
+// Helper function to safely navigate
+const safeNavigate = (routeConfig: any) => {
+  try {
+    // Only attempt navigation on non-web platforms or if navigation is available
+    if (Platform.OS !== 'web' || (typeof reset === 'function')) {
+      reset(routeConfig)
+    } else {
+      console.log('Navigation not available on web or not initialized')
+    }
+  } catch (navError) {
+    console.warn("Navigation error:", navError)
+    // Try fallback navigation if available
+    if (typeof navigate === 'function' && Platform.OS !== 'web') {
+      try {
+        navigate(routeConfig.routes[0].name)
+      } catch (fallbackError) {
+        console.error("Fallback navigation failed:", fallbackError)
+      }
+    }
+  }
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authInitialized, setAuthInitialized] = useState(false)
 
   // Load user from AsyncStorage on initial load
   useEffect(() => {
@@ -48,53 +72,94 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     console.log("Setting up auth state listener")
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setLoading(true)
-      console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
+    let unsubscribe: () => void;
+    
+    try {
+      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+        setLoading(true)
+        console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
+        setAuthInitialized(true)
 
-      if (firebaseUser) {
-        try {
-          // For development/testing, create a mock user if Firebase is not properly configured
-          let userProfile
+        if (firebaseUser) {
           try {
-            userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
-          } catch (error) {
-            console.warn("Error fetching user profile, using mock data:", error)
-            // Create a mock user for development
-            userProfile = {
-              id: "mock-id",
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || "test@example.com",
-              userType: "user" as UserType,
-              createdAt: new Date(),
-              lastLoginAt: new Date(),
+            // For development/testing, create a mock user if Firebase is not properly configured
+            let userProfile
+            try {
+              userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
+            } catch (error) {
+              console.warn("Error fetching user profile, using mock data:", error)
+              // Create a mock user for development
+              userProfile = {
+                id: "mock-id",
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || "test@example.com",
+                userType: "user" as UserType,
+                createdAt: new Date(),
+                lastLoginAt: new Date(),
+              }
             }
+
+            setUser(userProfile)
+            console.log("User profile loaded:", userProfile.email)
+
+            // Store user data in AsyncStorage
+            await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
+          } catch (error) {
+            console.error("Error in auth state change handler:", error)
+            setUser(null)
+            await AsyncStorage.removeItem(USER_STORAGE_KEY)
           }
-
-          setUser(userProfile)
-          console.log("User profile loaded:", userProfile.email)
-
-          // Store user data in AsyncStorage
-          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
-        } catch (error) {
-          console.error("Error in auth state change handler:", error)
+        } else {
+          console.log("No user found, clearing user state")
           setUser(null)
           await AsyncStorage.removeItem(USER_STORAGE_KEY)
         }
-      } else {
-        console.log("No user found, clearing user state")
-        setUser(null)
-        await AsyncStorage.removeItem(USER_STORAGE_KEY)
-      }
 
+        setLoading(false)
+      });
+    } catch (error) {
+      console.error("Error setting up auth state listener:", error)
       setLoading(false)
-    })
+      setAuthInitialized(true)
+      
+      // For web platform, create a mock user to prevent black screen
+      if (Platform.OS === 'web') {
+        console.log("Web platform: Creating mock user for display purposes")
+        const mockUser = {
+          id: "web-mock-id",
+          uid: "web-mock-uid",
+          email: "web-user@example.com",
+          userType: "user" as UserType,
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
+        }
+        setUser(mockUser)
+      }
+    }
 
     return () => {
       console.log("Cleaning up auth state listener")
-      unsubscribe()
+      if (unsubscribe) {
+        unsubscribe()
+      }
     }
   }, [])
+
+  // Special handling for web platform to prevent black screen
+  useEffect(() => {
+    if (Platform.OS === 'web' && authInitialized && !user && !loading) {
+      console.log("Web platform: No authenticated user, creating mock user for display")
+      const mockUser = {
+        id: "web-guest-id",
+        uid: "web-guest-uid",
+        email: "guest@example.com",
+        userType: "user" as UserType,
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
+      }
+      setUser(mockUser)
+    }
+  }, [authInitialized, user, loading])
 
   const signIn = async (email: string, password: string) => {
     console.log("Attempting to sign in:", email)
@@ -120,13 +185,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Navigate to main app after successful login
-      try {
-        reset({
+      if (Platform.OS !== 'web') {
+        safeNavigate({
           index: 0,
           routes: [{ name: "Main" }],
         })
-      } catch (navError) {
-        console.warn("Navigation error:", navError)
       }
     } catch (error) {
       console.error("Error signing in:", error)
@@ -176,13 +239,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Navigate to main app after successful signup
-      try {
-        reset({
+      if (Platform.OS !== 'web') {
+        safeNavigate({
           index: 0,
           routes: [{ name: "Main" }],
         })
-      } catch (navError) {
-        console.warn("Navigation error:", navError)
       }
     } catch (error) {
       console.error("Error signing up:", error)
@@ -219,15 +280,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Sign out successful")
 
       // Navigate to Auth/Login screen after sign out
-      try {
-        reset({
+      if (Platform.OS !== 'web') {
+        safeNavigate({
           index: 0,
           routes: [{ name: "Auth" }],
         })
-      } catch (navError) {
-        console.warn("Navigation error:", navError)
-        // Fallback navigation
-        navigate("Auth")
       }
     } catch (error) {
       console.error("Error signing out:", error)
@@ -237,15 +294,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null)
 
       // Still navigate to Auth screen even if there was an error
-      try {
-        reset({
+      if (Platform.OS !== 'web') {
+        safeNavigate({
           index: 0,
           routes: [{ name: "Auth" }],
         })
-      } catch (navError) {
-        console.warn("Navigation error:", navError)
-        // Fallback navigation
-        navigate("Auth")
       }
     } finally {
       setLoading(false)
