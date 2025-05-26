@@ -1,6 +1,6 @@
 [build]
-  command = "expo export:web"
-  publish = "web-build"
+  command = "npm run build"
+  publish = "dist"
   
 [dev]
   command = "npm run start"
