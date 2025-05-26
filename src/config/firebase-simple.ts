@@ -6,12 +6,12 @@ import { getStorage } from "firebase/storage"
 // Your web app's Firebase configuration
 // Replace with your actual Firebase config
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "your-app.firebaseapp.com",
-  projectId: "your-app",
-  storageBucket: "your-app.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
+  authDomain: "eco-guardian-bd74f.firebaseapp.com",
+  projectId: "eco-guardian-bd74f",
+  storageBucket: "eco-guardian-bd74f.firebasestorage.app",
+  messagingSenderId: "917905910857",
+  appId: "1:917905910857:android:5886ab1db46cec56912398",
 }
 
 // Initialize Firebase
