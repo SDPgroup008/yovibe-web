@@ -4,26 +4,22 @@
     "slug": "yo-vibe",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.svg",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.svg",
-      "resizeMode": "contain",
-      "backgroundColor": "#121212"
+      "backgroundColor": "#121212",
+      "resizeMode": "contain"
     },
-    "assetBundlePatterns": ["**/*"],
     "platforms": ["ios", "android", "web"],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.svg",
         "backgroundColor": "#121212"
       }
     },
     "web": {
-      "favicon": "./assets/favicon.svg",
       "bundler": "metro"
     }
   }
