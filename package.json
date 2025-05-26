@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start --web",
-    "build": "expo export:web",
+    "build": "npx expo export --platform web",
     "deploy": "netlify deploy --prod"
   },
   "dependencies": {
