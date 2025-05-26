@@ -1,68 +1,47 @@
-import { initializeApp, getApps as getFirebaseApps, getApp as getFirebaseApp } from "firebase/app"
+import { initializeApp } from "firebase/app"
 import { getAuth } from "firebase/auth"
 import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
-import firebase from "firebase/compat/app"
-import "firebase/compat/auth"
-import "firebase/compat/firestore"
-import "firebase/compat/storage"
 
 // Your web app's Firebase configuration
 // Replace with your actual Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
-  authDomain: "eco-guardian-bd74f.firebaseapp.com",
-  projectId: "eco-guardian-bd74f",
-  storageBucket: "eco-guardian-bd74f.appspot.com",
-  messagingSenderId: "917905910857",
-  appId: "1:917905910857:android:5886ab1db46cec56912398",
+  apiKey: "YOUR_API_KEY",
+  authDomain: "your-app.firebaseapp.com",
+  projectId: "your-app",
+  storageBucket: "your-app.appspot.com",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
 }
 
 // Initialize Firebase
 let app, auth, db, storage
 
 try {
-  // Initialize Firebase only if it hasn't been initialized yet
-  if (!getFirebaseApps().length) {
-    app = initializeApp(firebaseConfig)
-  } else {
-    app = getFirebaseApp()
-  }
-
+  // Initialize Firebase
+  app = initializeApp(firebaseConfig)
   auth = getAuth(app)
   db = getFirestore(app)
   storage = getStorage(app)
+
+  console.log("Firebase initialized successfully")
 } catch (error) {
   console.error("Error initializing Firebase:", error)
 
-  // Create mock implementations for development/testing
+  // Create mock implementations for development
   auth = {
     currentUser: null,
     onAuthStateChanged: (callback) => {
       callback(null)
       return () => {}
     },
-  }
-  db = {}
-  storage = {}
-}
+    signInWithEmailAndPassword: () => Promise.reject(new Error("Firebase not initialized")),
+    createUserWithEmailAndPassword: () => Promise.reject(new Error("Firebase not initialized")),
+    signOut: () => Promise.reject(new Error("Firebase not initialized")),
+  } as any
 
-// Helper function to check if Firebase apps are initialized
-function getApps() {
-  try {
-    return firebase.apps
-  } catch (e) {
-    return []
-  }
-}
-
-// Helper function to get the default app
-function getApp() {
-  try {
-    return firebase.app()
-  } catch (e) {
-    return null
-  }
+  db = {} as any
+  storage = {} as any
 }
 
 // Export the Firebase services

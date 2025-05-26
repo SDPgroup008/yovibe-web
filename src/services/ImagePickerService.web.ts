@@ -1,6 +1,4 @@
-/**
- * Web-specific implementation of ImagePickerService
- */
+// Web-specific implementation of ImagePickerService
 
 export interface ImagePickerResult {
   canceled: boolean

@@ -1,10 +1,10 @@
 [build]
-  command = "npx expo export:web"
+  command = "expo export:web"
   publish = "web-build"
   
-[build.environment]
-  RN_SRC_EXT = ".web.tsx,.web.ts,.web.js,.web.jsx,.tsx,.ts,.js,.jsx"
-
+[dev]
+  command = "npm run start"
+  
 [[redirects]]
   from = "/*"
   to = "/index.html"

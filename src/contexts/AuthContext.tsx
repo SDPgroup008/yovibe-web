@@ -1,4 +1,3 @@
-// Modified version of AuthContext.tsx for web compatibility
 "use client"
 
 import type React from "react"
@@ -8,7 +7,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage"
 import { auth } from "../config/firebase"
 import FirebaseService from "../services/FirebaseService"
 import type { User, UserType } from "../models/User"
-import { Platform } from "react-native"
+import { reset, navigate } from "../utils/navigationRef"
+import { isDevelopment } from "../utils/env"
 
 interface AuthContextType {
   user: User | null
@@ -48,60 +48,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     console.log("Setting up auth state listener")
-    let unsubscribe: () => void;
-    
-    try {
-      unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-        setLoading(true)
-        console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true)
+      console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
 
-        if (firebaseUser) {
+      if (firebaseUser) {
+        try {
+          // For development/testing, create a mock user if Firebase is not properly configured
+          let userProfile
           try {
-            // For development/testing, create a mock user if Firebase is not properly configured
-            let userProfile
-            try {
-              userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
-            } catch (error) {
-              console.warn("Error fetching user profile, using mock data:", error)
-              // Create a mock user for development
-              userProfile = {
-                id: "mock-id",
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || "test@example.com",
-                userType: "user" as UserType,
-                createdAt: new Date(),
-                lastLoginAt: new Date(),
-              }
-            }
-
-            setUser(userProfile)
-            console.log("User profile loaded:", userProfile.email)
-
-            // Store user data in AsyncStorage
-            await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
+            userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
           } catch (error) {
-            console.error("Error in auth state change handler:", error)
-            setUser(null)
-            await AsyncStorage.removeItem(USER_STORAGE_KEY)
+            console.warn("Error fetching user profile, using mock data:", error)
+            // Create a mock user for development
+            userProfile = {
+              id: "mock-id",
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || "test@example.com",
+              userType: "user" as UserType,
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+            }
           }
-        } else {
-          console.log("No user found, clearing user state")
+
+          setUser(userProfile)
+          console.log("User profile loaded:", userProfile.email)
+
+          // Store user data in AsyncStorage
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
+        } catch (error) {
+          console.error("Error in auth state change handler:", error)
           setUser(null)
           await AsyncStorage.removeItem(USER_STORAGE_KEY)
         }
+      } else {
+        console.log("No user found, clearing user state")
+        setUser(null)
+        await AsyncStorage.removeItem(USER_STORAGE_KEY)
+      }
 
-        setLoading(false)
-      });
-    } catch (error) {
-      console.error("Error setting up auth state listener:", error)
       setLoading(false)
-    }
+    })
 
     return () => {
       console.log("Cleaning up auth state listener")
-      if (unsubscribe) {
-        unsubscribe()
-      }
+      unsubscribe()
     }
   }, [])
 
@@ -114,8 +105,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // The onAuthStateChanged listener will update the user state
 
       // For development/testing, create a mock user if Firebase is not properly configured
-      if (Platform.OS === 'web') {
-        console.log("Web mode: Creating mock user")
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
           id: "mock-id",
           uid: "mock-uid",
@@ -127,12 +118,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(mockUser)
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
       }
+
+      // Navigate to main app after successful login
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+      }
     } catch (error) {
       console.error("Error signing in:", error)
 
       // For development/testing, create a mock user if Firebase is not properly configured
-      if (Platform.OS === 'web') {
-        console.log("Web mode: Creating mock user despite error")
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
           id: "mock-id",
           uid: "mock-uid",
@@ -160,8 +161,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // The onAuthStateChanged listener will update the user state
 
       // For development/testing, create a mock user if Firebase is not properly configured
-      if (Platform.OS === 'web') {
-        console.log("Web mode: Creating mock user")
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
           id: "mock-id",
           uid: "mock-uid",
@@ -173,12 +174,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(mockUser)
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
       }
+
+      // Navigate to main app after successful signup
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+      }
     } catch (error) {
       console.error("Error signing up:", error)
 
       // For development/testing, create a mock user if Firebase is not properly configured
-      if (Platform.OS === 'web') {
-        console.log("Web mode: Creating mock user despite error")
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
           id: "mock-id",
           uid: "mock-uid",
@@ -206,12 +217,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await AsyncStorage.removeItem(USER_STORAGE_KEY)
       setUser(null)
       console.log("Sign out successful")
+
+      // Navigate to Auth/Login screen after sign out
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Auth" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+        // Fallback navigation
+        navigate("Auth")
+      }
     } catch (error) {
       console.error("Error signing out:", error)
 
       // For development/testing, clear user state even if Firebase fails
       await AsyncStorage.removeItem(USER_STORAGE_KEY)
       setUser(null)
+
+      // Still navigate to Auth screen even if there was an error
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Auth" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+        // Fallback navigation
+        navigate("Auth")
+      }
     } finally {
       setLoading(false)
     }
@@ -238,7 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.error("Error updating profile:", error)
 
       // For development/testing, update local state even if Firebase fails
-      if (Platform.OS === 'web') {
+      if (isDevelopment()) {
         const updatedUser = { ...user, ...data }
         setUser(updatedUser)
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
