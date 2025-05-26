@@ -6,7 +6,6 @@ import { createStackNavigator } from "@react-navigation/stack"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { AuthNavigator, MainTabNavigator } from "./navigation/AppNavigator"
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native"
-import { navigationRef } from "./utils/navigationRef"
 
 // Create the stack navigator
 const Stack = createStackNavigator()
@@ -23,7 +22,12 @@ function AppContent() {
     }
   }, [loading])
 
-  if (initializing) {
+  useEffect(() => {
+    // Debug logging
+    console.log("App state:", { user: !!user, loading, initializing })
+  }, [user, loading, initializing])
+
+  if (initializing || loading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2196F3" />
@@ -47,7 +51,7 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer>
         <AppContent />
       </NavigationContainer>
     </AuthProvider>
