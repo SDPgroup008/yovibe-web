@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { NavigationContainer } from "@react-navigation/native"
 import { createStackNavigator } from "@react-navigation/stack"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
@@ -13,17 +13,17 @@ const Stack = createStackNavigator()
 // Main app component with auth state handling
 function AppContent() {
   const { user, loading } = useAuth()
+  const [forceRender, setForceRender] = useState(0)
 
+  // Force re-render when user state changes
   useEffect(() => {
-    // Debug logging with more detail
-    console.log("App render state:", {
+    console.log("App: User state changed, forcing re-render", {
       hasUser: !!user,
       userEmail: user?.email,
-      userId: user?.id,
-      userType: user?.userType,
       loading,
-      timestamp: new Date().toISOString(),
+      forceRender,
     })
+    setForceRender((prev) => prev + 1)
   }, [user, loading])
 
   // Show loading screen while determining auth state
@@ -37,41 +37,23 @@ function AppContent() {
     )
   }
 
-  // Determine which navigator to show
-  const showMainApp = !!user
-  console.log("App: Navigation decision:", {
-    showMainApp,
-    userExists: !!user,
-    userEmail: user?.email,
-    willShowMainTab: showMainApp,
-    willShowAuth: !showMainApp,
-  })
-
-  if (showMainApp) {
-    console.log("App: Rendering MainTabNavigator for user:", user?.email)
+  // If user is authenticated, show main app
+  if (user) {
+    console.log("App: User authenticated, showing main app for:", user.email)
     return (
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          animationEnabled: false,
-        }}
-      >
-        <Stack.Screen name="Main" component={MainTabNavigator} />
-      </Stack.Navigator>
-    )
-  } else {
-    console.log("App: Rendering AuthNavigator - no user found")
-    return (
-      <Stack.Navigator
-        screenOptions={{
-          headerShown: false,
-          animationEnabled: false,
-        }}
-      >
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-      </Stack.Navigator>
+      <View style={styles.container} key={`main-${forceRender}`}>
+        <MainTabNavigator />
+      </View>
     )
   }
+
+  // If no user, show auth screens
+  console.log("App: No user, showing auth screens")
+  return (
+    <View style={styles.container} key={`auth-${forceRender}`}>
+      <AuthNavigator />
+    </View>
+  )
 }
 
 // Root component with providers
@@ -87,6 +69,10 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
