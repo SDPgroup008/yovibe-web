@@ -46,6 +46,7 @@ const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
 
 // Auth Navigator
 export const AuthNavigator = () => {
+  console.log("AuthNavigator: Rendering auth screens")
   return (
     <AuthStack.Navigator
       screenOptions={{
@@ -56,7 +57,6 @@ export const AuthNavigator = () => {
         headerTitleStyle: {
           fontWeight: "bold",
         },
-        // Add this to prevent going back to auth screens after login
         gestureEnabled: false,
       }}
     >
@@ -68,6 +68,7 @@ export const AuthNavigator = () => {
 
 // Venues Stack Navigator
 export const VenuesStackNavigator = () => {
+  console.log("VenuesStackNavigator: Rendering venues stack")
   return (
     <VenuesStack.Navigator
       screenOptions={{
@@ -95,6 +96,7 @@ export const VenuesStackNavigator = () => {
 
 // Events Stack Navigator
 export const EventsStackNavigator = () => {
+  console.log("EventsStackNavigator: Rendering events stack")
   return (
     <EventsStack.Navigator
       screenOptions={{
@@ -117,6 +119,7 @@ export const EventsStackNavigator = () => {
 
 // Map Stack Navigator
 export const MapStackNavigator = () => {
+  console.log("MapStackNavigator: Rendering map stack")
   return (
     <MapStack.Navigator
       screenOptions={{
@@ -138,6 +141,7 @@ export const MapStackNavigator = () => {
 
 // Calendar Stack Navigator
 export const CalendarStackNavigator = () => {
+  console.log("CalendarStackNavigator: Rendering calendar stack")
   return (
     <CalendarStack.Navigator
       screenOptions={{
@@ -159,6 +163,7 @@ export const CalendarStackNavigator = () => {
 
 // Profile Stack Navigator
 export const ProfileStackNavigator = () => {
+  console.log("ProfileStackNavigator: Rendering profile stack")
   return (
     <ProfileStack.Navigator
       screenOptions={{
@@ -185,6 +190,7 @@ export const ProfileStackNavigator = () => {
 
 // Main Tab Navigator
 export const MainTabNavigator = () => {
+  console.log("MainTabNavigator: Rendering main tab navigator")
   return (
     <MainTab.Navigator
       screenOptions={({ route }) => ({
