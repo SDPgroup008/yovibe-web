@@ -2,67 +2,73 @@
 
 import { useEffect, useState } from "react"
 import { NavigationContainer } from "@react-navigation/native"
-import { createStackNavigator } from "@react-navigation/stack"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import { AuthNavigator, MainTabNavigator } from "./navigation/AppNavigator"
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native"
 
-// Create the stack navigator
-const Stack = createStackNavigator()
-
 // Main app component with auth state handling
 function AppContent() {
   const { user, loading } = useAuth()
-  const [forceRender, setForceRender] = useState(0)
+  const [currentScreen, setCurrentScreen] = useState<"loading" | "auth" | "main">("loading")
 
-  // Force re-render when user state changes
+  // Update screen based on auth state
   useEffect(() => {
-    console.log("App: User state changed, forcing re-render", {
+    console.log("App: Auth state effect triggered", {
       hasUser: !!user,
       userEmail: user?.email,
+      userType: user?.userType,
       loading,
-      forceRender,
     })
-    setForceRender((prev) => prev + 1)
+
+    if (loading) {
+      console.log("App: Setting screen to loading")
+      setCurrentScreen("loading")
+    } else if (user) {
+      console.log("App: User authenticated, setting screen to main for:", user.email)
+      setCurrentScreen("main")
+    } else {
+      console.log("App: No user, setting screen to auth")
+      setCurrentScreen("auth")
+    }
   }, [user, loading])
 
-  // Show loading screen while determining auth state
-  if (loading) {
-    console.log("App: Showing loading screen")
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading YoVibe...</Text>
-      </View>
-    )
-  }
+  // Debug log for screen changes
+  useEffect(() => {
+    console.log("App: Current screen changed to:", currentScreen)
+  }, [currentScreen])
 
-  // If user is authenticated, show main app
-  if (user) {
-    console.log("App: User authenticated, showing main app for:", user.email)
-    return (
-      <View style={styles.container} key={`main-${forceRender}`}>
-        <MainTabNavigator />
-      </View>
-    )
-  }
+  // Render based on current screen
+  switch (currentScreen) {
+    case "loading":
+      console.log("App: Rendering loading screen")
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2196F3" />
+          <Text style={styles.loadingText}>Loading YoVibe...</Text>
+        </View>
+      )
 
-  // If no user, show auth screens
-  console.log("App: No user, showing auth screens")
-  return (
-    <View style={styles.container} key={`auth-${forceRender}`}>
-      <AuthNavigator />
-    </View>
-  )
+    case "main":
+      console.log("App: Rendering main app for user:", user?.email)
+      return <MainTabNavigator />
+
+    case "auth":
+    default:
+      console.log("App: Rendering auth screens")
+      return <AuthNavigator />
+  }
 }
 
 // Root component with providers
 export default function App() {
-  console.log("App: Root component rendering")
+  console.log("App: Root component rendering at", new Date().toISOString())
+
   return (
     <AuthProvider>
       <NavigationContainer>
-        <AppContent />
+        <View style={styles.container}>
+          <AppContent />
+        </View>
       </NavigationContainer>
     </AuthProvider>
   )
