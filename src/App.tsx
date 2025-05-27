@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
 import { NavigationContainer } from "@react-navigation/native"
 import { createStackNavigator } from "@react-navigation/stack"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
@@ -13,32 +13,21 @@ const Stack = createStackNavigator()
 // Main app component with auth state handling
 function AppContent() {
   const { user, loading } = useAuth()
-  const [initializing, setInitializing] = useState(true)
 
   useEffect(() => {
-    // After auth state is determined, set initializing to false
-    if (!loading) {
-      const timer = setTimeout(() => {
-        setInitializing(false)
-      }, 100) // Small delay to ensure state is properly set
-
-      return () => clearTimeout(timer)
-    }
-  }, [loading])
-
-  useEffect(() => {
-    // Debug logging
-    console.log("App state:", {
-      user: !!user,
+    // Debug logging with more detail
+    console.log("App render state:", {
+      hasUser: !!user,
       userEmail: user?.email,
+      userId: user?.id,
       loading,
-      initializing,
-      shouldShowMain: !!user && !loading && !initializing,
-      shouldShowAuth: !user && !loading && !initializing,
+      timestamp: new Date().toISOString(),
     })
-  }, [user, loading, initializing])
+  }, [user, loading])
 
-  if (initializing || loading) {
+  // Show loading screen while determining auth state
+  if (loading) {
+    console.log("App: Showing loading screen")
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#2196F3" />
@@ -47,26 +36,26 @@ function AppContent() {
     )
   }
 
-  console.log("Rendering navigation with user:", user ? user.email : "No user")
+  // Determine which navigator to show
+  const showMainApp = !!user
+  console.log("App: Navigation decision:", {
+    showMainApp,
+    userExists: !!user,
+    userEmail: user?.email,
+  })
 
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        <Stack.Screen
-          name="Main"
-          component={MainTabNavigator}
-          options={{
-            animationEnabled: false, // Disable animation for smoother transition
-          }}
-        />
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animationEnabled: false, // Disable animations for immediate navigation
+      }}
+      initialRouteName={showMainApp ? "Main" : "Auth"}
+    >
+      {showMainApp ? (
+        <Stack.Screen name="Main" component={MainTabNavigator} />
       ) : (
-        <Stack.Screen
-          name="Auth"
-          component={AuthNavigator}
-          options={{
-            animationEnabled: false, // Disable animation for smoother transition
-          }}
-        />
+        <Stack.Screen name="Auth" component={AuthNavigator} />
       )}
     </Stack.Navigator>
   )
