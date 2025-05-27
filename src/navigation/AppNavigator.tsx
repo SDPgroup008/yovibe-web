@@ -18,6 +18,7 @@ import EventCalendarScreen from "../screens/EventCalendarScreen";
 import ProfileScreen from "../screens/ProfileScreen";
 import AddVenueScreen from "../screens/AddVenueScreen";
 import AddEventScreen from "../screens/AddEventScreen";
+import VenuesAddEventScreen from "../screens/VenuesAddEventScreen"; // New import
 import MyVenuesScreen from "../screens/MyVenuesScreen";
 import ManageProgramsScreen from "../screens/ManageProgramsScreen";
 
@@ -110,7 +111,7 @@ export const VenuesStackNavigator = () => {
     >
       <VenuesStack.Screen name="VenuesList" component={VenuesScreen} options={{ title: "Venues" }} />
       <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
-      <VenuesStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <VenuesStack.Screen name="AddEvent" component={VenuesAddEventScreen} options={{ title: "Add Event" }} />
       <VenuesStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <VenuesStack.Screen name="ManagePrograms" component={ManageProgramsScreen} options={{ title: "Weekly Programs" }} />
     </VenuesStack.Navigator>
