@@ -1,42 +1,38 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native"
-import FirebaseService from "../services/FirebaseService"
-import type { Venue } from "../models/Venue"
-
-interface VenuesScreenProps {
-  navigation: any
-}
+import type { VenuesScreenProps } from "../navigation/types";
+import { useState, useEffect } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native";
+import FirebaseService from "../services/FirebaseService";
+import type { Venue } from "../models/Venue";
 
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
-  const [venues, setVenues] = useState<Venue[]>([])
-  const [loading, setLoading] = useState(true)
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
-      loadVenues()
-    })
+      loadVenues();
+    });
 
-    return unsubscribe
-  }, [navigation])
+    return unsubscribe;
+  }, [navigation]);
 
   const loadVenues = async () => {
     try {
-      setLoading(true)
-      const venuesList = await FirebaseService.getVenues()
-      setVenues(venuesList)
+      setLoading(true);
+      const venuesList = await FirebaseService.getVenues();
+      setVenues(venuesList);
     } catch (error) {
-      console.error("Error loading venues:", error)
+      console.error("Error loading venues:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleVenueSelect = (venueId: string) => {
-    navigation.navigate("VenueDetail", { venueId })
-  }
+    navigation.navigate("VenueDetail", { venueId });
+  };
 
   return (
     <View style={styles.container}>
@@ -71,8 +67,8 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         />
       )}
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -136,6 +132,6 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.8)",
     marginTop: 4,
   },
-})
+});
 
-export default VenuesScreen
+export default VenuesScreen;
