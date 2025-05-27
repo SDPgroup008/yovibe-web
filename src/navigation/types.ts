@@ -69,7 +69,7 @@ export type AppNavigation = NativeStackNavigationProp<
 // Screen props using NativeStackScreenProps
 export type VenueDetailScreenProps = NativeStackScreenProps<VenuesStackParamList, "VenueDetail">;
 export type EventDetailScreenProps = NativeStackScreenProps<EventsStackParamList, "EventDetail">;
-export type AddEventScreenProps = NativeStackScreenProps<AddEventScreenParamList, "AddEvent">;
+export type AddEventScreenProps<T extends VenuesStackParamList | EventsStackParamList> = NativeStackScreenProps<T, "AddEvent">;
 export type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamList, "ManagePrograms">;
 export type MapScreenProps = NativeStackScreenProps<MapStackParamList, "MapView">;
 
@@ -85,6 +85,3 @@ export type SignUpScreenProps = { navigation: NativeStackNavigationProp<AuthStac
 export type AdminUsersScreenProps = { navigation: AppNavigation };
 export type AdminVenuesScreenProps = { navigation: AppNavigation };
 export type AdminEventsScreenProps = { navigation: AppNavigation };
-
-// Union type for AddEventScreen
-export type AddEventScreenParamList = VenuesStackParamList | EventsStackParamList;
