@@ -4,22 +4,13 @@ import { getFirestore } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
 
 // Your web app's Firebase configuration
-ules_version = '2';
-2
-service firebase.storage {
-3
-  match /b/{bucket}/o {
-4
-    match /{allPaths=**} {
-5
-      allow read: if true;
-6
-      allow write: if request.auth != null;
-7
-    }
-8
-  }
-9
+const firebaseConfig = {
+  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
+  authDomain: "eco-guardian-bd74f.firebaseapp.com",
+  projectId: "eco-guardian-bd74f",
+  storageBucket: "eco-guardian-bd74f.firebasestorage.app",
+  messagingSenderId: "917905910857",
+  appId: "1:917905910857:android:5886ab1db46cec56912398",
 }
 
 // Check if we're in development mode and Firebase is not configured
