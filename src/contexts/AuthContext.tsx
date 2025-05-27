@@ -1,214 +1,230 @@
-"use client";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+import React from "react";
+import { View, Text } from "react-native";
 
-import type React from "react";
-import { createContext, useState, useEffect, useContext, useCallback } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, isFirebaseConfigured } from "../config/firebase";
-import FirebaseService from "../services/FirebaseService";
-import type { User, UserType } from "../models/User";
+// Auth Screens
+import LoginScreen from "../screens/auth/LoginScreen";
+import SignUpScreen from "../screens/auth/SignUpScreen";
 
-interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, userType: UserType) => Promise<void>;
-  signOut: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+// Main Screens
+import VenuesScreen from "../screens/VenuesScreen";
+import VenueDetailScreen from "../screens/VenueDetailScreen";
+import EventsScreen from "../screens/EventsScreen";
+import EventDetailScreen from "../screens/EventDetailScreen";
+import MapScreen from "../screens/MapScreen";
+import EventCalendarScreen from "../screens/EventCalendarScreen";
+import ProfileScreen from "../screens/ProfileScreen";
+import AddVenueScreen from "../screens/AddVenueScreen";
+import AddEventScreen from "../screens/AddEventScreen";
+import MyVenuesScreen from "../screens/MyVenuesScreen";
+import ManageProgramsScreen from "../screens/ManageProgramsScreen";
+
+// Admin Screens
+import AdminUsersScreen from "../screens/admin/AdminUsersScreen";
+import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen";
+import AdminEventsScreen from "../screens/admin/AdminEventsScreen";
+
+// Types
+import type {
+  AuthStackParamList,
+  VenuesStackParamList,
+  EventsStackParamList,
+  MapStackParamList,
+  CalendarStackParamList,
+  ProfileStackParamList,
+  MainTabParamList,
+} from "./types";
+
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
 
-const USER_STORAGE_KEY = "yovibe_user_data";
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  state: ErrorBoundaryState = { hasError: false, error: null };
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
 
-  const updateUserState = useCallback(async (newUser: User | null) => {
-    console.log("AuthContext: Updating user state:", newUser ? newUser.email : "null");
-    setUser(newUser ? { ...newUser } : null);
-    try {
-      if (newUser) {
-        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
-      } else {
-        localStorage.removeItem(USER_STORAGE_KEY);
-      }
-    } catch (error) {
-      console.error("AuthContext: Error updating storage:", error);
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary: Caught error in MainTabNavigator:", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" }}>
+          <Text style={{ color: "#FFFFFF" }}>Error loading main app: {String(this.state.error)}</Text>
+        </View>
+      );
     }
-    console.log("AuthContext: User state updated successfully");
-  }, []);
+    return this.props.children;
+  }
+}
 
-  useEffect(() => {
-    const loadStoredUser = () => {
-      try {
-        console.log("AuthContext: Loading stored user...");
-        const storedUser = localStorage.getItem(USER_STORAGE_KEY);
-        if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          parsedUser.createdAt = new Date(parsedUser.createdAt);
-          parsedUser.lastLoginAt = new Date(parsedUser.lastLoginAt);
-          console.log("AuthContext: Loaded stored user:", parsedUser.email);
-          setUser(parsedUser);
-        } else {
-          console.log("AuthContext: No stored user found");
-        }
-      } catch (error) {
-        console.error("AuthContext: Error loading stored user:", error);
-      }
-    };
+// Create the navigators
+const AuthStack = createNativeStackNavigator<AuthStackParamList>();
+const MainTab = createBottomTabNavigator<MainTabParamList>();
+const VenuesStack = createNativeStackNavigator<VenuesStackParamList>();
+const EventsStack = createNativeStackNavigator<EventsStackParamList>();
+const MapStack = createNativeStackNavigator<MapStackParamList>();
+const CalendarStack = createNativeStackNavigator<CalendarStackParamList>();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 
-    loadStoredUser();
-  }, []);
-
-  useEffect(() => {
-    console.log("AuthContext: Setting up auth state listener");
-    if (!isFirebaseConfigured) {
-      console.log("AuthContext: Firebase not configured - skipping auth state listener");
-      setLoading(false);
-      return;
-    }
-
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("AuthContext: Auth state changed:", firebaseUser ? firebaseUser.email : "No user");
-      if (firebaseUser) {
-        try {
-          console.log("AuthContext: Getting user profile for:", firebaseUser.email);
-          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
-          console.log("AuthContext: User profile loaded successfully:", userProfile.email);
-          await updateUserState(userProfile);
-        } catch (error) {
-          console.error("AuthContext: Error loading user profile:", error);
-          await updateUserState(null);
-        }
-      } else {
-        console.log("AuthContext: No Firebase user, clearing state");
-        await updateUserState(null);
-      }
-      setLoading(false);
-    });
-
-    return () => {
-      console.log("AuthContext: Cleaning up auth state listener");
-      unsubscribe();
-    };
-  }, [updateUserState]);
-
-  const signIn = async (email: string, password: string) => {
-    console.log("AuthContext: Attempting to sign in:", email);
-    try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signin");
-        const mockUser = {
-          id: "dev-user-id",
-          uid: "dev-uid",
-          email: email,
-          userType: "user" as UserType,
-          createdAt: new Date(),
-          lastLoginAt: new Date(),
-        };
-        await updateUserState(mockUser);
-        console.log("AuthContext: Development signin successful");
-        return;
-      }
-      await FirebaseService.signIn(email, password);
-      console.log("AuthContext: Firebase signin successful");
-    } catch (error) {
-      console.error("AuthContext: Error signing in:", error);
-      throw error;
-    }
-  };
-
-  const signUp = async (email: string, password: string, userType: UserType) => {
-    console.log("AuthContext: Attempting to sign up:", email, "as", userType);
-    try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signup");
-        const mockUser = {
-          id: "dev-user-id",
-          uid: "dev-uid",
-          email: email,
-          userType: userType,
-          createdAt: new Date(),
-          lastLoginAt: new Date(),
-        };
-        await updateUserState(mockUser);
-        console.log("AuthContext: Development signup successful");
-        return;
-      }
-      await FirebaseService.signUp(email, password, userType);
-      console.log("AuthContext: Firebase signup successful");
-    } catch (error) {
-      console.error("AuthContext: Error signing up:", error);
-      throw error;
-    }
-  };
-
-  const signOut = async () => {
-    console.log("AuthContext: Attempting to sign out");
-    setLoading(true);
-    try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signout");
-        await updateUserState(null);
-        console.log("AuthContext: Development signout successful");
-        return;
-      }
-      await FirebaseService.signOut();
-      await updateUserState(null);
-      console.log("AuthContext: Firebase signout successful");
-    } catch (error) {
-      console.error("AuthContext: Error signing out:", error);
-      await updateUserState(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateProfile = async (data: Partial<User>) => {
-    if (!user) {
-      throw new Error("No user logged in");
-    }
-    console.log("AuthContext: Updating user profile:", data);
-    try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode profile update");
-        const updatedUser = { ...user, ...data };
-        await updateUserState(updatedUser);
-        console.log("AuthContext: Development profile update successful");
-        return;
-      }
-      await FirebaseService.updateUserProfile(user.id, data);
-      const updatedUser = { ...user, ...data };
-      await updateUserState(updatedUser);
-      console.log("AuthContext: Profile update successful");
-    } catch (error) {
-      console.error("AuthContext: Error updating profile:", error);
-      throw error;
-    }
-  };
-
-  useEffect(() => {
-    console.log("AuthContext: State update:", {
-      hasUser: !!user,
-      userEmail: user?.email,
-      userType: user?.userType,
-      loading,
-      timestamp: new Date().toISOString(),
-    });
-  }, [user, loading]);
-
+// Auth Navigator
+export const AuthNavigator = () => {
+  console.log("AuthNavigator: Rendering auth screens");
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, updateProfile }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+        gestureEnabled: false,
+      }}
+    >
+      <AuthStack.Screen name="Login" component={LoginScreen} options={{ headerShown: false }} />
+      <AuthStack.Screen name="SignUp" component={SignUpScreen} options={{ headerShown: false }} />
+    </AuthStack.Navigator>
   );
 };
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+// Venues Stack Navigator
+export const VenuesStackNavigator = () => {
+  console.log("VenuesStackNavigator: Rendering venues stack");
+  return (
+    <VenuesStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      <VenuesStack.Screen name="VenuesList" component={VenuesScreen} options={{ title: "Venues" }} />
+      <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <VenuesStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <VenuesStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <VenuesStack.Screen name="ManagePrograms" component={ManageProgramsScreen} options={{ title: "Weekly Programs" }} />
+    </VenuesStack.Navigator>
+  );
+};
+
+// Events Stack Navigator
+export const EventsStackNavigator = () => {
+  console.log("EventsStackNavigator: Rendering events stack");
+  return (
+    <EventsStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      <EventsStack.Screen name="EventsList" component={EventsScreen} options={{ title: "Events" }} />
+      <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <EventsStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <EventsStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+    </EventsStack.Navigator>
+  );
+};
+
+// Map Stack Navigator
+export const MapStackNavigator = () => {
+  console.log("MapStackNavigator: Rendering map stack");
+  return (
+    <MapStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      <MapStack.Screen name="MapView" component={MapScreen} options={{ title: "Map" }} />
+      <MapStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <MapStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+    </MapStack.Navigator>
+  );
+};
+
+// Calendar Stack Navigator
+export const CalendarStackNavigator = () => {
+  console.log("CalendarStackNavigator: Rendering calendar stack");
+  return (
+    <CalendarStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      <CalendarStack.Screen name="CalendarView" component={EventCalendarScreen} options={{ title: "Calendar" }} />
+      <CalendarStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <CalendarStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+    </CalendarStack.Navigator>
+  );
+};
+
+// Profile Stack Navigator
+export const ProfileStackNavigator = () => {
+  console.log("ProfileStackNavigator: Rendering profile stack");
+  return (
+    <ProfileStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#121212" },
+        headerTintColor: "#FFFFFF",
+        headerTitleStyle: { fontWeight: "bold" },
+      }}
+    >
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: "Profile" }} />
+      <ProfileStack.Screen name="MyVenues" component={MyVenuesScreen} options={{ title: "My Venues" }} />
+      <ProfileStack.Screen name="AddVenue" component={AddVenueScreen} options={{ title: "Add Venue" }} />
+      <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <ProfileStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
+      <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
+      <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
+    </ProfileStack.Navigator>
+  );
+};
+
+// Main Tab Navigator
+export const MainTabNavigator = () => {
+  console.log("MainTabNavigator: Rendering main tab navigator");
+  return (
+    <ErrorBoundary>
+      <MainTab.Navigator
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName: keyof typeof Ionicons.glyphMap = "business";
+            if (route.name === "Venues") iconName = focused ? "business" : "business-outline";
+            else if (route.name === "Events") iconName = focused ? "calendar" : "calendar-outline";
+            else if (route.name === "Map") iconName = focused ? "map" : "map-outline";
+            else if (route.name === "Calendar") iconName = focused ? "today" : "today-outline";
+            else if (route.name === "Profile") iconName = focused ? "person" : "person-outline";
+            return <Ionicons name={iconName} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: "#2196F3",
+          tabBarInactiveTintColor: "gray",
+          tabBarStyle: { backgroundColor: "#121212", borderTopColor: "#333" },
+          headerStyle: { backgroundColor: "#121212" },
+          headerTintColor: "#FFFFFF",
+          headerTitleStyle: { fontWeight: "bold" },
+        })}
+      >
+        <MainTab.Screen name="Venues" component={VenuesStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Events" component={EventsStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Map" component={MapStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Calendar" component={CalendarStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />
+      </MainTab.Navigator>
+    </ErrorBoundary>
+  );
 };
