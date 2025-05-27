@@ -20,6 +20,7 @@ function AppContent() {
       hasUser: !!user,
       userEmail: user?.email,
       userId: user?.id,
+      userType: user?.userType,
       loading,
       timestamp: new Date().toISOString(),
     })
@@ -42,27 +43,40 @@ function AppContent() {
     showMainApp,
     userExists: !!user,
     userEmail: user?.email,
+    willShowMainTab: showMainApp,
+    willShowAuth: !showMainApp,
   })
 
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        animationEnabled: false, // Disable animations for immediate navigation
-      }}
-      initialRouteName={showMainApp ? "Main" : "Auth"}
-    >
-      {showMainApp ? (
+  if (showMainApp) {
+    console.log("App: Rendering MainTabNavigator for user:", user?.email)
+    return (
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animationEnabled: false,
+        }}
+      >
         <Stack.Screen name="Main" component={MainTabNavigator} />
-      ) : (
+      </Stack.Navigator>
+    )
+  } else {
+    console.log("App: Rendering AuthNavigator - no user found")
+    return (
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+          animationEnabled: false,
+        }}
+      >
         <Stack.Screen name="Auth" component={AuthNavigator} />
-      )}
-    </Stack.Navigator>
-  )
+      </Stack.Navigator>
+    )
+  }
 }
 
 // Root component with providers
 export default function App() {
+  console.log("App: Root component rendering")
   return (
     <AuthProvider>
       <NavigationContainer>
