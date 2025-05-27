@@ -26,16 +26,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
-  // Function to update user state and storage
+  // Function to update user state and storage with forced re-render
   const updateUserState = async (newUser: User | null) => {
     console.log("AuthContext: Updating user state:", newUser ? newUser.email : "null")
-    setUser(newUser)
 
+    // Force a state update by creating a new object reference
     if (newUser) {
+      setUser({ ...newUser })
       await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser))
     } else {
+      setUser(null)
       await AsyncStorage.removeItem(USER_STORAGE_KEY)
     }
+
+    // Small delay to ensure state is properly set
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
   // Load user from AsyncStorage on initial load
@@ -50,7 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           parsedUser.createdAt = new Date(parsedUser.createdAt)
           parsedUser.lastLoginAt = new Date(parsedUser.lastLoginAt)
           console.log("AuthContext: Loaded stored user:", parsedUser.email)
-          setUser(parsedUser)
+          setUser({ ...parsedUser }) // Force new object reference
         } else {
           console.log("AuthContext: No stored user found")
         }
@@ -204,6 +209,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("AuthContext: State update:", {
       hasUser: !!user,
       userEmail: user?.email,
+      userType: user?.userType,
       loading,
       timestamp: new Date().toISOString(),
     })
