@@ -26,7 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const updateUserState = useCallback(async (newUser: User | null) => {
     console.log("AuthContext: Updating user state:", newUser ? newUser.email : "null");
-    setUser(newUser);
+    setUser(newUser ? { ...newUser } : null);
     try {
       if (newUser) {
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
