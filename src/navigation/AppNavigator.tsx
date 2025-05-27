@@ -2,6 +2,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
+import { View, Text } from "react-native";
 
 // Auth Screens
 import LoginScreen from "../screens/auth/LoginScreen";
@@ -202,7 +203,7 @@ export const MainTabNavigator = () => {
       <MainTab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
-            let iconName = "";
+            let iconName: keyof typeof Ionicons.glyphMap = "business";
             if (route.name === "Venues") iconName = focused ? "business" : "business-outline";
             else if (route.name === "Events") iconName = focused ? "calendar" : "calendar-outline";
             else if (route.name === "Map") iconName = focused ? "map" : "map-outline";
