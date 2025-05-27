@@ -13,7 +13,7 @@ import {
 } from "firebase/firestore"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
 import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage"
-import { auth, db, storage } from "../config/firebase"
+import { auth, db, storage, isFirebaseConfigured } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
@@ -25,7 +25,47 @@ class FirebaseService {
   async signUp(email: string, password: string, userType: UserType): Promise<void> {
     try {
       console.log("FirebaseService: Signing up user", email, "as", userType)
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating signup")
+        // Simulate successful signup in development
+        return Promise.resolve()
+      }
+
+      let userCredential
+      try {
+        userCredential = await createUserWithEmailAndPassword(auth, email, password)
+      } catch (error: any) {
+        if (error.code === "auth/email-already-in-use") {
+          // User already exists in Auth, try to sign them in and create profile if missing
+          console.log("FirebaseService: User already exists, checking profile...")
+          await signInWithEmailAndPassword(auth, email, password)
+
+          // Check if user profile exists in Firestore
+          const currentUser = auth.currentUser
+          if (currentUser) {
+            try {
+              await this.getUserProfile(currentUser.uid)
+              console.log("FirebaseService: User profile already exists")
+              return
+            } catch (profileError) {
+              // Profile doesn't exist, create it
+              console.log("FirebaseService: Creating missing user profile")
+              await addDoc(collection(db, "users"), {
+                uid: currentUser.uid,
+                email: currentUser.email,
+                userType,
+                createdAt: Timestamp.now(),
+                lastLoginAt: Timestamp.now(),
+              })
+              console.log("FirebaseService: User profile created")
+              return
+            }
+          }
+        }
+        throw error
+      }
+
       const { uid } = userCredential.user
       console.log("FirebaseService: User created with UID", uid)
 
@@ -49,6 +89,13 @@ class FirebaseService {
   async signIn(email: string, password: string): Promise<void> {
     try {
       console.log("FirebaseService: Signing in user", email)
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating signin")
+        // Simulate successful signin in development
+        return Promise.resolve()
+      }
+
       await signInWithEmailAndPassword(auth, email, password)
       console.log("FirebaseService: Sign in successful")
       return
@@ -61,6 +108,12 @@ class FirebaseService {
   async signOut(): Promise<void> {
     try {
       console.log("FirebaseService: Signing out user")
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating signout")
+        return Promise.resolve()
+      }
+
       await firebaseSignOut(auth)
       console.log("FirebaseService: Sign out successful")
       return
@@ -74,13 +127,49 @@ class FirebaseService {
   async getUserProfile(uid: string): Promise<User> {
     try {
       console.log("FirebaseService: Getting user profile for UID", uid)
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - returning mock user profile")
+        return {
+          id: "dev-user-id",
+          uid: uid,
+          email: "dev@example.com",
+          userType: "user",
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
+        }
+      }
+
       const usersRef = collection(db, "users")
       const q = query(usersRef, where("uid", "==", uid))
       const querySnapshot = await getDocs(q)
 
       if (querySnapshot.empty) {
-        console.error("FirebaseService: User not found for UID", uid)
-        throw new Error("User not found")
+        console.error("FirebaseService: User profile not found for UID", uid)
+
+        // If user is authenticated but profile is missing, create a basic profile
+        const currentUser = auth.currentUser
+        if (currentUser && currentUser.uid === uid) {
+          console.log("FirebaseService: Creating missing profile for authenticated user")
+          const userRef = await addDoc(collection(db, "users"), {
+            uid: currentUser.uid,
+            email: currentUser.email || "unknown@example.com",
+            userType: "user" as UserType,
+            createdAt: Timestamp.now(),
+            lastLoginAt: Timestamp.now(),
+          })
+
+          return {
+            id: userRef.id,
+            uid: currentUser.uid,
+            email: currentUser.email || "unknown@example.com",
+            userType: "user",
+            createdAt: new Date(),
+            lastLoginAt: new Date(),
+          }
+        }
+
+        throw new Error("User profile not found")
       }
 
       const userDoc = querySnapshot.docs[0]
@@ -107,6 +196,11 @@ class FirebaseService {
 
   async getCurrentUser(): Promise<User | null> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - no current user")
+        return null
+      }
+
       const currentUser = auth.currentUser
       if (!currentUser) {
         console.log("FirebaseService: No current user")
@@ -124,6 +218,12 @@ class FirebaseService {
   async updateUserProfile(userId: string, data: Partial<User>): Promise<void> {
     try {
       console.log("FirebaseService: Updating user profile", userId)
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating profile update")
+        return Promise.resolve()
+      }
+
       const userRef = doc(db, "users", userId)
       await updateDoc(userRef, {
         ...data,
@@ -142,74 +242,50 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting venues")
 
-      // For development/testing, return mock data if Firebase is not properly configured
-      if (isDevelopment()) {
-        try {
-          const venuesRef = collection(db, "venues")
-          const querySnapshot = await getDocs(venuesRef)
-
-          if (querySnapshot.empty) {
-            console.log("FirebaseService: No venues found, returning mock data")
-            return this.getMockVenues()
-          }
-
-          const venues: Venue[] = []
-          querySnapshot.forEach((doc) => {
-            const data = doc.data()
-            venues.push({
-              id: doc.id,
-              name: data.name,
-              location: data.location,
-              description: data.description,
-              backgroundImageUrl: data.backgroundImageUrl,
-              categories: data.categories,
-              vibeRating: data.vibeRating,
-              todayImages: data.todayImages || [],
-              latitude: data.latitude,
-              longitude: data.longitude,
-              weeklyPrograms: data.weeklyPrograms || {},
-              ownerId: data.ownerId,
-              createdAt: data.createdAt.toDate(),
-            })
-          })
-
-          console.log("FirebaseService: Found", venues.length, "venues")
-          return venues
-        } catch (error) {
-          console.warn("FirebaseService: Error getting venues, returning mock data:", error)
-          return this.getMockVenues()
-        }
+      // Always return mock data if Firebase is not configured
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - returning mock venues")
+        return this.getMockVenues()
       }
 
-      // Production code
-      const venuesRef = collection(db, "venues")
-      const querySnapshot = await getDocs(venuesRef)
-      const venues: Venue[] = []
+      try {
+        const venuesRef = collection(db, "venues")
+        const querySnapshot = await getDocs(venuesRef)
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        venues.push({
-          id: doc.id,
-          name: data.name,
-          location: data.location,
-          description: data.description,
-          backgroundImageUrl: data.backgroundImageUrl,
-          categories: data.categories,
-          vibeRating: data.vibeRating,
-          todayImages: data.todayImages || [],
-          latitude: data.latitude,
-          longitude: data.longitude,
-          weeklyPrograms: data.weeklyPrograms || {},
-          ownerId: data.ownerId,
-          createdAt: data.createdAt.toDate(),
+        if (querySnapshot.empty) {
+          console.log("FirebaseService: No venues found, returning mock data")
+          return this.getMockVenues()
+        }
+
+        const venues: Venue[] = []
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+          venues.push({
+            id: doc.id,
+            name: data.name,
+            location: data.location,
+            description: data.description,
+            backgroundImageUrl: data.backgroundImageUrl,
+            categories: data.categories,
+            vibeRating: data.vibeRating,
+            todayImages: data.todayImages || [],
+            latitude: data.latitude,
+            longitude: data.longitude,
+            weeklyPrograms: data.weeklyPrograms || {},
+            ownerId: data.ownerId,
+            createdAt: data.createdAt.toDate(),
+          })
         })
-      })
 
-      console.log("FirebaseService: Found", venues.length, "venues")
-      return venues
+        console.log("FirebaseService: Found", venues.length, "venues")
+        return venues
+      } catch (error) {
+        console.warn("FirebaseService: Error getting venues, returning mock data:", error)
+        return this.getMockVenues()
+      }
     } catch (error) {
       console.error("FirebaseService: Error getting venues:", error)
-      throw error
+      return this.getMockVenues()
     }
   }
 
@@ -290,6 +366,10 @@ class FirebaseService {
 
   async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
     try {
+      if (!isFirebaseConfigured) {
+        return this.getMockVenues().filter((venue) => venue.ownerId === ownerId)
+      }
+
       const venuesRef = collection(db, "venues")
       const q = query(venuesRef, where("ownerId", "==", ownerId))
       const querySnapshot = await getDocs(q)
@@ -323,6 +403,10 @@ class FirebaseService {
 
   async getVenueById(venueId: string): Promise<Venue | null> {
     try {
+      if (!isFirebaseConfigured) {
+        return this.getMockVenues().find((venue) => venue.id === venueId) || null
+      }
+
       const venueRef = doc(db, "venues", venueId)
       const venueDoc = await getDoc(venueRef)
 
@@ -354,6 +438,11 @@ class FirebaseService {
 
   async addVenue(venueData: Omit<Venue, "id">): Promise<string> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating venue creation")
+        return Promise.resolve("mock-venue-id")
+      }
+
       const venueRef = await addDoc(collection(db, "venues"), {
         ...venueData,
         createdAt: Timestamp.fromDate(venueData.createdAt),
@@ -368,6 +457,11 @@ class FirebaseService {
 
   async updateVenue(venueId: string, data: Partial<Venue>): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating venue update")
+        return Promise.resolve()
+      }
+
       const venueRef = doc(db, "venues", venueId)
       await updateDoc(venueRef, data)
       return
@@ -379,6 +473,11 @@ class FirebaseService {
 
   async updateVenuePrograms(venueId: string, programs: Record<string, string>): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating venue programs update")
+        return Promise.resolve()
+      }
+
       const venueRef = doc(db, "venues", venueId)
       await updateDoc(venueRef, { weeklyPrograms: programs })
       return
@@ -391,6 +490,11 @@ class FirebaseService {
   // Add a new method to delete events by venue ID
   async deleteEventsByVenue(venueId: string): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating events deletion")
+        return Promise.resolve()
+      }
+
       console.log("FirebaseService: Deleting events for venue", venueId)
 
       // Get all events for this venue
@@ -416,6 +520,11 @@ class FirebaseService {
   // Enhance the deleteVenue method to also delete associated images
   async deleteVenue(venueId: string): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating venue deletion")
+        return Promise.resolve()
+      }
+
       console.log("FirebaseService: Deleting venue", venueId)
 
       // Get venue data to check for images
@@ -442,7 +551,11 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting events")
 
-      // Always try to get real events from Firestore first
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - returning mock events")
+        return this.getMockEvents()
+      }
+
       try {
         const eventsRef = collection(db, "events")
         const querySnapshot = await getDocs(eventsRef)
@@ -499,8 +612,62 @@ class FirebaseService {
     }
   }
 
+  private getMockEvents(): Event[] {
+    const today = new Date()
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    const nextWeek = new Date(today)
+    nextWeek.setDate(nextWeek.getDate() + 7)
+
+    return [
+      {
+        id: "event1",
+        name: "Electronic Nights",
+        venueId: "venue1",
+        venueName: "Club Neon",
+        description: "The biggest electronic music event of the year featuring top international DJs.",
+        date: tomorrow,
+        posterImageUrl:
+          "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
+        artists: ["DJ Snake", "Martin Garrix", "Tiësto"],
+        isFeatured: true,
+        location: "KAMPALA",
+        priceIndicator: 3,
+        entryFee: "50,000 UGX",
+        attendees: ["user1", "user2", "user3"],
+        createdAt: new Date(),
+        createdBy: "owner1",
+        createdByType: "club_owner",
+      },
+      {
+        id: "event2",
+        name: "Jazz Evening",
+        venueId: "venue2",
+        venueName: "Jazz & Whiskey",
+        description: "An intimate evening of smooth jazz and premium whiskey tasting.",
+        date: nextWeek,
+        posterImageUrl:
+          "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
+        artists: ["Sarah Johnson Quartet", "Mike Davis Trio"],
+        isFeatured: false,
+        location: "KAMPALA",
+        priceIndicator: 2,
+        entryFee: "30,000 UGX",
+        attendees: ["user4", "user5"],
+        createdAt: new Date(),
+        createdBy: "owner2",
+        createdByType: "club_owner",
+      },
+    ]
+  }
+
   async getFeaturedEvents(): Promise<Event[]> {
     try {
+      if (!isFirebaseConfigured) {
+        return this.getMockEvents().filter((event) => event.isFeatured)
+      }
+
       const eventsRef = collection(db, "events")
       const q = query(eventsRef, where("isFeatured", "==", true))
       const querySnapshot = await getDocs(q)
@@ -541,6 +708,10 @@ class FirebaseService {
 
   async getEventsByVenue(venueId: string): Promise<Event[]> {
     try {
+      if (!isFirebaseConfigured) {
+        return this.getMockEvents().filter((event) => event.venueId === venueId)
+      }
+
       const eventsRef = collection(db, "events")
       const q = query(eventsRef, where("venueId", "==", venueId))
       const querySnapshot = await getDocs(q)
@@ -581,6 +752,10 @@ class FirebaseService {
 
   async getEventById(eventId: string): Promise<Event | null> {
     try {
+      if (!isFirebaseConfigured) {
+        return this.getMockEvents().find((event) => event.id === eventId) || null
+      }
+
       const eventRef = doc(db, "events", eventId)
       const eventDoc = await getDoc(eventRef)
 
@@ -614,6 +789,11 @@ class FirebaseService {
 
   async addEvent(eventData: Omit<Event, "id">): Promise<string> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating event creation")
+        return Promise.resolve("mock-event-id")
+      }
+
       // Create a Firestore-compatible object with type assertion
       const firestoreEventData = {
         name: eventData.name,
@@ -645,6 +825,11 @@ class FirebaseService {
 
   async updateEvent(eventId: string, data: Partial<Event>): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating event update")
+        return Promise.resolve()
+      }
+
       const eventRef = doc(db, "events", eventId)
 
       // Convert Date objects to Firestore Timestamps
@@ -664,6 +849,11 @@ class FirebaseService {
   // Enhance the deleteEvent method to also delete associated images
   async deleteEvent(eventId: string): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating event deletion")
+        return Promise.resolve()
+      }
+
       console.log("FirebaseService: Deleting event", eventId)
 
       // Get event data to check for images
@@ -688,6 +878,11 @@ class FirebaseService {
   // Delete past events
   async deletePastEvents(): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating past events cleanup")
+        return Promise.resolve()
+      }
+
       console.log("FirebaseService: Deleting past events")
 
       const today = new Date()
@@ -720,15 +915,16 @@ class FirebaseService {
   async uploadVenueImage(uri: string): Promise<string> {
     try {
       console.log("FirebaseService: Uploading venue image")
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - returning placeholder image")
+        return "https://images.unsplash.com/photo-1566737236500-c8ac43014a67?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+      }
+
       // For web, we'll just return the URL directly if it's already a URL
       if (uri.startsWith("http") && !uri.startsWith("data:")) {
         console.log("FirebaseService: Image is already a URL, returning directly")
         return uri
-      }
-
-      // For development or testing on web
-      if (isDevelopment()) {
-        return "https://images.unsplash.com/photo-1566737236500-c8ac43014a67?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
       }
 
       // Generate a unique filename
@@ -737,33 +933,50 @@ class FirebaseService {
 
       // Handle data URLs (from web file picker)
       if (uri.startsWith("data:")) {
+        console.log("FirebaseService: Uploading data URL")
         // Upload data URL directly
         await uploadString(storageRef, uri, "data_url")
         const downloadUrl = await getDownloadURL(storageRef)
+        console.log("FirebaseService: Upload successful, URL:", downloadUrl.substring(0, 50) + "...")
         return downloadUrl
       }
 
       // Otherwise, we need to upload the file
+      console.log("FirebaseService: Fetching image data")
       // Convert URI to blob
       const response = await fetch(uri)
       const blob = await response.blob()
 
+      console.log("FirebaseService: Uploading blob to Firebase Storage")
       // Upload blob to Firebase Storage
       const uploadResult = await uploadBytes(storageRef, blob)
 
       // Get download URL
       const downloadUrl = await getDownloadURL(uploadResult.ref)
+      console.log("FirebaseService: Upload successful, URL:", downloadUrl.substring(0, 50) + "...")
       return downloadUrl
     } catch (error) {
       console.error("FirebaseService: Error uploading venue image:", error)
-      // Return a placeholder in case of error
-      return "https://images.unsplash.com/photo-1566737236500-c8ac43014a67?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+
+      // In development mode, return a placeholder but log the error
+      if (isDevelopment()) {
+        console.warn("FirebaseService: Using placeholder image due to error")
+        return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+      }
+
+      // In production, rethrow the error
+      throw error
     }
   }
 
   async uploadEventImage(uri: string): Promise<string> {
     try {
       console.log("FirebaseService: Uploading event image", uri.substring(0, 50) + "...")
+
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - returning placeholder image")
+        return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+      }
 
       // For web, we'll just return the URL directly if it's already a URL and not a data URI
       if (uri.startsWith("http") && !uri.startsWith("data:")) {
@@ -805,7 +1018,7 @@ class FirebaseService {
       // In development mode, return a placeholder but log the error
       if (isDevelopment()) {
         console.warn("FirebaseService: Using placeholder image due to error")
-        return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+        return "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
       }
 
       // In production, rethrow the error
@@ -816,6 +1029,10 @@ class FirebaseService {
   // Admin methods
   async getAllUsers(): Promise<User[]> {
     try {
+      if (!isFirebaseConfigured) {
+        return []
+      }
+
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       const users: User[] = []
@@ -845,6 +1062,10 @@ class FirebaseService {
 
   async getClubOwners(): Promise<User[]> {
     try {
+      if (!isFirebaseConfigured) {
+        return []
+      }
+
       const usersRef = collection(db, "users")
       const q = query(usersRef, where("userType", "==", "club_owner"))
       const querySnapshot = await getDocs(q)
@@ -875,6 +1096,11 @@ class FirebaseService {
 
   async freezeUser(userId: string, isFrozen: boolean): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating user freeze")
+        return Promise.resolve()
+      }
+
       const userRef = doc(db, "users", userId)
       await updateDoc(userRef, { isFrozen })
       return
@@ -887,6 +1113,11 @@ class FirebaseService {
   // Enhance the deleteUser method to also delete user's content
   async deleteUser(userId: string): Promise<void> {
     try {
+      if (!isFirebaseConfigured) {
+        console.log("FirebaseService: Development mode - simulating user deletion")
+        return Promise.resolve()
+      }
+
       console.log("FirebaseService: Deleting user", userId)
 
       // Get user data to check if they're a venue owner
