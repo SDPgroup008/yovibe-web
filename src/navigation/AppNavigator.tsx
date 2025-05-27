@@ -234,3 +234,58 @@ export const MainTabNavigator = () => {
     </MainTab.Navigator>
   )
 }
+import React from "react";
+import { View, Text } from "react-native";
+
+class ErrorBoundary extends React.Component {
+  state = { hasError: false, error: null };
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary: Caught error in MainTabNavigator:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+          <Text>Error loading main app: {String(this.state.error)}</Text>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export const MainTabNavigator = () => {
+  console.log("MainTabNavigator: Rendering main tab navigator");
+  return (
+    <ErrorBoundary>
+      <MainTab.Navigator
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color, size }) => {
+            let iconName = "";
+            if (route.name === "Venues") iconName = focused ? "business" : "business-outline";
+            else if (route.name === "Events") iconName = focused ? "calendar" : "calendar-outline";
+            else if (route.name === "Map") iconName = focused ? "map" : "map-outline";
+            else if (route.name === "Calendar") iconName = focused ? "today" : "today-outline";
+            else if (route.name === "Profile") iconName = focused ? "person" : "person-outline";
+            return <Ionicons name={iconName as any} size={size} color={color} />;
+          },
+          tabBarActiveTintColor: "#2196F3",
+          tabBarInactiveTintColor: "gray",
+          tabBarStyle: { backgroundColor: "#121212", borderTopColor: "#333" },
+          headerStyle: { backgroundColor: "#121212" },
+          headerTintColor: "#FFFFFF",
+          headerTitleStyle: { fontWeight: "bold" },
+        })}
+      >
+        <MainTab.Screen name="Venues" component={VenuesStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Events" component={EventsStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Map" component={MapStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Calendar" component={CalendarStackNavigator} options={{ headerShown: false }} />
+        <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />
+      </MainTab.Navigator>
+    </ErrorBoundary>
+  );
+};
