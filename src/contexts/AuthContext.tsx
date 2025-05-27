@@ -151,15 +151,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!isFirebaseConfigured) {
         console.log("AuthContext: Development mode signout");
         await updateUserState(null);
+        localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
         console.log("AuthContext: Development signout successful");
         return;
       }
       await FirebaseService.signOut();
       await updateUserState(null);
+      localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
       console.log("AuthContext: Firebase signout successful");
     } catch (error) {
       console.error("AuthContext: Error signing out:", error);
       await updateUserState(null);
+      localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
     } finally {
       setLoading(false);
     }
