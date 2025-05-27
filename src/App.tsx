@@ -8,7 +8,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const [currentScreen, setCurrentScreen] = useState("loading");
+  const [currentScreen, setCurrentScreen] = useState<"loading" | "auth" | "main">("loading");
 
   useEffect(() => {
     console.log("App: Auth state effect triggered", {
@@ -17,7 +17,10 @@ function AppContent() {
       userType: user?.userType,
       loading,
       userObject: JSON.stringify(user, null, 2),
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toLocaleString("en-US", {
+        timeZone: "Africa/Nairobi",
+      }),
+      options: { timeZone: "EAT" },
     });
 
     try {
@@ -25,7 +28,7 @@ function AppContent() {
         console.log("App: Setting screen to loading");
         setCurrentScreen("loading");
       } else if (user && user.email) {
-        console.log("App: User authenticated, setting screen to main for:", user.email);
+        console.log("App: authenticated, User setting screen to main for:", user.email);
         setCurrentScreen("main");
       } else {
         console.log("App: No valid user, setting screen to auth");
@@ -38,10 +41,10 @@ function AppContent() {
   }, [user, loading]);
 
   useEffect(() => {
-    console.log("App: Current screen changed to:", currentScreen);
+    console.log("App: Current screen changed to currentScreen);
   }, [currentScreen]);
 
-  console.log("App: Rendering AppContent with currentScreen:", currentScreen);
+  console.log("App: AppContent rendering with currentScreen:", currentScreen);
 
   try {
     switch (currentScreen) {
@@ -50,7 +53,7 @@ function AppContent() {
         return (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2196F3" />
-            <Text style={styles.loadingText}>Loading YoVibe...</Text>
+            <Text={styles.loadingText}>Loading YoVibe...</Text>
           </View>
         );
       case "main":
@@ -58,7 +61,7 @@ function AppContent() {
         return <MainTabNavigator />;
       case "auth":
       default:
-        console.log("App: Rendering auth screens");
+        console.log("App: auth screens");
         return <AuthNavigator />;
     }
   } catch (error) {
@@ -72,7 +75,7 @@ function AppContent() {
 }
 
 export default function App() {
-  console.log("App: Root component rendering at", new Date().toISOString());
+  console.log("App: Root component rendering at", new Date().toLocaleString());
   return (
     <AuthProvider>
       <NavigationContainer>
@@ -86,6 +89,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#121212" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" },
+  loadingContainer: { flex: 1, justifyContent: "center",",alignItems: "center",",backgroundColor: "#121212" },
   loadingText: { color: "#FFFFFF", marginTop: 16, fontSize: 16 },
 });
