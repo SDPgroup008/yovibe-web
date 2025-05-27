@@ -26,22 +26,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Function to update user state and storage
+  const updateUserState = async (newUser: User | null) => {
+    console.log("AuthContext: Updating user state:", newUser ? newUser.email : "null")
+    setUser(newUser)
+
+    if (newUser) {
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser))
+    } else {
+      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+    }
+  }
+
   // Load user from AsyncStorage on initial load
   useEffect(() => {
     const loadStoredUser = async () => {
       try {
+        console.log("AuthContext: Loading stored user...")
         const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY)
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser)
           // Convert date strings back to Date objects
           parsedUser.createdAt = new Date(parsedUser.createdAt)
           parsedUser.lastLoginAt = new Date(parsedUser.lastLoginAt)
+          console.log("AuthContext: Loaded stored user:", parsedUser.email)
           setUser(parsedUser)
+        } else {
+          console.log("AuthContext: No stored user found")
         }
       } catch (error) {
-        console.error("Error loading stored user:", error)
-      } finally {
-        setLoading(false)
+        console.error("AuthContext: Error loading stored user:", error)
       }
     }
 
@@ -49,52 +63,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [])
 
   useEffect(() => {
-    console.log("Setting up auth state listener")
+    console.log("AuthContext: Setting up auth state listener")
 
     if (!isFirebaseConfigured) {
-      console.log("Firebase not configured - skipping auth state listener")
+      console.log("AuthContext: Firebase not configured - skipping auth state listener")
       setLoading(false)
       return
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
+      console.log("AuthContext: Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
 
       if (firebaseUser) {
         try {
+          console.log("AuthContext: Getting user profile for:", firebaseUser.email)
           const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
-          setUser(userProfile)
-          console.log("User profile loaded:", userProfile.email)
-
-          // Store user data in AsyncStorage
-          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
+          console.log("AuthContext: User profile loaded successfully:", userProfile.email)
+          await updateUserState(userProfile)
         } catch (error) {
-          console.error("Error in auth state change handler:", error)
-          setUser(null)
-          await AsyncStorage.removeItem(USER_STORAGE_KEY)
+          console.error("AuthContext: Error loading user profile:", error)
+          await updateUserState(null)
         }
       } else {
-        console.log("No user found, clearing user state")
-        setUser(null)
-        await AsyncStorage.removeItem(USER_STORAGE_KEY)
+        console.log("AuthContext: No Firebase user, clearing state")
+        await updateUserState(null)
       }
 
       setLoading(false)
     })
 
     return () => {
-      console.log("Cleaning up auth state listener")
+      console.log("AuthContext: Cleaning up auth state listener")
       unsubscribe()
     }
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    console.log("Attempting to sign in:", email)
-    setLoading(true)
+    console.log("AuthContext: Attempting to sign in:", email)
     try {
       if (!isFirebaseConfigured) {
-        console.log("Development mode: Creating mock user for signin")
-        // Create a mock user for development
+        console.log("AuthContext: Development mode signin")
         const mockUser = {
           id: "dev-user-id",
           uid: "dev-uid",
@@ -103,30 +111,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date(),
           lastLoginAt: new Date(),
         }
-        setUser(mockUser)
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
-        console.log("Development signin successful")
+        await updateUserState(mockUser)
+        console.log("AuthContext: Development signin successful")
         return
       }
 
       await FirebaseService.signIn(email, password)
-      console.log("Sign in successful")
+      console.log("AuthContext: Firebase signin successful")
       // The onAuthStateChanged listener will update the user state
     } catch (error) {
-      console.error("Error signing in:", error)
+      console.error("AuthContext: Error signing in:", error)
       throw error
-    } finally {
-      setLoading(false)
     }
   }
 
   const signUp = async (email: string, password: string, userType: UserType) => {
-    console.log("Attempting to sign up:", email, "as", userType)
-    setLoading(true)
+    console.log("AuthContext: Attempting to sign up:", email, "as", userType)
     try {
       if (!isFirebaseConfigured) {
-        console.log("Development mode: Creating mock user for signup")
-        // Create a mock user for development
+        console.log("AuthContext: Development mode signup")
         const mockUser = {
           id: "dev-user-id",
           uid: "dev-uid",
@@ -135,45 +138,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           createdAt: new Date(),
           lastLoginAt: new Date(),
         }
-        setUser(mockUser)
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
-        console.log("Development signup successful")
+        await updateUserState(mockUser)
+        console.log("AuthContext: Development signup successful")
         return
       }
 
       await FirebaseService.signUp(email, password, userType)
-      console.log("Sign up successful")
+      console.log("AuthContext: Firebase signup successful")
       // The onAuthStateChanged listener will update the user state
     } catch (error) {
-      console.error("Error signing up:", error)
+      console.error("AuthContext: Error signing up:", error)
       throw error
-    } finally {
-      setLoading(false)
     }
   }
 
   const signOut = async () => {
-    console.log("Attempting to sign out")
+    console.log("AuthContext: Attempting to sign out")
     setLoading(true)
     try {
       if (!isFirebaseConfigured) {
-        console.log("Development mode: Simulating signout")
-        await AsyncStorage.removeItem(USER_STORAGE_KEY)
-        setUser(null)
-        console.log("Development signout successful")
+        console.log("AuthContext: Development mode signout")
+        await updateUserState(null)
+        console.log("AuthContext: Development signout successful")
         return
       }
 
       await FirebaseService.signOut()
-      // Clear stored user data
-      await AsyncStorage.removeItem(USER_STORAGE_KEY)
-      setUser(null)
-      console.log("Sign out successful")
+      await updateUserState(null)
+      console.log("AuthContext: Firebase signout successful")
     } catch (error) {
-      console.error("Error signing out:", error)
-      // Clear user state even if there was an error
-      await AsyncStorage.removeItem(USER_STORAGE_KEY)
-      setUser(null)
+      console.error("AuthContext: Error signing out:", error)
+      await updateUserState(null)
     } finally {
       setLoading(false)
     }
@@ -184,34 +179,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error("No user logged in")
     }
 
-    console.log("Updating user profile:", data)
-    setLoading(true)
+    console.log("AuthContext: Updating user profile:", data)
     try {
       if (!isFirebaseConfigured) {
-        console.log("Development mode: Simulating profile update")
+        console.log("AuthContext: Development mode profile update")
         const updatedUser = { ...user, ...data }
-        setUser(updatedUser)
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
-        console.log("Development profile update successful")
+        await updateUserState(updatedUser)
+        console.log("AuthContext: Development profile update successful")
         return
       }
 
       await FirebaseService.updateUserProfile(user.id, data)
-
-      // Update local user state
       const updatedUser = { ...user, ...data }
-      setUser(updatedUser)
-
-      // Update stored user data
-      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
-      console.log("Profile update successful")
+      await updateUserState(updatedUser)
+      console.log("AuthContext: Profile update successful")
     } catch (error) {
-      console.error("Error updating profile:", error)
+      console.error("AuthContext: Error updating profile:", error)
       throw error
-    } finally {
-      setLoading(false)
     }
   }
+
+  // Debug logging for state changes
+  useEffect(() => {
+    console.log("AuthContext: State update:", {
+      hasUser: !!user,
+      userEmail: user?.email,
+      loading,
+      timestamp: new Date().toISOString(),
+    })
+  }, [user, loading])
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, updateProfile }}>
