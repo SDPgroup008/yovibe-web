@@ -17,8 +17,9 @@ import { Ionicons } from "@expo/vector-icons";
 import ImagePickerService from "../services/ImagePickerService";
 import FirebaseService from "../services/FirebaseService";
 import { useAuth } from "../contexts/AuthContext";
+import type { EventsStackParamList } from "../navigation/types"; // Import for type specificity
 
-const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) => {
+const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ navigation, route }) => {
   const { user } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
