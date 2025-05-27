@@ -3,18 +3,38 @@
     "strict": true,
     "esModuleInterop": true,
     "jsx": "react-native",
-    "lib": ["ESNext", "DOM"],
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noImplicitAny": false,
     "outDir": "dist",
-    "types": ["react", "react-native", "prop-types", "node"],
+    "types": [
+      "react",
+      "react-native",
+      "prop-types",
+      "node"
+    ],
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     }
   },
-  "include": ["src/**/*", "App.tsx"],
-  "exclude": ["node_modules", "babel.config.js", "metro.config.js", "webpack.config.js", "dist"]
+  "include": [
+    "src/**/*",
+    "App.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "babel.config.js",
+    "metro.config.js",
+    "webpack.config.js",
+    "dist"
+  ],
+  "extends": "expo/tsconfig.base"
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import type { AddEventScreenProps } from "../navigation/types";
+import type { AddEventScreenProps, VenuesStackParamList, EventsStackParamList } from "../navigation/types";
 import { useState, useEffect } from "react";
 import {
   View,
@@ -17,9 +17,13 @@ import { Ionicons } from "@expo/vector-icons";
 import ImagePickerService from "../services/ImagePickerService";
 import FirebaseService from "../services/FirebaseService";
 import { useAuth } from "../contexts/AuthContext";
-import type { EventsStackParamList } from "../navigation/types"; // Import for type specificity
+import type { Venue } from "../models/Venue";
 
-const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ navigation, route }) => {
+type AddEventScreenType = <T extends VenuesStackParamList | EventsStackParamList>(
+  props: AddEventScreenProps<T>
+) => JSX.Element;
+
+const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
   const { user } = useAuth();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -50,7 +54,7 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
   const loadVenues = async () => {
     try {
       const venuesList = await FirebaseService.getVenues();
-      setVenues(venuesList.map((venue) => ({ id: venue.id, name: venue.name })));
+      setVenues(venuesList.map((venue: Venue) => ({ id: venue.id, name: venue.name })));
     } catch (error) {
       console.error("Error loading venues:", error);
     }
@@ -117,7 +121,7 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
       {
         // @ts-ignore - Web-only feature
         prompt: { type: "plain-text", placeholder: "https://example.com/image.jpg" },
-      },
+      }
     );
   };
 
@@ -165,7 +169,7 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
           description: `Custom venue for event: ${name}`,
           categories: ["Other"],
           vibeRating: 4.0,
-          backgroundImageUrl: image,
+          backgroundImageUrl: image ?? "",
           latitude: 0,
           longitude: 0,
           ownerId: user.id,
@@ -181,7 +185,7 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
         try {
           console.log("Uploading event poster image...");
           imageUrl = await FirebaseService.uploadEventImage(image);
-          console.log("Image uploaded successfully:", imageUrl.substring(0, 50) + "...");
+          console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...");
         } catch (error) {
           console.error("Error uploading image:", error);
           Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.");
@@ -195,7 +199,7 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
         artists: artists.split(",").map((artist) => artist.trim()),
         venueId,
         venueName,
-        posterImageUrl: imageUrl,
+        posterImageUrl: imageUrl ?? "",
         isFeatured,
         location: location.toUpperCase(),
         priceIndicator: Number.parseInt(priceIndicator),
@@ -211,8 +215,8 @@ const AddEventScreen: React.FC<AddEventScreenProps<EventsStackParamList>> = ({ n
       Alert.alert("Success", "Event created successfully");
       navigation.goBack();
     } catch (error) {
+      console.error("Error creating event:", error);
       Alert.alert("Error", "Failed to create event");
-      console.error(error);
     } finally {
       setLoading(false);
     }
