@@ -4,10 +4,9 @@ import type React from "react"
 import { createContext, useState, useEffect, useContext } from "react"
 import { onAuthStateChanged } from "firebase/auth"
 import AsyncStorage from "@react-native-async-storage/async-storage"
-import { auth } from "../config/firebase"
+import { auth, isFirebaseConfigured } from "../config/firebase"
 import FirebaseService from "../services/FirebaseService"
 import type { User, UserType } from "../models/User"
-import { isDevelopment } from "../utils/env"
 
 interface AuthContextType {
   user: User | null
@@ -51,28 +50,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     console.log("Setting up auth state listener")
+
+    if (!isFirebaseConfigured) {
+      console.log("Firebase not configured - skipping auth state listener")
+      setLoading(false)
+      return
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
 
       if (firebaseUser) {
         try {
-          // For development/testing, create a mock user if Firebase is not properly configured
-          let userProfile
-          try {
-            userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
-          } catch (error) {
-            console.warn("Error fetching user profile, using mock data:", error)
-            // Create a mock user for development
-            userProfile = {
-              id: "mock-id",
-              uid: firebaseUser.uid,
-              email: firebaseUser.email || "test@example.com",
-              userType: "user" as UserType,
-              createdAt: new Date(),
-              lastLoginAt: new Date(),
-            }
-          }
-
+          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
           setUser(userProfile)
           console.log("User profile loaded:", userProfile.email)
 
@@ -80,8 +70,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
         } catch (error) {
           console.error("Error in auth state change handler:", error)
-          setUser(null)
-          await AsyncStorage.removeItem(USER_STORAGE_KEY)
+
+          // If profile is missing but user is authenticated, create a basic profile
+          if (firebaseUser) {
+            console.log("Creating basic profile for authenticated user")
+            try {
+              // Try to create a basic user profile
+              const basicProfile = {
+                id: "temp-id",
+                uid: firebaseUser.uid,
+                email: firebaseUser.email || "unknown@example.com",
+                userType: "user" as UserType,
+                createdAt: new Date(),
+                lastLoginAt: new Date(),
+              }
+              setUser(basicProfile)
+              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(basicProfile))
+              console.log("Basic profile created successfully")
+            } catch (profileError) {
+              console.error("Failed to create basic profile:", profileError)
+              setUser(null)
+              await AsyncStorage.removeItem(USER_STORAGE_KEY)
+            }
+          } else {
+            setUser(null)
+            await AsyncStorage.removeItem(USER_STORAGE_KEY)
+          }
         }
       } else {
         console.log("No user found, clearing user state")
@@ -102,18 +116,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Attempting to sign in:", email)
     setLoading(true)
     try {
-      await FirebaseService.signIn(email, password)
-      console.log("Sign in successful")
-      // The onAuthStateChanged listener will update the user state
-    } catch (error) {
-      console.error("Error signing in:", error)
-
-      // For development/testing, create a mock user if Firebase is not properly configured
-      if (isDevelopment()) {
-        console.log("Development mode: Creating mock user")
+      if (!isFirebaseConfigured) {
+        console.log("Development mode: Creating mock user for signin")
+        // Create a mock user for development
         const mockUser = {
-          id: "mock-id",
-          uid: "mock-uid",
+          id: "dev-user-id",
+          uid: "dev-uid",
           email: email,
           userType: "user" as UserType,
           createdAt: new Date(),
@@ -121,9 +129,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setUser(mockUser)
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
-      } else {
-        throw error
+        console.log("Development signin successful")
+        return
       }
+
+      await FirebaseService.signIn(email, password)
+      console.log("Sign in successful")
+      // The onAuthStateChanged listener will update the user state
+    } catch (error) {
+      console.error("Error signing in:", error)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -133,18 +148,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Attempting to sign up:", email, "as", userType)
     setLoading(true)
     try {
-      await FirebaseService.signUp(email, password, userType)
-      console.log("Sign up successful")
-      // The onAuthStateChanged listener will update the user state
-    } catch (error) {
-      console.error("Error signing up:", error)
-
-      // For development/testing, create a mock user if Firebase is not properly configured
-      if (isDevelopment()) {
-        console.log("Development mode: Creating mock user")
+      if (!isFirebaseConfigured) {
+        console.log("Development mode: Creating mock user for signup")
+        // Create a mock user for development
         const mockUser = {
-          id: "mock-id",
-          uid: "mock-uid",
+          id: "dev-user-id",
+          uid: "dev-uid",
           email: email,
           userType: userType,
           createdAt: new Date(),
@@ -152,9 +161,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         setUser(mockUser)
         await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
-      } else {
-        throw error
+        console.log("Development signup successful")
+        return
       }
+
+      await FirebaseService.signUp(email, password, userType)
+      console.log("Sign up successful")
+      // The onAuthStateChanged listener will update the user state
+    } catch (error) {
+      console.error("Error signing up:", error)
+      throw error
     } finally {
       setLoading(false)
     }
@@ -164,6 +180,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Attempting to sign out")
     setLoading(true)
     try {
+      if (!isFirebaseConfigured) {
+        console.log("Development mode: Simulating signout")
+        await AsyncStorage.removeItem(USER_STORAGE_KEY)
+        setUser(null)
+        console.log("Development signout successful")
+        return
+      }
+
       await FirebaseService.signOut()
       // Clear stored user data
       await AsyncStorage.removeItem(USER_STORAGE_KEY)
@@ -171,8 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Sign out successful")
     } catch (error) {
       console.error("Error signing out:", error)
-
-      // For development/testing, clear user state even if Firebase fails
+      // Clear user state even if there was an error
       await AsyncStorage.removeItem(USER_STORAGE_KEY)
       setUser(null)
     } finally {
@@ -188,6 +211,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Updating user profile:", data)
     setLoading(true)
     try {
+      if (!isFirebaseConfigured) {
+        console.log("Development mode: Simulating profile update")
+        const updatedUser = { ...user, ...data }
+        setUser(updatedUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
+        console.log("Development profile update successful")
+        return
+      }
+
       await FirebaseService.updateUserProfile(user.id, data)
 
       // Update local user state
@@ -199,15 +231,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       console.log("Profile update successful")
     } catch (error) {
       console.error("Error updating profile:", error)
-
-      // For development/testing, update local state even if Firebase fails
-      if (isDevelopment()) {
-        const updatedUser = { ...user, ...data }
-        setUser(updatedUser)
-        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
-      } else {
-        throw error
-      }
+      throw error
     } finally {
       setLoading(false)
     }
