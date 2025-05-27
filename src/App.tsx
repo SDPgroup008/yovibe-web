@@ -18,13 +18,24 @@ function AppContent() {
   useEffect(() => {
     // After auth state is determined, set initializing to false
     if (!loading) {
-      setInitializing(false)
+      const timer = setTimeout(() => {
+        setInitializing(false)
+      }, 100) // Small delay to ensure state is properly set
+
+      return () => clearTimeout(timer)
     }
   }, [loading])
 
   useEffect(() => {
     // Debug logging
-    console.log("App state:", { user: !!user, loading, initializing })
+    console.log("App state:", {
+      user: !!user,
+      userEmail: user?.email,
+      loading,
+      initializing,
+      shouldShowMain: !!user && !loading && !initializing,
+      shouldShowAuth: !user && !loading && !initializing,
+    })
   }, [user, loading, initializing])
 
   if (initializing || loading) {
@@ -36,12 +47,26 @@ function AppContent() {
     )
   }
 
+  console.log("Rendering navigation with user:", user ? user.email : "No user")
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
-        <Stack.Screen name="Main" component={MainTabNavigator} />
+        <Stack.Screen
+          name="Main"
+          component={MainTabNavigator}
+          options={{
+            animationEnabled: false, // Disable animation for smoother transition
+          }}
+        />
       ) : (
-        <Stack.Screen name="Auth" component={AuthNavigator} />
+        <Stack.Screen
+          name="Auth"
+          component={AuthNavigator}
+          options={{
+            animationEnabled: false, // Disable animation for smoother transition
+          }}
+        />
       )}
     </Stack.Navigator>
   )
