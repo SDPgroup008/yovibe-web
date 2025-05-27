@@ -16,24 +16,28 @@ function AppContent() {
       userEmail: user?.email,
       userType: user?.userType,
       loading,
+      userObject: JSON.stringify(user, null, 2), // Detailed user object
       timestamp: new Date().toISOString(),
     });
 
     if (loading) {
       console.log("App: Setting screen to loading");
       setCurrentScreen("loading");
-    } else if (user) {
+    } else if (user && user.email) {
       console.log("App: User authenticated, setting screen to main for:", user.email);
       setCurrentScreen("main");
     } else {
-      console.log("App: No user, setting screen to auth");
+      console.log("App: No valid user, setting screen to auth");
       setCurrentScreen("auth");
     }
-  }, [user, loading]); // Ensure dependencies are correct
+  }, [user, loading]);
 
   useEffect(() => {
     console.log("App: Current screen changed to:", currentScreen);
   }, [currentScreen]);
+
+  // Debug rendering
+  console.log("App: Rendering AppContent with currentScreen:", currentScreen);
 
   switch (currentScreen) {
     case "loading":
