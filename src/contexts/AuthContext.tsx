@@ -70,32 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
         } catch (error) {
           console.error("Error in auth state change handler:", error)
-
-          // If profile is missing but user is authenticated, create a basic profile
-          if (firebaseUser) {
-            console.log("Creating basic profile for authenticated user")
-            try {
-              // Try to create a basic user profile
-              const basicProfile = {
-                id: "temp-id",
-                uid: firebaseUser.uid,
-                email: firebaseUser.email || "unknown@example.com",
-                userType: "user" as UserType,
-                createdAt: new Date(),
-                lastLoginAt: new Date(),
-              }
-              setUser(basicProfile)
-              await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(basicProfile))
-              console.log("Basic profile created successfully")
-            } catch (profileError) {
-              console.error("Failed to create basic profile:", profileError)
-              setUser(null)
-              await AsyncStorage.removeItem(USER_STORAGE_KEY)
-            }
-          } else {
-            setUser(null)
-            await AsyncStorage.removeItem(USER_STORAGE_KEY)
-          }
+          setUser(null)
+          await AsyncStorage.removeItem(USER_STORAGE_KEY)
         }
       } else {
         console.log("No user found, clearing user state")
