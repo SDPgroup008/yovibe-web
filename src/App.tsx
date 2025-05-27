@@ -28,7 +28,7 @@ function AppContent() {
         console.log("App: Setting screen to loading");
         setCurrentScreen("loading");
       } else if (user && user.email) {
-        console.log("App: authenticated, User setting screen to main for:", user.email);
+        console.log("App: User authenticated, setting screen to main for:", user.email);
         setCurrentScreen("main");
       } else {
         console.log("App: No valid user, setting screen to auth");
@@ -41,7 +41,7 @@ function AppContent() {
   }, [user, loading]);
 
   useEffect(() => {
-    console.log("App: Current screen changed to currentScreen);
+    console.log("App: Current screen changed to:", currentScreen);
   }, [currentScreen]);
 
   console.log("App: AppContent rendering with currentScreen:", currentScreen);
@@ -53,7 +53,7 @@ function AppContent() {
         return (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#2196F3" />
-            <Text={styles.loadingText}>Loading YoVibe...</Text>
+            <Text style={styles.loadingText}>Loading YoVibe...</Text>
           </View>
         );
       case "main":
@@ -61,7 +61,7 @@ function AppContent() {
         return <MainTabNavigator />;
       case "auth":
       default:
-        console.log("App: auth screens");
+        console.log("App: Rendering auth screens");
         return <AuthNavigator />;
     }
   } catch (error) {
@@ -89,6 +89,6 @@ export default function App() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#121212" },
-  loadingContainer: { flex: 1, justifyContent: "center",",alignItems: "center",",backgroundColor: "#121212" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" },
   loadingText: { color: "#FFFFFF", marginTop: 16, fontSize: 16 },
 });
