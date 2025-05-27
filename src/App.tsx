@@ -8,7 +8,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 
 function AppContent() {
   const { user, loading } = useAuth();
-  const [currentScreen, setCurrentScreen] = useState<"loading" | "auth" | "main">("loading");
+  const [currentScreen, setCurrentScreen] = useState("loading");
 
   useEffect(() => {
     console.log("App: Auth state effect triggered", {
@@ -33,7 +33,7 @@ function AppContent() {
       }
     } catch (error) {
       console.error("App: Error in auth state handling:", error);
-      setCurrentScreen("auth"); // Fallback to auth screen
+      setCurrentScreen("auth");
     }
   }, [user, loading]);
 
@@ -85,19 +85,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#121212",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#121212",
-  },
-  loadingText: {
-    color: "#FFFFFF",
-    marginTop: 16,
-    fontSize: 16,
-  },
+  container: { flex: 1, backgroundColor: "#121212" },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#121212" },
+  loadingText: { color: "#FFFFFF", marginTop: 16, fontSize: 16 },
 });
