@@ -185,7 +185,7 @@ export const ProfileStackNavigator = () => {
     >
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: "Profile" }} />
       <ProfileStack.Screen name="MyVenues" component={MyVenuesScreen} options={{ title: "My Venues" }} />
-      <ProfileStack.Screen name="AddVenue" component={AddVenueScreenweetoptions={{ title: "Add Venue" }} />
+      <ProfileStack.Screen name="AddVenue" component={AddVenueScreen} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <ProfileStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
