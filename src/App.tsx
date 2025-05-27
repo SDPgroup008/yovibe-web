@@ -16,19 +16,24 @@ function AppContent() {
       userEmail: user?.email,
       userType: user?.userType,
       loading,
-      userObject: JSON.stringify(user, null, 2), // Detailed user object
+      userObject: JSON.stringify(user, null, 2),
       timestamp: new Date().toISOString(),
     });
 
-    if (loading) {
-      console.log("App: Setting screen to loading");
-      setCurrentScreen("loading");
-    } else if (user && user.email) {
-      console.log("App: User authenticated, setting screen to main for:", user.email);
-      setCurrentScreen("main");
-    } else {
-      console.log("App: No valid user, setting screen to auth");
-      setCurrentScreen("auth");
+    try {
+      if (loading) {
+        console.log("App: Setting screen to loading");
+        setCurrentScreen("loading");
+      } else if (user && user.email) {
+        console.log("App: User authenticated, setting screen to main for:", user.email);
+        setCurrentScreen("main");
+      } else {
+        console.log("App: No valid user, setting screen to auth");
+        setCurrentScreen("auth");
+      }
+    } catch (error) {
+      console.error("App: Error in auth state handling:", error);
+      setCurrentScreen("auth"); // Fallback to auth screen
     }
   }, [user, loading]);
 
@@ -36,25 +41,33 @@ function AppContent() {
     console.log("App: Current screen changed to:", currentScreen);
   }, [currentScreen]);
 
-  // Debug rendering
   console.log("App: Rendering AppContent with currentScreen:", currentScreen);
 
-  switch (currentScreen) {
-    case "loading":
-      console.log("App: Rendering loading screen");
-      return (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
-          <Text style={styles.loadingText}>Loading YoVibe...</Text>
-        </View>
-      );
-    case "main":
-      console.log("App: Rendering main app for user:", user?.email);
-      return <MainTabNavigator />;
-    case "auth":
-    default:
-      console.log("App: Rendering auth screens");
-      return <AuthNavigator />;
+  try {
+    switch (currentScreen) {
+      case "loading":
+        console.log("App: Rendering loading screen");
+        return (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2196F3" />
+            <Text style={styles.loadingText}>Loading YoVibe...</Text>
+          </View>
+        );
+      case "main":
+        console.log("App: Rendering main app for user:", user?.email);
+        return <MainTabNavigator />;
+      case "auth":
+      default:
+        console.log("App: Rendering auth screens");
+        return <AuthNavigator />;
+    }
+  } catch (error) {
+    console.error("App: Error rendering navigator:", error);
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Error loading app. Please try again.</Text>
+      </View>
+    );
   }
 }
 
