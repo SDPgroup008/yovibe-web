@@ -1,12 +1,10 @@
 "use client";
 
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import type { AddEventScreenProps } from "../navigation/types";
 import type { VenuesStackParamList } from "../navigation/types";
 import AddEventScreen from "./AddEventScreen";
 
-type VenuesAddEventScreenProps = NativeStackScreenProps<VenuesStackParamList, "AddEvent">;
-
-const VenuesAddEventScreen: React.FC<VenuesAddEventScreenProps> = ({ navigation, route }) => {
+const VenuesAddEventScreen: React.FC<AddEventScreenProps<VenuesStackParamList>> = ({ navigation, route }) => {
   return <AddEventScreen navigation={navigation} route={route} />;
 };
 
