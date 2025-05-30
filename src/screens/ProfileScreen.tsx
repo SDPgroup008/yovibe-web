@@ -39,15 +39,30 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   }, [user])
 
   const handleSignOut = async () => {
-    setLoading(true)
-    try {
-      await signOut()
-      // The AuthContext will handle navigation
-    } catch (error) {
-      Alert.alert("Error", "Failed to sign out")
-    } finally {
-      setLoading(false)
-    }
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Sign Out",
+        style: "destructive",
+        onPress: async () => {
+          setLoading(true)
+          try {
+            console.log("ProfileScreen: Starting sign out process")
+            await signOut()
+            console.log("ProfileScreen: Sign out completed")
+            // The AuthContext will handle navigation
+          } catch (error) {
+            console.error("ProfileScreen: Sign out error:", error)
+            Alert.alert("Error", "Failed to sign out. Please try again.")
+          } finally {
+            setLoading(false)
+          }
+        },
+      },
+    ])
   }
 
   const navigateToMyVenues = () => {
@@ -228,7 +243,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut} disabled={loading}>
+      <TouchableOpacity
+        style={[styles.signOutButton, loading && styles.disabledButton]}
+        onPress={handleSignOut}
+        disabled={loading}
+      >
         {loading ? <ActivityIndicator color="#FF3B30" /> : <Text style={styles.signOutText}>Sign Out</Text>}
       </TouchableOpacity>
 

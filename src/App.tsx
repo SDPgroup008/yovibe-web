@@ -23,6 +23,23 @@ function AppContent() {
     }
   }, [loading])
 
+  // Additional safety check - if user is null, always show auth
+  useEffect(() => {
+    if (!loading && !user) {
+      // Ensure we're on the auth screen when no user is present
+      setTimeout(() => {
+        try {
+          navigationRef.current?.reset({
+            index: 0,
+            routes: [{ name: "Auth" }],
+          })
+        } catch (error) {
+          console.warn("Navigation reset error:", error)
+        }
+      }, 100)
+    }
+  }, [user, loading])
+
   if (initializing) {
     return (
       <View style={styles.loadingContainer}>
@@ -32,13 +49,18 @@ function AppContent() {
     )
   }
 
+  // Force auth screen if no user - additional safety measure
+  if (!user) {
+    return (
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="Auth" component={AuthNavigator} />
+      </Stack.Navigator>
+    )
+  }
+
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }}>
-      {user ? (
-        <Stack.Screen name="Main" component={MainTabNavigator} />
-      ) : (
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-      )}
+      <Stack.Screen name="Main" component={MainTabNavigator} />
     </Stack.Navigator>
   )
 }

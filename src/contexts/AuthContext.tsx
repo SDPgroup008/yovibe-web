@@ -85,6 +85,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log("No user found, clearing user state")
         setUser(null)
         await AsyncStorage.removeItem(USER_STORAGE_KEY)
+
+        // Ensure we're on the auth screen when no user is present
+        setTimeout(() => {
+          try {
+            reset({
+              index: 0,
+              routes: [{ name: "Auth", params: { screen: "Login" } }],
+            })
+          } catch (navError) {
+            console.warn("Navigation error during auth state cleanup:", navError)
+          }
+        }, 100)
       }
 
       setLoading(false)
@@ -212,17 +224,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.log("Attempting to sign out")
     setLoading(true)
     try {
-      await FirebaseService.signOut()
-      // Clear stored user data
-      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+      // Clear user state immediately to prevent any lingering access
       setUser(null)
+
+      // Clear stored user data first
+      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+
+      // Sign out from Firebase
+      await FirebaseService.signOut()
+
       console.log("Sign out successful")
 
-      // Navigate to Auth/Login screen after sign out
+      // Navigate to Auth/Login screen after sign out with complete reset
       try {
         reset({
           index: 0,
-          routes: [{ name: "Auth" }],
+          routes: [{ name: "Auth", params: { screen: "Login" } }],
         })
       } catch (navError) {
         console.warn("Navigation error:", navError)
@@ -232,15 +249,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error("Error signing out:", error)
 
-      // For development/testing, clear user state even if Firebase fails
-      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+      // Even if Firebase sign out fails, clear local state and navigate to login
       setUser(null)
+      await AsyncStorage.removeItem(USER_STORAGE_KEY)
 
       // Still navigate to Auth screen even if there was an error
       try {
         reset({
           index: 0,
-          routes: [{ name: "Auth" }],
+          routes: [{ name: "Auth", params: { screen: "Login" } }],
         })
       } catch (navError) {
         console.warn("Navigation error:", navError)

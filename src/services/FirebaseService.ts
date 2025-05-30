@@ -61,12 +61,27 @@ class FirebaseService {
   async signOut(): Promise<void> {
     try {
       console.log("FirebaseService: Signing out user")
-      await firebaseSignOut(auth)
+
+      // Clear any cached auth state
+      if (auth.currentUser) {
+        await firebaseSignOut(auth)
+      }
+
+      // Additional cleanup - clear any persisted auth state
+      if (typeof window !== "undefined" && window.localStorage) {
+        // Clear any Firebase auth persistence
+        const firebaseKeys = Object.keys(window.localStorage).filter(
+          (key) => key.startsWith("firebase:") || key.includes("firebaseLocalStorageDb"),
+        )
+        firebaseKeys.forEach((key) => window.localStorage.removeItem(key))
+      }
+
       console.log("FirebaseService: Sign out successful")
       return
     } catch (error) {
       console.error("FirebaseService: Error signing out:", error)
-      throw error
+      // Don't throw the error - we want to clear local state regardless
+      console.warn("FirebaseService: Continuing with local cleanup despite Firebase error")
     }
   }
 
