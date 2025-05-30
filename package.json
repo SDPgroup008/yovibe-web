@@ -10,8 +10,9 @@
     "deploy": "netlify deploy --prod",
     "dev": "expo start --web",
     "preview": "expo start --web --no-dev --minify",
-    "clean": "expo r -c",
-    "reset": "expo r -c && npm install"
+    "clean": "expo start --clear",
+    "reset": "expo install --fix && npm install",
+    "clear-cache": "expo start --clear --web"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
