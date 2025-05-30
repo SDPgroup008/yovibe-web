@@ -20,4 +20,13 @@ config.resolver.extraNodeModules = {
   ),
 }
 
+// Configure asset handling
+config.resolver.assetExts = [...config.resolver.assetExts, "png", "jpg", "jpeg", "gif", "svg", "webp", "ico"]
+
+// Transformer configuration for better asset handling
+config.transformer = {
+  ...config.transformer,
+  assetPlugins: ["expo-asset/tools/hashAssetFiles"],
+}
+
 module.exports = config

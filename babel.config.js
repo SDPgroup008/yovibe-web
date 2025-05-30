@@ -11,6 +11,7 @@ module.exports = (api) => {
           },
         },
       ],
+      "react-native-web", // Added to handle asset imports better
     ],
   }
 }
