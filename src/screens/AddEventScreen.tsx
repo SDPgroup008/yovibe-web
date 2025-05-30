@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import type { AddEventScreenProps, VenuesStackParamList, EventsStackParamList } from "../navigation/types";
-import { useState, useEffect } from "react";
+import type React from "react"
+import { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -12,78 +12,89 @@ import {
   Image,
   Alert,
   ActivityIndicator,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import ImagePickerService from "../services/ImagePickerService";
-import FirebaseService from "../services/FirebaseService";
-import { useAuth } from "../contexts/AuthContext";
-import type { Venue } from "../models/Venue";
+} from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import ImagePickerService from "../services/ImagePickerService"
+import FirebaseService from "../services/FirebaseService"
+import { useAuth } from "../contexts/AuthContext"
 
-type AddEventScreenType = <T extends VenuesStackParamList | EventsStackParamList>(
-  props: AddEventScreenProps<T>
-) => JSX.Element;
+interface AddEventScreenProps {
+  navigation: any
+  route: {
+    params?: {
+      venueId?: string
+      venueName?: string
+    }
+  }
+}
 
-const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
-  const { user } = useAuth();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [date, setDate] = useState(new Date());
-  const [dateString, setDateString] = useState(new Date().toISOString().split("T")[0]);
-  const [artists, setArtists] = useState("");
-  const [image, setImage] = useState<string | null>(null);
-  const [imageFile, setImageFile] = useState<any>(null);
-  const [isFeatured, setIsFeatured] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([]);
-  const [selectedVenueId, setSelectedVenueId] = useState(route.params?.venueId || "");
-  const [selectedVenueName, setSelectedVenueName] = useState(route.params?.venueName || "");
-  const [showVenueSelector, setShowVenueSelector] = useState(false);
-  const [useCustomVenue, setUseCustomVenue] = useState(false);
-  const [customVenueName, setCustomVenueName] = useState("");
-  const [customVenueAddress, setCustomVenueAddress] = useState("");
-  const [location, setLocation] = useState("");
-  const [priceIndicator, setPriceIndicator] = useState("1");
-  const [entryFee, setEntryFee] = useState("");
+const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) => {
+  const { user } = useAuth()
+  const [name, setName] = useState("")
+  const [description, setDescription] = useState("")
+  const [date, setDate] = useState(new Date())
+  const [dateString, setDateString] = useState(new Date().toISOString().split("T")[0])
+  const [artists, setArtists] = useState("")
+  const [image, setImage] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<any>(null) // For handling actual file upload
+  const [isFeatured, setIsFeatured] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedVenueId, setSelectedVenueId] = useState(route.params?.venueId || "")
+  const [selectedVenueName, setSelectedVenueName] = useState(route.params?.venueName || "")
+  const [showVenueSelector, setShowVenueSelector] = useState(false)
+  const [useCustomVenue, setUseCustomVenue] = useState(false)
+  const [customVenueName, setCustomVenueName] = useState("")
+  const [customVenueAddress, setCustomVenueAddress] = useState("")
+
+  // Add these new state variables after the existing state declarations
+  const [location, setLocation] = useState("")
+  const [priceIndicator, setPriceIndicator] = useState("1")
+  const [entryFee, setEntryFee] = useState("")
 
   useEffect(() => {
+    // If user is not a club owner, load venues for selection
     if (user && user.userType !== "club_owner") {
-      loadVenues();
+      loadVenues()
     }
-  }, [user]);
+  }, [user])
 
   const loadVenues = async () => {
     try {
-      const venuesList = await FirebaseService.getVenues();
-      setVenues(venuesList.map((venue: Venue) => ({ id: venue.id, name: venue.name })));
+      const venuesList = await FirebaseService.getVenues()
+      setVenues(venuesList.map((venue) => ({ id: venue.id, name: venue.name })))
     } catch (error) {
-      console.error("Error loading venues:", error);
+      console.error("Error loading venues:", error)
     }
-  };
+  }
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newDate = new Date(e.target.value);
-    setDate(newDate);
-    setDateString(e.target.value);
-  };
+    const newDate = new Date(e.target.value)
+    setDate(newDate)
+    setDateString(e.target.value)
+  }
 
   const handleVenueSelect = (venueId: string, venueName: string) => {
-    setSelectedVenueId(venueId);
-    setSelectedVenueName(venueName);
-    setShowVenueSelector(false);
-    setUseCustomVenue(false);
-  };
+    setSelectedVenueId(venueId)
+    setSelectedVenueName(venueName)
+    setShowVenueSelector(false)
+    setUseCustomVenue(false)
+  }
 
   const toggleCustomVenue = () => {
-    setUseCustomVenue(!useCustomVenue);
+    setUseCustomVenue(!useCustomVenue)
     if (!useCustomVenue) {
-      setSelectedVenueId("");
-      setSelectedVenueName("");
+      // Reset the selected venue when switching to custom
+      setSelectedVenueId("")
+      setSelectedVenueName("")
     } else {
-      setCustomVenueName("");
-      setCustomVenueAddress("");
+      // Reset the custom venue fields when switching back
+      setCustomVenueName("")
+      setCustomVenueAddress("")
     }
-  };
+  }
 
+  // Function to pick an image from the device
   const pickImage = async () => {
     try {
       const result = await ImagePickerService.launchImageLibraryAsync({
@@ -91,107 +102,121 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
         allowsEditing: true,
         aspect: [3, 4],
         quality: 0.8,
-      });
+      })
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImage = result.assets[0];
-        console.log("Image selected:", selectedImage.uri.substring(0, 50) + "...");
-        setImage(selectedImage.uri);
-        setImageFile(selectedImage);
+        const selectedImage = result.assets[0]
+        console.log("Image selected:", selectedImage.uri.substring(0, 50) + "...")
+        setImage(selectedImage.uri)
+        setImageFile(selectedImage)
       }
     } catch (error) {
-      console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image");
+      console.error("Error picking image:", error)
+      Alert.alert("Error", "Failed to pick image")
     }
-  };
+  }
 
+  // Handle image URL input (for when picking is not available)
   const handleImageUrlInput = () => {
     Alert.alert(
       "Image URL",
       "Please enter the URL of the image:",
       [
-        { text: "Cancel", style: "cancel" },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
         {
           text: "OK",
           onPress: (url) => {
-            if (url) setImage(url);
+            if (url) {
+              setImage(url)
+            }
           },
         },
       ],
       {
-        // @ts-ignore - Web-only feature
-        prompt: { type: "plain-text", placeholder: "https://example.com/image.jpg" },
-      }
-    );
-  };
+        // @ts-ignore - This is a web-only feature
+        prompt: {
+          type: "plain-text",
+          placeholder: "https://example.com/image.jpg",
+        },
+      },
+    )
+  }
 
   const handleSubmit = async () => {
     if (!name || !description || !artists) {
-      Alert.alert("Error", "Please fill in all required fields");
-      return;
+      Alert.alert("Error", "Please fill in all required fields")
+      return
     }
 
     if (!image) {
-      Alert.alert("Error", "Please select an image for the event");
-      return;
+      Alert.alert("Error", "Please select an image for the event")
+      return
     }
 
     if (!user) {
-      Alert.alert("Error", "You must be logged in to add an event");
-      return;
+      Alert.alert("Error", "You must be logged in to add an event")
+      return
     }
 
+    // Venue validation
     if (!useCustomVenue && !selectedVenueId) {
-      Alert.alert("Error", "Please select a venue for this event");
-      return;
+      Alert.alert("Error", "Please select a venue for this event")
+      return
     }
 
     if (useCustomVenue && (!customVenueName || !customVenueAddress)) {
-      Alert.alert("Error", "Please enter both name and address for the custom venue");
-      return;
+      Alert.alert("Error", "Please enter both name and address for the custom venue")
+      return
     }
 
     if (!location) {
-      Alert.alert("Error", "Please enter the location of the event");
-      return;
+      Alert.alert("Error", "Please enter the location of the event")
+      return
     }
 
-    setLoading(true);
+    setLoading(true)
 
     try {
-      let venueId = selectedVenueId;
-      let venueName = selectedVenueName;
+      let venueId = selectedVenueId
+      let venueName = selectedVenueName
 
+      // If using custom venue, create it first
       if (useCustomVenue) {
+        // Create a simple venue object with minimal required fields
         const customVenue = {
           name: customVenueName,
           location: customVenueAddress,
           description: `Custom venue for event: ${name}`,
           categories: ["Other"],
           vibeRating: 4.0,
-          backgroundImageUrl: image ?? "",
-          latitude: 0,
-          longitude: 0,
+          backgroundImageUrl: image, // Use the same image for the venue temporarily
+          latitude: 0, // Default value
+          longitude: 0, // Default value
           ownerId: user.id,
           createdAt: new Date(),
-        };
+        }
 
-        venueId = await FirebaseService.addVenue(customVenue);
-        venueName = customVenueName;
+        venueId = await FirebaseService.addVenue(customVenue)
+        venueName = customVenueName
       }
 
-      let imageUrl = image;
+      // Upload image
+      let imageUrl = image
       if (image) {
         try {
-          console.log("Uploading event poster image...");
-          imageUrl = await FirebaseService.uploadEventImage(image);
-          console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...");
+          console.log("Uploading event poster image...")
+          imageUrl = await FirebaseService.uploadEventImage(image)
+          console.log("Image uploaded successfully:", imageUrl.substring(0, 50) + "...")
         } catch (error) {
-          console.error("Error uploading image:", error);
-          Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.");
+          console.error("Error uploading image:", error)
+          Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.")
         }
       }
 
+      // Create event object
       const eventData = {
         name,
         description,
@@ -199,28 +224,29 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
         artists: artists.split(",").map((artist) => artist.trim()),
         venueId,
         venueName,
-        posterImageUrl: imageUrl ?? "",
+        posterImageUrl: imageUrl,
         isFeatured,
         location: location.toUpperCase(),
         priceIndicator: Number.parseInt(priceIndicator),
-        entryFee: entryFee ? entryFee : "Free Entry",
+        entryFee: entryFee ? entryFee : "Free Entry", // Only use "Free Entry" if no fee is entered
         attendees: [],
         createdAt: new Date(),
         createdBy: user.id,
         createdByType: user.userType,
-      };
+      }
 
-      await FirebaseService.addEvent(eventData);
+      // Add event to database
+      await FirebaseService.addEvent(eventData)
 
-      Alert.alert("Success", "Event created successfully");
-      navigation.goBack();
+      Alert.alert("Success", "Event created successfully")
+      navigation.goBack()
     } catch (error) {
-      console.error("Error creating event:", error);
-      Alert.alert("Error", "Failed to create event");
+      Alert.alert("Error", "Failed to create event")
+      console.error(error)
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -273,6 +299,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
           placeholderTextColor="#999"
         />
 
+        {/* Venue selection with custom venue option */}
         {(!user?.userType || user?.userType !== "club_owner") && (
           <>
             <View style={styles.venueToggleContainer}>
@@ -282,6 +309,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
               >
                 <Text style={styles.venueToggleText}>Select Existing Venue</Text>
               </TouchableOpacity>
+
               <TouchableOpacity
                 style={[styles.venueToggleButton, useCustomVenue && styles.venueToggleButtonActive]}
                 onPress={() => setUseCustomVenue(true)}
@@ -324,6 +352,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
                   placeholder="Enter venue name"
                   placeholderTextColor="#999"
                 />
+
                 <Text style={styles.label}>Custom Venue Address *</Text>
                 <TextInput
                   style={styles.input}
@@ -337,6 +366,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
           </>
         )}
 
+        {/* For club owners, show the selected venue */}
         {user?.userType === "club_owner" && (
           <>
             <Text style={styles.label}>Venue</Text>
@@ -346,6 +376,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
           </>
         )}
 
+        {/* Feature toggle (only for admins) */}
         {user?.userType === "admin" && (
           <View style={styles.checkboxContainer}>
             <TouchableOpacity style={styles.checkbox} onPress={() => setIsFeatured(!isFeatured)}>
@@ -359,6 +390,7 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
           </View>
         )}
 
+        {/* Add these new form fields before the image selection section */}
         <Text style={styles.label}>Location (City) *</Text>
         <TextInput
           style={styles.input}
@@ -400,11 +432,13 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
         </View>
 
         <Text style={styles.label}>Event Poster *</Text>
+
         <View style={styles.imageOptions}>
           <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
             <Ionicons name="image" size={20} color="#FFFFFF" />
             <Text style={styles.imageButtonText}>Pick from Device</Text>
           </TouchableOpacity>
+
           <TouchableOpacity style={styles.imageButton} onPress={handleImageUrlInput}>
             <Ionicons name="link" size={20} color="#FFFFFF" />
             <Text style={styles.imageButtonText}>Enter URL</Text>
@@ -417,8 +451,8 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
             <TouchableOpacity
               style={styles.removeImageButton}
               onPress={() => {
-                setImage(null);
-                setImageFile(null);
+                setImage(null)
+                setImageFile(null)
               }}
             >
               <Ionicons name="close-circle" size={24} color="#FFFFFF" />
@@ -442,13 +476,22 @@ const AddEventScreen: AddEventScreenType = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
     </ScrollView>
-  );
-};
+  )
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#121212" },
-  form: { padding: 16 },
-  label: { fontSize: 16, color: "#FFFFFF", marginBottom: 8 },
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
+  form: {
+    padding: 16,
+  },
+  label: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginBottom: 8,
+  },
   input: {
     backgroundColor: "#1E1E1E",
     borderRadius: 8,
@@ -458,9 +501,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  textArea: { height: 100, textAlignVertical: "top" },
-  datePickerContainer: { marginBottom: 16 },
-  venueToggleContainer: { flexDirection: "row", marginBottom: 16 },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  datePickerContainer: {
+    marginBottom: 16,
+  },
+  venueToggleContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
   venueToggleButton: {
     flex: 1,
     padding: 10,
@@ -469,8 +520,13 @@ const styles = StyleSheet.create({
     borderColor: "#333",
     backgroundColor: "#1E1E1E",
   },
-  venueToggleButtonActive: { backgroundColor: "#2196F3" },
-  venueToggleText: { color: "#FFFFFF", fontSize: 14 },
+  venueToggleButtonActive: {
+    backgroundColor: "#2196F3",
+  },
+  venueToggleText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
   venueSelector: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -482,7 +538,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  venueSelectorText: { color: "#FFFFFF" },
+  venueSelectorText: {
+    color: "#FFFFFF",
+  },
   venueDropdown: {
     backgroundColor: "#1E1E1E",
     borderRadius: 8,
@@ -491,9 +549,17 @@ const styles = StyleSheet.create({
     borderColor: "#333",
     maxHeight: 150,
   },
-  venueList: { padding: 8 },
-  venueItem: { padding: 12, borderBottomWidth: 1, borderBottomColor: "#333" },
-  venueItemText: { color: "#FFFFFF" },
+  venueList: {
+    padding: 8,
+  },
+  venueItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  venueItemText: {
+    color: "#FFFFFF",
+  },
   venueInfo: {
     backgroundColor: "#1E1E1E",
     borderRadius: 8,
@@ -502,11 +568,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  venueText: { color: "#FFFFFF" },
-  checkboxContainer: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
-  checkbox: { marginRight: 8 },
-  checkboxLabel: { color: "#FFFFFF" },
-  imageOptions: { flexDirection: "row", marginBottom: 16 },
+  venueText: {
+    color: "#FFFFFF",
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  checkbox: {
+    marginRight: 8,
+  },
+  checkboxLabel: {
+    color: "#FFFFFF",
+  },
+  imageOptions: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
   imageButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -517,14 +596,51 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: 8,
   },
-  imageButtonText: { color: "#FFFFFF", marginLeft: 8 },
-  imagePreview: { height: 200, marginBottom: 16, borderRadius: 8, overflow: "hidden", position: "relative" },
-  previewImage: { width: "100%", height: "100%" },
-  removeImageButton: { position: "absolute", top: 8, right: 8, backgroundColor: "rgba(0,0,0,0.6)", borderRadius: 15, padding: 2 },
-  submitButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#2196F3", borderRadius: 8, padding: 16, marginTop: 8 },
-  disabledButton: { opacity: 0.6 },
-  submitButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
-  priceContainer: { flexDirection: "row", marginBottom: 16 },
+  imageButtonText: {
+    color: "#FFFFFF",
+    marginLeft: 8,
+  },
+  imagePreview: {
+    height: 200,
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 15,
+    padding: 2,
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 8,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  priceContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
   priceButton: {
     flex: 1,
     padding: 12,
@@ -535,8 +651,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
-  selectedPriceButton: { backgroundColor: "#2196F3", borderColor: "#2196F3" },
-  priceButtonText: { color: "#FFFFFF", fontSize: 14, fontWeight: "bold" },
-});
+  selectedPriceButton: {
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
+  },
+  priceButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+})
 
-export default AddEventScreen;
+export default AddEventScreen

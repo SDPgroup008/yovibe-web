@@ -13,4 +13,3 @@ if (typeof document !== "undefined") {
   const rootTag = document.getElementById("root")
   AppRegistry.runApplication("YoVibe", { rootTag })
 }
-

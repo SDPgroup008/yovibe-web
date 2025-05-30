@@ -1,7 +1,7 @@
-"use client";
+"use client"
 
-import type React from "react";
-import { useState, useCallback } from "react";
+import type React from "react"
+import { useState } from "react"
 import {
   View,
   Text,
@@ -11,47 +11,51 @@ import {
   Alert,
   ActivityIndicator,
   ImageBackground,
-} from "react-native";
-import { useAuth } from "../../contexts/AuthContext";
-import { Ionicons } from "@expo/vector-icons";
+} from "react-native"
+import { useAuth } from "../../contexts/AuthContext"
+import { Ionicons } from "@expo/vector-icons"
 
 interface LoginScreenProps {
-  navigation: any;
+  navigation: any
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const { signIn } = useAuth();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { signIn } = useAuth()
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
 
-  const handleLogin = useCallback(async () => {
+  const handleLogin = async () => {
     if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password");
-      return;
+      Alert.alert("Error", "Please enter both email and password")
+      return
     }
 
-    if (loading) return; // Prevent multiple calls
-
-    setLoading(true);
+    setLoading(true)
     try {
-      console.log("Login attempt with:", email);
-      await signIn(email, password);
-      console.log("Login successful - user should be authenticated now");
+      console.log("Login attempt with:", email)
+      await signIn(email, password)
+      console.log("Login successful")
+      // Navigate to main app after successful login
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Main" }],
+      })
+      // The AuthContext will handle navigation
     } catch (error) {
-      console.error("Login failed:", error);
-      Alert.alert("Login Failed", error instanceof Error ? error.message : "Failed to login");
+      console.error("Login failed:", error)
+      Alert.alert("Login Failed", error instanceof Error ? error.message : "Failed to login")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [email, password, loading, signIn]);
+  }
 
   return (
     <ImageBackground
       source={{
         uri: "https://images.unsplash.com/photo-1571204829887-3b8d69e23af5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
       }}
-      style={styles.container8}
+      style={styles.container}
     >
       <View style={styles.overlay}>
         <View style={styles.logoContainer}>
@@ -106,11 +110,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
         </View>
       </View>
     </ImageBackground>
-  );
-};
+  )
+}
 
 const styles = StyleSheet.create({
-  container8: {
+  container: {
     flex: 1,
     backgroundColor: "#121212",
   },
@@ -197,6 +201,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "bold",
   },
-});
+})
 
-export default LoginScreen;
+export default LoginScreen

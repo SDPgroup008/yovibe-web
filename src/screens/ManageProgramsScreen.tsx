@@ -1,38 +1,48 @@
-"use client";
+"use client"
 
-import type { ManageProgramsScreenProps } from "../navigation/types";
-import { useState } from "react";
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import FirebaseService from "../services/FirebaseService";
+import type React from "react"
+import { useState } from "react"
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import FirebaseService from "../services/FirebaseService"
 
-const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+interface ManageProgramsScreenProps {
+  navigation: any
+  route: {
+    params: {
+      venueId: string
+      weeklyPrograms: Record<string, string>
+    }
+  }
+}
+
+const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 const ManageProgramsScreen: React.FC<ManageProgramsScreenProps> = ({ navigation, route }) => {
-  const { venueId, weeklyPrograms } = route.params;
-  const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms || {});
-  const [loading, setLoading] = useState(false);
+  const { venueId, weeklyPrograms } = route.params
+  const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms || {})
+  const [loading, setLoading] = useState(false)
 
   const handleProgramChange = (day: string, program: string) => {
     setPrograms((prev) => ({
       ...prev,
       [day]: program,
-    }));
-  };
+    }))
+  }
 
   const handleSave = async () => {
-    setLoading(true);
+    setLoading(true)
     try {
-      await FirebaseService.updateVenuePrograms(venueId, programs);
-      Alert.alert("Success", "Weekly programs updated successfully");
-      navigation.goBack();
+      await FirebaseService.updateVenuePrograms(venueId, programs)
+      Alert.alert("Success", "Weekly programs updated successfully")
+      navigation.goBack()
     } catch (error) {
-      console.error("Error updating programs:", error);
-      Alert.alert("Error", "Failed to update weekly programs");
+      console.error("Error updating programs:", error)
+      Alert.alert("Error", "Failed to update weekly programs")
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <ScrollView style={styles.container}>
@@ -70,16 +80,40 @@ const ManageProgramsScreen: React.FC<ManageProgramsScreenProps> = ({ navigation,
         )}
       </TouchableOpacity>
     </ScrollView>
-  );
-};
+  )
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#121212" },
-  header: { padding: 16, borderBottomWidth: 1, borderBottomColor: "#333" },
-  headerTitle: { fontSize: 24, fontWeight: "bold", color: "#FFFFFF", marginBottom: 8 },
-  headerSubtitle: { fontSize: 16, color: "#BBBBBB" },
-  dayContainer: { padding: 16, borderBottomWidth: 1, borderBottomColor: "#333" },
-  dayLabel: { fontSize: 18, fontWeight: "bold", color: "#FFFFFF", marginBottom: 8 },
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
+  header: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: 8,
+  },
+  headerSubtitle: {
+    fontSize: 16,
+    color: "#BBBBBB",
+  },
+  dayContainer: {
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  dayLabel: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: 8,
+  },
   programInput: {
     backgroundColor: "#1E1E1E",
     borderRadius: 8,
@@ -99,8 +133,15 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
   },
-  disabledButton: { opacity: 0.6 },
-  saveButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
-});
+  disabledButton: {
+    opacity: 0.6,
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+})
 
-export default ManageProgramsScreen;
+export default ManageProgramsScreen

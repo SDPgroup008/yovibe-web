@@ -4,7 +4,7 @@ module.exports = (api) => {
     presets: ["babel-preset-expo"],
     plugins: [
       [
-        "babel-plugin-module-resolver",
+        "module-resolver",
         {
           alias: {
             "@": "./src",

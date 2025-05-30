@@ -1,217 +1,301 @@
-"use client";
+"use client"
 
-import type React from "react";
-import { createContext, useState, useEffect, useContext, useCallback } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { auth, isFirebaseConfigured } from "../config/firebase";
-import FirebaseService from "../services/FirebaseService";
-import type { User, UserType } from "../models/User";
+import type React from "react"
+import { createContext, useState, useEffect, useContext } from "react"
+import { onAuthStateChanged } from "firebase/auth"
+import AsyncStorage from "@react-native-async-storage/async-storage"
+import { auth } from "../config/firebase"
+import FirebaseService from "../services/FirebaseService"
+import type { User, UserType } from "../models/User"
+import { reset, navigate } from "../utils/navigationRef"
+import { isDevelopment } from "../utils/env"
 
 interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, userType: UserType) => Promise<void>;
-  signOut: () => Promise<void>;
-  updateProfile: (data: Partial<User>) => Promise<void>;
+  user: User | null
+  loading: boolean
+  signIn: (email: string, password: string) => Promise<void>
+  signUp: (email: string, password: string, userType: UserType) => Promise<void>
+  signOut: () => Promise<void>
+  updateProfile: (data: Partial<User>) => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-const USER_STORAGE_KEY = "yovibe_user_data";
+// Key for storing user data in AsyncStorage
+const USER_STORAGE_KEY = "yovibe_user_data"
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const updateUserState = useCallback(async (newUser: User | null) => {
-    console.log("AuthContext: Updating user state:", newUser ? newUser.email : "null");
-    setUser(newUser ? { ...newUser } : null);
-    try {
-      if (newUser) {
-        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(newUser));
-      } else {
-        localStorage.removeItem(USER_STORAGE_KEY);
-      }
-    } catch (error) {
-      console.error("AuthContext: Error updating storage:", error);
-    }
-    console.log("AuthContext: User state updated successfully");
-  }, []);
-
+  // Load user from AsyncStorage on initial load
   useEffect(() => {
-    const loadStoredUser = () => {
+    const loadStoredUser = async () => {
       try {
-        console.log("AuthContext: Loading stored user...");
-        const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+        const storedUser = await AsyncStorage.getItem(USER_STORAGE_KEY)
         if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-          parsedUser.createdAt = new Date(parsedUser.createdAt);
-          parsedUser.lastLoginAt = new Date(parsedUser.lastLoginAt);
-          console.log("AuthContext: Loaded stored user:", parsedUser.email);
-          setUser(parsedUser);
-        } else {
-          console.log("AuthContext: No stored user found");
+          setUser(JSON.parse(storedUser))
         }
       } catch (error) {
-        console.error("AuthContext: Error loading stored user:", error);
+        console.error("Error loading stored user:", error)
+      } finally {
+        setLoading(false)
       }
-    };
-
-    loadStoredUser();
-  }, []);
-
-  useEffect(() => {
-    console.log("AuthContext: Setting up auth state listener");
-    if (!isFirebaseConfigured) {
-      console.log("AuthContext: Firebase not configured - skipping auth state listener");
-      setLoading(false);
-      return;
     }
 
+    loadStoredUser()
+  }, [])
+
+  useEffect(() => {
+    console.log("Setting up auth state listener")
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("AuthContext: Auth state changed:", firebaseUser ? firebaseUser.email : "No user");
+      setLoading(true)
+      console.log("Auth state changed:", firebaseUser ? firebaseUser.email : "No user")
+
       if (firebaseUser) {
         try {
-          console.log("AuthContext: Getting user profile for:", firebaseUser.email);
-          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
-          console.log("AuthContext: User profile loaded successfully:", userProfile.email);
-          await updateUserState(userProfile);
+          // For development/testing, create a mock user if Firebase is not properly configured
+          let userProfile
+          try {
+            userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
+          } catch (error) {
+            console.warn("Error fetching user profile, using mock data:", error)
+            // Create a mock user for development
+            userProfile = {
+              id: "mock-id",
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || "test@example.com",
+              userType: "user" as UserType,
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+            }
+          }
+
+          setUser(userProfile)
+          console.log("User profile loaded:", userProfile.email)
+
+          // Store user data in AsyncStorage
+          await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(userProfile))
         } catch (error) {
-          console.error("AuthContext: Error loading user profile:", error);
-          await updateUserState(null);
+          console.error("Error in auth state change handler:", error)
+          setUser(null)
+          await AsyncStorage.removeItem(USER_STORAGE_KEY)
         }
       } else {
-        console.log("AuthContext: No Firebase user, clearing state");
-        await updateUserState(null);
+        console.log("No user found, clearing user state")
+        setUser(null)
+        await AsyncStorage.removeItem(USER_STORAGE_KEY)
       }
-      setLoading(false);
-    });
+
+      setLoading(false)
+    })
 
     return () => {
-      console.log("AuthContext: Cleaning up auth state listener");
-      unsubscribe();
-    };
-  }, [updateUserState]);
+      console.log("Cleaning up auth state listener")
+      unsubscribe()
+    }
+  }, [])
 
   const signIn = async (email: string, password: string) => {
-    console.log("AuthContext: Attempting to sign in:", email);
+    console.log("Attempting to sign in:", email)
+    setLoading(true)
     try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signin");
+      await FirebaseService.signIn(email, password)
+      console.log("Sign in successful")
+      // The onAuthStateChanged listener will update the user state
+
+      // For development/testing, create a mock user if Firebase is not properly configured
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
-          id: "dev-user-id",
-          uid: "dev-uid",
+          id: "mock-id",
+          uid: "mock-uid",
           email: email,
           userType: "user" as UserType,
           createdAt: new Date(),
           lastLoginAt: new Date(),
-        };
-        await updateUserState(mockUser);
-        console.log("AuthContext: Development signin successful");
-        return;
+        }
+        setUser(mockUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
       }
-      await FirebaseService.signIn(email, password);
-      console.log("AuthContext: Firebase signin successful");
+
+      // Navigate to main app after successful login
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+      }
     } catch (error) {
-      console.error("AuthContext: Error signing in:", error);
-      throw error;
+      console.error("Error signing in:", error)
+
+      // For development/testing, create a mock user if Firebase is not properly configured
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
+        const mockUser = {
+          id: "mock-id",
+          uid: "mock-uid",
+          email: email,
+          userType: "user" as UserType,
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
+        }
+        setUser(mockUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
+      } else {
+        throw error
+      }
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
   const signUp = async (email: string, password: string, userType: UserType) => {
-    console.log("AuthContext: Attempting to sign up:", email, "as", userType);
+    console.log("Attempting to sign up:", email, "as", userType)
+    setLoading(true)
     try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signup");
+      await FirebaseService.signUp(email, password, userType)
+      console.log("Sign up successful")
+      // The onAuthStateChanged listener will update the user state
+
+      // For development/testing, create a mock user if Firebase is not properly configured
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
         const mockUser = {
-          id: "dev-user-id",
-          uid: "dev-uid",
+          id: "mock-id",
+          uid: "mock-uid",
           email: email,
           userType: userType,
           createdAt: new Date(),
           lastLoginAt: new Date(),
-        };
-        await updateUserState(mockUser);
-        console.log("AuthContext: Development signup successful");
-        return;
+        }
+        setUser(mockUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
       }
-      await FirebaseService.signUp(email, password, userType);
-      console.log("AuthContext: Firebase signup successful");
+
+      // Navigate to main app after successful signup
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Main" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+      }
     } catch (error) {
-      console.error("AuthContext: Error signing up:", error);
-      throw error;
+      console.error("Error signing up:", error)
+
+      // For development/testing, create a mock user if Firebase is not properly configured
+      if (isDevelopment()) {
+        console.log("Development mode: Creating mock user")
+        const mockUser = {
+          id: "mock-id",
+          uid: "mock-uid",
+          email: email,
+          userType: userType,
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
+        }
+        setUser(mockUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(mockUser))
+      } else {
+        throw error
+      }
+    } finally {
+      setLoading(false)
     }
-  };
+  }
 
   const signOut = async () => {
-    console.log("AuthContext: Attempting to sign out");
-    setLoading(true);
+    console.log("Attempting to sign out")
+    setLoading(true)
     try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode signout");
-        await updateUserState(null);
-        localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
-        console.log("AuthContext: Development signout successful");
-        return;
+      await FirebaseService.signOut()
+      // Clear stored user data
+      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+      setUser(null)
+      console.log("Sign out successful")
+
+      // Navigate to Auth/Login screen after sign out
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Auth" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+        // Fallback navigation
+        navigate("Auth")
       }
-      await FirebaseService.signOut();
-      await updateUserState(null);
-      localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
-      console.log("AuthContext: Firebase signout successful");
     } catch (error) {
-      console.error("AuthContext: Error signing out:", error);
-      await updateUserState(null);
-      localStorage.removeItem(USER_STORAGE_KEY); // Clear storage
+      console.error("Error signing out:", error)
+
+      // For development/testing, clear user state even if Firebase fails
+      await AsyncStorage.removeItem(USER_STORAGE_KEY)
+      setUser(null)
+
+      // Still navigate to Auth screen even if there was an error
+      try {
+        reset({
+          index: 0,
+          routes: [{ name: "Auth" }],
+        })
+      } catch (navError) {
+        console.warn("Navigation error:", navError)
+        // Fallback navigation
+        navigate("Auth")
+      }
     } finally {
-      setLoading(false);
+      setLoading(false)
     }
-  };
+  }
 
   const updateProfile = async (data: Partial<User>) => {
     if (!user) {
-      throw new Error("No user logged in");
+      throw new Error("No user logged in")
     }
-    console.log("AuthContext: Updating user profile:", data);
-    try {
-      if (!isFirebaseConfigured) {
-        console.log("AuthContext: Development mode profile update");
-        const updatedUser = { ...user, ...data };
-        await updateUserState(updatedUser);
-        console.log("AuthContext: Development profile update successful");
-        return;
-      }
-      await FirebaseService.updateUserProfile(user.id, data);
-      const updatedUser = { ...user, ...data };
-      await updateUserState(updatedUser);
-      console.log("AuthContext: Profile update successful");
-    } catch (error) {
-      console.error("AuthContext: Error updating profile:", error);
-      throw error;
-    }
-  };
 
-  useEffect(() => {
-    console.log("AuthContext: State update:", {
-      hasUser: !!user,
-      userEmail: user?.email,
-      userType: user?.userType,
-      loading,
-      timestamp: new Date().toISOString(),
-    });
-  }, [user, loading]);
+    console.log("Updating user profile:", data)
+    setLoading(true)
+    try {
+      await FirebaseService.updateUserProfile(user.id, data)
+
+      // Update local user state
+      const updatedUser = { ...user, ...data }
+      setUser(updatedUser)
+
+      // Update stored user data
+      await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
+      console.log("Profile update successful")
+    } catch (error) {
+      console.error("Error updating profile:", error)
+
+      // For development/testing, update local state even if Firebase fails
+      if (isDevelopment()) {
+        const updatedUser = { ...user, ...data }
+        setUser(updatedUser)
+        await AsyncStorage.setItem(USER_STORAGE_KEY, JSON.stringify(updatedUser))
+      } else {
+        throw error
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, updateProfile }}>
       {children}
     </AuthContext.Provider>
-  );
-};
+  )
+}
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
+  const context = useContext(AuthContext)
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider");
+    throw new Error("useAuth must be used within an AuthProvider")
   }
-  return context;
-};
+  return context
+}

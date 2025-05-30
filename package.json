@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "start": "expo start --web",
-    "build": "npx expo export --platform web",
+    "build": "expo export:web",
     "deploy": "netlify deploy --prod"
   },
   "dependencies": {
@@ -38,7 +38,6 @@
     "@types/prop-types": "^15.7.11",
     "@types/react": "~18.3.12",
     "@types/uuid": "^9.0.8",
-    "babel-plugin-module-resolver": "^5.0.0",
     "netlify-cli": "^17.15.7",
     "typescript": "^5.3.0",
     "@types/react-dom": "^18.3.1"

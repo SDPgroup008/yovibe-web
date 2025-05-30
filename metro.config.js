@@ -3,9 +3,6 @@ const path = require("path")
 
 const config = getDefaultConfig(__dirname)
 
-// Add web support
-config.resolver.platforms = ["web", "native", "ios", "android"]
-
 // Add resolution for platform-specific extensions
 config.resolver.sourceExts = process.env.RN_SRC_EXT
   ? [...process.env.RN_SRC_EXT.split(",").concat(config.resolver.sourceExts), "web.ts", "web.tsx", "web.js", "web.jsx"]
