@@ -50,6 +50,33 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     navigation.navigate("VenueDetail", { venueId })
   }
 
+  const renderVenueCard = ({ item }: { item: Venue }) => (
+    <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
+      <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
+        <View style={styles.venueGradient}>
+          <Text style={styles.venueName}>{item.name}</Text>
+          <Text style={styles.venueInfo}>
+            {item.categories.join(", ")} • Vibe Rating: {item.vibeRating.toFixed(1)}⭐️
+          </Text>
+          {venueVibeRatings[item.id] && (
+            <View style={styles.vibeRatingContainer}>
+              <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+              <Text
+                style={[styles.vibeRatingValue, { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id]) }]}
+              >
+                {venueVibeRatings[item.id].toFixed(1)}
+              </Text>
+              <Text style={styles.vibeRatingDescription}>
+                {" "}
+                - {VibeAnalysisService.getVibeDescription(venueVibeRatings[item.id])}
+              </Text>
+            </View>
+          )}
+        </View>
+      </ImageBackground>
+    </TouchableOpacity>
+  )
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Night Clubs & Bars</Text>
@@ -68,31 +95,9 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         <FlatList
           data={venues}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
-              <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
-                <View style={styles.venueGradient}>
-                  <Text style={styles.venueName}>{item.name}</Text>
-                  <Text style={styles.venueInfo}>
-                    {item.categories.join(", ")} • Vibe Rating: {item.vibeRating.toFixed(1)}⭐️
-                  </Text>
-                  {venueVibeRatings[item.id] && (
-                    <View style={styles.vibeRatingContainer}>
-                      <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-                      <Text
-                        style={[
-                          styles.vibeRatingValue,
-                          { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id]) },
-                        ]}
-                      >
-                        {venueVibeRatings[item.id].toFixed(1)}
-                      </Text>
-                    </View>
-                  )}
-                </View>
-              </ImageBackground>
-            </TouchableOpacity>
-          )}
+          renderItem={renderVenueCard}
+          refreshing={loading}
+          onRefresh={loadVenues}
         />
       )}
     </View>
@@ -165,6 +170,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
+    flexWrap: "wrap",
   },
   vibeRatingLabel: {
     fontSize: 14,
@@ -173,6 +179,10 @@ const styles = StyleSheet.create({
   vibeRatingValue: {
     fontSize: 14,
     fontWeight: "bold",
+  },
+  vibeRatingDescription: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.7)",
   },
 })
 
