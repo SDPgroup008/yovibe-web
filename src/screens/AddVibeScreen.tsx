@@ -90,13 +90,20 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         analysisData: analysisResult.analysisData,
       }
 
-      // Save to Firestore
+      // Save to Firestore (this will also update the venue's vibe rating)
       await FirebaseService.addVibeImage(vibeImageData)
 
       Alert.alert("Success", "Vibe image uploaded successfully!", [
         {
           text: "OK",
-          onPress: () => navigation.goBack(),
+          onPress: () => {
+            // Navigate back and refresh the parent screens
+            navigation.goBack()
+            // Trigger a refresh on the parent screens by navigating to them
+            setTimeout(() => {
+              navigation.navigate("VenueDetail", { venueId, refresh: Date.now() })
+            }, 100)
+          },
         },
       ])
     } catch (error) {
