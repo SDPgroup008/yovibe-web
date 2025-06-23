@@ -98,9 +98,8 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
     </View>
   )
 
-  const renderWeekDay = (day: string, vibes: VibeImage[]) => (
+  const renderWeekDay = ({ item: [day, vibes] }: { item: [string, VibeImage[]] }) => (
     <TouchableOpacity
-      key={day}
       style={[styles.weekDayCard, selectedDay === day && styles.selectedWeekDayCard]}
       onPress={() => setSelectedDay(selectedDay === day ? null : day)}
     >
@@ -116,6 +115,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
 
       {selectedDay === day && (
         <FlatList
+          key={`week-vibes-${day}`} // Unique key for each day's vibe list
           data={vibes}
           renderItem={renderVibeImage}
           keyExtractor={(item) => item.id}
@@ -169,6 +169,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
             </View>
           ) : (
             <FlatList
+              key="today-vibes" // Unique key for today's vibe list
               data={todayVibes}
               renderItem={renderVibeImage}
               keyExtractor={(item) => item.id}
@@ -188,10 +189,12 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
             </View>
           ) : (
             <FlatList
+              key="week-days" // Unique key for week days list
               data={Object.entries(weekVibes).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())}
-              renderItem={({ item: [day, vibes] }) => renderWeekDay(day, vibes)}
+              renderItem={renderWeekDay}
               keyExtractor={([day]) => day}
               contentContainerStyle={styles.weekList}
+              numColumns={1} // Explicitly set to 1 for the week view
             />
           )}
         </View>
