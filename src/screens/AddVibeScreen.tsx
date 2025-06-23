@@ -97,12 +97,8 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         {
           text: "OK",
           onPress: () => {
-            // Navigate back and refresh the parent screens
+            // Navigate back to the venue detail screen
             navigation.goBack()
-            // Trigger a refresh on the parent screens by navigating to them
-            setTimeout(() => {
-              navigation.navigate("VenueDetail", { venueId, refresh: Date.now() })
-            }, 100)
           },
         },
       ])
