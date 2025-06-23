@@ -124,6 +124,14 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
                 </TouchableOpacity>
 
                 <TouchableOpacity
+                  style={styles.actionButton}
+                  onPress={() => navigation.navigate("AddVibe", { venueId: item.id, venueName: item.name })}
+                >
+                  <Ionicons name="camera" size={20} color="#2196F3" />
+                  <Text style={styles.actionText}>Add Vibe</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={[styles.actionButton, styles.deleteButton]}
                   onPress={() => handleDeleteVenue(item.id)}
                 >
