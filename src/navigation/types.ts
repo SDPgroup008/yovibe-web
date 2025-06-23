@@ -17,6 +17,7 @@ export type VenuesStackParamList = {
   AddEvent: { venueId: string; venueName: string }
   ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
   EventDetail: { eventId: string }
+  TodaysVibe: { venueId: string; venueName: string }
 }
 
 export type EventsStackParamList = {
@@ -42,12 +43,14 @@ export type ProfileStackParamList = {
   ProfileMain: undefined
   MyVenues: undefined
   AddVenue: undefined
+  AddVibe: { venueId: string; venueName: string }
   EditProfile: undefined
   VenueDetail: { venueId: string }
   EventDetail: { eventId: string }
   AdminUsers: undefined
   AdminVenues: undefined
   AdminEvents: undefined
+  TodaysVibe: { venueId: string; venueName: string }
 }
 
 // Define the tab navigator param list
@@ -80,6 +83,14 @@ export type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamL
 }
 
 export type MapScreenProps = NativeStackScreenProps<MapStackParamList, "MapView"> & {
+  navigation: AppNavigation
+}
+
+export type TodaysVibeScreenProps = NativeStackScreenProps<VenuesStackParamList, "TodaysVibe"> & {
+  navigation: AppNavigation
+}
+
+export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe"> & {
   navigation: AppNavigation
 }
 
