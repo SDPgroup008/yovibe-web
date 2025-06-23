@@ -18,6 +18,8 @@ import AddVenueScreen from "../screens/AddVenueScreen"
 import AddEventScreen from "../screens/AddEventScreen"
 import MyVenuesScreen from "../screens/MyVenuesScreen"
 import ManageProgramsScreen from "../screens/ManageProgramsScreen"
+import AddVibeScreen from "../screens/AddVibeScreen"
+import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 
 // Admin Screens
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
@@ -89,6 +91,8 @@ export const VenuesStackNavigator = () => {
         component={ManageProgramsScreen as any}
         options={{ title: "Weekly Programs" }}
       />
+      <VenuesStack.Screen name="AddVibe" component={AddVibeScreen as any} options={{ title: "Add Vibe" }} />
+      <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
     </VenuesStack.Navigator>
   )
 }
@@ -179,6 +183,8 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
+      <ProfileStack.Screen name="AddVibe" component={AddVibeScreen as any} options={{ title: "Add Vibe" }} />
+      <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
     </ProfileStack.Navigator>
   )
 }
