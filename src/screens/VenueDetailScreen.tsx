@@ -9,6 +9,7 @@ import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VenueDetailScreenProps } from "../navigation/types"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 
 const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation }) => {
   const { venueId } = route.params
@@ -18,6 +19,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [loading, setLoading] = useState(true)
   const [isOwner, setIsOwner] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [latestVibeRating, setLatestVibeRating] = useState<number | null>(null)
 
   useEffect(() => {
     const loadVenueAndEvents = async () => {
@@ -34,6 +36,9 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         if (venueData) {
           const venueEvents = await FirebaseService.getEventsByVenue(venueId)
           setEvents(venueEvents)
+          // Get latest vibe rating
+          const vibeRating = await FirebaseService.getLatestVibeRating(venueId)
+          setLatestVibeRating(vibeRating)
         }
       } catch (error) {
         console.error("Error loading venue details:", error)
@@ -76,6 +81,10 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         },
       },
     ])
+  }
+
+  const handleTodaysVibe = () => {
+    navigation.navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
   }
 
   if (loading) {
@@ -136,6 +145,30 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
             )}
           </View>
         )}
+
+        {/* Today's Vibe Section */}
+        <View style={styles.vibeSection}>
+          <View style={styles.vibeSectionHeader}>
+            <Text style={styles.vibeSectionTitle}>Current Vibe</Text>
+            {latestVibeRating && (
+              <View style={styles.currentVibeRating}>
+                <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(latestVibeRating) }]}>
+                  {latestVibeRating.toFixed(1)}
+                </Text>
+                <Text style={styles.vibeRatingLabel}>/5.0</Text>
+              </View>
+            )}
+          </View>
+
+          {latestVibeRating && (
+            <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(latestVibeRating)}</Text>
+          )}
+
+          <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
+            <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.todaysVibeButtonText}>Today's Vibe</Text>
+          </TouchableOpacity>
+        </View>
 
         <Text style={styles.sectionTitle}>About</Text>
         <Text style={styles.description}>{venue.description}</Text>
@@ -367,6 +400,56 @@ const styles = StyleSheet.create({
     marginTop: 24,
   },
   directionsButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  vibeSection: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    marginVertical: 16,
+  },
+  vibeSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  vibeSectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  currentVibeRating: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  vibeRatingText: {
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  vibeRatingLabel: {
+    fontSize: 16,
+    color: "#666666",
+    marginLeft: 2,
+  },
+  vibeDescription: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  todaysVibeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  todaysVibeButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
