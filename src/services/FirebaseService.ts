@@ -736,7 +736,7 @@ class FirebaseService {
   // Vibe Image methods
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
     try {
-      console.log("FirebaseService: Adding vibe image")
+      console.log("FirebaseService: Adding vibe image for venue", vibeImageData.venueId)
 
       const firestoreVibeData = {
         venueId: vibeImageData.venueId,
@@ -749,10 +749,46 @@ class FirebaseService {
 
       const vibeRef = await addDoc(collection(db, "vibeImages"), firestoreVibeData)
       console.log("FirebaseService: Vibe image added with ID", vibeRef.id)
+
+      // Update venue's vibe rating with the latest rating
+      await this.updateVenueVibeRating(vibeImageData.venueId, vibeImageData.vibeRating)
+
       return vibeRef.id
     } catch (error) {
       console.error("Error adding vibe image:", error)
       throw error
+    }
+  }
+
+  // New method to update venue's vibe rating
+  async updateVenueVibeRating(venueId: string, newVibeRating: number): Promise<void> {
+    try {
+      console.log("FirebaseService: Updating venue vibe rating", venueId, "to", newVibeRating)
+
+      // Get all vibe images for this venue to calculate average
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(vibeImagesRef, where("venueId", "==", venueId), orderBy("uploadedAt", "desc"))
+      const querySnapshot = await getDocs(q)
+
+      if (!querySnapshot.empty) {
+        // Calculate average of recent vibe ratings (last 10 ratings or all if less than 10)
+        const recentRatings: number[] = []
+        querySnapshot.docs.slice(0, 10).forEach((doc) => {
+          const data = doc.data()
+          recentRatings.push(data.vibeRating)
+        })
+
+        const averageRating = recentRatings.reduce((sum, rating) => sum + rating, 0) / recentRatings.length
+
+        // Update venue's vibe rating
+        const venueRef = doc(db, "venues", venueId)
+        await updateDoc(venueRef, { vibeRating: averageRating })
+
+        console.log("FirebaseService: Venue vibe rating updated to", averageRating.toFixed(2))
+      }
+    } catch (error) {
+      console.error("Error updating venue vibe rating:", error)
+      // Don't throw error as this is not critical for the main flow
     }
   }
 
