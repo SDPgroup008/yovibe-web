@@ -92,37 +92,41 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     return event.attendees ? event.attendees.length : 0
   }
 
-  const renderPriceIndicator = (priceIndicator = 1) => {
-    // Instead of dollar signs, use a more descriptive price indicator
-    switch (priceIndicator) {
-      case 3:
-        return "PREMIUM"
-      case 2:
-        return "MID-RANGE"
-      case 1:
-      default:
-        return "BUDGET"
-    }
-  }
-
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity style={styles.eventCard} onPress={() => handleEventSelect(item.id)}>
       <ImageBackground source={{ uri: item.posterImageUrl }} style={styles.eventImage}>
         <View style={styles.eventOverlay}>
-          <Text style={styles.eventName}>{item.name}</Text>
-          <View style={styles.eventDetails}>
-            <Text style={styles.eventLocation}>
-              {item.location || item.venueName.split(" ")[0]} • {formatDateRange(item.date)}
-            </Text>
+          <View style={styles.eventHeader}>
+            <View style={styles.dateChip}>
+              <Text style={styles.dateChipText}>{formatDateRange(item.date)}</Text>
+            </View>
+            <View style={styles.feeChip}>
+              <Text style={styles.feeChipText}>{item.entryFee || "Free"}</Text>
+            </View>
+          </View>
 
-            <View style={styles.eventMeta}>
+          <View style={styles.eventContent}>
+            <Text style={styles.eventName}>{item.name}</Text>
+            <View style={styles.eventLocationRow}>
+              <Ionicons name="location" size={16} color="#FFFFFF" />
+              <Text style={styles.eventLocation}>{item.venueName}</Text>
+            </View>
+
+            <View style={styles.eventFooter}>
               {getAttendeeCount(item) > 0 && (
-                <View style={styles.attendeeCount}>
-                  <Ionicons name="people" size={14} color="#FFFFFF" />
-                  <Text style={styles.attendeeCountText}>{getAttendeeCount(item)}</Text>
+                <View style={styles.attendeeInfo}>
+                  <Ionicons name="people" size={16} color="#00D4FF" />
+                  <Text style={styles.attendeeText}>{getAttendeeCount(item)} going</Text>
                 </View>
               )}
-              <Text style={styles.entryFee}>{item.entryFee || "Free Entry"}</Text>
+              <View style={styles.artistsPreview}>
+                {item.artists.slice(0, 2).map((artist, index) => (
+                  <Text key={index} style={styles.artistPreviewText}>
+                    {artist}
+                  </Text>
+                ))}
+                {item.artists.length > 2 && <Text style={styles.moreArtistsText}>+{item.artists.length - 2}</Text>}
+              </View>
             </View>
           </View>
         </View>
@@ -173,124 +177,191 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: "#0A0A0A",
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 16,
-    backgroundColor: "#121212",
+    padding: 20,
+    paddingTop: Platform.OS === "ios" ? 60 : 30,
+    background: "linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)",
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
+    fontSize: 28,
+    fontWeight: "800",
     color: "#FFFFFF",
+    textShadowColor: "rgba(0, 212, 255, 0.3)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
   },
   searchButton: {
-    padding: 8,
+    padding: 12,
+    backgroundColor: "rgba(0, 212, 255, 0.2)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
   },
   addEventButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2196F3",
-    padding: 12,
-    borderRadius: 8,
-    marginHorizontal: 16,
-    marginBottom: 16,
+    backgroundColor: "linear-gradient(135deg, #00D4FF 0%, #0099CC 100%)",
+    padding: 16,
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginBottom: 20,
     justifyContent: "center",
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
   addEventButtonText: {
     color: "#FFFFFF",
-    fontWeight: "bold",
+    fontWeight: "700",
+    fontSize: 16,
     marginLeft: 8,
+  },
+  eventCard: {
+    marginHorizontal: 20,
+    marginBottom: 24,
+    borderRadius: 20,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  eventImage: {
+    width: "100%",
+    height: 280,
+  },
+  eventOverlay: {
+    flex: 1,
+    backgroundColor: "linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.8) 100%)",
+    padding: 20,
+    justifyContent: "space-between",
+  },
+  eventHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  dateChip: {
+    backgroundColor: "rgba(0, 212, 255, 0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backdropFilter: "blur(10px)",
+  },
+  dateChipText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  feeChip: {
+    backgroundColor: "rgba(255, 215, 0, 0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backdropFilter: "blur(10px)",
+  },
+  feeChipText: {
+    color: "#000000",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  eventContent: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  eventName: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#FFFFFF",
+    marginBottom: 8,
+    textShadowColor: "rgba(0,0,0,0.8)",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 4,
+  },
+  eventLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  eventLocation: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginLeft: 6,
+    opacity: 0.9,
+  },
+  eventFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  attendeeInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 212, 255, 0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+  },
+  attendeeText: {
+    color: "#00D4FF",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 4,
+  },
+  artistsPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  artistPreviewText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    marginRight: 8,
+    opacity: 0.8,
+  },
+  moreArtistsText: {
+    color: "#00D4FF",
+    fontSize: 12,
+    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0A0A0A",
   },
   loadingText: {
     color: "#FFFFFF",
     marginTop: 16,
+    fontSize: 16,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 40,
   },
   emptyText: {
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
+    fontSize: 20,
+    fontWeight: "700",
     textAlign: "center",
+    marginBottom: 8,
   },
   emptySubtext: {
     color: "#999999",
-    fontSize: 14,
-    marginTop: 8,
+    fontSize: 16,
     textAlign: "center",
-  },
-  eventsList: {
-    paddingBottom: 16,
-  },
-  eventCard: {
-    marginBottom: 1,
-    height: 200,
-  },
-  eventImage: {
-    width: "100%",
-    height: "100%",
-  },
-  eventOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.3)",
-    justifyContent: "flex-end",
-    padding: 16,
-  },
-  eventName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 4,
-    textShadowColor: "rgba(0,0,0,0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  eventDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  eventLocation: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    textShadowColor: "rgba(0,0,0,0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
-  },
-  eventMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  attendeeCount: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  attendeeCountText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    marginLeft: 4,
-  },
-  entryFee: {
-    color: "#FFD700",
-    fontWeight: "bold",
-    fontSize: 14,
-    textShadowColor: "rgba(0,0,0,0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
+    lineHeight: 24,
   },
 })
 
