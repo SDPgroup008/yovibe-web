@@ -6,7 +6,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicat
 import { Ionicons } from "@expo/vector-icons"
 import ImagePickerService from "../services/ImagePickerService"
 import FirebaseService from "../services/FirebaseService"
-import VibeAnalysisService from "../"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
 

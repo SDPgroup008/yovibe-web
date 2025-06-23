@@ -30,7 +30,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const imageSize = (screenWidth - 48) / 2 // 2 columns with padding
 
   useEffect(() => {
-    loadVibeData()
+    loadVibeData()  
   }, [venueId])
 
   const loadVibeData = async () => {
