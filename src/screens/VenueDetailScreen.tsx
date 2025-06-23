@@ -50,6 +50,31 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
     loadVenueAndEvents()
   }, [venueId, user])
 
+  // Add focus listener to refresh data when returning from other screens
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      // Refresh venue data when screen comes into focus
+      const refreshVenueData = async () => {
+        try {
+          const venueData = await FirebaseService.getVenueById(venueId)
+          setVenue(venueData)
+
+          if (venueData) {
+            // Get latest vibe rating
+            const vibeRating = await FirebaseService.getLatestVibeRating(venueId)
+            setLatestVibeRating(vibeRating)
+          }
+        } catch (error) {
+          console.error("Error refreshing venue data:", error)
+        }
+      }
+
+      refreshVenueData()
+    })
+
+    return unsubscribe
+  }, [navigation, venueId])
+
   const handleManagePrograms = () => {
     navigation.navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
   }
