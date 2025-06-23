@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native"
 import FirebaseService from "../services/FirebaseService"
 import type { Venue } from "../models/Venue"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 
 interface VenuesScreenProps {
   navigation: any
@@ -13,6 +14,7 @@ interface VenuesScreenProps {
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -27,6 +29,16 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       setLoading(true)
       const venuesList = await FirebaseService.getVenues()
       setVenues(venuesList)
+
+      // Load vibe ratings for each venue
+      const vibeRatings: Record<string, number> = {}
+      for (const venue of venuesList) {
+        const rating = await FirebaseService.getLatestVibeRating(venue.id)
+        if (rating !== null) {
+          vibeRatings[venue.id] = rating
+        }
+      }
+      setVenueVibeRatings(vibeRatings)
     } catch (error) {
       console.error("Error loading venues:", error)
     } finally {
@@ -64,6 +76,19 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
                   <Text style={styles.venueInfo}>
                     {item.categories.join(", ")} • Vibe Rating: {item.vibeRating.toFixed(1)}⭐️
                   </Text>
+                  {venueVibeRatings[item.id] && (
+                    <View style={styles.vibeRatingContainer}>
+                      <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                      <Text
+                        style={[
+                          styles.vibeRatingValue,
+                          { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id]) },
+                        ]}
+                      >
+                        {venueVibeRatings[item.id].toFixed(1)}
+                      </Text>
+                    </View>
+                  )}
                 </View>
               </ImageBackground>
             </TouchableOpacity>
@@ -135,6 +160,19 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "rgba(255,255,255,0.8)",
     marginTop: 4,
+  },
+  vibeRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  vibeRatingLabel: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.8)",
+  },
+  vibeRatingValue: {
+    fontSize: 14,
+    fontWeight: "bold",
   },
 })
 
