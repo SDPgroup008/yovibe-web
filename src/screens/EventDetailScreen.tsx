@@ -166,7 +166,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
                   <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
                 </View>
               )}
-              <Text style={styles.entryFee}>{event.entryFee}</Text>
+              <Text style={styles.entryFee}>{event.entryFee || "Free"}</Text>
             </View>
           </View>
         </View>
@@ -252,7 +252,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
         <TouchableOpacity style={styles.button}>
           <Text style={styles.buttonText}>
-            {event.entryFee === "Free Entry" ? "Get Free Entry" : `Buy Ticket (${event.entryFee})`}
+            {event.entryFee && event.entryFee !== "Free" ? `Buy Ticket - ${event.entryFee}` : "Get Free Entry"}
           </Text>
         </TouchableOpacity>
       </View>
