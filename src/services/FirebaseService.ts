@@ -803,6 +803,8 @@ class FirebaseService {
       const endOfDay = new Date(date)
       endOfDay.setHours(23, 59, 59, 999)
 
+      console.log("Date range:", startOfDay.toISOString(), "to", endOfDay.toISOString())
+
       const vibeImagesRef = collection(db, "vibeImages")
       const q = query(
         vibeImagesRef,
@@ -815,8 +817,11 @@ class FirebaseService {
       const querySnapshot = await getDocs(q)
       const vibeImages: VibeImage[] = []
 
+      console.log("Query returned", querySnapshot.size, "documents")
+
       querySnapshot.forEach((doc) => {
         const data = doc.data()
+        console.log("Processing vibe image:", doc.id, data.uploadedAt.toDate())
         vibeImages.push({
           id: doc.id,
           venueId: data.venueId,
@@ -845,6 +850,8 @@ class FirebaseService {
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - 7)
 
+      console.log("Week range:", startDate.toISOString(), "to", endDate.toISOString())
+
       const vibeImagesRef = collection(db, "vibeImages")
       const q = query(
         vibeImagesRef,
@@ -856,6 +863,8 @@ class FirebaseService {
 
       const querySnapshot = await getDocs(q)
       const weekVibes: Record<string, VibeImage[]> = {}
+
+      console.log("Week query returned", querySnapshot.size, "documents")
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
