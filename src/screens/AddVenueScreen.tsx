@@ -27,7 +27,6 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   const [location, setLocation] = useState("")
   const [description, setDescription] = useState("")
   const [categories, setCategories] = useState("")
-  const [vibeRating, setVibeRating] = useState("4.5")
   const [latitude, setLatitude] = useState("0")
   const [longitude, setLongitude] = useState("0")
   const [image, setImage] = useState<string | null>(null)
@@ -108,7 +107,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
         location,
         description,
         categories: categories.split(",").map((cat) => cat.trim()),
-        vibeRating: Number.parseFloat(vibeRating) || 4.5,
+        vibeRating: 4.0, // Default vibe rating
         backgroundImageUrl: imageUrl,
         latitude: Number.parseFloat(latitude) || 0,
         longitude: Number.parseFloat(longitude) || 0,
@@ -170,16 +169,6 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           onChangeText={setCategories}
           placeholder="Enter categories (comma separated)"
           placeholderTextColor="#999"
-        />
-
-        <Text style={styles.label}>Vibe Rating (1-5)</Text>
-        <TextInput
-          style={styles.input}
-          value={vibeRating}
-          onChangeText={setVibeRating}
-          placeholder="Enter vibe rating (e.g. 4.5)"
-          placeholderTextColor="#999"
-          keyboardType="numeric"
         />
 
         <View style={styles.locationContainer}>
