@@ -394,4 +394,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default AddVibeScreen
+export default AddVibeScreen
