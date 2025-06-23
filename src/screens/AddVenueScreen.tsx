@@ -16,6 +16,8 @@ import {
 import FirebaseService from "../services/FirebaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
+import ImagePickerService from "../services/ImagePickerService"
+import { Ionicons } from "@expo/vector-icons"
 
 interface AddVenueScreenProps {
   navigation: any
@@ -50,33 +52,27 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
     })()
   }, [])
 
-  // Web-specific image picker
   const pickImage = async () => {
-    Alert.alert(
-      "Image URL",
-      "Please enter the URL of the image:",
-      [
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-        {
-          text: "OK",
-          onPress: (url) => {
-            if (url) {
-              setImage(url)
-            }
-          },
-        },
-      ],
-      {
-        // @ts-ignore - This is a web-only feature
-        prompt: {
-          type: "plain-text",
-          placeholder: "https://example.com/image.jpg",
-        },
-      },
-    )
+    try {
+      // Request permissions first
+      await ImagePickerService.requestMediaLibraryPermissionsAsync()
+
+      // Launch image picker
+      const result = await ImagePickerService.launchImageLibraryAsync({
+        mediaTypes: "Images",
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      })
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const imageUri = result.assets[0].uri
+        setImage(imageUri)
+      }
+    } catch (error) {
+      console.error("Error picking image:", error)
+      Alert.alert("Error", "Failed to pick image")
+    }
   }
 
   const handleSubmit = async () => {
@@ -197,14 +193,11 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        <Text style={styles.label}>Venue Image URL *</Text>
-        <TextInput
-          style={styles.input}
-          value={image || ""}
-          onChangeText={setImage}
-          placeholder="Enter image URL"
-          placeholderTextColor="#999"
-        />
+        <Text style={styles.label}>Venue Image *</Text>
+        <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+          <Ionicons name="camera-outline" size={24} color="#FFFFFF" />
+          <Text style={styles.imagePickerText}>{image ? "Change Image" : "Select Image"}</Text>
+        </TouchableOpacity>
 
         {image && (
           <View style={styles.imagePreview}>
@@ -280,6 +273,21 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  imagePickerButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 16,
+  },
+  imagePickerText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
   },
 })
 
