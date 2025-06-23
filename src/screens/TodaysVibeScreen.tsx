@@ -30,8 +30,17 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const imageSize = (screenWidth - 48) / 2 // 2 columns with padding
 
   useEffect(() => {
-    loadVibeData()  
+    loadVibeData()
   }, [venueId])
+
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("focus", () => {
+      console.log("TodaysVibeScreen focused, refreshing data...")
+      loadVibeData()
+    })
+
+    return unsubscribe
+  }, [navigation])
 
   const loadVibeData = async () => {
     try {
@@ -39,11 +48,15 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
 
       // Load today's vibes
       const today = new Date()
+      console.log("Loading vibes for today:", today.toDateString())
       const todayVibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+      console.log("Today's vibes loaded:", todayVibeImages.length)
       setTodayVibes(todayVibeImages)
 
       // Load week's vibes
+      console.log("Loading week's vibes...")
       const weekData = await FirebaseService.getVibeImagesByVenueAndWeek(venueId)
+      console.log("Week's vibes loaded:", Object.keys(weekData).length, "days")
       setWeekVibes(weekData)
     } catch (error) {
       console.error("Error loading vibe data:", error)
