@@ -10,6 +10,7 @@ import {
   updateDoc,
   deleteDoc,
   Timestamp,
+  orderBy,
 } from "firebase/firestore"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
 import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage"
@@ -17,6 +18,7 @@ import { auth, db, storage } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import type { VibeImage } from "../models/VibeImage"
 import { v4 as uuidv4 } from "uuid"
 import { isDevelopment } from "../utils/env"
 
@@ -731,6 +733,143 @@ class FirebaseService {
     }
   }
 
+  // Vibe Image methods
+  async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
+    try {
+      console.log("FirebaseService: Adding vibe image")
+
+      const firestoreVibeData = {
+        venueId: vibeImageData.venueId,
+        imageUrl: vibeImageData.imageUrl,
+        vibeRating: vibeImageData.vibeRating,
+        uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
+        uploadedBy: vibeImageData.uploadedBy,
+        analysisData: vibeImageData.analysisData,
+      }
+
+      const vibeRef = await addDoc(collection(db, "vibeImages"), firestoreVibeData)
+      console.log("FirebaseService: Vibe image added with ID", vibeRef.id)
+      return vibeRef.id
+    } catch (error) {
+      console.error("Error adding vibe image:", error)
+      throw error
+    }
+  }
+
+  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
+    try {
+      console.log("FirebaseService: Getting vibe images for venue and date", venueId, date.toDateString())
+
+      // Create start and end of day timestamps
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(
+        vibeImagesRef,
+        where("venueId", "==", venueId),
+        where("uploadedAt", ">=", Timestamp.fromDate(startOfDay)),
+        where("uploadedAt", "<=", Timestamp.fromDate(endOfDay)),
+        orderBy("uploadedAt", "desc"),
+      )
+
+      const querySnapshot = await getDocs(q)
+      const vibeImages: VibeImage[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        vibeImages.push({
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating,
+          uploadedAt: data.uploadedAt.toDate(),
+          uploadedBy: data.uploadedBy,
+          analysisData: data.analysisData,
+        })
+      })
+
+      console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
+      return vibeImages
+    } catch (error) {
+      console.error("Error getting vibe images by venue and date:", error)
+      return []
+    }
+  }
+
+  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
+    try {
+      console.log("FirebaseService: Getting vibe images for venue and week", venueId)
+
+      // Get last 7 days
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 7)
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(
+        vibeImagesRef,
+        where("venueId", "==", venueId),
+        where("uploadedAt", ">=", Timestamp.fromDate(startDate)),
+        where("uploadedAt", "<=", Timestamp.fromDate(endDate)),
+        orderBy("uploadedAt", "desc"),
+      )
+
+      const querySnapshot = await getDocs(q)
+      const weekVibes: Record<string, VibeImage[]> = {}
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const vibeImage: VibeImage = {
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating,
+          uploadedAt: data.uploadedAt.toDate(),
+          uploadedBy: data.uploadedBy,
+          analysisData: data.analysisData,
+        }
+
+        // Group by date string
+        const dateString = vibeImage.uploadedAt.toISOString().split("T")[0]
+        if (!weekVibes[dateString]) {
+          weekVibes[dateString] = []
+        }
+        weekVibes[dateString].push(vibeImage)
+      })
+
+      console.log("FirebaseService: Found vibe images for", Object.keys(weekVibes).length, "days")
+      return weekVibes
+    } catch (error) {
+      console.error("Error getting vibe images by venue and week:", error)
+      return {}
+    }
+  }
+
+  async getLatestVibeRating(venueId: string): Promise<number | null> {
+    try {
+      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(vibeImagesRef, where("venueId", "==", venueId), orderBy("uploadedAt", "desc"))
+
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        return null
+      }
+
+      const latestVibe = querySnapshot.docs[0].data()
+      return latestVibe.vibeRating
+    } catch (error) {
+      console.error("Error getting latest vibe rating:", error)
+      return null
+    }
+  }
+
   // Image upload methods - Web-friendly versions
   async uploadVenueImage(uri: string): Promise<string> {
     try {
@@ -821,6 +960,58 @@ class FirebaseService {
       if (isDevelopment()) {
         console.warn("FirebaseService: Using placeholder image due to error")
         return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
+      }
+
+      // In production, rethrow the error
+      throw error
+    }
+  }
+
+  async uploadVibeImage(uri: string): Promise<string> {
+    try {
+      console.log("FirebaseService: Uploading vibe image")
+
+      // For web, we'll just return the URL directly if it's already a URL and not a data URI
+      if (uri.startsWith("http") && !uri.startsWith("data:")) {
+        console.log("FirebaseService: Image is already a URL, returning directly")
+        return uri
+      }
+
+      // Generate a unique filename
+      const filename = `vibes/${uuidv4()}`
+      const storageRef = ref(storage, filename)
+
+      // Handle data URLs (from web file picker)
+      if (uri.startsWith("data:")) {
+        console.log("FirebaseService: Uploading vibe data URL")
+        // Upload data URL directly
+        await uploadString(storageRef, uri, "data_url")
+        const downloadUrl = await getDownloadURL(storageRef)
+        console.log("FirebaseService: Vibe upload successful")
+        return downloadUrl
+      }
+
+      // Otherwise, we need to upload the file
+      console.log("FirebaseService: Fetching vibe image data")
+      // Convert URI to blob
+      const response = await fetch(uri)
+      const blob = await response.blob()
+
+      console.log("FirebaseService: Uploading vibe blob to Firebase Storage")
+      // Upload blob to Firebase Storage
+      const uploadResult = await uploadBytes(storageRef, blob)
+
+      // Get download URL
+      const downloadUrl = await getDownloadURL(uploadResult.ref)
+      console.log("FirebaseService: Vibe upload successful")
+      return downloadUrl
+    } catch (error) {
+      console.error("FirebaseService: Error uploading vibe image:", error)
+
+      // In development mode, return a placeholder but log the error
+      if (isDevelopment()) {
+        console.warn("FirebaseService: Using placeholder vibe image due to error")
+        return "https://images.unsplash.com/photo-1571204829887-3b8d69e23af5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
       }
 
       // In production, rethrow the error
