@@ -24,6 +24,9 @@ import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
 import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen"
 import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
 
+import AddVibeScreen from "../screens/AddVibeScreen"
+import TodaysVibeScreen from "../screens/TodaysVibeScreen"
+
 // Types
 import type {
   AuthStackParamList,
@@ -89,6 +92,7 @@ export const VenuesStackNavigator = () => {
         component={ManageProgramsScreen as any}
         options={{ title: "Weekly Programs" }}
       />
+      <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreen} options={{ title: "Today's Vibe" }} />
     </VenuesStack.Navigator>
   )
 }
@@ -179,6 +183,8 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
+      <ProfileStack.Screen name="AddVibe" component={AddVibeScreen} options={{ title: "Add Vibe" }} />
+      <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreen} options={{ title: "Today's Vibe" }} />
     </ProfileStack.Navigator>
   )
 }
