@@ -15,6 +15,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
+  const [activeTab, setActiveTab] = useState<"nightlife" | "recreation">("nightlife")
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -50,14 +51,21 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     navigation.navigate("VenueDetail", { venueId })
   }
 
+  const getFilteredVenues = () => {
+    return venues.filter((venue) => {
+      const isNightlife = venue.categories.some((cat) =>
+        ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()),
+      )
+      return activeTab === "nightlife" ? isNightlife : !isNightlife
+    })
+  }
+
   const renderVenueCard = ({ item }: { item: Venue }) => (
     <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
       <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
         <View style={styles.venueGradient}>
           <Text style={styles.venueName}>{item.name}</Text>
-          <Text style={styles.venueInfo}>
-            {item.categories.join(", ")} • Vibe Rating: {item.vibeRating.toFixed(1)}⭐️
-          </Text>
+          <Text style={styles.venueInfo}>{item.categories.join(", ")}</Text>
           {venueVibeRatings[item.id] && (
             <View style={styles.vibeRatingContainer}>
               <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
@@ -77,27 +85,49 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     </TouchableOpacity>
   )
 
+  const filteredVenues = getFilteredVenues()
+
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>Night Clubs & Bars</Text>
+    <View style={[styles.container, activeTab === "recreation" && styles.recreationContainer]}>
+      <View style={styles.header}>
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
+            onPress={() => setActiveTab("nightlife")}
+          >
+            <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs & Bars</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "recreation" && styles.activeTab]}
+            onPress={() => setActiveTab("recreation")}
+          >
+            <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centers</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
-          <Text style={styles.loadingText}>Loading venues...</Text>
+          <ActivityIndicator size="large" color={activeTab === "recreation" ? "#2196F3" : "#2196F3"} />
+          <Text style={[styles.loadingText, activeTab === "recreation" && styles.recreationText]}>
+            Loading venues...
+          </Text>
         </View>
-      ) : venues.length === 0 ? (
+      ) : filteredVenues.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No venues found</Text>
-          <Text style={styles.emptySubtext}>Check back later for new venues</Text>
+          <Text style={[styles.emptyText, activeTab === "recreation" && styles.recreationText]}>No venues found</Text>
+          <Text style={[styles.emptySubtext, activeTab === "recreation" && styles.recreationSubtext]}>
+            Check back later for new venues
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={venues}
+          data={filteredVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}
           refreshing={loading}
           onRefresh={loadVenues}
+          contentContainerStyle={styles.venuesList}
         />
       )}
     </View>
@@ -108,13 +138,36 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
-    padding: 16,
+  },
+  recreationContainer: {
+    backgroundColor: "#F5F5F5",
   },
   header: {
-    fontSize: 24,
+    padding: 16,
+    paddingBottom: 0,
+  },
+  tabContainer: {
+    flexDirection: "row",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderRadius: 6,
+  },
+  activeTab: {
+    backgroundColor: "#2196F3",
+  },
+  tabText: {
+    fontSize: 16,
+    color: "#BBBBBB",
     fontWeight: "bold",
+  },
+  activeTabText: {
     color: "#FFFFFF",
-    marginBottom: 16,
   },
   loadingContainer: {
     flex: 1,
@@ -124,6 +177,9 @@ const styles = StyleSheet.create({
   loadingText: {
     color: "#FFFFFF",
     marginTop: 16,
+  },
+  recreationText: {
+    color: "#333333",
   },
   emptyContainer: {
     flex: 1,
@@ -139,6 +195,12 @@ const styles = StyleSheet.create({
     color: "#999999",
     fontSize: 14,
     marginTop: 8,
+  },
+  recreationSubtext: {
+    color: "#666666",
+  },
+  venuesList: {
+    padding: 16,
   },
   venueCard: {
     height: 200,
