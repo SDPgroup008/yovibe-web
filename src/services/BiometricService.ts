@@ -1,81 +1,38 @@
-// Biometric Service for eye scanning and verification
-class BiometricService {
-  private static instance: BiometricService
-
-  public static getInstance(): BiometricService {
-    if (!BiometricService.instance) {
-      BiometricService.instance = new BiometricService()
-    }
-    return BiometricService.instance
+// Simulated biometric service for eye scanning
+export class BiometricService {
+  static async isAvailable(): Promise<boolean> {
+    // Simulate checking if biometric hardware is available
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(true), 500)
+    })
   }
 
-  // Check if biometric scanning is available on the device
-  async isBiometricAvailable(): Promise<boolean> {
-    try {
-      // In production, integrate with actual biometric SDK
-      // For now, simulate availability check
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          resolve(true) // Simulate biometric availability
-        }, 500)
-      })
-    } catch (error) {
-      console.error("Error checking biometric availability:", error)
-      return false
-    }
+  static async captureBiometric(): Promise<string> {
+    // Simulate capturing biometric data (eye scan)
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        // Simulate successful capture with a mock hash
+        const mockBiometricHash = `bio_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        resolve(mockBiometricHash)
+      }, 2000)
+    })
   }
 
-  // Capture biometric data (eye scan)
-  async captureBiometric(): Promise<string> {
-    try {
-      return new Promise((resolve, reject) => {
-        setTimeout(() => {
-          // Simulate biometric capture
-          const mockBiometricHash = this.generateMockBiometricHash()
-          resolve(mockBiometricHash)
-        }, 3000)
-      })
-    } catch (error) {
-      console.error("Error capturing biometric:", error)
-      throw new Error("Failed to capture biometric data")
-    }
+  static async verifyBiometric(storedHash: string, capturedData: string): Promise<boolean> {
+    // Simulate biometric verification
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        // For demo purposes, we'll simulate a 95% success rate
+        const isMatch = Math.random() > 0.05
+        resolve(isMatch)
+      }, 1500)
+    })
   }
 
-  // Verify biometric data against stored hash
-  async verifyBiometric(storedHash: string, capturedData?: string): Promise<boolean> {
-    try {
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          // Simulate biometric verification
-          // In production, this would compare actual biometric data
-          const verificationResult = Math.random() > 0.1 // 90% success rate for demo
-          resolve(verificationResult)
-        }, 2000)
-      })
-    } catch (error) {
-      console.error("Error verifying biometric:", error)
-      return false
-    }
-  }
-
-  // Generate a mock biometric hash for demonstration
-  private generateMockBiometricHash(): string {
-    const timestamp = Date.now().toString()
-    const randomData = Math.random().toString(36).substring(2, 15)
-    return `bio_${timestamp}_${randomData}`
-  }
-
-  // Encrypt biometric data (in production, use proper encryption)
-  private encryptBiometricData(data: string): string {
-    // In production, implement proper encryption
-    return Buffer.from(data).toString("base64")
-  }
-
-  // Decrypt biometric data
-  private decryptBiometricData(encryptedData: string): string {
-    // In production, implement proper decryption
-    return Buffer.from(encryptedData, "base64").toString()
+  static generateBiometricHash(rawData: string): string {
+    // Simulate generating a secure hash from biometric data
+    return `hash_${btoa(rawData)}_${Date.now()}`
   }
 }
 
-export default BiometricService.getInstance()
+export default BiometricService
