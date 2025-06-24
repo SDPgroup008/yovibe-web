@@ -1,5 +1,6 @@
 export interface Ticket {
   id: string
+  ticketCode: string
   eventId: string
   eventName: string
   venueId: string
@@ -8,38 +9,37 @@ export interface Ticket {
   buyerName: string
   buyerEmail: string
   quantity: number
-  unitPrice: number
+  ticketPrice: number
   totalAmount: number
-  appCommission: number // 5% of total
-  venueRevenue: number // 95% of total
+  appCommission: number
+  venueRevenue: number
   purchaseDate: Date
-  ticketCode: string // Unique QR code
-  biometricHash: string // Encrypted eye scan data
-  status: "active" | "used" | "cancelled"
-  paymentId: string
-  paymentStatus: "pending" | "completed" | "failed"
-  usedAt?: Date
-  validatedBy?: string
+  status: "active" | "used" | "cancelled" | "expired"
+  biometricHash: string
+  qrCodeData: string
+  paymentIntentId: string
+  validationHistory: TicketValidation[]
 }
 
 export interface TicketValidation {
   id: string
   ticketId: string
-  eventId: string
+  validatedBy: string
   validatedAt: Date
-  validatedBy: string // Scanner operator ID
-  biometricMatch: boolean
   entryGranted: boolean
+  biometricMatch: boolean
+  location?: string
   notes?: string
 }
 
 export interface PaymentIntent {
   id: string
-  eventId: string
-  buyerId: string
+  ticketId: string
   amount: number
   currency: string
-  status: "pending" | "processing" | "completed" | "failed"
+  status: "pending" | "succeeded" | "failed" | "cancelled"
   paymentMethod: string
   createdAt: Date
+  completedAt?: Date
+  failureReason?: string
 }
