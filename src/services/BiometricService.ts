@@ -1,47 +1,81 @@
-// Simulated biometric service - in production, integrate with actual biometric SDK
+// Biometric Service for eye scanning and verification
 class BiometricService {
-  // Simulate eye scanning and generate a hash
-  async captureEyeScan(): Promise<string> {
-    return new Promise((resolve, reject) => {
-      // Simulate camera access and eye scanning
-      setTimeout(() => {
-        // In production, this would capture actual biometric data
-        const mockBiometricData = this.generateMockBiometricHash()
-        resolve(mockBiometricData)
-      }, 3000) // Simulate 3 second scan time
-    })
+  private static instance: BiometricService
+
+  public static getInstance(): BiometricService {
+    if (!BiometricService.instance) {
+      BiometricService.instance = new BiometricService()
+    }
+    return BiometricService.instance
+  }
+
+  // Check if biometric scanning is available on the device
+  async isBiometricAvailable(): Promise<boolean> {
+    try {
+      // In production, integrate with actual biometric SDK
+      // For now, simulate availability check
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve(true) // Simulate biometric availability
+        }, 500)
+      })
+    } catch (error) {
+      console.error("Error checking biometric availability:", error)
+      return false
+    }
+  }
+
+  // Capture biometric data (eye scan)
+  async captureBiometric(): Promise<string> {
+    try {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          // Simulate biometric capture
+          const mockBiometricHash = this.generateMockBiometricHash()
+          resolve(mockBiometricHash)
+        }, 3000)
+      })
+    } catch (error) {
+      console.error("Error capturing biometric:", error)
+      throw new Error("Failed to capture biometric data")
+    }
   }
 
   // Verify biometric data against stored hash
-  async verifyEyeScan(storedHash: string, currentScan?: string): Promise<boolean> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // In production, this would compare actual biometric data
-        if (currentScan) {
-          // Compare provided scan with stored hash
-          resolve(currentScan === storedHash)
-        } else {
-          // Capture new scan and compare
-          this.captureEyeScan().then((newScan) => {
-            resolve(newScan === storedHash)
-          })
-        }
-      }, 2000)
-    })
+  async verifyBiometric(storedHash: string, capturedData?: string): Promise<boolean> {
+    try {
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          // Simulate biometric verification
+          // In production, this would compare actual biometric data
+          const verificationResult = Math.random() > 0.1 // 90% success rate for demo
+          resolve(verificationResult)
+        }, 2000)
+      })
+    } catch (error) {
+      console.error("Error verifying biometric:", error)
+      return false
+    }
   }
 
+  // Generate a mock biometric hash for demonstration
   private generateMockBiometricHash(): string {
-    // Generate a mock hash based on current user and timestamp
-    const timestamp = Date.now()
+    const timestamp = Date.now().toString()
     const randomData = Math.random().toString(36).substring(2, 15)
     return `bio_${timestamp}_${randomData}`
   }
 
-  // Check if device supports biometric scanning
-  async isBiometricAvailable(): Promise<boolean> {
-    // In production, check for camera and biometric capabilities
-    return true
+  // Encrypt biometric data (in production, use proper encryption)
+  private encryptBiometricData(data: string): string {
+    // In production, implement proper encryption
+    return Buffer.from(data).toString("base64")
+  }
+
+  // Decrypt biometric data
+  private decryptBiometricData(encryptedData: string): string {
+    // In production, implement proper decryption
+    return Buffer.from(encryptedData, "base64").toString()
   }
 }
 
-export default new BiometricService()
+export default BiometricService.getInstance()
