@@ -8,7 +8,6 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
 import { v4 as uuidv4 } from "uuid"
-import { isDevelopment } from "../utils/env"
 
 class FirebaseService {
   // Auth methods
@@ -26,6 +25,7 @@ class FirebaseService {
         userType,
         createdAt: Timestamp.now(),
         lastLoginAt: Timestamp.now(),
+        isDeleted: false,
       })
       console.log("FirebaseService: User profile created with ID", userRef.id)
 
@@ -153,78 +153,56 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting venues")
 
-      // For development/testing, return mock data if Firebase is not properly configured
-      if (isDevelopment()) {
-        try {
-          const venuesRef = collection(db, "venues")
-          const q = query(venuesRef, where("isDeleted", "!=", true))
-          const querySnapshot = await getDocs(q)
+      // Try to get venues from Firestore first
+      const venuesRef = collection(db, "venues")
 
-          if (querySnapshot.empty) {
-            console.log("FirebaseService: No venues found, returning mock data")
-            return this.getMockVenues()
-          }
+      // Try without the isDeleted filter first to see if there are any venues at all
+      const querySnapshot = await getDocs(venuesRef)
+      console.log("FirebaseService: Total venues in database:", querySnapshot.size)
 
-          const venues: Venue[] = []
-          querySnapshot.forEach((doc) => {
-            const data = doc.data()
-            venues.push({
-              id: doc.id,
-              name: data.name,
-              location: data.location,
-              description: data.description,
-              backgroundImageUrl: data.backgroundImageUrl,
-              categories: data.categories,
-              vibeRating: data.vibeRating,
-              todayImages: data.todayImages || [],
-              latitude: data.latitude,
-              longitude: data.longitude,
-              weeklyPrograms: data.weeklyPrograms || {},
-              ownerId: data.ownerId,
-              createdAt: data.createdAt.toDate(),
-              venueType: data.venueType || "nightlife",
-            })
-          })
-
-          console.log("FirebaseService: Found", venues.length, "venues")
-          return venues
-        } catch (error) {
-          console.warn("FirebaseService: Error getting venues, returning mock data:", error)
-          return this.getMockVenues()
-        }
+      if (querySnapshot.empty) {
+        console.log("FirebaseService: No venues found in database, returning mock data for development")
+        return this.getMockVenues()
       }
 
-      // Production code
-      const venuesRef = collection(db, "venues")
-      const q = query(venuesRef, where("isDeleted", "!=", true))
-      const querySnapshot = await getDocs(q)
+      // Now filter for non-deleted venues
       const venues: Venue[] = []
-
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        venues.push({
-          id: doc.id,
-          name: data.name,
-          location: data.location,
-          description: data.description,
-          backgroundImageUrl: data.backgroundImageUrl,
-          categories: data.categories,
-          vibeRating: data.vibeRating,
-          todayImages: data.todayImages || [],
-          latitude: data.latitude,
-          longitude: data.longitude,
-          weeklyPrograms: data.weeklyPrograms || {},
-          ownerId: data.ownerId,
-          createdAt: data.createdAt.toDate(),
-          venueType: data.venueType || "nightlife",
-        })
+
+        // Only include non-deleted venues (or venues without isDeleted field for backward compatibility)
+        if (!data.isDeleted) {
+          venues.push({
+            id: doc.id,
+            name: data.name,
+            location: data.location,
+            description: data.description,
+            backgroundImageUrl: data.backgroundImageUrl,
+            categories: data.categories,
+            vibeRating: data.vibeRating,
+            todayImages: data.todayImages || [],
+            latitude: data.latitude,
+            longitude: data.longitude,
+            weeklyPrograms: data.weeklyPrograms || {},
+            ownerId: data.ownerId,
+            createdAt: data.createdAt.toDate(),
+            venueType: data.venueType || "nightlife",
+          })
+        }
       })
 
-      console.log("FirebaseService: Found", venues.length, "venues")
+      console.log("FirebaseService: Found", venues.length, "active venues")
+
+      if (venues.length === 0) {
+        console.log("FirebaseService: All venues are deleted, returning mock data for development")
+        return this.getMockVenues()
+      }
+
       return venues
     } catch (error) {
       console.error("FirebaseService: Error getting venues:", error)
-      throw error
+      console.log("FirebaseService: Falling back to mock data due to error")
+      return this.getMockVenues()
     }
   }
 
@@ -309,28 +287,31 @@ class FirebaseService {
   async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
     try {
       const venuesRef = collection(db, "venues")
-      const q = query(venuesRef, where("ownerId", "==", ownerId), where("isDeleted", "!=", true))
+      const q = query(venuesRef, where("ownerId", "==", ownerId))
       const querySnapshot = await getDocs(q)
       const venues: Venue[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        venues.push({
-          id: doc.id,
-          name: data.name,
-          location: data.location,
-          description: data.description,
-          backgroundImageUrl: data.backgroundImageUrl,
-          categories: data.categories,
-          vibeRating: data.vibeRating,
-          todayImages: data.todayImages || [],
-          latitude: data.latitude,
-          longitude: data.longitude,
-          weeklyPrograms: data.weeklyPrograms || {},
-          ownerId: data.ownerId,
-          createdAt: data.createdAt.toDate(),
-          venueType: data.venueType || "nightlife",
-        })
+        // Only include non-deleted venues
+        if (!data.isDeleted) {
+          venues.push({
+            id: doc.id,
+            name: data.name,
+            location: data.location,
+            description: data.description,
+            backgroundImageUrl: data.backgroundImageUrl,
+            categories: data.categories,
+            vibeRating: data.vibeRating,
+            todayImages: data.todayImages || [],
+            latitude: data.latitude,
+            longitude: data.longitude,
+            weeklyPrograms: data.weeklyPrograms || {},
+            ownerId: data.ownerId,
+            createdAt: data.createdAt.toDate(),
+            venueType: data.venueType || "nightlife",
+          })
+        }
       })
 
       return venues
@@ -493,12 +474,69 @@ class FirebaseService {
 
       try {
         const eventsRef = collection(db, "events")
-        const q = query(eventsRef, where("isDeleted", "!=", true))
-        const querySnapshot = await getDocs(q)
+        const querySnapshot = await getDocs(eventsRef)
         const events: Event[] = []
 
         querySnapshot.forEach((doc) => {
           const data = doc.data()
+
+          // Only include non-deleted events
+          if (!data.isDeleted) {
+            const eventDate = data.date.toDate()
+
+            // Only include future events
+            if (eventDate >= new Date()) {
+              events.push({
+                id: doc.id,
+                name: data.name,
+                venueId: data.venueId,
+                venueName: data.venueName,
+                description: data.description,
+                date: eventDate,
+                posterImageUrl: data.posterImageUrl,
+                artists: data.artists,
+                isFeatured: data.isFeatured,
+                location: data.location,
+                priceIndicator: data.priceIndicator || 1,
+                attendees: data.attendees || [],
+                createdAt: data.createdAt.toDate(),
+                createdBy: data.createdBy,
+                createdByType: data.createdByType,
+              })
+            }
+          }
+        })
+
+        console.log("FirebaseService: Found", events.length, "events")
+
+        // Sort events by date (closest to today first)
+        const sortedEvents = events.sort((a, b) => {
+          return a.date.getTime() - b.date.getTime()
+        })
+
+        return sortedEvents
+      } catch (error) {
+        console.error("Error getting events from Firestore:", error)
+        return []
+      }
+    } catch (error) {
+      console.error("Error getting events:", error)
+      throw error
+    }
+  }
+
+  async getFeaturedEvents(): Promise<Event[]> {
+    try {
+      const eventsRef = collection(db, "events")
+      const q = query(eventsRef, where("isFeatured", "==", true))
+      const querySnapshot = await getDocs(q)
+      const events: Event[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+
+        // Only include non-deleted events
+        if (!data.isDeleted) {
           const eventDate = data.date.toDate()
 
           // Only include future events
@@ -521,63 +559,6 @@ class FirebaseService {
               createdByType: data.createdByType,
             })
           }
-        })
-
-        console.log("FirebaseService: Found", events.length, "events")
-
-        // Sort events by date (closest to today first)
-        const sortedEvents = events.sort((a, b) => {
-          return a.date.getTime() - b.date.getTime()
-        })
-
-        return sortedEvents
-      } catch (error) {
-        console.error("Error getting events from Firestore:", error)
-
-        // Only in development mode and if Firestore fails, return an empty array
-        if (isDevelopment()) {
-          console.warn("Development mode: Returning empty events array")
-          return []
-        } else {
-          throw error
-        }
-      }
-    } catch (error) {
-      console.error("Error getting events:", error)
-      throw error
-    }
-  }
-
-  async getFeaturedEvents(): Promise<Event[]> {
-    try {
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("isFeatured", "==", true), where("isDeleted", "!=", true))
-      const querySnapshot = await getDocs(q)
-      const events: Event[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const eventDate = data.date.toDate()
-
-        // Only include future events
-        if (eventDate >= new Date()) {
-          events.push({
-            id: doc.id,
-            name: data.name,
-            venueId: data.venueId,
-            venueName: data.venueName,
-            description: data.description,
-            date: eventDate,
-            posterImageUrl: data.posterImageUrl,
-            artists: data.artists,
-            isFeatured: data.isFeatured,
-            location: data.location,
-            priceIndicator: data.priceIndicator || 1,
-            attendees: data.attendees || [],
-            createdAt: data.createdAt.toDate(),
-            createdBy: data.createdBy,
-            createdByType: data.createdByType,
-          })
         }
       })
 
@@ -591,33 +572,37 @@ class FirebaseService {
   async getEventsByVenue(venueId: string): Promise<Event[]> {
     try {
       const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("venueId", "==", venueId), where("isDeleted", "!=", true))
+      const q = query(eventsRef, where("venueId", "==", venueId))
       const querySnapshot = await getDocs(q)
       const events: Event[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        const eventDate = data.date.toDate()
 
-        // Only include future events
-        if (eventDate >= new Date()) {
-          events.push({
-            id: doc.id,
-            name: data.name,
-            venueId: data.venueId,
-            venueName: data.venueName,
-            description: data.description,
-            date: eventDate,
-            posterImageUrl: data.posterImageUrl,
-            artists: data.artists,
-            isFeatured: data.isFeatured,
-            location: data.location,
-            priceIndicator: data.priceIndicator || 1,
-            attendees: data.attendees || [],
-            createdAt: data.createdAt.toDate(),
-            createdBy: data.createdBy,
-            createdByType: data.createdByType,
-          })
+        // Only include non-deleted events
+        if (!data.isDeleted) {
+          const eventDate = data.date.toDate()
+
+          // Only include future events
+          if (eventDate >= new Date()) {
+            events.push({
+              id: doc.id,
+              name: data.name,
+              venueId: data.venueId,
+              venueName: data.venueName,
+              description: data.description,
+              date: eventDate,
+              posterImageUrl: data.posterImageUrl,
+              artists: data.artists,
+              isFeatured: data.isFeatured,
+              location: data.location,
+              priceIndicator: data.priceIndicator || 1,
+              attendees: data.attendees || [],
+              createdAt: data.createdAt.toDate(),
+              createdBy: data.createdBy,
+              createdByType: data.createdByType,
+            })
+          }
         }
       })
 
@@ -1149,24 +1134,26 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting all users (admin)")
       const usersRef = collection(db, "users")
-      const q = query(usersRef, where("isDeleted", "!=", true))
-      const querySnapshot = await getDocs(q)
+      const querySnapshot = await getDocs(usersRef)
       const users: User[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        users.push({
-          id: doc.id,
-          uid: data.uid,
-          email: data.email,
-          userType: data.userType,
-          displayName: data.displayName,
-          photoURL: data.photoURL,
-          venueId: data.venueId,
-          isFrozen: data.isFrozen,
-          createdAt: data.createdAt.toDate(),
-          lastLoginAt: data.lastLoginAt.toDate(),
-        })
+        // Only include non-deleted users
+        if (!data.isDeleted) {
+          users.push({
+            id: doc.id,
+            uid: data.uid,
+            email: data.email,
+            userType: data.userType,
+            displayName: data.displayName,
+            photoURL: data.photoURL,
+            venueId: data.venueId,
+            isFrozen: data.isFrozen,
+            createdAt: data.createdAt.toDate(),
+            lastLoginAt: data.lastLoginAt.toDate(),
+          })
+        }
       })
 
       console.log("FirebaseService: Found", users.length, "users")
