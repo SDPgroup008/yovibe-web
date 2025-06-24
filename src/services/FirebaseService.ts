@@ -1,15 +1,54 @@
 import "react-native-get-random-values" // Add this import at the top
-import { collection, addDoc, getDoc, getDocs, doc, query, where, updateDoc, Timestamp, limit } from "firebase/firestore"
+import { initializeApp } from "firebase/app"
+import { getAnalytics } from "firebase/analytics"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { auth, db, storage } from "../config/firebase"
+import { collection, addDoc, getDocs, getDoc, updateDoc, doc, query, where, Timestamp } from "firebase/firestore"
+import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
-import type { VibeImage } from "../models/VibeImage"
-import { v4 as uuidv4 } from "uuid"
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+}
+
+let app
+let analytics
 
 class FirebaseService {
+  private static instance: FirebaseService
+  public isFirebaseConfigured = false
+
+  private constructor() {
+    if (!firebaseConfig.apiKey) {
+      console.warn("Firebase not configured: Missing API key")
+      return
+    }
+
+    try {
+      app = initializeApp(firebaseConfig)
+      analytics = getAnalytics(app)
+      this.isFirebaseConfigured = true
+      console.log("Firebase initialized successfully!")
+    } catch (error: any) {
+      console.error("Firebase initialization error:", error.message)
+    }
+  }
+
+  public static getInstance(): FirebaseService {
+    if (!FirebaseService.instance) {
+      FirebaseService.instance = new FirebaseService()
+    }
+    return FirebaseService.instance
+  }
+
   // Auth methods
   async signUp(email: string, password: string, userType: UserType): Promise<void> {
     try {
@@ -664,7 +703,7 @@ class FirebaseService {
         venueId: eventData.venueId,
         venueName: eventData.venueName,
         description: eventData.description,
-        date: Timestamp.fromDate(eventData.date) as any,
+        date: Timestamp.fromDate(eventData.date),
         posterImageUrl: eventData.posterImageUrl,
         artists: eventData.artists,
         isFeatured: eventData.isFeatured,
@@ -672,595 +711,13 @@ class FirebaseService {
         priceIndicator: eventData.priceIndicator,
         entryFee: eventData.entryFee,
         attendees: eventData.attendees || [],
-        createdAt: Timestamp.fromDate(new Date()) as any,
-        createdBy: eventData.createdBy,
-        createdByType: eventData.createdByType,
-        isDeleted: false,
       }
 
-      // Add the document to Firestore
       const eventRef = await addDoc(collection(db, "events"), firestoreEventData)
-
       return eventRef.id
     } catch (error) {
       console.error("Error adding event:", error)
       throw error
     }
   }
-
-  async updateEvent(eventId: string, data: Partial<Event>): Promise<void> {
-    try {
-      const eventRef = doc(db, "events", eventId)
-
-      // Convert Date objects to Firestore Timestamps
-      const firestoreData: any = { ...data }
-      if (data.date) {
-        firestoreData.date = Timestamp.fromDate(data.date)
-      }
-
-      await updateDoc(eventRef, firestoreData)
-      return
-    } catch (error) {
-      console.error("Error updating event:", error)
-      throw error
-    }
-  }
-
-  // Soft delete event
-  async deleteEvent(eventId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Soft deleting event", eventId)
-      const eventRef = doc(db, "events", eventId)
-      await updateDoc(eventRef, {
-        isDeleted: true,
-        deletedAt: Timestamp.now(),
-      })
-      console.log("FirebaseService: Event soft deleted successfully")
-      return
-    } catch (error) {
-      console.error("Error soft deleting event:", error)
-      throw error
-    }
-  }
-
-  // Restore deleted event
-  async restoreEvent(eventId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Restoring event", eventId)
-      const eventRef = doc(db, "events", eventId)
-      await updateDoc(eventRef, {
-        isDeleted: false,
-        deletedAt: null,
-      })
-      console.log("FirebaseService: Event restored successfully")
-      return
-    } catch (error) {
-      console.error("Error restoring event:", error)
-      throw error
-    }
-  }
-
-  // Get deleted events (admin only)
-  async getDeletedEvents(): Promise<Event[]> {
-    try {
-      console.log("FirebaseService: Getting deleted events")
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("isDeleted", "==", true))
-      const querySnapshot = await getDocs(q)
-      const events: Event[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        events.push({
-          id: doc.id,
-          name: data.name,
-          venueId: data.venueId,
-          venueName: data.venueName,
-          description: data.description,
-          date: data.date.toDate(),
-          posterImageUrl: data.posterImageUrl,
-          artists: data.artists,
-          isFeatured: data.isFeatured,
-          location: data.location, // Make sure this is included
-          priceIndicator: data.priceIndicator || 1,
-          entryFee: data.entryFee, // Make sure this is included
-          attendees: data.attendees || [],
-          createdAt: data.createdAt.toDate(),
-          createdBy: data.createdBy,
-          createdByType: data.createdByType,
-        })
-      })
-
-      console.log("FirebaseService: Found", events.length, "deleted events")
-      return events
-    } catch (error) {
-      console.error("Error getting deleted events:", error)
-      throw error
-    }
-  }
-
-  // Delete past events
-  async deletePastEvents(): Promise<void> {
-    try {
-      console.log("FirebaseService: Deleting past events")
-
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
-      const eventsRef = collection(db, "events")
-      const querySnapshot = await getDocs(eventsRef)
-      const deletePromises: Promise<void>[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const eventDate = data.date.toDate()
-
-        // If event date is before today, delete it
-        if (eventDate < today) {
-          console.log(`FirebaseService: Deleting past event: ${data.name} (${eventDate.toDateString()})`)
-          deletePromises.push(this.deleteEvent(doc.id))
-        }
-      })
-
-      await Promise.all(deletePromises)
-      console.log(`FirebaseService: Deleted ${deletePromises.length} past events`)
-    } catch (error) {
-      console.error("Error deleting past events:", error)
-      throw error
-    }
-  }
-
-  // Add a new method to delete events by venue ID
-  async deleteEventsByVenue(venueId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Deleting events for venue", venueId)
-
-      // Get all events for this venue
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("venueId", "==", venueId))
-      const querySnapshot = await getDocs(q)
-
-      // Delete each event
-      const deletePromises: Promise<void>[] = []
-      querySnapshot.forEach((doc) => {
-        deletePromises.push(this.deleteEvent(doc.id))
-      })
-
-      await Promise.all(deletePromises)
-      console.log(`FirebaseService: Deleted ${deletePromises.length} events for venue ${venueId}`)
-      return
-    } catch (error) {
-      console.error("Error deleting events by venue:", error)
-      throw error
-    }
-  }
-
-  // Vibe Image methods
-  async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
-    try {
-      console.log("FirebaseService: Adding vibe image for venue", vibeImageData.venueId)
-
-      const firestoreVibeData = {
-        venueId: vibeImageData.venueId,
-        imageUrl: vibeImageData.imageUrl,
-        vibeRating: vibeImageData.vibeRating,
-        uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
-        uploadedBy: vibeImageData.uploadedBy,
-        analysisData: vibeImageData.analysisData,
-      }
-
-      const vibeRef = await addDoc(collection(db, "vibeImages"), firestoreVibeData)
-      console.log("FirebaseService: Vibe image added with ID", vibeRef.id)
-
-      // Update venue's vibe rating with the latest rating
-      await this.updateVenueVibeRating(vibeImageData.venueId, vibeImageData.vibeRating)
-
-      return vibeRef.id
-    } catch (error) {
-      console.error("Error adding vibe image:", error)
-      throw error
-    }
-  }
-
-  // New method to update venue's vibe rating
-  async updateVenueVibeRating(venueId: string, newVibeRating: number): Promise<void> {
-    try {
-      console.log("FirebaseService: Updating venue vibe rating", venueId, "to", newVibeRating)
-
-      // Get all vibe images for this venue to calculate average
-      const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId), limit(10))
-      const querySnapshot = await getDocs(q)
-
-      if (!querySnapshot.empty) {
-        // Calculate average of recent vibe ratings (last 10 ratings or all if less than 10)
-        const recentRatings: number[] = []
-        querySnapshot.docs.forEach((doc) => {
-          const data = doc.data()
-          recentRatings.push(data.vibeRating)
-        })
-
-        const averageRating = recentRatings.reduce((sum, rating) => sum + rating, 0) / recentRatings.length
-
-        // Update venue's vibe rating
-        const venueRef = doc(db, "venues", venueId)
-        await updateDoc(venueRef, { vibeRating: averageRating })
-
-        console.log("FirebaseService: Venue vibe rating updated to", averageRating.toFixed(2))
-      }
-    } catch (error) {
-      console.error("Error updating venue vibe rating:", error)
-      // Don't throw error as this is not critical for the main flow
-    }
-  }
-
-  // Simplified query that doesn't require complex indexes
-  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
-    try {
-      console.log("FirebaseService: Getting vibe images for venue and date", venueId, date.toDateString())
-
-      // Get all vibe images for this venue first (simple query)
-      const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId))
-
-      const querySnapshot = await getDocs(q)
-      const vibeImages: VibeImage[] = []
-
-      console.log("Query returned", querySnapshot.size, "documents")
-
-      // Filter by date in JavaScript (client-side filtering)
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const uploadedAt = data.uploadedAt.toDate()
-
-        // Check if the upload date is within today's range
-        if (uploadedAt >= startOfDay && uploadedAt <= endOfDay) {
-          console.log("Processing vibe image:", doc.id, uploadedAt)
-          vibeImages.push({
-            id: doc.id,
-            venueId: data.venueId,
-            imageUrl: data.imageUrl,
-            vibeRating: data.vibeRating,
-            uploadedAt: uploadedAt,
-            uploadedBy: data.uploadedBy,
-            analysisData: data.analysisData,
-          })
-        }
-      })
-
-      // Sort by upload time (most recent first)
-      vibeImages.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
-
-      console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
-      return vibeImages
-    } catch (error) {
-      console.error("Error getting vibe images by venue and date:", error)
-      return []
-    }
-  }
-
-  // Add the missing method for week vibes
-  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
-    try {
-      console.log("FirebaseService: Getting vibe images for venue and week", venueId)
-
-      // Get all vibe images for this venue first (simple query)
-      const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId))
-
-      const querySnapshot = await getDocs(q)
-      const weekVibes: Record<string, VibeImage[]> = {}
-
-      console.log("Week query returned", querySnapshot.size, "documents")
-
-      // Filter by week in JavaScript (client-side filtering)
-      const endDate = new Date()
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - 7)
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const uploadedAt = data.uploadedAt.toDate()
-
-        // Check if the upload date is within the last week
-        if (uploadedAt >= startDate && uploadedAt <= endDate) {
-          const vibeImage: VibeImage = {
-            id: doc.id,
-            venueId: data.venueId,
-            imageUrl: data.imageUrl,
-            vibeRating: data.vibeRating,
-            uploadedAt: uploadedAt,
-            uploadedBy: data.uploadedBy,
-            analysisData: data.analysisData,
-          }
-
-          // Group by date string
-          const dateString = vibeImage.uploadedAt.toISOString().split("T")[0]
-          if (!weekVibes[dateString]) {
-            weekVibes[dateString] = []
-          }
-          weekVibes[dateString].push(vibeImage)
-        }
-      })
-
-      // Sort each day's vibes by time (most recent first)
-      Object.keys(weekVibes).forEach((dateString) => {
-        weekVibes[dateString].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
-      })
-
-      console.log("FirebaseService: Found vibe images for", Object.keys(weekVibes).length, "days")
-      return weekVibes
-    } catch (error) {
-      console.error("Error getting vibe images by venue and week:", error)
-      return {}
-    }
-  }
-
-  async getLatestVibeRating(venueId: string): Promise<number | null> {
-    try {
-      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
-
-      // Simple query without ordering to avoid index requirements
-      const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId))
-
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        return null
-      }
-
-      // Find the most recent vibe image in JavaScript
-      let latestVibe: any = null
-      let latestDate = new Date(0) // Start with epoch
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const uploadedAt = data.uploadedAt.toDate()
-
-        if (uploadedAt > latestDate) {
-          latestDate = uploadedAt
-          latestVibe = data
-        }
-      })
-
-      return latestVibe ? latestVibe.vibeRating : null
-    } catch (error) {
-      console.error("Error getting latest vibe rating:", error)
-      return null
-    }
-  }
-
-  // File upload methods
-  async uploadVenueImage(imageUri: string): Promise<string> {
-    try {
-      console.log("FirebaseService: Uploading venue image")
-
-      // Generate a unique filename
-      const filename = `venues/${uuidv4()}.jpg`
-      const imageRef = ref(storage, filename)
-
-      // For web, we need to handle the image differently
-      if (typeof window !== "undefined") {
-        // Web environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      } else {
-        // React Native environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      }
-
-      // Get the download URL
-      const downloadURL = await getDownloadURL(imageRef)
-      console.log("FirebaseService: Image uploaded successfully")
-
-      return downloadURL
-    } catch (error) {
-      console.error("Error uploading venue image:", error)
-      throw error
-    }
-  }
-
-  async uploadEventImage(imageUri: string): Promise<string> {
-    try {
-      console.log("FirebaseService: Uploading event image")
-
-      // Generate a unique filename
-      const filename = `events/${uuidv4()}.jpg`
-      const imageRef = ref(storage, filename)
-
-      // For web, we need to handle the image differently
-      if (typeof window !== "undefined") {
-        // Web environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      } else {
-        // React Native environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      }
-
-      // Get the download URL
-      const downloadURL = await getDownloadURL(imageRef)
-      console.log("FirebaseService: Event image uploaded successfully")
-
-      return downloadURL
-    } catch (error) {
-      console.error("Error uploading event image:", error)
-      throw error
-    }
-  }
-
-  async uploadVibeImage(imageUri: string): Promise<string> {
-    try {
-      console.log("FirebaseService: Uploading vibe image")
-
-      // Generate a unique filename
-      const filename = `vibes/${uuidv4()}.jpg`
-      const imageRef = ref(storage, filename)
-
-      // For web, we need to handle the image differently
-      if (typeof window !== "undefined") {
-        // Web environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      } else {
-        // React Native environment
-        const response = await fetch(imageUri)
-        const blob = await response.blob()
-        await uploadBytes(imageRef, blob)
-      }
-
-      // Get the download URL
-      const downloadURL = await getDownloadURL(imageRef)
-      console.log("FirebaseService: Vibe image uploaded successfully")
-
-      return downloadURL
-    } catch (error) {
-      console.error("Error uploading vibe image:", error)
-      throw error
-    }
-  }
-
-  // Admin methods
-  async getAllUsers(): Promise<User[]> {
-    try {
-      console.log("FirebaseService: Getting all users (admin)")
-      const usersRef = collection(db, "users")
-      const querySnapshot = await getDocs(usersRef)
-      const users: User[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        // Only include non-deleted users
-        if (!data.isDeleted) {
-          users.push({
-            id: doc.id,
-            uid: data.uid,
-            email: data.email,
-            userType: data.userType,
-            displayName: data.displayName,
-            photoURL: data.photoURL,
-            venueId: data.venueId,
-            isFrozen: data.isFrozen,
-            createdAt: data.createdAt.toDate(),
-            lastLoginAt: data.lastLoginAt.toDate(),
-          })
-        }
-      })
-
-      console.log("FirebaseService: Found", users.length, "users")
-      return users
-    } catch (error) {
-      console.error("Error getting all users:", error)
-      throw error
-    }
-  }
-
-  async freezeUser(userId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Freezing user", userId)
-      const userRef = doc(db, "users", userId)
-      await updateDoc(userRef, { isFrozen: true })
-      console.log("FirebaseService: User frozen successfully")
-      return
-    } catch (error) {
-      console.error("Error freezing user:", error)
-      throw error
-    }
-  }
-
-  async unfreezeUser(userId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Unfreezing user", userId)
-      const userRef = doc(db, "users", userId)
-      await updateDoc(userRef, { isFrozen: false })
-      console.log("FirebaseService: User unfrozen successfully")
-      return
-    } catch (error) {
-      console.error("Error unfreezing user:", error)
-      throw error
-    }
-  }
-
-  // Soft delete user
-  async deleteUser(userId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Soft deleting user", userId)
-      const userRef = doc(db, "users", userId)
-      await updateDoc(userRef, {
-        isDeleted: true,
-        deletedAt: Timestamp.now(),
-      })
-      console.log("FirebaseService: User soft deleted successfully")
-      return
-    } catch (error) {
-      console.error("Error soft deleting user:", error)
-      throw error
-    }
-  }
-
-  // Restore deleted user
-  async restoreUser(userId: string): Promise<void> {
-    try {
-      console.log("FirebaseService: Restoring user", userId)
-      const userRef = doc(db, "users", userId)
-      await updateDoc(userRef, {
-        isDeleted: false,
-        deletedAt: null,
-      })
-      console.log("FirebaseService: User restored successfully")
-      return
-    } catch (error) {
-      console.error("Error restoring user:", error)
-      throw error
-    }
-  }
-
-  // Get deleted users (admin only)
-  async getDeletedUsers(): Promise<User[]> {
-    try {
-      console.log("FirebaseService: Getting deleted users")
-      const usersRef = collection(db, "users")
-      const q = query(usersRef, where("isDeleted", "==", true))
-      const querySnapshot = await getDocs(q)
-      const users: User[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        users.push({
-          id: doc.id,
-          uid: data.uid,
-          email: data.email,
-          userType: data.userType,
-          displayName: data.displayName,
-          photoURL: data.photoURL,
-          venueId: data.venueId,
-          isFrozen: data.isFrozen,
-          createdAt: data.createdAt.toDate(),
-          lastLoginAt: data.lastLoginAt.toDate(),
-        })
-      })
-
-      console.log("FirebaseService: Found", users.length, "deleted users")
-      return users
-    } catch (error) {
-      console.error("Error getting deleted users:", error)
-      throw error
-    }
-  }
 }
-
-export default new FirebaseService()
