@@ -1,17 +1,5 @@
 import "react-native-get-random-values" // Add this import at the top
-import {
-  collection,
-  addDoc,
-  getDoc,
-  getDocs,
-  doc,
-  query,
-  where,
-  updateDoc,
-  deleteDoc,
-  Timestamp,
-  limit,
-} from "firebase/firestore"
+import { collection, addDoc, getDoc, getDocs, doc, query, where, updateDoc, Timestamp, limit } from "firebase/firestore"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { auth, db, storage } from "../config/firebase"
@@ -62,26 +50,32 @@ class FirebaseService {
 
   async signOut(): Promise<void> {
     try {
-      console.log("FirebaseService: Signing out user")
+      console.log("FirebaseService: Starting sign out process")
 
       // Clear any cached auth state
       if (auth.currentUser) {
+        console.log("FirebaseService: Signing out current user:", auth.currentUser.email)
         await firebaseSignOut(auth)
+        console.log("FirebaseService: Firebase sign out completed")
       }
 
       // Additional cleanup - clear any persisted auth state
       if (typeof window !== "undefined" && window.localStorage) {
+        console.log("FirebaseService: Clearing localStorage")
         // Clear any Firebase auth persistence
         const firebaseKeys = Object.keys(window.localStorage).filter(
           (key) => key.startsWith("firebase:") || key.includes("firebaseLocalStorageDb"),
         )
-        firebaseKeys.forEach((key) => window.localStorage.removeItem(key))
+        firebaseKeys.forEach((key) => {
+          console.log("FirebaseService: Removing key:", key)
+          window.localStorage.removeItem(key)
+        })
       }
 
-      console.log("FirebaseService: Sign out successful")
+      console.log("FirebaseService: Sign out process completed successfully")
       return
     } catch (error) {
-      console.error("FirebaseService: Error signing out:", error)
+      console.error("FirebaseService: Error during sign out:", error)
       // Don't throw the error - we want to clear local state regardless
       console.warn("FirebaseService: Continuing with local cleanup despite Firebase error")
     }
@@ -163,7 +157,8 @@ class FirebaseService {
       if (isDevelopment()) {
         try {
           const venuesRef = collection(db, "venues")
-          const querySnapshot = await getDocs(venuesRef)
+          const q = query(venuesRef, where("isDeleted", "!=", true))
+          const querySnapshot = await getDocs(q)
 
           if (querySnapshot.empty) {
             console.log("FirebaseService: No venues found, returning mock data")
@@ -187,7 +182,7 @@ class FirebaseService {
               weeklyPrograms: data.weeklyPrograms || {},
               ownerId: data.ownerId,
               createdAt: data.createdAt.toDate(),
-              venueType: data.venueType || "nightlife", // Default to nightlife for existing venues
+              venueType: data.venueType || "nightlife",
             })
           })
 
@@ -201,7 +196,8 @@ class FirebaseService {
 
       // Production code
       const venuesRef = collection(db, "venues")
-      const querySnapshot = await getDocs(venuesRef)
+      const q = query(venuesRef, where("isDeleted", "!=", true))
+      const querySnapshot = await getDocs(q)
       const venues: Venue[] = []
 
       querySnapshot.forEach((doc) => {
@@ -220,7 +216,7 @@ class FirebaseService {
           weeklyPrograms: data.weeklyPrograms || {},
           ownerId: data.ownerId,
           createdAt: data.createdAt.toDate(),
-          venueType: data.venueType || "nightlife", // Default to nightlife for existing venues
+          venueType: data.venueType || "nightlife",
         })
       })
 
@@ -313,7 +309,7 @@ class FirebaseService {
   async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
     try {
       const venuesRef = collection(db, "venues")
-      const q = query(venuesRef, where("ownerId", "==", ownerId))
+      const q = query(venuesRef, where("ownerId", "==", ownerId), where("isDeleted", "!=", true))
       const querySnapshot = await getDocs(q)
       const venues: Venue[] = []
 
@@ -354,6 +350,12 @@ class FirebaseService {
       }
 
       const data = venueDoc.data()
+
+      // Check if venue is deleted
+      if (data.isDeleted) {
+        return null
+      }
+
       return {
         id: venueDoc.id,
         name: data.name,
@@ -381,6 +383,7 @@ class FirebaseService {
       const venueRef = await addDoc(collection(db, "venues"), {
         ...venueData,
         createdAt: Timestamp.fromDate(venueData.createdAt),
+        isDeleted: false,
       })
 
       return venueRef.id
@@ -412,51 +415,73 @@ class FirebaseService {
     }
   }
 
-  // Add a new method to delete events by venue ID
-  async deleteEventsByVenue(venueId: string): Promise<void> {
+  // Soft delete venue (mark as deleted)
+  async deleteVenue(venueId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting events for venue", venueId)
-
-      // Get all events for this venue
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("venueId", "==", venueId))
-      const querySnapshot = await getDocs(q)
-
-      // Delete each event
-      const deletePromises: Promise<void>[] = []
-      querySnapshot.forEach((doc) => {
-        deletePromises.push(deleteDoc(doc.ref))
+      console.log("FirebaseService: Soft deleting venue", venueId)
+      const venueRef = doc(db, "venues", venueId)
+      await updateDoc(venueRef, {
+        isDeleted: true,
+        deletedAt: Timestamp.now(),
       })
-
-      await Promise.all(deletePromises)
-      console.log(`FirebaseService: Deleted ${deletePromises.length} events for venue ${venueId}`)
+      console.log("FirebaseService: Venue soft deleted successfully")
       return
     } catch (error) {
-      console.error("Error deleting events by venue:", error)
+      console.error("Error soft deleting venue:", error)
       throw error
     }
   }
 
-  // Enhance the deleteVenue method to also delete associated images
-  async deleteVenue(venueId: string): Promise<void> {
+  // Restore deleted venue
+  async restoreVenue(venueId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting venue", venueId)
-
-      // Get venue data to check for images
+      console.log("FirebaseService: Restoring venue", venueId)
       const venueRef = doc(db, "venues", venueId)
-      const venueDoc = await getDoc(venueRef)
-
-      if (venueDoc.exists()) {
-        // Delete the venue document
-        await deleteDoc(venueRef)
-        console.log("FirebaseService: Venue deleted successfully")
-      } else {
-        console.warn("FirebaseService: Venue not found", venueId)
-      }
-
+      await updateDoc(venueRef, {
+        isDeleted: false,
+        deletedAt: null,
+      })
+      console.log("FirebaseService: Venue restored successfully")
       return
     } catch (error) {
-      console.error("Error deleting venue:", error)
+      console.error("Error restoring venue:", error)
+      throw error
+    }
+  }
+
+  // Get deleted venues (admin only)
+  async getDeletedVenues(): Promise<Venue[]> {
+    try {
+      console.log("FirebaseService: Getting deleted venues")
+      const venuesRef = collection(db, "venues")
+      const q = query(venuesRef, where("isDeleted", "==", true))
+      const querySnapshot = await getDocs(q)
+      const venues: Venue[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        venues.push({
+          id: doc.id,
+          name: data.name,
+          location: data.location,
+          description: data.description,
+          backgroundImageUrl: data.backgroundImageUrl,
+          categories: data.categories,
+          vibeRating: data.vibeRating,
+          todayImages: data.todayImages || [],
+          latitude: data.latitude,
+          longitude: data.longitude,
+          weeklyPrograms: data.weeklyPrograms || {},
+          ownerId: data.ownerId,
+          createdAt: data.createdAt.toDate(),
+          venueType: data.venueType || "nightlife",
+        })
+      })
+
+      console.log("FirebaseService: Found", venues.length, "deleted venues")
+      return venues
+    } catch (error) {
+      console.error("Error getting deleted venues:", error)
       throw error
     }
   }
@@ -466,10 +491,10 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting events")
 
-      // Always try to get real events from Firestore first
       try {
         const eventsRef = collection(db, "events")
-        const querySnapshot = await getDocs(eventsRef)
+        const q = query(eventsRef, where("isDeleted", "!=", true))
+        const querySnapshot = await getDocs(q)
         const events: Event[] = []
 
         querySnapshot.forEach((doc) => {
@@ -526,7 +551,7 @@ class FirebaseService {
   async getFeaturedEvents(): Promise<Event[]> {
     try {
       const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("isFeatured", "==", true))
+      const q = query(eventsRef, where("isFeatured", "==", true), where("isDeleted", "!=", true))
       const querySnapshot = await getDocs(q)
       const events: Event[] = []
 
@@ -566,7 +591,7 @@ class FirebaseService {
   async getEventsByVenue(venueId: string): Promise<Event[]> {
     try {
       const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("venueId", "==", venueId))
+      const q = query(eventsRef, where("venueId", "==", venueId), where("isDeleted", "!=", true))
       const querySnapshot = await getDocs(q)
       const events: Event[] = []
 
@@ -613,6 +638,12 @@ class FirebaseService {
       }
 
       const data = eventDoc.data()
+
+      // Check if event is deleted
+      if (data.isDeleted) {
+        return null
+      }
+
       return {
         id: eventDoc.id,
         name: data.name,
@@ -644,7 +675,7 @@ class FirebaseService {
         venueId: eventData.venueId,
         venueName: eventData.venueName,
         description: eventData.description,
-        date: Timestamp.fromDate(eventData.date) as any, // Use type assertion to avoid TypeScript error
+        date: Timestamp.fromDate(eventData.date) as any,
         posterImageUrl: eventData.posterImageUrl,
         artists: eventData.artists,
         isFeatured: eventData.isFeatured,
@@ -652,9 +683,10 @@ class FirebaseService {
         priceIndicator: eventData.priceIndicator,
         entryFee: eventData.entryFee,
         attendees: eventData.attendees || [],
-        createdAt: Timestamp.fromDate(new Date()) as any, // Use type assertion to avoid TypeScript error
+        createdAt: Timestamp.fromDate(new Date()) as any,
         createdBy: eventData.createdBy,
         createdByType: eventData.createdByType,
+        isDeleted: false,
       }
 
       // Add the document to Firestore
@@ -685,57 +717,74 @@ class FirebaseService {
     }
   }
 
-  // Enhance the deleteEvent method to also delete associated images
+  // Soft delete event
   async deleteEvent(eventId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting event", eventId)
-
-      // Get event data to check for images
+      console.log("FirebaseService: Soft deleting event", eventId)
       const eventRef = doc(db, "events", eventId)
-      const eventDoc = await getDoc(eventRef)
-
-      if (eventDoc.exists()) {
-        // Delete the event document
-        await deleteDoc(eventRef)
-        console.log("FirebaseService: Event deleted successfully")
-      } else {
-        console.warn("FirebaseService: Event not found", eventId)
-      }
-
+      await updateDoc(eventRef, {
+        isDeleted: true,
+        deletedAt: Timestamp.now(),
+      })
+      console.log("FirebaseService: Event soft deleted successfully")
       return
     } catch (error) {
-      console.error("Error deleting event:", error)
+      console.error("Error soft deleting event:", error)
       throw error
     }
   }
 
-  // Delete past events
-  async deletePastEvents(): Promise<void> {
+  // Restore deleted event
+  async restoreEvent(eventId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting past events")
+      console.log("FirebaseService: Restoring event", eventId)
+      const eventRef = doc(db, "events", eventId)
+      await updateDoc(eventRef, {
+        isDeleted: false,
+        deletedAt: null,
+      })
+      console.log("FirebaseService: Event restored successfully")
+      return
+    } catch (error) {
+      console.error("Error restoring event:", error)
+      throw error
+    }
+  }
 
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-
+  // Get deleted events (admin only)
+  async getDeletedEvents(): Promise<Event[]> {
+    try {
+      console.log("FirebaseService: Getting deleted events")
       const eventsRef = collection(db, "events")
-      const querySnapshot = await getDocs(eventsRef)
-      const deletePromises: Promise<void>[] = []
+      const q = query(eventsRef, where("isDeleted", "==", true))
+      const querySnapshot = await getDocs(q)
+      const events: Event[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        const eventDate = data.date.toDate()
-
-        // If event date is before today, delete it
-        if (eventDate < today) {
-          console.log(`FirebaseService: Deleting past event: ${data.name} (${eventDate.toDateString()})`)
-          deletePromises.push(this.deleteEvent(doc.id))
-        }
+        events.push({
+          id: doc.id,
+          name: data.name,
+          venueId: data.venueId,
+          venueName: data.venueName,
+          description: data.description,
+          date: data.date.toDate(),
+          posterImageUrl: data.posterImageUrl,
+          artists: data.artists,
+          isFeatured: data.isFeatured,
+          location: data.location,
+          priceIndicator: data.priceIndicator || 1,
+          attendees: data.attendees || [],
+          createdAt: data.createdAt.toDate(),
+          createdBy: data.createdBy,
+          createdByType: data.createdByType,
+        })
       })
 
-      await Promise.all(deletePromises)
-      console.log(`FirebaseService: Deleted ${deletePromises.length} past events`)
+      console.log("FirebaseService: Found", events.length, "deleted events")
+      return events
     } catch (error) {
-      console.error("Error deleting past events:", error)
+      console.error("Error getting deleted events:", error)
       throw error
     }
   }
@@ -850,23 +899,79 @@ class FirebaseService {
     }
   }
 
-  // Get latest vibe rating for a venue
+  // Add the missing method for week vibes
+  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
+    try {
+      console.log("FirebaseService: Getting vibe images for venue and week", venueId)
+
+      // Get all vibe images for this venue first (simple query)
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(vibeImagesRef, where("venueId", "==", venueId))
+
+      const querySnapshot = await getDocs(q)
+      const weekVibes: Record<string, VibeImage[]> = {}
+
+      console.log("Week query returned", querySnapshot.size, "documents")
+
+      // Filter by week in JavaScript (client-side filtering)
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 7)
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const uploadedAt = data.uploadedAt.toDate()
+
+        // Check if the upload date is within the last week
+        if (uploadedAt >= startDate && uploadedAt <= endDate) {
+          const vibeImage: VibeImage = {
+            id: doc.id,
+            venueId: data.venueId,
+            imageUrl: data.imageUrl,
+            vibeRating: data.vibeRating,
+            uploadedAt: uploadedAt,
+            uploadedBy: data.uploadedBy,
+            analysisData: data.analysisData,
+          }
+
+          // Group by date string
+          const dateString = vibeImage.uploadedAt.toISOString().split("T")[0]
+          if (!weekVibes[dateString]) {
+            weekVibes[dateString] = []
+          }
+          weekVibes[dateString].push(vibeImage)
+        }
+      })
+
+      // Sort each day's vibes by time (most recent first)
+      Object.keys(weekVibes).forEach((dateString) => {
+        weekVibes[dateString].sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
+      })
+
+      console.log("FirebaseService: Found vibe images for", Object.keys(weekVibes).length, "days")
+      return weekVibes
+    } catch (error) {
+      console.error("Error getting vibe images by venue and week:", error)
+      return {}
+    }
+  }
+
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
       console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
 
+      // Simple query without ordering to avoid index requirements
       const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId), limit(1))
+      const q = query(vibeImagesRef, where("venueId", "==", venueId))
 
       const querySnapshot = await getDocs(q)
 
       if (querySnapshot.empty) {
-        console.log("FirebaseService: No vibe images found for venue", venueId)
         return null
       }
 
-      // Get the most recent vibe image
-      let latestVibeImage: any = null
+      // Find the most recent vibe image in JavaScript
+      let latestVibe: any = null
       let latestDate = new Date(0) // Start with epoch
 
       querySnapshot.forEach((doc) => {
@@ -875,16 +980,11 @@ class FirebaseService {
 
         if (uploadedAt > latestDate) {
           latestDate = uploadedAt
-          latestVibeImage = data
+          latestVibe = data
         }
       })
 
-      if (latestVibeImage) {
-        console.log("FirebaseService: Latest vibe rating found:", latestVibeImage.vibeRating)
-        return latestVibeImage.vibeRating
-      }
-
-      return null
+      return latestVibe ? latestVibe.vibeRating : null
     } catch (error) {
       console.error("Error getting latest vibe rating:", error)
       return null
@@ -993,7 +1093,8 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting all users (admin)")
       const usersRef = collection(db, "users")
-      const querySnapshot = await getDocs(usersRef)
+      const q = query(usersRef, where("isDeleted", "!=", true))
+      const querySnapshot = await getDocs(q)
       const users: User[] = []
 
       querySnapshot.forEach((doc) => {
@@ -1046,15 +1147,69 @@ class FirebaseService {
     }
   }
 
+  // Soft delete user
   async deleteUser(userId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting user", userId)
+      console.log("FirebaseService: Soft deleting user", userId)
       const userRef = doc(db, "users", userId)
-      await deleteDoc(userRef)
-      console.log("FirebaseService: User deleted successfully")
+      await updateDoc(userRef, {
+        isDeleted: true,
+        deletedAt: Timestamp.now(),
+      })
+      console.log("FirebaseService: User soft deleted successfully")
       return
     } catch (error) {
-      console.error("Error deleting user:", error)
+      console.error("Error soft deleting user:", error)
+      throw error
+    }
+  }
+
+  // Restore deleted user
+  async restoreUser(userId: string): Promise<void> {
+    try {
+      console.log("FirebaseService: Restoring user", userId)
+      const userRef = doc(db, "users", userId)
+      await updateDoc(userRef, {
+        isDeleted: false,
+        deletedAt: null,
+      })
+      console.log("FirebaseService: User restored successfully")
+      return
+    } catch (error) {
+      console.error("Error restoring user:", error)
+      throw error
+    }
+  }
+
+  // Get deleted users (admin only)
+  async getDeletedUsers(): Promise<User[]> {
+    try {
+      console.log("FirebaseService: Getting deleted users")
+      const usersRef = collection(db, "users")
+      const q = query(usersRef, where("isDeleted", "==", true))
+      const querySnapshot = await getDocs(q)
+      const users: User[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        users.push({
+          id: doc.id,
+          uid: data.uid,
+          email: data.email,
+          userType: data.userType,
+          displayName: data.displayName,
+          photoURL: data.photoURL,
+          venueId: data.venueId,
+          isFrozen: data.isFrozen,
+          createdAt: data.createdAt.toDate(),
+          lastLoginAt: data.lastLoginAt.toDate(),
+        })
+      })
+
+      console.log("FirebaseService: Found", users.length, "deleted users")
+      return users
+    } catch (error) {
+      console.error("Error getting deleted users:", error)
       throw error
     }
   }
