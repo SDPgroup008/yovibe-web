@@ -292,7 +292,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               >
                 <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
-
+    
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton, editProfileLoading && styles.disabledButton]}
                 onPress={handleUpdateProfile}
