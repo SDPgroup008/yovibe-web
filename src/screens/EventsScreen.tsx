@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   ImageBackground,
   Platform,
+  TextInput,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
@@ -21,8 +22,11 @@ import type { EventsScreenProps } from "../navigation/types"
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   const { user } = useAuth()
   const [events, setEvents] = useState<Event[]>([])
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showSearch, setShowSearch] = useState(false)
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
@@ -31,6 +35,22 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
 
     return unsubscribe
   }, [navigation])
+
+  useEffect(() => {
+    // Filter events based on search query
+    if (searchQuery.trim() === "") {
+      setFilteredEvents(events)
+    } else {
+      const filtered = events.filter(
+        (event) =>
+          event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          event.venueName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          event.artists.some((artist) => artist.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          event.description.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+      setFilteredEvents(filtered)
+    }
+  }, [searchQuery, events])
 
   const loadEvents = async () => {
     try {
@@ -51,6 +71,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
       })
 
       setEvents(sortedEvents)
+      setFilteredEvents(sortedEvents)
 
       // Get featured events and sort them as well
       const featured = await FirebaseService.getFeaturedEvents()
@@ -76,6 +97,13 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   const handleAddEvent = () => {
     // Use type assertion to work around the navigation type limitations
     ;(navigation as any).navigate("AddEvent")
+  }
+
+  const toggleSearch = () => {
+    setShowSearch(!showSearch)
+    if (showSearch) {
+      setSearchQuery("")
+    }
   }
 
   const formatDateRange = (date: Date) => {
@@ -138,17 +166,22 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Upcoming Events</Text>
-        <TouchableOpacity style={styles.searchButton}>
+        <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
           <Ionicons name="search" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
-      {/* Add Event Button for Regular Users */}
-      {user && (user.userType === "user" || user.userType === "admin") && (
-        <TouchableOpacity style={styles.addEventButton} onPress={handleAddEvent}>
-          <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.addEventButtonText}>Add New Event</Text>
-        </TouchableOpacity>
+      {showSearch && (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search events, venues, or artists..."
+            placeholderTextColor="#999"
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+        </View>
       )}
 
       {loading ? (
@@ -156,19 +189,30 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           <ActivityIndicator size="large" color="#2196F3" />
           <Text style={styles.loadingText}>Loading events...</Text>
         </View>
-      ) : events.length === 0 ? (
+      ) : filteredEvents.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>No events found</Text>
-          <Text style={styles.emptySubtext}>Check back later for upcoming events</Text>
+          <Text style={styles.emptyText}>
+            {searchQuery ? "No events found matching your search" : "No events found"}
+          </Text>
+          <Text style={styles.emptySubtext}>
+            {searchQuery ? "Try a different search term" : "Check back later for upcoming events"}
+          </Text>
         </View>
       ) : (
         <FlatList
-          data={events}
+          data={filteredEvents}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
           ListEmptyComponent={<Text style={styles.emptyText}>No upcoming events found</Text>}
           contentContainerStyle={styles.eventsList}
         />
+      )}
+
+      {/* Floating Add Event Button */}
+      {user && (user.userType === "user" || user.userType === "admin") && (
+        <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddEvent}>
+          <Ionicons name="add" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
       )}
     </View>
   )
@@ -202,26 +246,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.3)",
   },
-  addEventButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "linear-gradient(135deg, #00D4FF 0%, #0099CC 100%)",
-    padding: 16,
-    borderRadius: 16,
-    marginHorizontal: 20,
-    marginBottom: 20,
-    justifyContent: "center",
-    shadowColor: "#00D4FF",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+  searchContainer: {
+    padding: 20,
+    paddingTop: 0,
   },
-  addEventButtonText: {
+  searchInput: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
     color: "#FFFFFF",
-    fontWeight: "700",
     fontSize: 16,
-    marginLeft: 8,
+    borderWidth: 1,
+    borderColor: "#333",
   },
   eventCard: {
     marginHorizontal: 20,
@@ -362,6 +398,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: "center",
     lineHeight: 24,
+  },
+  eventsList: {
+    paddingBottom: 100, // Add padding to account for floating button
+  },
+  floatingAddButton: {
+    position: "absolute",
+    bottom: 90, // Position above the tab bar
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#2196F3",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
   },
 })
 
