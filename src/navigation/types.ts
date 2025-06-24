@@ -1,166 +1,92 @@
-import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack"
 import type { Event } from "../models/Event"
+import type { Venue } from "../models/Venue"
 
-// Define the param lists for each stack
-export type RootStackParamList = {
-  Auth: undefined
-  Main: undefined
-}
-
+// Auth Stack
 export type AuthStackParamList = {
   Login: undefined
   SignUp: undefined
 }
 
+// Venues Stack
 export type VenuesStackParamList = {
   VenuesList: undefined
-  VenueDetail: { venueId: string }
-  AddEvent: { venueId: string; venueName: string }
-  ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
-  EventDetail: { eventId: string }
-  TodaysVibe: { venueId: string; venueName: string }
+  VenueDetail: { venue: Venue }
+  AddEvent: { venue: Venue }
+  EventDetail: { event: Event }
+  ManagePrograms: { venue: Venue }
+  TodaysVibe: { venue: Venue }
   TicketPurchase: { event: Event }
-  TicketDetail: { ticketId: string }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string }
 }
 
+// Events Stack
 export type EventsStackParamList = {
   EventsList: undefined
-  EventDetail: { eventId: string }
-  AddEvent: { venueId?: string; venueName?: string }
-  VenueDetail: { venueId: string }
+  EventDetail: { event: Event }
+  AddEvent: { venue?: Venue }
+  VenueDetail: { venue: Venue }
   TicketPurchase: { event: Event }
-  TicketDetail: { ticketId: string }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string }
 }
 
+// Map Stack
 export type MapStackParamList = {
-  MapView: { destinationVenueId?: string }
-  VenueDetail: { venueId: string }
-  EventDetail: { eventId: string }
+  MapView: undefined
+  VenueDetail: { venue: Venue }
+  EventDetail: { event: Event }
   TicketPurchase: { event: Event }
-  TicketDetail: { ticketId: string }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string }
 }
 
+// Calendar Stack
 export type CalendarStackParamList = {
   CalendarView: undefined
-  EventDetail: { eventId: string }
-  VenueDetail: { venueId: string }
+  EventDetail: { event: Event }
+  VenueDetail: { venue: Venue }
   TicketPurchase: { event: Event }
-  TicketDetail: { ticketId: string }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string }
 }
 
+// Profile Stack
 export type ProfileStackParamList = {
   ProfileMain: undefined
   MyVenues: undefined
   AddVenue: undefined
-  AddVibe: { venueId: string; venueName: string }
-  EditProfile: undefined
-  VenueDetail: { venueId: string }
-  EventDetail: { eventId: string }
+  VenueDetail: { venue: Venue }
+  EventDetail: { event: Event }
   AdminUsers: undefined
   AdminVenues: undefined
   AdminEvents: undefined
-  TodaysVibe: { venueId: string; venueName: string }
+  AddVibe: { venue: Venue }
+  TodaysVibe: { venue: Venue }
   TicketPurchase: { event: Event }
-  TicketDetail: { ticketId: string }
-  TicketScanner: undefined
-  MyTickets: undefined
+  TicketScanner: { eventId: string }
 }
 
-// Define the tab navigator param list
+// Main Tab
 export type MainTabParamList = {
-  Venues: undefined | { screen: keyof VenuesStackParamList; params: any }
-  Events: undefined | { screen: keyof EventsStackParamList; params: any }
-  Map: undefined | { screen: keyof MapStackParamList; params: any }
-  Calendar: undefined | { screen: keyof CalendarStackParamList; params: any }
-  Profile: undefined | { screen: keyof ProfileStackParamList; params: any }
+  Venues: undefined
+  Events: undefined
+  Map: undefined
+  Calendar: undefined
+  Profile: undefined
 }
 
-// Create a more flexible navigation type that allows cross-stack navigation
-export type AppNavigation = any
-
-// Screen props using NativeStackScreenProps
-export type VenueDetailScreenProps = NativeStackScreenProps<VenuesStackParamList, "VenueDetail"> & {
-  navigation: AppNavigation
+// Ticket Screen Props
+export type TicketPurchaseScreenProps = {
+  route: {
+    params: {
+      event: Event
+    }
+  }
+  navigation: any
 }
 
-export type EventDetailScreenProps = NativeStackScreenProps<EventsStackParamList, "EventDetail"> & {
-  navigation: AppNavigation
-}
-
-export type AddEventScreenProps = NativeStackScreenProps<EventsStackParamList, "AddEvent"> & {
-  navigation: AppNavigation
-}
-
-export type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamList, "ManagePrograms"> & {
-  navigation: AppNavigation
-}
-
-export type MapScreenProps = NativeStackScreenProps<MapStackParamList, "MapView"> & {
-  navigation: AppNavigation
-}
-
-export type TodaysVibeScreenProps = NativeStackScreenProps<VenuesStackParamList, "TodaysVibe"> & {
-  navigation: AppNavigation
-}
-
-export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe"> & {
-  navigation: AppNavigation
-}
-
-export type TicketPurchaseScreenProps = NativeStackScreenProps<EventsStackParamList, "TicketPurchase"> & {
-  navigation: AppNavigation
-}
-
-export type TicketScannerScreenProps = NativeStackScreenProps<ProfileStackParamList, "TicketScanner"> & {
-  navigation: AppNavigation
-}
-
-// Navigation props for each screen
-export type VenuesScreenProps = {
-  navigation: AppNavigation
-}
-
-export type EventsScreenProps = {
-  navigation: AppNavigation
-}
-
-export type EventCalendarScreenProps = {
-  navigation: AppNavigation
-}
-
-export type ProfileScreenProps = {
-  navigation: AppNavigation
-}
-
-export type MyVenuesScreenProps = {
-  navigation: AppNavigation
-}
-
-export type AddVenueScreenProps = {
-  navigation: AppNavigation
-}
-
-export type LoginScreenProps = {
-  navigation: NativeStackNavigationProp<AuthStackParamList>
-}
-
-export type SignUpScreenProps = {
-  navigation: NativeStackNavigationProp<AuthStackParamList>
-}
-
-// Admin screen props
-export type AdminUsersScreenProps = {
-  navigation: AppNavigation
-}
-
-export type AdminVenuesScreenProps = {
-  navigation: AppNavigation
-}
-
-export type AdminEventsScreenProps = {
-  navigation: AppNavigation
+export type TicketScannerScreenProps = {
+  route: {
+    params: {
+      eventId: string
+    }
+  }
+  navigation: any
 }
