@@ -14,6 +14,7 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 
@@ -25,6 +26,7 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
   const { user } = useAuth()
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
 
   useEffect(() => {
     loadVenues()
@@ -37,6 +39,16 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
     try {
       const venuesList = await FirebaseService.getVenuesByOwner(user.id)
       setVenues(venuesList)
+
+      // Load current vibe ratings for each venue
+      const vibeRatings: Record<string, number> = {}
+      for (const venue of venuesList) {
+        const rating = await FirebaseService.getLatestVibeRating(venue.id)
+        if (rating !== null) {
+          vibeRatings[venue.id] = rating
+        }
+      }
+      setVenueVibeRatings(vibeRatings)
     } catch (error) {
       console.error("Error loading venues:", error)
       Alert.alert("Error", "Failed to load venues")
@@ -54,7 +66,7 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
   }
 
   const handleDeleteVenue = async (venueId: string) => {
-    Alert.alert("Delete Venue", "Are you sure you want to delete this venue? This action cannot be undone.", [
+    Alert.alert("Delete Venue", "Are you sure you want to delete this venue? This action can be undone by an admin.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
@@ -63,6 +75,7 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
           setLoading(true)
           try {
             await FirebaseService.deleteVenue(venueId)
+            Alert.alert("Success", "Venue deleted successfully")
             // Refresh the list
             loadVenues()
           } catch (error) {
@@ -107,9 +120,24 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
                 <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
                   <View style={styles.venueGradient}>
                     <Text style={styles.venueName}>{item.name}</Text>
-                    <Text style={styles.venueInfo}>
-                      {item.categories.join(", ")} • Vibe Rating: {item.vibeRating.toFixed(1)}⭐️
-                    </Text>
+                    <Text style={styles.venueInfo}>{item.categories.join(", ")}</Text>
+                    {venueVibeRatings[item.id] && (
+                      <View style={styles.vibeRatingContainer}>
+                        <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                        <Text
+                          style={[
+                            styles.vibeRatingValue,
+                            { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id]) },
+                          ]}
+                        >
+                          {venueVibeRatings[item.id].toFixed(1)}
+                        </Text>
+                        <Text style={styles.vibeRatingDescription}>
+                          {" "}
+                          - {VibeAnalysisService.getVibeDescription(venueVibeRatings[item.id])}
+                        </Text>
+                      </View>
+                    )}
                   </View>
                 </ImageBackground>
               </TouchableOpacity>
@@ -223,6 +251,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: "rgba(255,255,255,0.8)",
     marginTop: 4,
+  },
+  vibeRatingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+    flexWrap: "wrap",
+  },
+  vibeRatingLabel: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.8)",
+  },
+  vibeRatingValue: {
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  vibeRatingDescription: {
+    fontSize: 12,
+    color: "rgba(255,255,255,0.7)",
   },
   venueActions: {
     flexDirection: "row",
