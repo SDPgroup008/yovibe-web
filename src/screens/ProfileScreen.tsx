@@ -47,16 +47,23 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       {
         text: "Sign Out",
         style: "destructive",
-        onPress: async () => {
+        onPress: () => {
           setLoading(true)
           try {
-            console.log("ProfileScreen: Starting sign out process")
-            await signOut()
-            console.log("ProfileScreen: Sign out completed")
-            // The AuthContext will handle navigation
+            console.log("ProfileScreen: Navigating to login page")
+            // Navigate directly to login page
+            navigation.reset({
+              index: 0,
+              routes: [{ name: "Login" }],
+            })
           } catch (error) {
-            console.error("ProfileScreen: Sign out error:", error)
-            Alert.alert("Error", "Failed to sign out. Please try again.")
+            console.error("ProfileScreen: Navigation error:", error)
+            // Fallback navigation attempt
+            try {
+              navigation.navigate("Login" as any)
+            } catch (fallbackError) {
+              console.error("ProfileScreen: Fallback navigation failed:", fallbackError)
+            }
           } finally {
             setLoading(false)
           }
