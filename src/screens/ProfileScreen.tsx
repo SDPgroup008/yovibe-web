@@ -392,13 +392,13 @@ const styles = StyleSheet.create({
   signOutButton: {
     margin: 24,
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: "#FF3B30",
     borderRadius: 8,
     alignItems: "center",
   },
   signOutText: {
     fontSize: 16,
-    color: "#FF3B30",
+    color: "#FFFFFF",
     fontWeight: "bold",
   },
   modalContainer: {
