@@ -721,3 +721,7 @@ class FirebaseService {
     }
   }
 }
+
+// Export a singleton instance as default
+const firebaseService = FirebaseService.getInstance()
+export default firebaseService
