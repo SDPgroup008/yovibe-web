@@ -12,4 +12,5 @@ export interface Venue {
   weeklyPrograms?: Record<string, string>
   ownerId: string
   createdAt: Date
+  venueType?: "nightlife" | "recreation" // Add venue type
 }
