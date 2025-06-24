@@ -13,38 +13,19 @@ class NotificationService {
   }
 
   // Send ticket purchase notification to event owner
-  async sendTicketPurchaseNotification(
+  static async sendTicketPurchaseNotification(
     eventId: string,
     buyerName: string,
     quantity: number,
-    revenue: number,
+    amount: number,
   ): Promise<void> {
     try {
-      // In production, integrate with push notification service
-      // (Firebase Cloud Messaging, OneSignal, etc.)
+      console.log(`Notification: ${buyerName} purchased ${quantity} ticket(s)`)
+      console.log(`Revenue: UGX ${amount.toLocaleString()}`)
 
-      const notification = {
-        title: "🎫 New Ticket Purchase!",
-        body: `${buyerName} purchased ${quantity} ticket(s). You earned UGX ${revenue.toLocaleString()}`,
-        data: {
-          type: "ticket_purchase",
-          eventId,
-          buyerName,
-          quantity: quantity.toString(),
-          revenue: revenue.toString(),
-        },
-      }
-
-      // Simulate sending notification
-      console.log("Sending notification:", notification)
-
-      // In production, you would:
-      // 1. Get event owner's device tokens
-      // 2. Send push notification
-      // 3. Store notification in database
-      // 4. Send email notification if enabled
+      // In production, implement actual notification sending
     } catch (error) {
-      console.error("Error sending ticket purchase notification:", error)
+      console.error("Error sending notification:", error)
     }
   }
 
@@ -138,20 +119,16 @@ class NotificationService {
 
   static async notifyTicketPurchase(event: Event, ticket: Ticket): Promise<void> {
     try {
-      // In a real app, this would send push notifications
-      console.log(`Ticket purchased notification:`, {
-        eventOwner: event.createdBy,
-        eventName: event.name,
-        buyerName: ticket.buyerName,
-        quantity: ticket.quantity,
-        revenue: ticket.venueRevenue,
-      })
+      console.log(`Notification: Ticket purchased for ${event.name}`)
+      console.log(`Buyer: ${ticket.buyerName}`)
+      console.log(`Quantity: ${ticket.quantity}`)
+      console.log(`Amount: UGX ${ticket.totalAmount.toLocaleString()}`)
 
-      // Simulate sending notification to event owner
+      // In production, send push notification to event owner
       // await this.sendPushNotification(event.createdBy, {
-      //   title: 'New Ticket Purchase!',
-      //   body: `${ticket.buyerName} bought ${ticket.quantity} ticket(s) for ${event.name}`,
-      //   data: { eventId: event.id, ticketId: ticket.id }
+      //   title: "New Ticket Purchase",
+      //   body: `${ticket.buyerName} purchased ${ticket.quantity} ticket(s) for ${event.name}`,
+      //   data: { ticketId: ticket.id, eventId: event.id }
       // })
     } catch (error) {
       console.error("Error sending ticket purchase notification:", error)
@@ -160,47 +137,29 @@ class NotificationService {
 
   static async notifyTicketValidation(ticket: Ticket, validation: TicketValidation): Promise<void> {
     try {
-      console.log(`Ticket validation notification:`, {
-        ticketId: ticket.id,
-        eventName: ticket.eventName,
-        status: validation.status,
-        validatedAt: validation.validatedAt,
-      })
+      console.log(`Notification: Ticket validated`)
+      console.log(`Ticket: ${ticket.id}`)
+      console.log(`Status: ${validation.status}`)
+      console.log(`Validated by: ${validation.validatedBy}`)
 
-      // In a real app, send notification to ticket buyer
+      // In production, send notification to relevant parties
       // await this.sendPushNotification(ticket.buyerId, {
-      //   title: validation.status === 'granted' ? 'Entry Granted!' : 'Entry Denied',
-      //   body: `Your ticket for ${ticket.eventName} has been ${validation.status}`,
-      //   data: { ticketId: ticket.id }
+      //   title: "Ticket Validated",
+      //   body: `Your ticket for ${ticket.eventName} has been validated`,
+      //   data: { ticketId: ticket.id, validationId: validation.id }
       // })
     } catch (error) {
-      console.error("Error sending validation notification:", error)
-    }
-  }
-
-  static async sendEventReminder(ticket: Ticket, hoursBeforeEvent: number): Promise<void> {
-    try {
-      console.log(`Event reminder:`, {
-        ticketId: ticket.id,
-        eventName: ticket.eventName,
-        hoursBeforeEvent,
-      })
-
-      // In a real app, send reminder notification
-      // await this.sendPushNotification(ticket.buyerId, {
-      //   title: `${ticket.eventName} starts in ${hoursBeforeEvent} hours!`,
-      //   body: 'Don\'t forget to bring your ticket and be ready for biometric verification',
-      //   data: { ticketId: ticket.id }
-      // })
-    } catch (error) {
-      console.error("Error sending event reminder:", error)
+      console.error("Error sending ticket validation notification:", error)
     }
   }
 
   private static async sendPushNotification(userId: string, notification: any): Promise<void> {
-    // This would integrate with a push notification service like Firebase Cloud Messaging
-    // For now, we'll just log the notification
-    console.log(`Push notification to ${userId}:`, notification)
+    try {
+      // In production, implement push notification service
+      console.log(`Push notification to ${userId}:`, notification)
+    } catch (error) {
+      console.error("Error sending push notification:", error)
+    }
   }
 }
 

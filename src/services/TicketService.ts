@@ -46,7 +46,7 @@ export class TicketService {
       // Save ticket to database
       await FirebaseService.saveTicket(ticket)
 
-      // Send notification to event owner
+      // Send notification to event owner - use static method
       await NotificationService.notifyTicketPurchase(event, ticket)
 
       return ticket
@@ -109,7 +109,7 @@ export class TicketService {
 
       await this.logValidation(validation)
 
-      // Send notification
+      // Send notification - use static method
       await NotificationService.notifyTicketValidation(ticket, validation)
 
       return { success: true }
