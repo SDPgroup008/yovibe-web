@@ -15,10 +15,10 @@ import {
   ScrollView,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { useAuth } from "../"
-import FirebaseService from "../services/FirebaseService"
-import ImagePickerService from "../services/ImagePickerService"
-import type { ProfileScreenProps } from "../navigation/types"
+import { useAuth } from "../yovibe-web/src/contexts/AuthContext"
+import FirebaseService from "../yovibe-web/src/services/FirebaseService"
+import ImagePickerService from "../yovibe-web/src/services/ImagePickerService"
+import type { ProfileScreenProps } from "../yovibe-web/src/navigation/types"
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const { user, signOut, updateProfile } = useAuth()
