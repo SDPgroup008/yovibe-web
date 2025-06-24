@@ -10,10 +10,10 @@ import {
   updateDoc,
   deleteDoc,
   Timestamp,
-  orderBy,
+  limit,
 } from "firebase/firestore"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
-import { ref, uploadBytes, getDownloadURL, uploadString } from "firebase/storage"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { auth, db, storage } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
@@ -187,6 +187,7 @@ class FirebaseService {
               weeklyPrograms: data.weeklyPrograms || {},
               ownerId: data.ownerId,
               createdAt: data.createdAt.toDate(),
+              venueType: data.venueType || "nightlife", // Default to nightlife for existing venues
             })
           })
 
@@ -219,6 +220,7 @@ class FirebaseService {
           weeklyPrograms: data.weeklyPrograms || {},
           ownerId: data.ownerId,
           createdAt: data.createdAt.toDate(),
+          venueType: data.venueType || "nightlife", // Default to nightlife for existing venues
         })
       })
 
@@ -255,6 +257,7 @@ class FirebaseService {
         },
         ownerId: "owner1",
         createdAt: new Date(),
+        venueType: "nightlife",
       },
       {
         id: "venue2",
@@ -278,29 +281,31 @@ class FirebaseService {
         },
         ownerId: "owner2",
         createdAt: new Date(),
+        venueType: "nightlife",
       },
       {
         id: "venue3",
-        name: "Rooftop Lounge",
-        location: "789 Skyview Dr, Uptown",
-        description: "Elegant rooftop bar with panoramic city views and craft cocktails.",
+        name: "Fitness Plus Center",
+        location: "789 Health Dr, Uptown",
+        description: "Modern fitness center with state-of-the-art equipment and group classes.",
         backgroundImageUrl:
-          "https://images.unsplash.com/photo-1517457373958-b7bdd4587205?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
-        categories: ["Lounge", "Rooftop", "Cocktails"],
+          "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
+        categories: ["Fitness", "Recreation", "Sports"],
         vibeRating: 4.7,
         latitude: 40.758,
         longitude: -73.9855,
         weeklyPrograms: {
-          Monday: "Monday Sunset Sessions",
-          Tuesday: "Taco & Tequila Tuesday",
-          Wednesday: "Wine Down Wednesday",
-          Thursday: "Acoustic Live Sets",
-          Friday: "DJ & Dancing under the Stars",
-          Saturday: "VIP Bottle Service Night",
-          Sunday: "Sunday Brunch & Beats",
+          Monday: "Morning Yoga & Evening Cardio",
+          Tuesday: "Strength Training & Pilates",
+          Wednesday: "Zumba & CrossFit",
+          Thursday: "Swimming & Aqua Aerobics",
+          Friday: "HIIT & Spinning",
+          Saturday: "Group Classes & Personal Training",
+          Sunday: "Relaxation & Stretching",
         },
         ownerId: "owner3",
         createdAt: new Date(),
+        venueType: "recreation",
       },
     ]
   }
@@ -328,6 +333,7 @@ class FirebaseService {
           weeklyPrograms: data.weeklyPrograms || {},
           ownerId: data.ownerId,
           createdAt: data.createdAt.toDate(),
+          venueType: data.venueType || "nightlife",
         })
       })
 
@@ -362,6 +368,7 @@ class FirebaseService {
         weeklyPrograms: data.weeklyPrograms || {},
         ownerId: data.ownerId,
         createdAt: data.createdAt.toDate(),
+        venueType: data.venueType || "nightlife",
       }
     } catch (error) {
       console.error("Error getting venue by ID:", error)
@@ -767,13 +774,13 @@ class FirebaseService {
 
       // Get all vibe images for this venue to calculate average
       const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId), orderBy("uploadedAt", "desc"))
+      const q = query(vibeImagesRef, where("venueId", "==", venueId), limit(10))
       const querySnapshot = await getDocs(q)
 
       if (!querySnapshot.empty) {
         // Calculate average of recent vibe ratings (last 10 ratings or all if less than 10)
         const recentRatings: number[] = []
-        querySnapshot.docs.slice(0, 10).forEach((doc) => {
+        querySnapshot.docs.forEach((doc) => {
           const data = doc.data()
           recentRatings.push(data.vibeRating)
         })
@@ -792,46 +799,48 @@ class FirebaseService {
     }
   }
 
+  // Simplified query that doesn't require complex indexes
   async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
     try {
       console.log("FirebaseService: Getting vibe images for venue and date", venueId, date.toDateString())
 
-      // Create start and end of day timestamps
-      const startOfDay = new Date(date)
-      startOfDay.setHours(0, 0, 0, 0)
-
-      const endOfDay = new Date(date)
-      endOfDay.setHours(23, 59, 59, 999)
-
-      console.log("Date range:", startOfDay.toISOString(), "to", endOfDay.toISOString())
-
+      // Get all vibe images for this venue first (simple query)
       const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(
-        vibeImagesRef,
-        where("venueId", "==", venueId),
-        where("uploadedAt", ">=", Timestamp.fromDate(startOfDay)),
-        where("uploadedAt", "<=", Timestamp.fromDate(endOfDay)),
-        orderBy("uploadedAt", "desc"),
-      )
+      const q = query(vibeImagesRef, where("venueId", "==", venueId))
 
       const querySnapshot = await getDocs(q)
       const vibeImages: VibeImage[] = []
 
       console.log("Query returned", querySnapshot.size, "documents")
 
+      // Filter by date in JavaScript (client-side filtering)
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        console.log("Processing vibe image:", doc.id, data.uploadedAt.toDate())
-        vibeImages.push({
-          id: doc.id,
-          venueId: data.venueId,
-          imageUrl: data.imageUrl,
-          vibeRating: data.vibeRating,
-          uploadedAt: data.uploadedAt.toDate(),
-          uploadedBy: data.uploadedBy,
-          analysisData: data.analysisData,
-        })
+        const uploadedAt = data.uploadedAt.toDate()
+
+        // Check if the upload date is within today's range
+        if (uploadedAt >= startOfDay && uploadedAt <= endOfDay) {
+          console.log("Processing vibe image:", doc.id, uploadedAt)
+          vibeImages.push({
+            id: doc.id,
+            venueId: data.venueId,
+            imageUrl: data.imageUrl,
+            vibeRating: data.vibeRating,
+            uploadedAt: uploadedAt,
+            uploadedBy: data.uploadedBy,
+            analysisData: data.analysisData,
+          })
+        }
       })
+
+      // Sort by upload time (most recent first)
+      vibeImages.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime())
 
       console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
       return vibeImages
@@ -841,225 +850,140 @@ class FirebaseService {
     }
   }
 
-  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
-    try {
-      console.log("FirebaseService: Getting vibe images for venue and week", venueId)
-
-      // Get last 7 days
-      const endDate = new Date()
-      const startDate = new Date()
-      startDate.setDate(startDate.getDate() - 7)
-
-      console.log("Week range:", startDate.toISOString(), "to", endDate.toISOString())
-
-      const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(
-        vibeImagesRef,
-        where("venueId", "==", venueId),
-        where("uploadedAt", ">=", Timestamp.fromDate(startDate)),
-        where("uploadedAt", "<=", Timestamp.fromDate(endDate)),
-        orderBy("uploadedAt", "desc"),
-      )
-
-      const querySnapshot = await getDocs(q)
-      const weekVibes: Record<string, VibeImage[]> = {}
-
-      console.log("Week query returned", querySnapshot.size, "documents")
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const vibeImage: VibeImage = {
-          id: doc.id,
-          venueId: data.venueId,
-          imageUrl: data.imageUrl,
-          vibeRating: data.vibeRating,
-          uploadedAt: data.uploadedAt.toDate(),
-          uploadedBy: data.uploadedBy,
-          analysisData: data.analysisData,
-        }
-
-        // Group by date string
-        const dateString = vibeImage.uploadedAt.toISOString().split("T")[0]
-        if (!weekVibes[dateString]) {
-          weekVibes[dateString] = []
-        }
-        weekVibes[dateString].push(vibeImage)
-      })
-
-      console.log("FirebaseService: Found vibe images for", Object.keys(weekVibes).length, "days")
-      return weekVibes
-    } catch (error) {
-      console.error("Error getting vibe images by venue and week:", error)
-      return {}
-    }
-  }
-
+  // Get latest vibe rating for a venue
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
       console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
 
       const vibeImagesRef = collection(db, "vibeImages")
-      const q = query(vibeImagesRef, where("venueId", "==", venueId), orderBy("uploadedAt", "desc"))
+      const q = query(vibeImagesRef, where("venueId", "==", venueId), limit(1))
 
       const querySnapshot = await getDocs(q)
 
       if (querySnapshot.empty) {
+        console.log("FirebaseService: No vibe images found for venue", venueId)
         return null
       }
 
-      const latestVibe = querySnapshot.docs[0].data()
-      return latestVibe.vibeRating
+      // Get the most recent vibe image
+      let latestVibeImage: any = null
+      let latestDate = new Date(0) // Start with epoch
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const uploadedAt = data.uploadedAt.toDate()
+
+        if (uploadedAt > latestDate) {
+          latestDate = uploadedAt
+          latestVibeImage = data
+        }
+      })
+
+      if (latestVibeImage) {
+        console.log("FirebaseService: Latest vibe rating found:", latestVibeImage.vibeRating)
+        return latestVibeImage.vibeRating
+      }
+
+      return null
     } catch (error) {
       console.error("Error getting latest vibe rating:", error)
       return null
     }
   }
 
-  // Image upload methods - Web-friendly versions
-  async uploadVenueImage(uri: string): Promise<string> {
+  // File upload methods
+  async uploadVenueImage(imageUri: string): Promise<string> {
     try {
       console.log("FirebaseService: Uploading venue image")
-      // For web, we'll just return the URL directly if it's already a URL
-      if (uri.startsWith("http") && !uri.startsWith("data:")) {
-        console.log("FirebaseService: Image is already a URL, returning directly")
-        return uri
-      }
-
-      // For development or testing on web
-      if (isDevelopment()) {
-        return "https://images.unsplash.com/photo-1566737236500-c8ac43014a67?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
-      }
 
       // Generate a unique filename
-      const filename = `venues/${uuidv4()}`
-      const storageRef = ref(storage, filename)
+      const filename = `venues/${uuidv4()}.jpg`
+      const imageRef = ref(storage, filename)
 
-      // Handle data URLs (from web file picker)
-      if (uri.startsWith("data:")) {
-        // Upload data URL directly
-        await uploadString(storageRef, uri, "data_url")
-        const downloadUrl = await getDownloadURL(storageRef)
-        return downloadUrl
+      // For web, we need to handle the image differently
+      if (typeof window !== "undefined") {
+        // Web environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
+      } else {
+        // React Native environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
       }
 
-      // Otherwise, we need to upload the file
-      // Convert URI to blob
-      const response = await fetch(uri)
-      const blob = await response.blob()
+      // Get the download URL
+      const downloadURL = await getDownloadURL(imageRef)
+      console.log("FirebaseService: Image uploaded successfully")
 
-      // Upload blob to Firebase Storage
-      const uploadResult = await uploadBytes(storageRef, blob)
-
-      // Get download URL
-      const downloadUrl = await getDownloadURL(uploadResult.ref)
-      return downloadUrl
+      return downloadURL
     } catch (error) {
-      console.error("FirebaseService: Error uploading venue image:", error)
-      // Return a placeholder in case of error
-      return "https://images.unsplash.com/photo-1566737236500-c8ac43014a67?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
-    }
-  }
-
-  async uploadEventImage(uri: string): Promise<string> {
-    try {
-      console.log("FirebaseService: Uploading event image", uri.substring(0, 50) + "...")
-
-      // For web, we'll just return the URL directly if it's already a URL and not a data URI
-      if (uri.startsWith("http") && !uri.startsWith("data:")) {
-        console.log("FirebaseService: Image is already a URL, returning directly")
-        return uri
-      }
-
-      // Generate a unique filename
-      const filename = `events/${uuidv4()}`
-      const storageRef = ref(storage, filename)
-
-      // Handle data URLs (from web file picker)
-      if (uri.startsWith("data:")) {
-        console.log("FirebaseService: Uploading data URL")
-        // Upload data URL directly
-        await uploadString(storageRef, uri, "data_url")
-        const downloadUrl = await getDownloadURL(storageRef)
-        console.log("FirebaseService: Upload successful, URL:", downloadUrl.substring(0, 50) + "...")
-        return downloadUrl
-      }
-
-      // Otherwise, we need to upload the file
-      console.log("FirebaseService: Fetching image data")
-      // Convert URI to blob
-      const response = await fetch(uri)
-      const blob = await response.blob()
-
-      console.log("FirebaseService: Uploading blob to Firebase Storage")
-      // Upload blob to Firebase Storage
-      const uploadResult = await uploadBytes(storageRef, blob)
-
-      // Get download URL
-      const downloadUrl = await getDownloadURL(uploadResult.ref)
-      console.log("FirebaseService: Upload successful, URL:", downloadUrl.substring(0, 50) + "...")
-      return downloadUrl
-    } catch (error) {
-      console.error("FirebaseService: Error uploading event image:", error)
-
-      // In development mode, return a placeholder but log the error
-      if (isDevelopment()) {
-        console.warn("FirebaseService: Using placeholder image due to error")
-        return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
-      }
-
-      // In production, rethrow the error
+      console.error("Error uploading venue image:", error)
       throw error
     }
   }
 
-  async uploadVibeImage(uri: string): Promise<string> {
+  async uploadEventImage(imageUri: string): Promise<string> {
+    try {
+      console.log("FirebaseService: Uploading event image")
+
+      // Generate a unique filename
+      const filename = `events/${uuidv4()}.jpg`
+      const imageRef = ref(storage, filename)
+
+      // For web, we need to handle the image differently
+      if (typeof window !== "undefined") {
+        // Web environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
+      } else {
+        // React Native environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
+      }
+
+      // Get the download URL
+      const downloadURL = await getDownloadURL(imageRef)
+      console.log("FirebaseService: Event image uploaded successfully")
+
+      return downloadURL
+    } catch (error) {
+      console.error("Error uploading event image:", error)
+      throw error
+    }
+  }
+
+  async uploadVibeImage(imageUri: string): Promise<string> {
     try {
       console.log("FirebaseService: Uploading vibe image")
 
-      // For web, we'll just return the URL directly if it's already a URL and not a data URI
-      if (uri.startsWith("http") && !uri.startsWith("data:")) {
-        console.log("FirebaseService: Image is already a URL, returning directly")
-        return uri
-      }
-
       // Generate a unique filename
-      const filename = `vibes/${uuidv4()}`
-      const storageRef = ref(storage, filename)
+      const filename = `vibes/${uuidv4()}.jpg`
+      const imageRef = ref(storage, filename)
 
-      // Handle data URLs (from web file picker)
-      if (uri.startsWith("data:")) {
-        console.log("FirebaseService: Uploading vibe data URL")
-        // Upload data URL directly
-        await uploadString(storageRef, uri, "data_url")
-        const downloadUrl = await getDownloadURL(storageRef)
-        console.log("FirebaseService: Vibe upload successful")
-        return downloadUrl
+      // For web, we need to handle the image differently
+      if (typeof window !== "undefined") {
+        // Web environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
+      } else {
+        // React Native environment
+        const response = await fetch(imageUri)
+        const blob = await response.blob()
+        await uploadBytes(imageRef, blob)
       }
 
-      // Otherwise, we need to upload the file
-      console.log("FirebaseService: Fetching vibe image data")
-      // Convert URI to blob
-      const response = await fetch(uri)
-      const blob = await response.blob()
+      // Get the download URL
+      const downloadURL = await getDownloadURL(imageRef)
+      console.log("FirebaseService: Vibe image uploaded successfully")
 
-      console.log("FirebaseService: Uploading vibe blob to Firebase Storage")
-      // Upload blob to Firebase Storage
-      const uploadResult = await uploadBytes(storageRef, blob)
-
-      // Get download URL
-      const downloadUrl = await getDownloadURL(uploadResult.ref)
-      console.log("FirebaseService: Vibe upload successful")
-      return downloadUrl
+      return downloadURL
     } catch (error) {
-      console.error("FirebaseService: Error uploading vibe image:", error)
-
-      // In development mode, return a placeholder but log the error
-      if (isDevelopment()) {
-        console.warn("FirebaseService: Using placeholder vibe image due to error")
-        return "https://images.unsplash.com/photo-1571204829887-3b8d69e23af5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
-      }
-
-      // In production, rethrow the error
+      console.error("Error uploading vibe image:", error)
       throw error
     }
   }
@@ -1067,6 +991,7 @@ class FirebaseService {
   // Admin methods
   async getAllUsers(): Promise<User[]> {
     try {
+      console.log("FirebaseService: Getting all users (admin)")
       const usersRef = collection(db, "users")
       const querySnapshot = await getDocs(usersRef)
       const users: User[] = []
@@ -1087,6 +1012,7 @@ class FirebaseService {
         })
       })
 
+      console.log("FirebaseService: Found", users.length, "users")
       return users
     } catch (error) {
       console.error("Error getting all users:", error)
@@ -1094,94 +1020,36 @@ class FirebaseService {
     }
   }
 
-  async getClubOwners(): Promise<User[]> {
+  async freezeUser(userId: string): Promise<void> {
     try {
-      const usersRef = collection(db, "users")
-      const q = query(usersRef, where("userType", "==", "club_owner"))
-      const querySnapshot = await getDocs(q)
-      const users: User[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        users.push({
-          id: doc.id,
-          uid: data.uid,
-          email: data.email,
-          userType: data.userType,
-          displayName: data.displayName,
-          photoURL: data.photoURL,
-          venueId: data.venueId,
-          isFrozen: data.isFrozen,
-          createdAt: data.createdAt.toDate(),
-          lastLoginAt: data.lastLoginAt.toDate(),
-        })
-      })
-
-      return users
-    } catch (error) {
-      console.error("Error getting club owners:", error)
-      throw error
-    }
-  }
-
-  async freezeUser(userId: string, isFrozen: boolean): Promise<void> {
-    try {
+      console.log("FirebaseService: Freezing user", userId)
       const userRef = doc(db, "users", userId)
-      await updateDoc(userRef, { isFrozen })
+      await updateDoc(userRef, { isFrozen: true })
+      console.log("FirebaseService: User frozen successfully")
       return
     } catch (error) {
-      console.error("Error freezing/unfreezing user:", error)
+      console.error("Error freezing user:", error)
       throw error
     }
   }
 
-  // Enhance the deleteUser method to also delete user's content
+  async unfreezeUser(userId: string): Promise<void> {
+    try {
+      console.log("FirebaseService: Unfreezing user", userId)
+      const userRef = doc(db, "users", userId)
+      await updateDoc(userRef, { isFrozen: false })
+      console.log("FirebaseService: User unfrozen successfully")
+      return
+    } catch (error) {
+      console.error("Error unfreezing user:", error)
+      throw error
+    }
+  }
+
   async deleteUser(userId: string): Promise<void> {
     try {
       console.log("FirebaseService: Deleting user", userId)
-
-      // Get user data to check if they're a venue owner
       const userRef = doc(db, "users", userId)
-      const userDoc = await getDoc(userRef)
-
-      if (userDoc.exists()) {
-        const userData = userDoc.data()
-
-        // If user is a club owner, delete their venues
-        if (userData.userType === "club_owner") {
-          // Get all venues owned by this user
-          const venuesRef = collection(db, "venues")
-          const q = query(venuesRef, where("ownerId", "==", userId))
-          const venueSnapshot = await getDocs(q)
-
-          // Delete each venue and its events
-          const venueDeletePromises: Promise<void>[] = []
-          venueSnapshot.forEach((venueDoc) => {
-            // Delete events for this venue
-            venueDeletePromises.push(this.deleteEventsByVenue(venueDoc.id))
-            // Delete the venue itself
-            venueDeletePromises.push(deleteDoc(venueDoc.ref))
-          })
-
-          await Promise.all(venueDeletePromises)
-          console.log(`FirebaseService: Deleted ${venueSnapshot.size} venues for user ${userId}`)
-        }
-
-        // Delete user's events (if they created any as a regular user)
-        const eventsRef = collection(db, "events")
-        const eventsQuery = query(eventsRef, where("createdBy", "==", userId))
-        const eventsSnapshot = await getDocs(eventsQuery)
-
-        const eventDeletePromises: Promise<void>[] = []
-        eventsSnapshot.forEach((eventDoc) => {
-          eventDeletePromises.push(deleteDoc(eventDoc.ref))
-        })
-
-        await Promise.all(eventDeletePromises)
-        console.log(`FirebaseService: Deleted ${eventsSnapshot.size} events created by user ${userId}`)
-      }
-
-      // Finally delete the user document
       await deleteDoc(userRef)
       console.log("FirebaseService: User deleted successfully")
       return
