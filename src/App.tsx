@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { NavigationContainer } from "@react-navigation/native"
 import { createStackNavigator } from "@react-navigation/stack"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
-import { AuthNavigator, MainTabNavigator } from "./navigation/AppNavigator"
+import { AuthNavigator, MainTabNavigator } from "./"
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native"
 import { navigationRef } from "./utils/navigationRef"
 
