@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
 
@@ -13,6 +14,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
 
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
@@ -40,6 +42,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       setLoading(true)
       const venuesList = await FirebaseService.getVenues()
       setVenues(venuesList)
+
+      // Load vibe ratings for each venue
+      const vibeRatings: Record<string, number> = {}
+      for (const venue of venuesList) {
+        const rating = await FirebaseService.getLatestVibeRating(venue.id)
+        if (rating !== null) {
+          vibeRatings[venue.id] = rating
+        }
+      }
+      setVenueVibeRatings(vibeRatings)
     } catch (error) {
       console.error("Error loading venues for map:", error)
     } finally {
@@ -60,9 +72,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Venue Locations</Text>
-        <Text style={styles.headerSubtitle}>
-          Interactive maps are available in the mobile app. Here's a list of venues:
-        </Text>
+        <Text style={styles.headerSubtitle}>Here's a list of all our venues:</Text>
       </View>
 
       {loading ? (
@@ -82,10 +92,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 <Text style={styles.venueName}>{venue.name}</Text>
                 <Text style={styles.venueAddress}>{venue.location}</Text>
                 <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
-              </View>
-              <View style={styles.venueRating}>
-                <Text style={styles.ratingText}>{venue.vibeRating.toFixed(1)}</Text>
-                <Ionicons name="star" size={16} color="#FFD700" />
+                {venueVibeRatings[venue.id] && (
+                  <View style={styles.vibeRatingContainer}>
+                    <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                    <Text
+                      style={[
+                        styles.vibeRatingValue,
+                        { color: VibeAnalysisService.getVibeColor(venueVibeRatings[venue.id]) },
+                      ]}
+                    >
+                      {venueVibeRatings[venue.id].toFixed(1)}
+                    </Text>
+                    <Text style={styles.vibeRatingDescription}>
+                      {" "}
+                      - {VibeAnalysisService.getVibeDescription(venueVibeRatings[venue.id])}
+                    </Text>
+                  </View>
+                )}
               </View>
               <View style={styles.venueActions}>
                 <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.id)}>
@@ -179,21 +202,24 @@ const styles = StyleSheet.create({
   venueCategories: {
     fontSize: 14,
     color: "#2196F3",
+    marginBottom: 8,
   },
-  venueRating: {
+  vibeRatingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.3)",
-    borderRadius: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    alignSelf: "flex-start",
-    marginBottom: 12,
+    flexWrap: "wrap",
   },
-  ratingText: {
-    color: "#FFFFFF",
-    marginRight: 4,
+  vibeRatingLabel: {
+    fontSize: 14,
+    color: "#BBBBBB",
+  },
+  vibeRatingValue: {
+    fontSize: 14,
     fontWeight: "bold",
+  },
+  vibeRatingDescription: {
+    fontSize: 12,
+    color: "#BBBBBB",
   },
   venueActions: {
     flexDirection: "row",
