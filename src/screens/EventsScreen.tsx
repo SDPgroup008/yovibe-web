@@ -292,19 +292,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backdropFilter: "blur(10px)",
-  },
-  dateChipText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "700",
   },
   feeChip: {
     backgroundColor: "rgba(255, 215, 0, 0.9)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backdropFilter: "blur(10px)",
   },
   feeChipText: {
     color: "#000000",
