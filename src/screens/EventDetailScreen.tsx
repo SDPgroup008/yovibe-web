@@ -21,7 +21,7 @@ import TicketService from "../services/TicketService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type { Ticket } from "../models/Ticket"
-import type { EventDetailScreenProps } from "../navigation/types"
+import type { EventDetailScreenProps } from "../navigation/types"  
 
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
   const { eventId } = route.params
