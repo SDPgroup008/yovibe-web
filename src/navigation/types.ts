@@ -139,3 +139,24 @@ export type AdminVenuesScreenProps = {
 export type AdminEventsScreenProps = {
   navigation: AppNavigation
 }
+export type TicketPurchaseScreenProps = {
+  route: {
+    params: {
+      event: Event
+    }
+  }
+  navigation: any
+}
+
+export type TicketScannerScreenProps = {
+  navigation: any
+}
+
+export type TicketDetailScreenProps = {
+  route: {
+    params: {
+      ticketId: string
+    }
+  }
+  navigation: any
+}
