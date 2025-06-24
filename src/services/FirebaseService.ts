@@ -496,8 +496,9 @@ class FirebaseService {
                 posterImageUrl: data.posterImageUrl,
                 artists: data.artists,
                 isFeatured: data.isFeatured,
-                location: data.location,
+                location: data.location, // Make sure this is included
                 priceIndicator: data.priceIndicator || 1,
+                entryFee: data.entryFee, // Make sure this is included
                 attendees: data.attendees || [],
                 createdAt: data.createdAt.toDate(),
                 createdBy: data.createdBy,
@@ -551,8 +552,9 @@ class FirebaseService {
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
-              location: data.location,
+              location: data.location, // Make sure this is included
               priceIndicator: data.priceIndicator || 1,
+              entryFee: data.entryFee, // Make sure this is included
               attendees: data.attendees || [],
               createdAt: data.createdAt.toDate(),
               createdBy: data.createdBy,
@@ -595,8 +597,9 @@ class FirebaseService {
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
-              location: data.location,
+              location: data.location, // Make sure this is included
               priceIndicator: data.priceIndicator || 1,
+              entryFee: data.entryFee, // Make sure this is included
               attendees: data.attendees || [],
               createdAt: data.createdAt.toDate(),
               createdBy: data.createdBy,
@@ -639,8 +642,9 @@ class FirebaseService {
         posterImageUrl: data.posterImageUrl,
         artists: data.artists,
         isFeatured: data.isFeatured,
-        location: data.location,
+        location: data.location, // Make sure this is included
         priceIndicator: data.priceIndicator || 1,
+        entryFee: data.entryFee, // Make sure this is included
         attendees: data.attendees || [],
         createdAt: data.createdAt.toDate(),
         createdBy: data.createdBy,
@@ -757,8 +761,9 @@ class FirebaseService {
           posterImageUrl: data.posterImageUrl,
           artists: data.artists,
           isFeatured: data.isFeatured,
-          location: data.location,
+          location: data.location, // Make sure this is included
           priceIndicator: data.priceIndicator || 1,
+          entryFee: data.entryFee, // Make sure this is included
           attendees: data.attendees || [],
           createdAt: data.createdAt.toDate(),
           createdBy: data.createdBy,

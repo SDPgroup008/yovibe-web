@@ -129,7 +129,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
               <Text style={styles.dateChipText}>{formatDateRange(item.date)}</Text>
             </View>
             <View style={styles.feeChip}>
-              <Text style={styles.feeChipText}>{item.entryFee || "Free"}</Text>
+              <Text style={styles.feeChipText}>{item.entryFee ? `UGX ${item.entryFee}` : "Free"}</Text>
             </View>
           </View>
 
@@ -137,7 +137,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
             <Text style={styles.eventName}>{item.name}</Text>
             <View style={styles.eventLocationRow}>
               <Ionicons name="location" size={16} color="#FFFFFF" />
-              <Text style={styles.eventLocation}>{item.venueName}</Text>
+              <Text style={styles.eventLocation}>
+                {item.location ? `${item.location} • ${item.venueName}` : item.venueName}
+              </Text>
             </View>
 
             <View style={styles.eventFooter}>
@@ -404,19 +406,22 @@ const styles = StyleSheet.create({
   },
   floatingAddButton: {
     position: "absolute",
-    bottom: 90, // Position above the tab bar
+    bottom: 30, // Moved closer to profile icon
     right: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#2196F3",
+    backgroundColor: "#000000", // Changed to black
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowColor: "#00D4FF", // Glowing effect color
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 12,
+    // Add glowing border effect
+    borderWidth: 2,
+    borderColor: "rgba(0, 212, 255, 0.6)",
   },
 })
 
