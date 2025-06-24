@@ -29,6 +29,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   const [location, setLocation] = useState("")
   const [description, setDescription] = useState("")
   const [categories, setCategories] = useState("")
+  const [venueType, setVenueType] = useState<"nightlife" | "recreation">("nightlife")
   const [latitude, setLatitude] = useState("0")
   const [longitude, setLongitude] = useState("0")
   const [image, setImage] = useState<string | null>(null)
@@ -97,12 +98,33 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
       // Upload image first
       const imageUrl = await FirebaseService.uploadVenueImage(image)
 
-      // Create venue object
+      // Create venue object with venue type consideration
+      const venueCategories = categories.split(",").map((cat) => cat.trim())
+
+      // Add default categories based on venue type
+      if (venueType === "nightlife") {
+        if (
+          !venueCategories.some((cat) =>
+            ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()),
+          )
+        ) {
+          venueCategories.push("Nightclub")
+        }
+      } else {
+        if (
+          !venueCategories.some((cat) =>
+            ["recreation", "sports", "fitness", "entertainment"].includes(cat.toLowerCase()),
+          )
+        ) {
+          venueCategories.push("Recreation")
+        }
+      }
+
       const venueData = {
         name,
         location,
         description,
-        categories: categories.split(",").map((cat) => cat.trim()),
+        categories: venueCategories,
         vibeRating: 4.0, // Default vibe rating
         backgroundImageUrl: imageUrl,
         latitude: Number.parseFloat(latitude) || 0,
@@ -111,6 +133,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
         weeklyPrograms: {},
         todayImages: [],
         createdAt: new Date(),
+        venueType, // Add venue type to the data
       }
 
       // Add venue to database
@@ -158,12 +181,37 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           numberOfLines={4}
         />
 
+        <Text style={styles.label}>Venue Type *</Text>
+        <View style={styles.venueTypeContainer}>
+          <TouchableOpacity
+            style={[styles.venueTypeButton, venueType === "nightlife" && styles.selectedVenueType]}
+            onPress={() => setVenueType("nightlife")}
+          >
+            <Ionicons name="wine" size={20} color={venueType === "nightlife" ? "#FFFFFF" : "#BBBBBB"} />
+            <Text style={[styles.venueTypeText, venueType === "nightlife" && styles.selectedVenueTypeText]}>
+              Night Clubs & Bars
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.venueTypeButton, venueType === "recreation" && styles.selectedVenueType]}
+            onPress={() => setVenueType("recreation")}
+          >
+            <Ionicons name="fitness" size={20} color={venueType === "recreation" ? "#FFFFFF" : "#BBBBBB"} />
+            <Text style={[styles.venueTypeText, venueType === "recreation" && styles.selectedVenueTypeText]}>
+              Recreation Centers
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={styles.label}>Categories *</Text>
         <TextInput
           style={styles.input}
           value={categories}
           onChangeText={setCategories}
-          placeholder="Enter categories (comma separated)"
+          placeholder={
+            venueType === "nightlife" ? "e.g., Nightclub, Bar, Lounge" : "e.g., Sports Center, Gym, Entertainment"
+          }
           placeholderTextColor="#999"
         />
 
@@ -243,6 +291,36 @@ const styles = StyleSheet.create({
     height: 100,
     textAlignVertical: "top",
   },
+  venueTypeContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  venueTypeButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    borderRadius: 8,
+    marginRight: 8,
+    backgroundColor: "#1E1E1E",
+  },
+  selectedVenueType: {
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
+  },
+  venueTypeText: {
+    color: "#BBBBBB",
+    fontSize: 14,
+    marginLeft: 8,
+    textAlign: "center",
+  },
+  selectedVenueTypeText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
   locationContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -292,4 +370,3 @@ const styles = StyleSheet.create({
 })
 
 export default AddVenueScreen
-  
