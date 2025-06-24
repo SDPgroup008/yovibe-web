@@ -27,6 +27,9 @@ import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
 import AddVibeScreen from "../screens/AddVibeScreen"
 import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 
+import TicketPurchaseScreen from "../screens/TicketPurchaseScreen"
+import TicketScannerScreen from "../screens/TicketScannerScreen"
+
 // Types
 import type {
   AuthStackParamList,
@@ -93,6 +96,12 @@ export const VenuesStackNavigator = () => {
         options={{ title: "Weekly Programs" }}
       />
       <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
+      <VenuesStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreen}
+        options={{ title: "Purchase Tickets" }}
+      />
+      <VenuesStack.Screen name="TicketScanner" component={TicketScannerScreen} options={{ title: "Scan Tickets" }} />
     </VenuesStack.Navigator>
   )
 }
@@ -115,6 +124,12 @@ export const EventsStackNavigator = () => {
       <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <EventsStack.Screen name="AddEvent" component={AddEventScreen as any} options={{ title: "Add Event" }} />
       <EventsStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <EventsStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreen}
+        options={{ title: "Purchase Tickets" }}
+      />
+      <EventsStack.Screen name="TicketScanner" component={TicketScannerScreen} options={{ title: "Scan Tickets" }} />
     </EventsStack.Navigator>
   )
 }
@@ -136,6 +151,8 @@ export const MapStackNavigator = () => {
       <MapStack.Screen name="MapView" component={MapScreen} options={{ title: "Map" }} />
       <MapStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <MapStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <MapStack.Screen name="TicketPurchase" component={TicketPurchaseScreen} options={{ title: "Purchase Tickets" }} />
+      <MapStack.Screen name="TicketScanner" component={TicketScannerScreen} options={{ title: "Scan Tickets" }} />
     </MapStack.Navigator>
   )
 }
@@ -157,6 +174,12 @@ export const CalendarStackNavigator = () => {
       <CalendarStack.Screen name="CalendarView" component={EventCalendarScreen} options={{ title: "Calendar" }} />
       <CalendarStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <CalendarStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <CalendarStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreen}
+        options={{ title: "Purchase Tickets" }}
+      />
+      <CalendarStack.Screen name="TicketScanner" component={TicketScannerScreen} options={{ title: "Scan Tickets" }} />
     </CalendarStack.Navigator>
   )
 }
@@ -185,6 +208,12 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
       <ProfileStack.Screen name="AddVibe" component={AddVibeScreen as any} options={{ title: "Add Vibe" }} />
       <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
+      <ProfileStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreen}
+        options={{ title: "Purchase Tickets" }}
+      />
+      <ProfileStack.Screen name="TicketScanner" component={TicketScannerScreen} options={{ title: "Scan Tickets" }} />
     </ProfileStack.Navigator>
   )
 }
