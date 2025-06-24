@@ -229,7 +229,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
     paddingTop: Platform.OS === "ios" ? 60 : 30,
-    background: "linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)",
+    backgroundColor: "#1A1A2E",
   },
   headerTitle: {
     fontSize: 28,
@@ -276,7 +276,7 @@ const styles = StyleSheet.create({
   },
   eventOverlay: {
     flex: 1,
-    backgroundColor: "linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.8) 100%)",
+    backgroundColor: "rgba(0,0,0,0.6)",
     padding: 20,
     justifyContent: "space-between",
   },
