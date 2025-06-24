@@ -52,11 +52,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   }
 
   const getFilteredVenues = () => {
-    return venues.filter((venue) => {
+    const filtered = venues.filter((venue) => {
       const isNightlife = venue.categories.some((cat) =>
         ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()),
       )
       return activeTab === "nightlife" ? isNightlife : !isNightlife
+    })
+
+    // Sort by current vibe rating (highest first)
+    return filtered.sort((a, b) => {
+      const aVibe = venueVibeRatings[a.id] || 0
+      const bVibe = venueVibeRatings[b.id] || 0
+      return bVibe - aVibe
     })
   }
 
@@ -108,7 +115,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={activeTab === "recreation" ? "#2196F3" : "#2196F3"} />
+          <ActivityIndicator size="large" color="#2196F3" />
           <Text style={[styles.loadingText, activeTab === "recreation" && styles.recreationText]}>
             Loading venues...
           </Text>
