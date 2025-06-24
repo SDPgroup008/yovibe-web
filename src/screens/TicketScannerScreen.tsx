@@ -5,7 +5,7 @@ import { useState } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, Modal, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
-import TicketService from ".."
+import TicketService from "../services/TicketService"
 import type { Ticket } from "../models/Ticket"
 
 interface TicketScannerScreenProps {
