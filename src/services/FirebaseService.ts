@@ -789,6 +789,62 @@ class FirebaseService {
     }
   }
 
+  // Delete past events
+  async deletePastEvents(): Promise<void> {
+    try {
+      console.log("FirebaseService: Deleting past events")
+
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const eventsRef = collection(db, "events")
+      const querySnapshot = await getDocs(eventsRef)
+      const deletePromises: Promise<void>[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const eventDate = data.date.toDate()
+
+        // If event date is before today, delete it
+        if (eventDate < today) {
+          console.log(`FirebaseService: Deleting past event: ${data.name} (${eventDate.toDateString()})`)
+          deletePromises.push(this.deleteEvent(doc.id))
+        }
+      })
+
+      await Promise.all(deletePromises)
+      console.log(`FirebaseService: Deleted ${deletePromises.length} past events`)
+    } catch (error) {
+      console.error("Error deleting past events:", error)
+      throw error
+    }
+  }
+
+  // Add a new method to delete events by venue ID
+  async deleteEventsByVenue(venueId: string): Promise<void> {
+    try {
+      console.log("FirebaseService: Deleting events for venue", venueId)
+
+      // Get all events for this venue
+      const eventsRef = collection(db, "events")
+      const q = query(eventsRef, where("venueId", "==", venueId))
+      const querySnapshot = await getDocs(q)
+
+      // Delete each event
+      const deletePromises: Promise<void>[] = []
+      querySnapshot.forEach((doc) => {
+        deletePromises.push(this.deleteEvent(doc.id))
+      })
+
+      await Promise.all(deletePromises)
+      console.log(`FirebaseService: Deleted ${deletePromises.length} events for venue ${venueId}`)
+      return
+    } catch (error) {
+      console.error("Error deleting events by venue:", error)
+      throw error
+    }
+  }
+
   // Vibe Image methods
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
     try {
