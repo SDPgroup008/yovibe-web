@@ -1,12 +1,19 @@
-import { collection, addDoc, getDocs, doc, query, where, updateDoc, Timestamp } from "firebase/firestore"
-import { db } from "../config/firebase"
-import { v4 as uuidv4 } from "uuid"
-import type { Ticket, TicketValidation } from "../models/Ticket"
 import PaymentService from "./PaymentService"
 import BiometricService from "./BiometricService"
 import NotificationService from "./NotificationService"
+import type { Ticket, TicketValidation } from "../models/Ticket"
 
+// Ticket Service for managing ticket operations
 class TicketService {
+  private static instance: TicketService
+
+  public static getInstance(): TicketService {
+    if (!TicketService.instance) {
+      TicketService.instance = new TicketService()
+    }
+    return TicketService.instance
+  }
+
   // Purchase tickets
   async purchaseTickets(
     eventId: string,
@@ -17,34 +24,19 @@ class TicketService {
     buyerName: string,
     buyerEmail: string,
     quantity: number,
-    unitPrice: number,
+    ticketPrice: number,
   ): Promise<Ticket> {
     try {
-      console.log("TicketService: Starting ticket purchase process")
-
-      const totalAmount = quantity * unitPrice
-      const { appCommission, venueRevenue } = PaymentService.calculateCommission(totalAmount)
+      const totalAmount = quantity * ticketPrice
+      const revenueSplit = PaymentService.calculateRevenueSplit(totalAmount)
 
       // Capture biometric data
-      console.log("TicketService: Capturing biometric data...")
-      const biometricHash = await BiometricService.captureEyeScan()
-
-      // Create payment intent
-      const paymentIntent = await PaymentService.createPaymentIntent(totalAmount)
-
-      // Process payment
-      console.log("TicketService: Processing payment...")
-      const paymentSuccess = await PaymentService.processPayment(paymentIntent.id, "mobile_money")
-
-      if (!paymentSuccess) {
-        throw new Error("Payment failed")
-      }
-
-      // Generate unique ticket code
-      const ticketCode = this.generateTicketCode()
+      const biometricHash = await BiometricService.captureBiometric()
 
       // Create ticket
-      const ticket: Omit<Ticket, "id"> = {
+      const ticket: Ticket = {
+        id: `ticket_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        ticketCode: this.generateTicketCode(),
         eventId,
         eventName,
         venueId,
@@ -53,255 +45,238 @@ class TicketService {
         buyerName,
         buyerEmail,
         quantity,
-        unitPrice,
-        totalAmount,
-        appCommission,
-        venueRevenue,
+        ticketPrice,
+        totalAmount: revenueSplit.totalAmount,
+        appCommission: revenueSplit.appCommission,
+        venueRevenue: revenueSplit.venueRevenue,
         purchaseDate: new Date(),
-        ticketCode,
-        biometricHash,
         status: "active",
-        paymentId: paymentIntent.id,
-        paymentStatus: "completed",
+        biometricHash,
+        qrCodeData: this.generateQRCodeData(),
+        paymentIntentId: "",
+        validationHistory: [],
       }
 
-      // Save to database
-      const ticketRef = await addDoc(collection(db, "tickets"), {
-        ...ticket,
-        purchaseDate: Timestamp.fromDate(ticket.purchaseDate),
-      })
+      // Create payment intent
+      const paymentIntent = await PaymentService.createPaymentIntent(totalAmount, "UGX", ticket.id)
+      ticket.paymentIntentId = paymentIntent.id
 
-      const savedTicket: Ticket = {
-        id: ticketRef.id,
-        ...ticket,
-      }
+      // Process payment
+      await PaymentService.processPayment(paymentIntent.id)
+
+      // Save ticket to database
+      await this.saveTicket(ticket)
 
       // Send notification to event owner
-      await NotificationService.notifyEventOwner(eventId, {
-        type: "ticket_purchased",
-        message: `${buyerName} purchased ${quantity} ticket(s) for ${eventName}`,
-        ticketId: savedTicket.id,
-        amount: totalAmount,
-      })
+      await NotificationService.sendTicketPurchaseNotification(eventId, buyerName, quantity, revenueSplit.venueRevenue)
 
-      console.log("TicketService: Ticket purchased successfully", savedTicket.id)
-      return savedTicket
+      return ticket
     } catch (error) {
-      console.error("TicketService: Error purchasing tickets:", error)
-      throw error
+      console.error("Error purchasing tickets:", error)
+      throw new Error("Failed to purchase tickets")
     }
   }
 
   // Get tickets for an event (for event owners)
   async getEventTickets(eventId: string): Promise<Ticket[]> {
     try {
-      const ticketsRef = collection(db, "tickets")
-      const q = query(ticketsRef, where("eventId", "==", eventId))
-      const querySnapshot = await getDocs(q)
-      const tickets: Ticket[] = []
+      // In production, query from Firebase
+      const mockTickets: Ticket[] = [
+        {
+          id: "ticket_1",
+          ticketCode: "TKT-DEMO-001",
+          eventId,
+          eventName: "Sample Event",
+          venueId: "venue_1",
+          venueName: "Sample Venue",
+          buyerId: "user_1",
+          buyerName: "John Doe",
+          buyerEmail: "john@example.com",
+          quantity: 2,
+          ticketPrice: 50000,
+          totalAmount: 100000,
+          appCommission: 5000,
+          venueRevenue: 95000,
+          purchaseDate: new Date(),
+          status: "active",
+          biometricHash: "bio_hash_123",
+          qrCodeData: "qr_data_123",
+          paymentIntentId: "pi_123",
+          validationHistory: [],
+        },
+      ]
 
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        tickets.push({
-          id: doc.id,
-          eventId: data.eventId,
-          eventName: data.eventName,
-          venueId: data.venueId,
-          venueName: data.venueName,
-          buyerId: data.buyerId,
-          buyerName: data.buyerName,
-          buyerEmail: data.buyerEmail,
-          quantity: data.quantity,
-          unitPrice: data.unitPrice,
-          totalAmount: data.totalAmount,
-          appCommission: data.appCommission,
-          venueRevenue: data.venueRevenue,
-          purchaseDate: data.purchaseDate.toDate(),
-          ticketCode: data.ticketCode,
-          biometricHash: data.biometricHash,
-          status: data.status,
-          paymentId: data.paymentId,
-          paymentStatus: data.paymentStatus,
-          usedAt: data.usedAt?.toDate(),
-          validatedBy: data.validatedBy,
-        })
-      })
-
-      return tickets.sort((a, b) => b.purchaseDate.getTime() - a.purchaseDate.getTime())
+      return mockTickets
     } catch (error) {
-      console.error("TicketService: Error getting event tickets:", error)
-      throw error
+      console.error("Error getting event tickets:", error)
+      return []
     }
-  }
-
-  // Get user's tickets
-  async getUserTickets(userId: string): Promise<Ticket[]> {
-    try {
-      const ticketsRef = collection(db, "tickets")
-      const q = query(ticketsRef, where("buyerId", "==", userId))
-      const querySnapshot = await getDocs(q)
-      const tickets: Ticket[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        tickets.push({
-          id: doc.id,
-          eventId: data.eventId,
-          eventName: data.eventName,
-          venueId: data.venueId,
-          venueName: data.venueName,
-          buyerId: data.buyerId,
-          buyerName: data.buyerName,
-          buyerEmail: data.buyerEmail,
-          quantity: data.quantity,
-          unitPrice: data.unitPrice,
-          totalAmount: data.totalAmount,
-          appCommission: data.appCommission,
-          venueRevenue: data.venueRevenue,
-          purchaseDate: data.purchaseDate.toDate(),
-          ticketCode: data.ticketCode,
-          biometricHash: data.biometricHash,
-          status: data.status,
-          paymentId: data.paymentId,
-          paymentStatus: data.paymentStatus,
-          usedAt: data.usedAt?.toDate(),
-          validatedBy: data.validatedBy,
-        })
-      })
-
-      return tickets.sort((a, b) => b.purchaseDate.getTime() - a.purchaseDate.getTime())
-    } catch (error) {
-      console.error("TicketService: Error getting user tickets:", error)
-      throw error
-    }
-  }
-
-  // Validate ticket at entry
-  async validateTicket(ticketCode: string, validatorId: string): Promise<TicketValidation> {
-    try {
-      console.log("TicketService: Validating ticket", ticketCode)
-
-      // Find ticket by code
-      const ticketsRef = collection(db, "tickets")
-      const q = query(ticketsRef, where("ticketCode", "==", ticketCode))
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        throw new Error("Ticket not found")
-      }
-
-      const ticketDoc = querySnapshot.docs[0]
-      const ticketData = ticketDoc.data()
-
-      if (ticketData.status !== "active") {
-        throw new Error("Ticket is not active")
-      }
-
-      // Verify biometric data
-      console.log("TicketService: Verifying biometric data...")
-      const biometricMatch = await BiometricService.verifyEyeScan(ticketData.biometricHash)
-
-      if (!biometricMatch) {
-        // Log failed validation
-        const validation: TicketValidation = {
-          id: uuidv4(),
-          ticketId: ticketDoc.id,
-          eventId: ticketData.eventId,
-          validatedAt: new Date(),
-          validatedBy: validatorId,
-          biometricMatch: false,
-          entryGranted: false,
-          notes: "Biometric verification failed",
-        }
-
-        await addDoc(collection(db, "ticketValidations"), {
-          ...validation,
-          validatedAt: Timestamp.fromDate(validation.validatedAt),
-        })
-
-        throw new Error("Biometric verification failed")
-      }
-
-      // Mark ticket as used
-      await updateDoc(doc(db, "tickets", ticketDoc.id), {
-        status: "used",
-        usedAt: Timestamp.now(),
-        validatedBy: validatorId,
-      })
-
-      // Log successful validation
-      const validation: TicketValidation = {
-        id: uuidv4(),
-        ticketId: ticketDoc.id,
-        eventId: ticketData.eventId,
-        validatedAt: new Date(),
-        validatedBy: validatorId,
-        biometricMatch: true,
-        entryGranted: true,
-      }
-
-      await addDoc(collection(db, "ticketValidations"), {
-        ...validation,
-        validatedAt: Timestamp.fromDate(validation.validatedAt),
-      })
-
-      console.log("TicketService: Ticket validated successfully")
-      return validation
-    } catch (error) {
-      console.error("TicketService: Error validating ticket:", error)
-      throw error
-    }
-  }
-
-  // Generate unique ticket code
-  private generateTicketCode(): string {
-    const timestamp = Date.now().toString(36)
-    const random = Math.random().toString(36).substring(2, 8)
-    return `TKT-${timestamp}-${random}`.toUpperCase()
   }
 
   // Get ticket by code
   async getTicketByCode(ticketCode: string): Promise<Ticket | null> {
     try {
-      const ticketsRef = collection(db, "tickets")
-      const q = query(ticketsRef, where("ticketCode", "==", ticketCode))
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        return null
+      // In production, query from Firebase
+      const mockTicket: Ticket = {
+        id: "ticket_1",
+        ticketCode,
+        eventId: "event_1",
+        eventName: "Sample Event",
+        venueId: "venue_1",
+        venueName: "Sample Venue",
+        buyerId: "user_1",
+        buyerName: "John Doe",
+        buyerEmail: "john@example.com",
+        quantity: 1,
+        ticketPrice: 50000,
+        totalAmount: 50000,
+        appCommission: 2500,
+        venueRevenue: 47500,
+        purchaseDate: new Date(),
+        status: "active",
+        biometricHash: "bio_hash_123",
+        qrCodeData: "qr_data_123",
+        paymentIntentId: "pi_123",
+        validationHistory: [],
       }
 
-      const doc = querySnapshot.docs[0]
-      const data = doc.data()
+      return mockTicket
+    } catch (error) {
+      console.error("Error getting ticket by code:", error)
+      return null
+    }
+  }
+
+  // Validate ticket at entry
+  async validateTicket(
+    ticketCode: string,
+    validatorId: string,
+  ): Promise<{
+    entryGranted: boolean
+    ticket: Ticket | null
+    reason?: string
+  }> {
+    try {
+      const ticket = await this.getTicketByCode(ticketCode)
+
+      if (!ticket) {
+        return {
+          entryGranted: false,
+          ticket: null,
+          reason: "Ticket not found",
+        }
+      }
+
+      if (ticket.status !== "active") {
+        return {
+          entryGranted: false,
+          ticket,
+          reason: `Ticket is ${ticket.status}`,
+        }
+      }
+
+      // Verify biometric data
+      const biometricMatch = await BiometricService.verifyBiometric(ticket.biometricHash)
+
+      if (!biometricMatch) {
+        return {
+          entryGranted: false,
+          ticket,
+          reason: "Biometric verification failed",
+        }
+      }
+
+      // Create validation record
+      const validation: TicketValidation = {
+        id: `val_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
+        ticketId: ticket.id,
+        validatedBy: validatorId,
+        validatedAt: new Date(),
+        entryGranted: true,
+        biometricMatch: true,
+      }
+
+      // Update ticket status and add validation
+      ticket.status = "used"
+      ticket.validationHistory.push(validation)
+
+      await this.updateTicket(ticket)
 
       return {
-        id: doc.id,
-        eventId: data.eventId,
-        eventName: data.eventName,
-        venueId: data.venueId,
-        venueName: data.venueName,
-        buyerId: data.buyerId,
-        buyerName: data.buyerName,
-        buyerEmail: data.buyerEmail,
-        quantity: data.quantity,
-        unitPrice: data.unitPrice,
-        totalAmount: data.totalAmount,
-        appCommission: data.appCommission,
-        venueRevenue: data.venueRevenue,
-        purchaseDate: data.purchaseDate.toDate(),
-        ticketCode: data.ticketCode,
-        biometricHash: data.biometricHash,
-        status: data.status,
-        paymentId: data.paymentId,
-        paymentStatus: data.paymentStatus,
-        usedAt: data.usedAt?.toDate(),
-        validatedBy: data.validatedBy,
+        entryGranted: true,
+        ticket,
       }
     } catch (error) {
-      console.error("TicketService: Error getting ticket by code:", error)
-      return null
+      console.error("Error validating ticket:", error)
+      return {
+        entryGranted: false,
+        ticket: null,
+        reason: "Validation error",
+      }
+    }
+  }
+
+  // Generate unique ticket code
+  private generateTicketCode(): string {
+    const prefix = "TKT"
+    const timestamp = Date.now().toString().slice(-6)
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase()
+    return `${prefix}-${timestamp}-${random}`
+  }
+
+  // Generate QR code data
+  private generateQRCodeData(): string {
+    const data = {
+      ticketId: `ticket_${Date.now()}`,
+      timestamp: Date.now(),
+      hash: Math.random().toString(36).substring(2, 15),
+    }
+    return JSON.stringify(data)
+  }
+
+  // Save ticket to database
+  private async saveTicket(ticket: Ticket): Promise<void> {
+    try {
+      // In production, save to Firebase
+      console.log("Saving ticket:", ticket.id)
+    } catch (error) {
+      console.error("Error saving ticket:", error)
+      throw error
+    }
+  }
+
+  // Update ticket in database
+  private async updateTicket(ticket: Ticket): Promise<void> {
+    try {
+      // In production, update in Firebase
+      console.log("Updating ticket:", ticket.id)
+    } catch (error) {
+      console.error("Error updating ticket:", error)
+      throw error
+    }
+  }
+
+  // Cancel ticket
+  async cancelTicket(ticketId: string): Promise<boolean> {
+    try {
+      const ticket = await this.getTicketByCode(ticketId)
+      if (!ticket) return false
+
+      // Process refund
+      const refundSuccess = await PaymentService.refundPayment(ticket.paymentIntentId)
+
+      if (refundSuccess) {
+        ticket.status = "cancelled"
+        await this.updateTicket(ticket)
+        return true
+      }
+
+      return false
+    } catch (error) {
+      console.error("Error cancelling ticket:", error)
+      return false
     }
   }
 }
 
-export default new TicketService()
+export default TicketService.getInstance()
