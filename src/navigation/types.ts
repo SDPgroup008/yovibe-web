@@ -1,4 +1,5 @@
 import type { NativeStackNavigationProp, NativeStackScreenProps } from "@react-navigation/native-stack"
+import type { Event } from "../models/Event"
 
 // Define the param lists for each stack
 export type RootStackParamList = {
@@ -18,6 +19,9 @@ export type VenuesStackParamList = {
   ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
   EventDetail: { eventId: string }
   TodaysVibe: { venueId: string; venueName: string }
+  TicketPurchase: { event: Event }
+  TicketDetail: { ticketId: string }
+  TicketScanner: undefined
 }
 
 export type EventsStackParamList = {
@@ -25,18 +29,27 @@ export type EventsStackParamList = {
   EventDetail: { eventId: string }
   AddEvent: { venueId?: string; venueName?: string }
   VenueDetail: { venueId: string }
+  TicketPurchase: { event: Event }
+  TicketDetail: { ticketId: string }
+  TicketScanner: undefined
 }
 
 export type MapStackParamList = {
   MapView: { destinationVenueId?: string }
   VenueDetail: { venueId: string }
   EventDetail: { eventId: string }
+  TicketPurchase: { event: Event }
+  TicketDetail: { ticketId: string }
+  TicketScanner: undefined
 }
 
 export type CalendarStackParamList = {
   CalendarView: undefined
   EventDetail: { eventId: string }
   VenueDetail: { venueId: string }
+  TicketPurchase: { event: Event }
+  TicketDetail: { ticketId: string }
+  TicketScanner: undefined
 }
 
 export type ProfileStackParamList = {
@@ -51,6 +64,10 @@ export type ProfileStackParamList = {
   AdminVenues: undefined
   AdminEvents: undefined
   TodaysVibe: { venueId: string; venueName: string }
+  TicketPurchase: { event: Event }
+  TicketDetail: { ticketId: string }
+  TicketScanner: undefined
+  MyTickets: undefined
 }
 
 // Define the tab navigator param list
@@ -91,6 +108,14 @@ export type TodaysVibeScreenProps = NativeStackScreenProps<VenuesStackParamList,
 }
 
 export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe"> & {
+  navigation: AppNavigation
+}
+
+export type TicketPurchaseScreenProps = NativeStackScreenProps<EventsStackParamList, "TicketPurchase"> & {
+  navigation: AppNavigation
+}
+
+export type TicketScannerScreenProps = NativeStackScreenProps<ProfileStackParamList, "TicketScanner"> & {
   navigation: AppNavigation
 }
 
@@ -138,25 +163,4 @@ export type AdminVenuesScreenProps = {
 
 export type AdminEventsScreenProps = {
   navigation: AppNavigation
-}
-export type TicketPurchaseScreenProps = {
-  route: {
-    params: {
-      event: Event
-    }
-  }
-  navigation: any
-}
-
-export type TicketScannerScreenProps = {
-  navigation: any
-}
-
-export type TicketDetailScreenProps = {
-  route: {
-    params: {
-      ticketId: string
-    }
-  }
-  navigation: any
 }
