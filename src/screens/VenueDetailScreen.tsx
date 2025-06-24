@@ -136,15 +136,12 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         <Text style={styles.venueName}>{venue.name}</Text>
         <Text style={styles.venueLocation}>{venue.location}</Text>
 
-        <View style={styles.ratingContainer}>
-          <Text style={styles.ratingText}>Vibe Rating: {venue.vibeRating.toFixed(1)}⭐️</Text>
-          <View style={styles.categoriesContainer}>
-            {venue.categories.map((category, index) => (
-              <View key={index} style={styles.categoryTag}>
-                <Text style={styles.categoryText}>{category}</Text>
-              </View>
-            ))}
-          </View>
+        <View style={styles.categoriesContainer}>
+          {venue.categories.map((category, index) => (
+            <View key={index} style={styles.categoryTag}>
+              <Text style={styles.categoryText}>{category}</Text>
+            </View>
+          ))}
         </View>
 
         {/* Owner/Admin Actions */}
@@ -297,25 +294,18 @@ const styles = StyleSheet.create({
     color: "#BBBBBB",
     marginBottom: 12,
   },
-  ratingContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  ratingText: {
-    fontSize: 16,
-    color: "#FFFFFF",
-  },
   categoriesContainer: {
     flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 16,
   },
   categoryTag: {
     backgroundColor: "#2196F3",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
-    marginLeft: 8,
+    marginRight: 8,
+    marginBottom: 8,
   },
   categoryText: {
     color: "#FFFFFF",
