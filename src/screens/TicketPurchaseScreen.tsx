@@ -8,7 +8,16 @@ import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import BiometricService from "../services/BiometricService"
 import PaymentService from "../services/PaymentService"
-import type { TicketPurchaseScreenProps } from "../navigation/types"
+import type { Event } from "../models/Event"
+
+interface TicketPurchaseScreenProps {
+  route: {
+    params: {
+      event: Event
+    }
+  }
+  navigation: any
+}
 
 const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navigation }) => {
   const { event } = route.params
