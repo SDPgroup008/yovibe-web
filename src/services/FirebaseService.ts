@@ -2,11 +2,24 @@ import "react-native-get-random-values" // Add this import at the top
 import { initializeApp } from "firebase/app"
 import { getAnalytics } from "firebase/analytics"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
-import { collection, addDoc, getDocs, getDoc, updateDoc, doc, query, where, Timestamp } from "firebase/firestore"
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  updateDoc,
+  doc,
+  query,
+  where,
+  Timestamp,
+  orderBy,
+  limit,
+} from "firebase/firestore"
 import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import { hasFirebaseConfig } from "../config/firebase"
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -27,8 +40,9 @@ class FirebaseService {
   public isFirebaseConfigured = false
 
   private constructor() {
-    if (!firebaseConfig.apiKey) {
-      console.warn("Firebase not configured: Missing API key")
+    if (!hasFirebaseConfig) {
+      console.warn("Firebase not configured: Missing environment variables")
+      console.log("Create a .env.local file with your Firebase configuration")
       return
     }
 
@@ -718,6 +732,38 @@ class FirebaseService {
     } catch (error) {
       console.error("Error adding event:", error)
       throw error
+    }
+  }
+
+  async getLatestVibeRating(venueId: string): Promise<number | null> {
+    try {
+      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
+
+      if (!this.isFirebaseConfigured) {
+        console.log("Mock: Getting latest vibe rating for venue", venueId)
+        // Return a mock rating for development
+        return Math.random() * 5 // Random rating between 0-5
+      }
+
+      // Query for the latest vibe rating for this venue
+      const vibeRatingsRef = collection(db, "vibeRatings")
+      const q = query(vibeRatingsRef, where("venueId", "==", venueId), orderBy("createdAt", "desc"), limit(1))
+
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        console.log("FirebaseService: No vibe ratings found for venue", venueId)
+        return null
+      }
+
+      const latestRating = querySnapshot.docs[0].data()
+      console.log("FirebaseService: Latest vibe rating found:", latestRating.rating)
+
+      return latestRating.rating || null
+    } catch (error) {
+      console.error("Error getting latest vibe rating:", error)
+      // Return a fallback rating instead of throwing
+      return Math.random() * 5
     }
   }
 }
