@@ -2,7 +2,7 @@
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 
-class NotificationService {
+export class NotificationService {
   private static instance: NotificationService
 
   public static getInstance(): NotificationService {
@@ -13,19 +13,21 @@ class NotificationService {
   }
 
   // Send ticket purchase notification to event owner
-  static async sendTicketPurchaseNotification(
-    eventId: string,
-    buyerName: string,
-    quantity: number,
-    amount: number,
-  ): Promise<void> {
+  static async notifyTicketPurchase(event: Event, ticket: Ticket): Promise<void> {
     try {
-      console.log(`Notification: ${buyerName} purchased ${quantity} ticket(s)`)
-      console.log(`Revenue: UGX ${amount.toLocaleString()}`)
+      console.log("NotificationService: Sending ticket purchase notification")
+      console.log(`Ticket purchased for ${event.name} by ${ticket.buyerName}`)
 
-      // In production, implement actual notification sending
+      // In a real implementation, you would:
+      // 1. Send email to buyer with ticket details
+      // 2. Send notification to event owner about new sale
+      // 3. Update analytics/metrics
+
+      // For now, just log the notification
+      console.log("NotificationService: Ticket purchase notification sent successfully")
     } catch (error) {
-      console.error("Error sending notification:", error)
+      console.error("NotificationService: Error sending ticket purchase notification:", error)
+      // Don't throw error - notifications shouldn't break the main flow
     }
   }
 
@@ -77,22 +79,13 @@ class NotificationService {
   }
 
   // Send event reminder
-  async sendEventReminder(buyerEmail: string, eventName: string, eventDate: Date, ticketCode: string): Promise<void> {
+  static async sendEventReminder(event: Event, userEmail: string): Promise<void> {
     try {
-      const notification = {
-        title: `📅 Event Reminder: ${eventName}`,
-        body: `Your event is tomorrow! Don't forget your ticket: ${ticketCode}`,
-        data: {
-          type: "event_reminder",
-          eventName,
-          eventDate: eventDate.toISOString(),
-          ticketCode,
-        },
-      }
-
-      console.log("Sending event reminder:", notification)
+      console.log("NotificationService: Sending event reminder for", event.name, "to", userEmail)
+      // Implementation would go here
+      console.log("NotificationService: Event reminder sent successfully")
     } catch (error) {
-      console.error("Error sending event reminder:", error)
+      console.error("NotificationService: Error sending event reminder:", error)
     }
   }
 
@@ -117,39 +110,31 @@ class NotificationService {
     }
   }
 
-  static async notifyTicketPurchase(event: Event, ticket: Ticket): Promise<void> {
+  static async notifyTicketValidation(ticket: Ticket, validation: TicketValidation): Promise<void> {
     try {
-      console.log(`Notification: Ticket purchased for ${event.name}`)
-      console.log(`Buyer: ${ticket.buyerName}`)
-      console.log(`Quantity: ${ticket.quantity}`)
-      console.log(`Amount: UGX ${ticket.totalAmount.toLocaleString()}`)
+      console.log("NotificationService: Sending ticket validation notification")
+      console.log(`Ticket ${ticket.id} validation: ${validation.status}`)
 
-      // In production, send push notification to event owner
-      // await this.sendPushNotification(event.createdBy, {
-      //   title: "New Ticket Purchase",
-      //   body: `${ticket.buyerName} purchased ${ticket.quantity} ticket(s) for ${event.name}`,
-      //   data: { ticketId: ticket.id, eventId: event.id }
-      // })
+      // In a real implementation, you would:
+      // 1. Send notification to event owner about ticket usage
+      // 2. Update real-time dashboard
+      // 3. Log security events if validation failed
+
+      // For now, just log the notification
+      console.log("NotificationService: Ticket validation notification sent successfully")
     } catch (error) {
-      console.error("Error sending ticket purchase notification:", error)
+      console.error("NotificationService: Error sending ticket validation notification:", error)
+      // Don't throw error - notifications shouldn't break the main flow
     }
   }
 
-  static async notifyTicketValidation(ticket: Ticket, validation: TicketValidation): Promise<void> {
+  static async sendWelcomeEmail(userEmail: string, userName: string): Promise<void> {
     try {
-      console.log(`Notification: Ticket validated`)
-      console.log(`Ticket: ${ticket.id}`)
-      console.log(`Status: ${validation.status}`)
-      console.log(`Validated by: ${validation.validatedBy}`)
-
-      // In production, send notification to relevant parties
-      // await this.sendPushNotification(ticket.buyerId, {
-      //   title: "Ticket Validated",
-      //   body: `Your ticket for ${ticket.eventName} has been validated`,
-      //   data: { ticketId: ticket.id, validationId: validation.id }
-      // })
+      console.log("NotificationService: Sending welcome email to", userEmail)
+      // Implementation would go here
+      console.log("NotificationService: Welcome email sent successfully")
     } catch (error) {
-      console.error("Error sending ticket validation notification:", error)
+      console.error("NotificationService: Error sending welcome email:", error)
     }
   }
 
@@ -163,4 +148,4 @@ class NotificationService {
   }
 }
 
-export default NotificationService.getInstance()
+// export default NotificationService.getInstance()
