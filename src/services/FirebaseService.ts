@@ -29,7 +29,7 @@ class FirebaseService {
     if (!FirebaseService.instance) {
       FirebaseService.instance = new FirebaseService()
     }
-    return FirebaseService.instance
+    return FirebaseService.getInstance()
   }
 
   // Auth methods
@@ -727,6 +727,132 @@ class FirebaseService {
       console.error("Error getting latest vibe rating:", error)
       // Return a fallback rating instead of throwing
       return Math.random() * 5
+    }
+  }
+
+  // Add these methods after the existing methods, before the export statement
+
+  async deletePastEvents(): Promise<void> {
+    try {
+      console.log("FirebaseService: Deleting past events")
+      const eventsRef = collection(db, "events")
+      const querySnapshot = await getDocs(eventsRef)
+      const now = new Date()
+
+      const deletePromises: Promise<void>[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const eventDate = data.date.toDate()
+
+        // Mark past events as deleted instead of actually deleting them
+        if (eventDate < now && !data.isDeleted) {
+          const eventRef = doc.ref
+          deletePromises.push(
+            updateDoc(eventRef, {
+              isDeleted: true,
+              deletedAt: Timestamp.now(),
+            }),
+          )
+        }
+      })
+
+      await Promise.all(deletePromises)
+      console.log("FirebaseService: Past events marked as deleted")
+    } catch (error) {
+      console.error("Error deleting past events:", error)
+      // Don't throw error, just log it
+    }
+  }
+
+  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<any[]> {
+    try {
+      console.log("FirebaseService: Getting vibe images for venue", venueId, "on", date.toDateString())
+
+      // Create date range for the day
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(
+        vibeImagesRef,
+        where("venueId", "==", venueId),
+        where("uploadedAt", ">=", Timestamp.fromDate(startOfDay)),
+        where("uploadedAt", "<=", Timestamp.fromDate(endOfDay)),
+      )
+
+      const querySnapshot = await getDocs(q)
+      const vibeImages: any[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        vibeImages.push({
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating || Math.random() * 5, // Fallback rating
+          uploadedAt: data.uploadedAt.toDate(),
+          uploadedBy: data.uploadedBy,
+        })
+      })
+
+      console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
+      return vibeImages
+    } catch (error) {
+      console.error("Error getting vibe images by venue and date:", error)
+      // Return empty array instead of throwing
+      return []
+    }
+  }
+
+  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, any[]>> {
+    try {
+      console.log("FirebaseService: Getting vibe images for venue", venueId, "for the week")
+
+      // Get the last 7 days
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 7)
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(
+        vibeImagesRef,
+        where("venueId", "==", venueId),
+        where("uploadedAt", ">=", Timestamp.fromDate(startDate)),
+        where("uploadedAt", "<=", Timestamp.fromDate(endDate)),
+      )
+
+      const querySnapshot = await getDocs(q)
+      const weekData: Record<string, any[]> = {}
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const uploadDate = data.uploadedAt.toDate()
+        const dateKey = uploadDate.toDateString()
+
+        if (!weekData[dateKey]) {
+          weekData[dateKey] = []
+        }
+
+        weekData[dateKey].push({
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating || Math.random() * 5, // Fallback rating
+          uploadedAt: uploadDate,
+          uploadedBy: data.uploadedBy,
+        })
+      })
+
+      console.log("FirebaseService: Found vibe images for", Object.keys(weekData).length, "days")
+      return weekData
+    } catch (error) {
+      console.error("Error getting vibe images by venue and week:", error)
+      // Return empty object instead of throwing
+      return {}
     }
   }
 }
