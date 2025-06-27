@@ -26,8 +26,7 @@ import {
   deleteDoc,
 } from "firebase/firestore"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { auth, db } from "../config/firebase"
-import { firebaseConfig } from "../config/firebase"
+import { auth, db, firebaseConfig } from "../config/firebase"
 import type { User as AppUser } from "../models/User"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
