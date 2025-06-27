@@ -134,3 +134,4 @@ export type AddVibeScreenProps = {
   navigation: any
   route?: any
 }
+
