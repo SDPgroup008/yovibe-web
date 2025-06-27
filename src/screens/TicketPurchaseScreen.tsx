@@ -334,7 +334,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
   },
   summarySection: {
-    padding: 16,
+    padding: 16,  
     backgroundColor: "#1E1E1E",
     margin: 16,
     borderRadius: 12,
