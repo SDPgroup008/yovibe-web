@@ -23,3 +23,4 @@ const storage = getStorage(app)
 // Export the Firebase services
 export { auth, db, storage }
 export const hasFirebaseConfig = true
+  
