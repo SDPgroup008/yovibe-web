@@ -352,7 +352,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#FFFFFF",
   },
-  totalRow: {
+  totalRow: {  
     borderTopWidth: 1,
     borderTopColor: "#333333",
     paddingTop: 8,
