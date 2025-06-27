@@ -134,7 +134,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
             <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
               <Ionicons name="remove" size={20} color="#FFFFFF" />
             </TouchableOpacity>
-            <TextInput
+            <TextInput  
               style={styles.quantityInput}
               value={quantity.toString()}
               onChangeText={(text) => setQuantity(Math.max(1, Number.parseInt(text) || 1))}
