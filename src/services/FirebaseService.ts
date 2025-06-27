@@ -17,6 +17,7 @@ import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import type { Ticket, TicketValidation } from "../models/Ticket"
 
 class FirebaseService {
   private static instance: FirebaseService
@@ -853,6 +854,154 @@ class FirebaseService {
       console.error("Error getting vibe images by venue and week:", error)
       // Return empty object instead of throwing
       return {}
+    }
+  }
+
+  // Ticket methods
+  async saveTicket(ticket: Ticket): Promise<void> {
+    try {
+      console.log("FirebaseService: Saving ticket", ticket.id)
+      await addDoc(collection(db, "tickets"), {
+        ...ticket,
+        purchaseDate: Timestamp.fromDate(ticket.purchaseDate),
+      })
+      console.log("FirebaseService: Ticket saved successfully")
+    } catch (error) {
+      console.error("Error saving ticket:", error)
+      throw error
+    }
+  }
+
+  async getTicketById(ticketId: string): Promise<Ticket | null> {
+    try {
+      const ticketRef = doc(db, "tickets", ticketId)
+      const ticketDoc = await getDoc(ticketRef)
+
+      if (!ticketDoc.exists()) {
+        return null
+      }
+
+      const data = ticketDoc.data()
+      return {
+        id: ticketDoc.id,
+        eventId: data.eventId,
+        eventName: data.eventName,
+        buyerId: data.buyerId,
+        buyerName: data.buyerName,
+        buyerEmail: data.buyerEmail,
+        quantity: data.quantity,
+        totalAmount: data.totalAmount,
+        venueRevenue: data.venueRevenue,
+        appCommission: data.appCommission,
+        purchaseDate: data.purchaseDate.toDate(),
+        qrCode: data.qrCode,
+        biometricHash: data.biometricHash,
+        status: data.status,
+        validationHistory: data.validationHistory || [],
+      }
+    } catch (error) {
+      console.error("Error getting ticket by ID:", error)
+      throw error
+    }
+  }
+
+  async getTicketsByEvent(eventId: string): Promise<Ticket[]> {
+    try {
+      console.log("FirebaseService: Getting tickets for event", eventId)
+      const ticketsRef = collection(db, "tickets")
+      const q = query(ticketsRef, where("eventId", "==", eventId))
+      const querySnapshot = await getDocs(q)
+      const tickets: Ticket[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        tickets.push({
+          id: doc.id,
+          eventId: data.eventId,
+          eventName: data.eventName,
+          buyerId: data.buyerId,
+          buyerName: data.buyerName,
+          buyerEmail: data.buyerEmail,
+          quantity: data.quantity,
+          totalAmount: data.totalAmount,
+          venueRevenue: data.venueRevenue,
+          appCommission: data.appCommission,
+          purchaseDate: data.purchaseDate.toDate(),
+          qrCode: data.qrCode,
+          biometricHash: data.biometricHash,
+          status: data.status,
+          validationHistory: data.validationHistory || [],
+        })
+      })
+
+      console.log("FirebaseService: Found", tickets.length, "tickets for event")
+      return tickets
+    } catch (error) {
+      console.error("Error getting tickets by event:", error)
+      throw error
+    }
+  }
+
+  async getTicketsByUser(userId: string): Promise<Ticket[]> {
+    try {
+      console.log("FirebaseService: Getting tickets for user", userId)
+      const ticketsRef = collection(db, "tickets")
+      const q = query(ticketsRef, where("buyerId", "==", userId))
+      const querySnapshot = await getDocs(q)
+      const tickets: Ticket[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        tickets.push({
+          id: doc.id,
+          eventId: data.eventId,
+          eventName: data.eventName,
+          buyerId: data.buyerId,
+          buyerName: data.buyerName,
+          buyerEmail: data.buyerEmail,
+          quantity: data.quantity,
+          totalAmount: data.totalAmount,
+          venueRevenue: data.venueRevenue,
+          appCommission: data.appCommission,
+          purchaseDate: data.purchaseDate.toDate(),
+          qrCode: data.qrCode,
+          biometricHash: data.biometricHash,
+          status: data.status,
+          validationHistory: data.validationHistory || [],
+        })
+      })
+
+      console.log("FirebaseService: Found", tickets.length, "tickets for user")
+      return tickets
+    } catch (error) {
+      console.error("Error getting tickets by user:", error)
+      throw error
+    }
+  }
+
+  async updateTicket(ticketId: string, data: Partial<Ticket>): Promise<void> {
+    try {
+      console.log("FirebaseService: Updating ticket", ticketId)
+      const ticketRef = doc(db, "tickets", ticketId)
+      await updateDoc(ticketRef, data)
+      console.log("FirebaseService: Ticket updated successfully")
+    } catch (error) {
+      console.error("Error updating ticket:", error)
+      throw error
+    }
+  }
+
+  async saveTicketValidation(validation: TicketValidation): Promise<void> {
+    try {
+      console.log("FirebaseService: Saving ticket validation", validation.id)
+      await addDoc(collection(db, "ticketValidations"), {
+        ...validation,
+        validatedAt: Timestamp.fromDate(validation.validatedAt),
+      })
+      console.log("FirebaseService: Ticket validation saved successfully")
+    } catch (error) {
+      console.error("Error saving ticket validation:", error)
+      throw error
     }
   }
 }
