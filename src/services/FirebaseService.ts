@@ -29,7 +29,7 @@ class FirebaseService {
     if (!FirebaseService.instance) {
       FirebaseService.instance = new FirebaseService()
     }
-    return FirebaseService.getInstance()
+    return FirebaseService.instance
   }
 
   // Auth methods
