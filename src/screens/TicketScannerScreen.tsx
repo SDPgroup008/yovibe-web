@@ -1,123 +1,55 @@
 "use client"
 
-
-
-
-import React, { useState, useEffect } from 'react'
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native'
-import type { NativeStackScreenProps } from '@react-navigation/native-stack'
-import type { VenuesStackParamList } from '../navigation/types'
-import firebaseService from '../services/FirebaseService'
+import type React from "react"
+import { useState } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import BiometricService from "../services/BiometricService"
+import type { TicketScannerScreenProps } from "../navigation/types"
 
-
-
-type Props = NativeStackScreenProps<VenuesStackParamList, 'TicketScanner'>
-
-const TicketScannerScreen = ({ route, navigation }: Props) => {
+const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation }) => {
   const { user } = useAuth()
-  const { eventId } = route.params
   const [scanning, setScanning] = useState(false)
-
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null)
-
-
-  useEffect(() => {
-    // Request camera permissions
-    requestCameraPermissions()
-  }, [])
-
-  const requestCameraPermissions = async () => {
-    try {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-      // For web, we'll simulate permission
-      if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
-        setHasPermission(true)
-      } else {
-        setHasPermission(false)
-      }
-    } catch (error) {
-
-
-
-      console.error('Error requesting camera permissions:', error)
-      setHasPermission(false)
-    }
-  }
-
-
-
-
-
-
+  const [validating, setValidating] = useState(false)
 
   const handleScanTicket = async () => {
     try {
-
       setScanning(true)
-      
-      // For now, we'll simulate scanning with a prompt
-      // In a real app, you'd integrate with a QR code scanner library
-      const ticketId = prompt('Enter Ticket ID or QR Code:')
-      
-      if (!ticketId) {
-        setScanning(false)
-        return
-      }
 
-      // Validate the ticket
-      const ticket = await firebaseService.getTicketById(ticketId)
-      
-      if (!ticket) {
-        Alert.alert('Invalid Ticket', 'Ticket not found or invalid.')
-        setScanning(false)
-        return
-      }
+      // Simulate QR code scanning
+      Alert.prompt(
+        "Scan Ticket",
+        "Enter ticket ID or scan QR code:",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Validate",
+            onPress: async (ticketId) => {
+              if (ticketId) {
+                await handleValidateTicket(ticketId)
+              }
+            },
+          },
+        ],
+        "plain-text",
+      )
+    } catch (error) {
+      Alert.alert("Error", "Failed to scan ticket")
+    } finally {
+      setScanning(false)
+    }
+  }
 
-      if (ticket.status !== 'active') {
-        Alert.alert('Invalid Ticket', `Ticket status: ${ticket.status}`)
-        setScanning(false)
-        return
-      }
+  const handleValidateTicket = async (ticketId: string) => {
+    if (!user) {
+      Alert.alert("Error", "Please sign in to validate tickets")
+      return
+    }
 
-      // Get current user (should be venue staff)
-      const currentUser = await firebaseService.getCurrentUser()
-      if (!currentUser) {
-        Alert.alert('Error', 'Please sign in to validate tickets')
-        setScanning(false)
-        return
-      }
-
-      // Create validation record
-      const validation = {
-        id: `validation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        ticketId: ticket.id,
-        eventId: eventId,
-        userId: currentUser.id,
-        timestamp: new Date().toISOString(),
-        status: 'pending',
-      }
+    try {
+      setValidating(true)
 
       // Capture biometric data for verification
       Alert.alert(
@@ -146,11 +78,9 @@ const TicketScannerScreen = ({ route, navigation }: Props) => {
         ],
       )
     } catch (error) {
-
-      Alert.alert("Error", "Failed to scan ticket")
+      Alert.alert("Error", "Failed to validate ticket")
     } finally {
-
-      setScanning(false)
+      setValidating(false)
     }
   }
 
