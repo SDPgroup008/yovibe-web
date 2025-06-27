@@ -72,7 +72,6 @@ export type MainTabParamList = {
   Profile: undefined
 }
 
-
 // Screen Props using proper React Navigation types
 export type ProfileScreenProps = {
   navigation: any
@@ -96,27 +95,9 @@ export type VenueDetailScreenProps = NativeStackScreenProps<VenuesStackParamList
   navigation: any
 }
 
-
-
-
-
-
-
-
-
-
 // Updated Ticket Screen Props - Use React Navigation types
 export type TicketPurchaseScreenProps = NativeStackScreenProps<VenuesStackParamList, "TicketPurchase">
 export type TicketScannerScreenProps = NativeStackScreenProps<VenuesStackParamList, "TicketScanner">
-
-
-
-
-
-
-
-
-
 
 // Other screen props
 export type AddEventScreenProps = {

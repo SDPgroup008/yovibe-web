@@ -1,208 +1,289 @@
-"use client"
 
-import type React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useAuth } from "../contexts/AuthContext"
-import TicketService from "../services/TicketService"
-import BiometricService from "../services/BiometricService"
-import PaymentService from "../services/PaymentService"
-import type { Event } from "../models/Event"
+import React, { useState } from 'react'
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert } from 'react-native'
+import type { NativeStackScreenProps } from '@react-navigation/native-stack'
+import type { VenuesStackParamList } from '../navigation/types'
+import firebaseService from '../services/FirebaseService'
 
-interface TicketPurchaseScreenProps {
-  route: {
-    params: {
-      event: Event
-    }
-  }
-  navigation: any
-}
 
-const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navigation }) => {
+
+
+
+
+
+
+
+
+type Props = NativeStackScreenProps<VenuesStackParamList, 'TicketPurchase'>
+
+
+
+
+
+
+
+
+
+
+
+export default function TicketPurchaseScreen({ route, navigation }: Props) {
   const { event } = route.params
-  const { user } = useAuth()
+
   const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
-  const [biometricCaptured, setBiometricCaptured] = useState(false)
-  const [biometricHash, setBiometricHash] = useState("")
 
-  const ticketPrice = Number.parseInt(event.entryFee?.replace(/[^0-9]/g, "") || "0")
-  const totalAmount = ticketPrice * quantity
-  const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(totalAmount)
 
-  const handleCaptureBiometric = async () => {
+
+
+
+
+
+
+  const handlePurchase = async () => {
     try {
       setLoading(true)
 
-      const isAvailable = await BiometricService.isAvailable()
-      if (!isAvailable) {
-        Alert.alert("Error", "Biometric scanner not available on this device")
+
+
+
+      
+      // Get current user
+      const currentUser = await firebaseService.getCurrentUser()
+      if (!currentUser) {
+        Alert.alert('Error', 'Please sign in to purchase tickets')
         return
       }
 
-      Alert.alert(
-        "Biometric Capture",
-        "Please look directly at the camera for eye scanning. This will be used to verify your identity at the event.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Start Scan",
-            onPress: async () => {
-              try {
-                const hash = await BiometricService.captureBiometric()
-                setBiometricHash(hash)
-                setBiometricCaptured(true)
-                Alert.alert("Success", "Biometric data captured successfully!")
-              } catch (error) {
-                Alert.alert("Error", "Failed to capture biometric data")
-              }
-            },
-          },
-        ],
-      )
-    } catch (error) {
-      Alert.alert("Error", "Failed to initialize biometric scanner")
-    } finally {
-      setLoading(false)
-    }
-  }
+      const totalAmount = parseFloat(event.entryFee || '0') * quantity
+      const appCommission = totalAmount * 0.1 // 10% commission
+      const venueRevenue = totalAmount - appCommission
 
-  const handlePurchase = async () => {
-    if (!user) {
-      Alert.alert("Error", "Please sign in to purchase tickets")
-      return
-    }
-
-    if (!biometricCaptured) {
-      Alert.alert("Biometric Required", "Please capture your biometric data first")
-      return
-    }
-
-    try {
-      setLoading(true)
-
-      const ticket = await TicketService.purchaseTicket(
-        event,
-        user.id,
-        user.displayName || user.email || "Unknown",
-        user.email || "",
+      // Create ticket object
+      const ticket = {
+        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        eventId: event.id,
+        eventName: event.name,
+        buyerId: currentUser.id,
+        buyerName: currentUser.displayName || currentUser.email,
+        buyerEmail: currentUser.email,
         quantity,
-        biometricHash,
-      )
+        totalAmount,
+        venueRevenue,
+        appCommission,
+        purchaseDate: new Date(),
+        qrCode: `QR_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        biometricHash: '', // Will be set during validation
+        status: 'active' as const,
+        validationHistory: [],
+      }
 
-      Alert.alert("Purchase Successful!", `Your ticket has been purchased successfully. Ticket ID: ${ticket.id}`, [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
-      ])
+      // Save ticket to Firebase
+      await firebaseService.saveTicket(ticket)
+
+      Alert.alert(
+
+
+        'Success!', 
+        `Your ticket has been purchased successfully!\nTicket ID: ${ticket.id}`,
+        [
+
+          {
+
+
+
+
+
+
+
+
+
+
+
+
+
+            text: 'OK',
+            onPress: () => navigation.goBack()
+          }
+        ]
+      )
     } catch (error) {
-      console.error("Purchase error:", error)
-      Alert.alert("Purchase Failed", "Failed to purchase ticket. Please try again.")
+
+      console.error('Error purchasing ticket:', error)
+      Alert.alert('Error', 'Failed to purchase ticket. Please try again.')
     } finally {
       setLoading(false)
     }
   }
+
+
+
+
+
+
+  const totalPrice = parseFloat(event.entryFee || '0') * quantity
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Purchase Tickets</Text>
+
+
+
+
+        <Text style={styles.title}>Purchase Ticket</Text>
       </View>
 
       <View style={styles.eventInfo}>
         <Text style={styles.eventName}>{event.name}</Text>
-        <Text style={styles.eventVenue}>{event.venueName}</Text>
-        <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
+
+
+        <Text style={styles.venueName}>{event.venueName}</Text>
+        <Text style={styles.eventDate}>
+          {new Date(event.date).toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}
+        </Text>
+        <Text style={styles.location}>{event.location}</Text>
       </View>
 
-      <View style={styles.ticketSection}>
+
+      <View style={styles.ticketDetails}>
         <Text style={styles.sectionTitle}>Ticket Details</Text>
 
+        
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Price per ticket:</Text>
-          <Text style={styles.priceValue}>UGX {ticketPrice.toLocaleString()}</Text>
+
+          <Text style={styles.priceValue}>UGX {event.entryFee}</Text>
         </View>
 
         <View style={styles.quantitySection}>
           <Text style={styles.quantityLabel}>Quantity:</Text>
           <View style={styles.quantityControls}>
-            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-              <Ionicons name="remove" size={20} color="#FFFFFF" />
+
+
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => setQuantity(Math.max(1, quantity - 1))}
+            >
+              <Text style={styles.quantityButtonText}>-</Text>
             </TouchableOpacity>
-            <TextInput
-              style={styles.quantityInput}
-              value={quantity.toString()}
-              onChangeText={(text) => setQuantity(Math.max(1, Number.parseInt(text) || 1))}
-              keyboardType="numeric"
-            />
-            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(quantity + 1)}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
+
+
+
+
+
+
+
+
+            <Text style={styles.quantityText}>{quantity}</Text>
+            <TouchableOpacity
+              style={styles.quantityButton}
+              onPress={() => setQuantity(quantity + 1)}
+            >
+              <Text style={styles.quantityButtonText}>+</Text>
             </TouchableOpacity>
           </View>
         </View>
-      </View>
 
-      <View style={styles.biometricSection}>
-        <Text style={styles.sectionTitle}>Security Verification</Text>
-        <Text style={styles.biometricInfo}>
-          For security purposes, we need to capture your biometric data. This will be used to verify your identity at
-          the event entrance.
-        </Text>
 
-        <TouchableOpacity
-          style={[styles.biometricButton, biometricCaptured && styles.biometricCaptured]}
-          onPress={handleCaptureBiometric}
-          disabled={loading || biometricCaptured}
-        >
-          <Ionicons name={biometricCaptured ? "checkmark-circle" : "eye"} size={24} color="#FFFFFF" />
-          <Text style={styles.biometricButtonText}>
-            {biometricCaptured ? "Biometric Captured" : "Capture Biometric"}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
-      <View style={styles.summarySection}>
-        <Text style={styles.sectionTitle}>Order Summary</Text>
 
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Tickets ({quantity}x):</Text>
-          <Text style={styles.summaryValue}>UGX {totalAmount.toLocaleString()}</Text>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        <View style={styles.totalSection}>
+          <Text style={styles.totalLabel}>Total Amount:</Text>
+          <Text style={styles.totalValue}>UGX {totalPrice.toLocaleString()}</Text>
         </View>
 
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>App Fee (5%):</Text>
-          <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
-        </View>
 
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Venue Revenue:</Text>
-          <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
-        </View>
 
-        <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text style={styles.totalLabel}>Total:</Text>
-          <Text style={styles.totalValue}>UGX {totalAmount.toLocaleString()}</Text>
-        </View>
+
+
+
+
+
+
+
+
+
+
+
+
       </View>
 
       <TouchableOpacity
-        style={[styles.purchaseButton, (!biometricCaptured || loading) && styles.purchaseButtonDisabled]}
+
+        style={[styles.purchaseButton, loading && styles.purchaseButtonDisabled]}
         onPress={handlePurchase}
-        disabled={!biometricCaptured || loading}
+
+        disabled={loading}
       >
-        {loading ? (
-          <ActivityIndicator color="#FFFFFF" />
-        ) : (
-          <>
-            <Ionicons name="card" size={24} color="#FFFFFF" />
-            <Text style={styles.purchaseButtonText}>Purchase Tickets</Text>
-          </>
-        )}
+
+
+
+
+
+
+
+
+        <Text style={styles.purchaseButtonText}>
+          {loading ? 'Processing...' : 'Purchase Ticket'}
+        </Text>
       </TouchableOpacity>
     </ScrollView>
   )
@@ -211,181 +292,253 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+
+    backgroundColor: '#000',
   },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
+
+
+
+
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginLeft: 16,
+
+
+
+
+
+  title: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#fff',
+    textAlign: 'center',
   },
   eventInfo: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
+
+
+
+
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
   },
   eventName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 8,
+
+
+
+
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 5,
   },
-  eventVenue: {
+
+  venueName: {
     fontSize: 16,
-    color: "#2196F3",
-    marginBottom: 4,
+
+
+    color: '#ccc',
+    marginBottom: 5,
   },
   eventDate: {
     fontSize: 14,
-    color: "#DDDDDD",
+
+    color: '#999',
+    marginBottom: 5,
   },
-  ticketSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
+
+
+
+
+
+  location: {
+    fontSize: 14,
+    color: '#999',
+  },
+  ticketDetails: {
+    padding: 20,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 16,
+
+
+
+    fontWeight: 'bold',
+    color: '#fff',
+    marginBottom: 15,
   },
   priceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
+
+
+
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 15,
   },
   priceLabel: {
     fontSize: 16,
-    color: "#DDDDDD",
+
+    color: '#ccc',
   },
   priceValue: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#4CAF50",
+
+
+    fontWeight: 'bold',
+    color: '#fff',
   },
   quantitySection: {
-    marginBottom: 16,
+
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
   },
   quantityLabel: {
     fontSize: 16,
-    color: "#DDDDDD",
-    marginBottom: 8,
+
+
+    color: '#ccc',
   },
   quantityControls: {
-    flexDirection: "row",
-    alignItems: "center",
+
+
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   quantityButton: {
-    backgroundColor: "#2196F3",
+
     width: 40,
     height: 40,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
+
+
   },
-  quantityInput: {
-    backgroundColor: "#333333",
-    color: "#FFFFFF",
+
+
+
+  quantityButtonText: {
+    fontSize: 20,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  quantityText: {
     fontSize: 18,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginHorizontal: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    minWidth: 60,
+
+
+
+
+
+
+
+    color: '#fff',
+    marginHorizontal: 20,
+    fontWeight: 'bold',
   },
-  biometricSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  biometricInfo: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  biometricButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF9800",
-    padding: 16,
-    borderRadius: 8,
-  },
-  biometricCaptured: {
-    backgroundColor: "#4CAF50",
-  },
-  biometricButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  summarySection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  summaryRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: "#DDDDDD",
-  },
-  summaryValue: {
-    fontSize: 14,
-    color: "#FFFFFF",
-  },
-  totalRow: {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  totalSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 15,
     borderTopWidth: 1,
-    borderTopColor: "#333333",
-    paddingTop: 8,
-    marginTop: 8,
+
+
+
+    borderTopColor: '#333',
   },
   totalLabel: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
+
+
+    fontWeight: 'bold',
+    color: '#fff',
   },
   totalValue: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#4CAF50",
+
+
+    fontWeight: 'bold',
+    color: '#4CAF50',
   },
   purchaseButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#2196F3",
-    margin: 16,
-    padding: 16,
-    borderRadius: 8,
+
+
+
+
+
+
+
+    backgroundColor: '#4CAF50',
+    margin: 20,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
   },
   purchaseButtonDisabled: {
-    backgroundColor: "#666666",
+
+    backgroundColor: '#666',
   },
   purchaseButtonText: {
-    color: "#FFFFFF",
+
     fontSize: 18,
-    fontWeight: "bold",
-    marginLeft: 8,
+
+
+    fontWeight: 'bold',
+    color: '#fff',
   },
 })
 
-export default TicketPurchaseScreen
+
