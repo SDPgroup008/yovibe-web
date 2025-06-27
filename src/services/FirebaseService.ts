@@ -1,6 +1,4 @@
 import "react-native-get-random-values" // Add this import at the top
-import { initializeApp } from "firebase/app"
-import { getAnalytics } from "firebase/analytics"
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
 import {
   collection,
@@ -19,41 +17,12 @@ import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
-import { hasFirebaseConfig } from "../config/firebase"
-
-// Your web app's Firebase configuration
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
-}
-
-let app
-let analytics
 
 class FirebaseService {
   private static instance: FirebaseService
-  public isFirebaseConfigured = false
 
   private constructor() {
-    if (!hasFirebaseConfig) {
-      console.warn("Firebase not configured: Missing environment variables")
-      console.log("Create a .env.local file with your Firebase configuration")
-      return
-    }
-
-    try {
-      app = initializeApp(firebaseConfig)
-      analytics = getAnalytics(app)
-      this.isFirebaseConfigured = true
-      console.log("Firebase initialized successfully!")
-    } catch (error: any) {
-      console.error("Firebase initialization error:", error.message)
-    }
+    console.log("Firebase service initialized")
   }
 
   public static getInstance(): FirebaseService {
@@ -738,12 +707,6 @@ class FirebaseService {
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
       console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
-
-      if (!this.isFirebaseConfigured) {
-        console.log("Mock: Getting latest vibe rating for venue", venueId)
-        // Return a mock rating for development
-        return Math.random() * 5 // Random rating between 0-5
-      }
 
       // Query for the latest vibe rating for this venue
       const vibeRatingsRef = collection(db, "vibeRatings")
