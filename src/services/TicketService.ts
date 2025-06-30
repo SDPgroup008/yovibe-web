@@ -1,8 +1,8 @@
 import FirebaseService from "./FirebaseService"
 import PaymentService from "./PaymentService"
-import BiometricService from "./BiometricService"
+import { BiometricService } from "./BiometricService"
 import QRCodeService from "./QRCodeService"
-import NotificationService from "./NotificationService"
+import { NotificationService } from "./NotificationService"
 import type { Ticket, TicketValidation, TicketType } from "../models/Ticket"
 import type { Event } from "../models/Event"
 
