@@ -1,7 +1,3 @@
-import * as FaceDetector from "expo-face-detector"
-import { Camera } from "expo-camera"
-import * as MediaLibrary from "expo-media-library"
-
 export interface BiometricData {
   faceId: string
   landmarks: Array<{ x: number; y: number }>
@@ -23,15 +19,17 @@ export class BiometricService {
 
   static async isAvailable(): Promise<boolean> {
     try {
-      // Check if camera is available
-      const { status } = await Camera.requestCameraPermissionsAsync()
-      if (status !== "granted") {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return false
       }
 
-      // Check if face detection is available
-      const isAvailable = await FaceDetector.isAvailableAsync()
-      return isAvailable
+      // Check if Web Crypto API is available
+      if (!window.crypto || !window.crypto.subtle) {
+        return false
+      }
+
+      return true
     } catch (error) {
       console.error("Error checking biometric availability:", error)
       return false
@@ -42,25 +40,13 @@ export class BiometricService {
     try {
       console.log("Starting biometric capture...")
 
-      // Request camera permissions
-      const { status } = await Camera.requestCameraPermissionsAsync()
-      if (status !== "granted") {
-        throw new Error("Camera permission not granted")
+      // Check if biometric is available
+      const isAvailable = await this.isAvailable()
+      if (!isAvailable) {
+        throw new Error("Biometric capture not available on this device")
       }
 
-      // Request media library permissions for saving photos
-      const mediaStatus = await MediaLibrary.requestPermissionsAsync()
-      if (mediaStatus.status !== "granted") {
-        throw new Error("Media library permission not granted")
-      }
-
-      // In a real implementation, you would:
-      // 1. Open camera interface
-      // 2. Capture photo with face
-      // 3. Detect face features
-      // 4. Generate biometric hash
-
-      // For now, we'll simulate the process
+      // For web, we'll simulate the process with camera access
       const simulatedBiometricData = await this.simulateBiometricCapture()
       const biometricHash = await this.generateBiometricHash(simulatedBiometricData)
 
@@ -75,12 +61,6 @@ export class BiometricService {
   static async verifyBiometric(storedHash: string, capturedData: string): Promise<boolean> {
     try {
       console.log("Starting biometric verification...")
-
-      // In a real implementation, you would:
-      // 1. Parse the captured biometric data
-      // 2. Compare with stored biometric hash
-      // 3. Calculate similarity score
-      // 4. Return true if similarity > threshold
 
       const similarity = this.calculateSimilarity(storedHash, capturedData)
       const isMatch = similarity >= this.SIMILARITY_THRESHOLD
@@ -203,6 +183,7 @@ export class BiometricService {
 
       videoElement.srcObject = stream
       this.stream = stream
+      this.videoElement = videoElement
     } catch (error) {
       console.error("Error starting camera preview:", error)
       throw error
@@ -242,6 +223,41 @@ export class BiometricService {
       issues,
     }
   }
+
+  static async captureFromCanvas(canvas: HTMLCanvasElement): Promise<BiometricData> {
+    try {
+      const ctx = canvas.getContext("2d")
+      if (!ctx) {
+        throw new Error("Unable to get canvas context")
+      }
+
+      // Simulate face detection on the canvas
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      // For demo purposes, generate simulated face data
+      const biometricData: BiometricData = {
+        faceId: `canvas_face_${Date.now()}`,
+        landmarks: [
+          { x: canvas.width / 2, y: canvas.height / 2 },
+          { x: canvas.width / 2 - 20, y: canvas.height / 2 - 20 },
+          { x: canvas.width / 2 + 20, y: canvas.height / 2 - 20 },
+        ],
+        bounds: {
+          x: canvas.width / 2 - 60,
+          y: canvas.height / 2 - 60,
+          width: 120,
+          height: 120,
+        },
+        confidence: 0.9,
+        timestamp: Date.now(),
+      }
+
+      return biometricData
+    } catch (error) {
+      console.error("Error capturing from canvas:", error)
+      throw error
+    }
+  }
 }
 
-export * from "./BiometricService.web"
+export default BiometricService
