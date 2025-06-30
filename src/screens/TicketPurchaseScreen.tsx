@@ -19,6 +19,7 @@ import TicketService from "../services/TicketService"
 import BiometricService from "../services/BiometricService"
 import PaymentService, { type PaymentMethod } from "../services/PaymentService"
 import type { Event } from "../models/Event"
+import type { TicketType } from "../models/Ticket"
 
 interface TicketPurchaseScreenProps {
   route: {
@@ -34,6 +35,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const { user } = useAuth()
   const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [selectedTicketType, setSelectedTicketType] = useState<TicketType>("regular")
   const [biometricCaptured, setBiometricCaptured] = useState(false)
   const [biometricHash, setBiometricHash] = useState("")
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
@@ -45,6 +47,14 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(totalAmount)
 
   const paymentMethods = PaymentService.getAvailablePaymentMethods()
+
+  const handleTicketTypeChange = (type: TicketType) => {
+    setSelectedTicketType(type)
+    if (type === "regular") {
+      setBiometricCaptured(false)
+      setBiometricHash("")
+    }
+  }
 
   const handleCaptureBiometric = async () => {
     try {
@@ -95,8 +105,8 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       return
     }
 
-    if (!biometricCaptured) {
-      Alert.alert("Biometric Required", "Please capture your biometric data first")
+    if (selectedTicketType === "secure" && !biometricCaptured) {
+      Alert.alert("Biometric Required", "Please capture your biometric data for secure tickets")
       return
     }
 
@@ -120,13 +130,20 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         user.displayName || user.email || "Unknown",
         user.email || "",
         quantity,
-        biometricHash,
+        selectedTicketType,
+        selectedTicketType === "secure" ? biometricHash : undefined,
         selectedPaymentMethod,
       )
 
+      const ticketTypeText = selectedTicketType === "secure" ? "Secure Ticket" : "Regular Ticket"
+      const securityInfo =
+        selectedTicketType === "secure"
+          ? "\n\n🔒 Secure ticket with biometric verification required at entry."
+          : "\n\n📱 Regular ticket - QR code scanning only at entry."
+
       Alert.alert(
         "Purchase Successful!",
-        `Your ticket has been purchased successfully.\n\nTicket ID: ${ticket.id}\nQR Code generated for entry validation.`,
+        `Your ${ticketTypeText.toLowerCase()} has been purchased successfully.\n\nTicket ID: ${ticket.id}${securityInfo}`,
         [
           {
             text: "View Ticket",
@@ -247,6 +264,47 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
       </View>
 
+      {/* Ticket Type Selection */}
+      <View style={styles.ticketTypeSection}>
+        <Text style={styles.sectionTitle}>Select Ticket Type</Text>
+
+        <TouchableOpacity
+          style={[styles.ticketTypeOption, selectedTicketType === "regular" && styles.ticketTypeSelected]}
+          onPress={() => handleTicketTypeChange("regular")}
+        >
+          <View style={styles.ticketTypeHeader}>
+            <Ionicons name="qr-code" size={24} color={selectedTicketType === "regular" ? "#2196F3" : "#DDDDDD"} />
+            <Text style={[styles.ticketTypeName, selectedTicketType === "regular" && styles.ticketTypeNameSelected]}>
+              Regular Ticket
+            </Text>
+            <Text style={styles.ticketTypePrice}>UGX {ticketPrice.toLocaleString()}</Text>
+          </View>
+          <Text style={styles.ticketTypeDescription}>
+            Standard entry with QR code verification only. Quick and easy entry process.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.ticketTypeOption, selectedTicketType === "secure" && styles.ticketTypeSelected]}
+          onPress={() => handleTicketTypeChange("secure")}
+        >
+          <View style={styles.ticketTypeHeader}>
+            <Ionicons
+              name="shield-checkmark"
+              size={24}
+              color={selectedTicketType === "secure" ? "#2196F3" : "#DDDDDD"}
+            />
+            <Text style={[styles.ticketTypeName, selectedTicketType === "secure" && styles.ticketTypeNameSelected]}>
+              Secure Ticket
+            </Text>
+            <Text style={styles.ticketTypePrice}>UGX {ticketPrice.toLocaleString()}</Text>
+          </View>
+          <Text style={styles.ticketTypeDescription}>
+            Enhanced security with biometric verification. Requires eye scan for both purchase and entry.
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       <View style={styles.ticketSection}>
         <Text style={styles.sectionTitle}>Ticket Details</Text>
 
@@ -274,24 +332,27 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         </View>
       </View>
 
-      <View style={styles.biometricSection}>
-        <Text style={styles.sectionTitle}>Security Verification</Text>
-        <Text style={styles.biometricInfo}>
-          For security purposes, we need to capture your biometric data. This will be used to verify your identity at
-          the event entrance.
-        </Text>
-
-        <TouchableOpacity
-          style={[styles.biometricButton, biometricCaptured && styles.biometricCaptured]}
-          onPress={handleCaptureBiometric}
-          disabled={loading || biometricCaptured}
-        >
-          <Ionicons name={biometricCaptured ? "checkmark-circle" : "eye"} size={24} color="#FFFFFF" />
-          <Text style={styles.biometricButtonText}>
-            {biometricCaptured ? "Biometric Captured" : "Capture Biometric"}
+      {/* Biometric Section - Only for Secure Tickets */}
+      {selectedTicketType === "secure" && (
+        <View style={styles.biometricSection}>
+          <Text style={styles.sectionTitle}>Security Verification</Text>
+          <Text style={styles.biometricInfo}>
+            For secure tickets, we need to capture your biometric data. This will be used to verify your identity at the
+            event entrance.
           </Text>
-        </TouchableOpacity>
-      </View>
+
+          <TouchableOpacity
+            style={[styles.biometricButton, biometricCaptured && styles.biometricCaptured]}
+            onPress={handleCaptureBiometric}
+            disabled={loading || biometricCaptured}
+          >
+            <Ionicons name={biometricCaptured ? "checkmark-circle" : "eye"} size={24} color="#FFFFFF" />
+            <Text style={styles.biometricButtonText}>
+              {biometricCaptured ? "Biometric Captured" : "Capture Biometric"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.paymentSection}>
         <Text style={styles.sectionTitle}>Payment Method</Text>
@@ -310,7 +371,9 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Tickets ({quantity}x):</Text>
+          <Text style={styles.summaryLabel}>
+            {selectedTicketType === "secure" ? "Secure Tickets" : "Regular Tickets"} ({quantity}x):
+          </Text>
           <Text style={styles.summaryValue}>UGX {totalAmount.toLocaleString()}</Text>
         </View>
 
@@ -333,17 +396,20 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       <TouchableOpacity
         style={[
           styles.purchaseButton,
-          (!biometricCaptured || !selectedPaymentMethod || loading) && styles.purchaseButtonDisabled,
+          (!selectedPaymentMethod || loading || (selectedTicketType === "secure" && !biometricCaptured)) &&
+            styles.purchaseButtonDisabled,
         ]}
         onPress={handlePurchase}
-        disabled={!biometricCaptured || !selectedPaymentMethod || loading}
+        disabled={!selectedPaymentMethod || loading || (selectedTicketType === "secure" && !biometricCaptured)}
       >
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>
             <Ionicons name="card" size={24} color="#FFFFFF" />
-            <Text style={styles.purchaseButtonText}>Purchase Tickets</Text>
+            <Text style={styles.purchaseButtonText}>
+              Purchase {selectedTicketType === "secure" ? "Secure" : "Regular"} Tickets
+            </Text>
           </>
         )}
       </TouchableOpacity>
@@ -417,6 +483,49 @@ const styles = StyleSheet.create({
   eventDate: {
     fontSize: 14,
     color: "#DDDDDD",
+  },
+  ticketTypeSection: {
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    borderRadius: 12,
+  },
+  ticketTypeOption: {
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  ticketTypeSelected: {
+    borderColor: "#2196F3",
+    backgroundColor: "#1A2332",
+  },
+  ticketTypeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  ticketTypeName: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#DDDDDD",
+    marginLeft: 12,
+    flex: 1,
+  },
+  ticketTypeNameSelected: {
+    color: "#FFFFFF",
+  },
+  ticketTypePrice: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#4CAF50",
+  },
+  ticketTypeDescription: {
+    fontSize: 14,
+    color: "#AAAAAA",
+    lineHeight: 20,
   },
   ticketSection: {
     padding: 16,
