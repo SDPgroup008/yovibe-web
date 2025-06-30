@@ -1,9 +1,11 @@
 import * as Crypto from "expo-crypto"
+import type { TicketType } from "../models/Ticket"
 
 export interface QRCodeData {
   ticketId: string
   eventId: string
   buyerId: string
+  ticketType: TicketType
   timestamp: number
   signature: string
 }
@@ -11,7 +13,12 @@ export interface QRCodeData {
 export class QRCodeService {
   private static SECRET_KEY = "yovibe_secret_key_2024" // In production, use environment variable
 
-  static async generateQRCode(ticketId: string, eventId: string, buyerId: string): Promise<string> {
+  static async generateQRCode(
+    ticketId: string,
+    eventId: string,
+    buyerId: string,
+    ticketType: TicketType,
+  ): Promise<string> {
     try {
       const timestamp = Date.now()
 
@@ -20,6 +27,7 @@ export class QRCodeService {
         ticketId,
         eventId,
         buyerId,
+        ticketType,
         timestamp,
       }
 
@@ -40,7 +48,7 @@ export class QRCodeService {
       const qrString = JSON.stringify(qrData)
       const base64Data = btoa(qrString)
 
-      console.log("QR Code generated for ticket:", ticketId)
+      console.log("QR Code generated for ticket:", ticketId, "Type:", ticketType)
       return base64Data
     } catch (error) {
       console.error("Error generating QR code:", error)
@@ -59,6 +67,7 @@ export class QRCodeService {
         ticketId: qrData.ticketId,
         eventId: qrData.eventId,
         buyerId: qrData.buyerId,
+        ticketType: qrData.ticketType,
         timestamp: qrData.timestamp,
       }
 
@@ -86,7 +95,7 @@ export class QRCodeService {
         }
       }
 
-      console.log("QR Code validated successfully for ticket:", qrData.ticketId)
+      console.log("QR Code validated successfully for ticket:", qrData.ticketId, "Type:", qrData.ticketType)
       return {
         valid: true,
         data: qrData,
