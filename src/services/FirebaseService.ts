@@ -215,19 +215,25 @@ class FirebaseService {
         const userData = userDoc.data()
         return {
           id: user.uid,
+          uid: user.uid,
           email: user.email!,
           displayName: user.displayName || userData.displayName || "",
           photoURL: user.photoURL || userData.photoURL || "",
           userType: userData.userType || "user",
+          createdAt: userData.createdAt?.toDate() || new Date(),
+          lastLoginAt: userData.lastLoginAt?.toDate() || new Date(),
         }
       } else {
         // Create user profile if it doesn't exist
         const newUser: AppUser = {
           id: user.uid,
+          uid: user.uid,
           email: user.email!,
           displayName: user.displayName || "",
           photoURL: user.photoURL || "",
           userType: "user",
+          createdAt: new Date(),
+          lastLoginAt: new Date(),
         }
         await this.createUserProfile(newUser)
         return newUser
