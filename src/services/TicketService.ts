@@ -140,6 +140,7 @@ export class TicketService {
       appCommission: params.appCommission,
       purchaseDate: new Date(),
       qrCode,
+      ticketType: "regular", // Add the missing ticketType property
       biometricHash,
       status: "active",
       validationHistory: [],
@@ -236,7 +237,7 @@ export class TicketService {
 
       // Validate biometric if provided
       if (biometricHash && ticket.biometricHash && !ticket.biometricHash.includes("PLACEHOLDER")) {
-        const biometricResult = await BiometricService.verifyBiometric(biometricHash, ticket.biometricHash)
+        const biometricResult = await BiometricService.verifyBiometric(ticket.biometricHash, biometricHash)
         if (!biometricResult.isValid) {
           return {
             success: false,
@@ -250,7 +251,6 @@ export class TicketService {
       const validation: TicketValidation = {
         id: this.generateValidationId(),
         ticketId,
-        eventId: ticket.eventId,
         validatedAt: new Date(),
         validatedBy: "SYSTEM", // In real app, this would be the validator's ID
         biometricHash,
