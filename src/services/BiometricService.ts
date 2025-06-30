@@ -1,73 +1,113 @@
-import * as FaceDetector from "expo-face-detector"
-import { Camera } from "expo-camera"
-import * as MediaLibrary from "expo-media-library"
-import * as Crypto from "expo-crypto"
+import * as faceapi from "face-api.js"
 
 export interface BiometricData {
   faceId: string
-  landmarks: FaceDetector.FaceFeature[]
-  bounds: {
-    origin: { x: number; y: number }
-    size: { width: number; height: number }
-  }
-  rollAngle: number
-  yawAngle: number
-  smilingProbability: number
-  leftEyeOpenProbability: number
-  rightEyeOpenProbability: number
+  landmarks: number[][]
+  descriptor: Float32Array
+  confidence: number
   timestamp: number
 }
 
 export class BiometricService {
-  private static readonly SIMILARITY_THRESHOLD = 0.85
-  private static readonly FACE_DETECTION_OPTIONS: FaceDetector.FaceDetectorOptions = {
-    mode: FaceDetector.FaceDetectorMode.accurate,
-    detectLandmarks: FaceDetector.FaceDetectorLandmarks.all,
-    runClassifications: FaceDetector.FaceDetectorClassifications.all,
+  private static isInitialized = false
+  private static readonly SIMILARITY_THRESHOLD = 0.6
+
+  static async initialize(): Promise<void> {
+    if (this.isInitialized) return
+
+    try {
+      console.log("Initializing face-api.js...")
+
+      // Load face detection models
+      await faceapi.nets.tinyFaceDetector.loadFromUri("/models")
+      await faceapi.nets.faceLandmark68Net.loadFromUri("/models")
+      await faceapi.nets.faceRecognitionNet.loadFromUri("/models")
+
+      this.isInitialized = true
+      console.log("Face-api.js initialized successfully")
+    } catch (error) {
+      console.error("Error initializing face-api.js:", error)
+      throw new Error("Failed to initialize biometric service")
+    }
   }
 
   static async isAvailable(): Promise<boolean> {
     try {
-      // Check if camera is available
-      const { status } = await Camera.requestCameraPermissionsAsync()
-      if (status !== "granted") {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         return false
       }
 
-      // Check if face detection is available
-      const isAvailable = await FaceDetector.isAvailableAsync()
-      return isAvailable
+      // Check camera permissions
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
+      })
+
+      // Stop the stream immediately
+      stream.getTracks().forEach((track) => track.stop())
+
+      return true
     } catch (error) {
-      console.error("Error checking biometric availability:", error)
+      console.error("Camera not available:", error)
       return false
     }
   }
 
   static async captureBiometric(): Promise<string> {
     try {
+      if (!this.isInitialized) {
+        await this.initialize()
+      }
+
       console.log("Starting biometric capture...")
 
-      // Request camera permissions
-      const { status } = await Camera.requestCameraPermissionsAsync()
-      if (status !== "granted") {
-        throw new Error("Camera permission not granted")
+      // Get camera stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "user",
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+      })
+
+      // Create video element
+      const video = document.createElement("video")
+      video.srcObject = stream
+      video.autoplay = true
+      video.muted = true
+
+      // Wait for video to load
+      await new Promise((resolve) => {
+        video.onloadedmetadata = resolve
+      })
+
+      // Wait a bit for the camera to adjust
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Detect face and extract features
+      const detection = await faceapi
+        .detectSingleFace(video, new faceapi.TinyFaceDetectorOptions())
+        .withFaceLandmarks()
+        .withFaceDescriptor()
+
+      // Stop camera stream
+      stream.getTracks().forEach((track) => track.stop())
+
+      if (!detection) {
+        throw new Error("No face detected. Please ensure your face is clearly visible.")
       }
 
-      // Request media library permissions for saving photos
-      const mediaStatus = await MediaLibrary.requestPermissionsAsync()
-      if (mediaStatus.status !== "granted") {
-        throw new Error("Media library permission not granted")
+      // Create biometric data
+      const biometricData: BiometricData = {
+        faceId: `face_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        landmarks: detection.landmarks.positions.map((p) => [p.x, p.y]),
+        descriptor: detection.descriptor,
+        confidence: detection.detection.score,
+        timestamp: Date.now(),
       }
 
-      // In a real implementation, you would:
-      // 1. Open camera interface
-      // 2. Capture photo with face
-      // 3. Detect face features
-      // 4. Generate biometric hash
-
-      // For now, we'll simulate the process
-      const simulatedBiometricData = await this.simulateBiometricCapture()
-      const biometricHash = await this.generateBiometricHash(simulatedBiometricData)
+      // Generate hash from biometric data
+      const biometricHash = await this.generateBiometricHash(biometricData)
 
       console.log("Biometric capture completed successfully")
       return biometricHash
@@ -82,16 +122,15 @@ export class BiometricService {
       console.log("Starting biometric verification...")
 
       // In a real implementation, you would:
-      // 1. Parse the captured biometric data
-      // 2. Compare with stored biometric hash
-      // 3. Calculate similarity score
-      // 4. Return true if similarity > threshold
+      // 1. Parse both biometric data
+      // 2. Compare face descriptors using euclidean distance
+      // 3. Return true if distance is below threshold
 
-      // For simulation, we'll use string comparison with some fuzzy matching
+      // For simulation with some realistic logic
       const similarity = this.calculateSimilarity(storedHash, capturedData)
       const isMatch = similarity >= this.SIMILARITY_THRESHOLD
 
-      console.log(`Biometric verification result: ${isMatch ? "MATCH" : "NO MATCH"} (similarity: ${similarity})`)
+      console.log(`Biometric verification: ${isMatch ? "MATCH" : "NO MATCH"} (similarity: ${similarity.toFixed(3)})`)
       return isMatch
     } catch (error) {
       console.error("Error verifying biometric:", error)
@@ -99,66 +138,32 @@ export class BiometricService {
     }
   }
 
-  private static async simulateBiometricCapture(): Promise<BiometricData> {
-    // Simulate face detection process
-    await new Promise((resolve) => setTimeout(resolve, 2000)) // Simulate capture time
-
-    // Generate simulated biometric data
-    const biometricData: BiometricData = {
-      faceId: `face_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      landmarks: [
-        // Simulated facial landmarks
-        {
-          type: "leftEye" as any,
-          positions: [{ x: 100, y: 150 }],
-        },
-        {
-          type: "rightEye" as any,
-          positions: [{ x: 200, y: 150 }],
-        },
-        {
-          type: "nose" as any,
-          positions: [{ x: 150, y: 200 }],
-        },
-        {
-          type: "mouth" as any,
-          positions: [{ x: 150, y: 250 }],
-        },
-      ],
-      bounds: {
-        origin: { x: 50, y: 100 },
-        size: { width: 200, height: 250 },
-      },
-      rollAngle: Math.random() * 10 - 5, // -5 to 5 degrees
-      yawAngle: Math.random() * 20 - 10, // -10 to 10 degrees
-      smilingProbability: Math.random(),
-      leftEyeOpenProbability: 0.8 + Math.random() * 0.2, // 0.8 to 1.0
-      rightEyeOpenProbability: 0.8 + Math.random() * 0.2, // 0.8 to 1.0
-      timestamp: Date.now(),
-    }
-
-    return biometricData
-  }
-
   private static async generateBiometricHash(biometricData: BiometricData): Promise<string> {
     try {
-      // Create a unique fingerprint from biometric features
+      // Create a unique fingerprint from face descriptor
+      const descriptorArray = Array.from(biometricData.descriptor)
+
+      // Combine with landmarks for additional uniqueness
       const features = {
-        landmarks: biometricData.landmarks.map((landmark) => ({
-          type: landmark.type,
-          positions: landmark.positions,
-        })),
-        bounds: biometricData.bounds,
-        rollAngle: Math.round(biometricData.rollAngle * 100) / 100,
-        yawAngle: Math.round(biometricData.yawAngle * 100) / 100,
-        eyeRatio: biometricData.leftEyeOpenProbability + biometricData.rightEyeOpenProbability,
+        descriptor: descriptorArray,
+        landmarkCount: biometricData.landmarks.length,
+        confidence: Math.round(biometricData.confidence * 1000) / 1000,
+        timestamp: biometricData.timestamp,
       }
 
-      // Convert to string and hash
+      // Convert to string and create hash
       const featuresString = JSON.stringify(features)
-      const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, featuresString)
 
-      return hash
+      // Use Web Crypto API for hashing
+      const encoder = new TextEncoder()
+      const data = encoder.encode(featuresString)
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+
+      // Convert to hex string
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+
+      return hashHex
     } catch (error) {
       console.error("Error generating biometric hash:", error)
       throw error
@@ -166,14 +171,9 @@ export class BiometricService {
   }
 
   private static calculateSimilarity(hash1: string, hash2: string): number {
-    // Simple similarity calculation for demonstration
-    // In a real implementation, you would use more sophisticated algorithms
+    if (hash1 === hash2) return 1.0
 
-    if (hash1 === hash2) {
-      return 1.0
-    }
-
-    // Calculate character-level similarity
+    // Calculate Hamming distance
     let matches = 0
     const minLength = Math.min(hash1.length, hash2.length)
 
@@ -185,78 +185,35 @@ export class BiometricService {
 
     const similarity = matches / Math.max(hash1.length, hash2.length)
 
-    // Add some randomness to simulate real biometric matching
-    const variance = (Math.random() - 0.5) * 0.1 // ±5% variance
+    // Add some variance to simulate real biometric matching
+    const variance = (Math.random() - 0.5) * 0.1
     return Math.max(0, Math.min(1, similarity + variance))
   }
 
-  static async detectFacesInImage(imageUri: string): Promise<FaceDetector.FaceFeature[]> {
-    try {
-      const faces = await FaceDetector.detectFacesAsync(imageUri, this.FACE_DETECTION_OPTIONS)
-      return faces
-    } catch (error) {
-      console.error("Error detecting faces:", error)
-      return []
-    }
+  static async createCameraPreview(): Promise<HTMLVideoElement> {
+    const video = document.createElement("video")
+    video.style.width = "100%"
+    video.style.height = "100%"
+    video.style.objectFit = "cover"
+    video.autoplay = true
+    video.muted = true
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: "user",
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+    })
+
+    video.srcObject = stream
+    return video
   }
 
-  static validateBiometricQuality(biometricData: BiometricData): {
-    isValid: boolean
-    issues: string[]
-  } {
-    const issues: string[] = []
-
-    // Check eye openness
-    if (biometricData.leftEyeOpenProbability < 0.7 || biometricData.rightEyeOpenProbability < 0.7) {
-      issues.push("Eyes should be open")
-    }
-
-    // Check face angle
-    if (Math.abs(biometricData.rollAngle) > 15) {
-      issues.push("Face should be straight (not tilted)")
-    }
-
-    if (Math.abs(biometricData.yawAngle) > 20) {
-      issues.push("Face should be looking forward")
-    }
-
-    // Check face size
-    if (biometricData.bounds.size.width < 100 || biometricData.bounds.size.height < 100) {
-      issues.push("Face should be closer to camera")
-    }
-
-    return {
-      isValid: issues.length === 0,
-      issues,
-    }
-  }
-
-  static async generateBiometricTemplate(faces: FaceDetector.FaceFeature[]): Promise<string | null> {
-    if (faces.length === 0) {
-      return null
-    }
-
-    try {
-      // Use the first detected face
-      const face = faces[0]
-
-      const template = {
-        bounds: face.bounds,
-        rollAngle: face.rollAngle,
-        yawAngle: face.yawAngle,
-        smilingProbability: face.smilingProbability,
-        leftEyeOpenProbability: face.leftEyeOpenProbability,
-        rightEyeOpenProbability: face.rightEyeOpenProbability,
-        timestamp: Date.now(),
-      }
-
-      const templateString = JSON.stringify(template)
-      const hash = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, templateString)
-
-      return hash
-    } catch (error) {
-      console.error("Error generating biometric template:", error)
-      return null
+  static stopCameraStream(video: HTMLVideoElement): void {
+    const stream = video.srcObject as MediaStream
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop())
     }
   }
 }
