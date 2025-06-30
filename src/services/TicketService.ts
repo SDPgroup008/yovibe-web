@@ -3,7 +3,7 @@ import PaymentService from "./PaymentService"
 import BiometricService from "./BiometricService"
 import QRCodeService from "./QRCodeService"
 import NotificationService from "./NotificationService"
-import type { Ticket, TicketValidation } from "../models/Ticket"
+import type { Ticket, TicketValidation, TicketType } from "../models/Ticket"
 import type { Event } from "../models/Event"
 
 export class TicketService {
@@ -13,11 +13,17 @@ export class TicketService {
     buyerName: string,
     buyerEmail: string,
     quantity: number,
-    biometricHash: string,
-    paymentMethod: any,
+    ticketType: TicketType,
+    biometricHash?: string,
+    paymentMethod?: any,
   ): Promise<Ticket> {
     try {
-      console.log("Starting ticket purchase process...")
+      console.log("Starting ticket purchase process...", { ticketType, quantity })
+
+      // Validate biometric data for secure tickets
+      if (ticketType === "secure" && !biometricHash) {
+        throw new Error("Biometric data is required for secure tickets")
+      }
 
       const ticketPrice = Number.parseInt(event.entryFee?.replace(/[^0-9]/g, "") || "0")
       const totalAmount = ticketPrice * quantity
@@ -33,10 +39,10 @@ export class TicketService {
       }
 
       // Generate unique ticket ID
-      const ticketId = `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      const ticketId = `ticket_${ticketType}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-      // Generate QR code
-      const qrCode = await QRCodeService.generateQRCode(ticketId, event.id, buyerId)
+      // Generate QR code with ticket type
+      const qrCode = await QRCodeService.generateQRCode(ticketId, event.id, buyerId, ticketType)
 
       // Create ticket
       const ticket: Ticket = {
@@ -52,7 +58,8 @@ export class TicketService {
         appCommission: paymentIntent.appCommission,
         purchaseDate: new Date(),
         qrCode,
-        biometricHash,
+        ticketType,
+        biometricHash: ticketType === "secure" ? biometricHash : undefined,
         status: "active",
         validationHistory: [],
       }
@@ -63,7 +70,7 @@ export class TicketService {
       // Send notification to event owner
       await NotificationService.notifyTicketPurchase(event, ticket)
 
-      console.log("Ticket purchase completed successfully:", ticketId)
+      console.log("Ticket purchase completed successfully:", ticketId, "Type:", ticketType)
       return ticket
     } catch (error) {
       console.error("Error purchasing ticket:", error)
@@ -73,8 +80,8 @@ export class TicketService {
 
   static async validateTicket(
     qrCodeData: string,
-    capturedBiometricData: string,
-    validatorId: string,
+    capturedBiometricData?: string,
+    validatorId?: string,
     location?: string,
   ): Promise<{ success: boolean; reason?: string; ticket?: Ticket }> {
     try {
@@ -103,26 +110,58 @@ export class TicketService {
         }
       }
 
-      // Verify biometric data
-      const biometricMatch = await BiometricService.verifyBiometric(ticket.biometricHash, capturedBiometricData)
-
-      if (!biometricMatch) {
-        // Log failed validation
-        const validation: TicketValidation = {
-          id: `val_${Date.now()}`,
-          ticketId: ticket.id,
-          validatedAt: new Date(),
-          validatedBy: validatorId,
-          biometricMatch: false,
-          location,
-          status: "denied",
-          reason: "Biometric verification failed",
-        }
-
-        await this.logValidation(validation)
+      // Verify ticket type matches QR data
+      if (ticket.ticketType !== qrData.ticketType) {
         return {
           success: false,
-          reason: "Biometric verification failed",
+          reason: "Ticket type mismatch",
+        }
+      }
+
+      let biometricMatch = true
+      let validationReason: string | undefined
+
+      // For secure tickets, verify biometric data
+      if (ticket.ticketType === "secure") {
+        if (!capturedBiometricData) {
+          return {
+            success: false,
+            reason: "Biometric verification required for secure tickets",
+          }
+        }
+
+        if (!ticket.biometricHash) {
+          return {
+            success: false,
+            reason: "No biometric data found for secure ticket",
+          }
+        }
+
+        biometricMatch = await BiometricService.verifyBiometric(ticket.biometricHash, capturedBiometricData)
+
+        if (!biometricMatch) {
+          validationReason = "Biometric verification failed"
+        }
+      }
+
+      // Log validation attempt
+      const validation: TicketValidation = {
+        id: `val_${Date.now()}`,
+        ticketId: ticket.id,
+        validatedAt: new Date(),
+        validatedBy: validatorId || "unknown",
+        biometricMatch: ticket.ticketType === "secure" ? biometricMatch : undefined,
+        location,
+        status: biometricMatch ? "granted" : "denied",
+        reason: validationReason,
+      }
+
+      await this.logValidation(validation)
+
+      if (!biometricMatch) {
+        return {
+          success: false,
+          reason: validationReason,
           ticket,
         }
       }
@@ -130,23 +169,10 @@ export class TicketService {
       // Mark ticket as used
       await FirebaseService.updateTicket(ticket.id, { status: "used" })
 
-      // Log successful validation
-      const validation: TicketValidation = {
-        id: `val_${Date.now()}`,
-        ticketId: ticket.id,
-        validatedAt: new Date(),
-        validatedBy: validatorId,
-        biometricMatch: true,
-        location,
-        status: "granted",
-      }
-
-      await this.logValidation(validation)
-
       // Send notification
       await NotificationService.notifyTicketValidation(ticket, validation)
 
-      console.log("Ticket validation successful:", ticket.id)
+      console.log("Ticket validation successful:", ticket.id, "Type:", ticket.ticketType)
       return { success: true, ticket }
     } catch (error) {
       console.error("Error validating ticket:", error)
@@ -236,6 +262,8 @@ export class TicketService {
 
       const report = {
         totalTickets: tickets.length,
+        regularTickets: tickets.filter((t) => t.ticketType === "regular").length,
+        secureTickets: tickets.filter((t) => t.ticketType === "secure").length,
         activeTickets: tickets.filter((t) => t.status === "active").length,
         usedTickets: tickets.filter((t) => t.status === "used").length,
         cancelledTickets: tickets.filter((t) => t.status === "cancelled").length,
