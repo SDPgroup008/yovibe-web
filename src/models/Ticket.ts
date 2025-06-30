@@ -1,4 +1,6 @@
 export type TicketType = "regular" | "secure"
+export type TicketStatus = "active" | "used" | "cancelled" | "expired"
+export type ValidationStatus = "granted" | "denied"
 
 export interface Ticket {
   id: string
@@ -15,7 +17,7 @@ export interface Ticket {
   qrCode: string
   ticketType: TicketType
   biometricHash?: string // Only for secure tickets
-  status: "active" | "used" | "cancelled"
+  status: TicketStatus
   validationHistory: TicketValidation[]
   cancelReason?: string
   cancelledAt?: Date
@@ -26,9 +28,9 @@ export interface TicketValidation {
   ticketId: string
   validatedAt: Date
   validatedBy: string
-  biometricMatch?: boolean // Only applicable for secure tickets
+  biometricMatch?: boolean // Only for secure tickets
   location?: string
-  status: "granted" | "denied"
+  status: ValidationStatus
   reason?: string
 }
 
