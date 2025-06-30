@@ -16,7 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
-import BiometricService from "../services/BiometricService"
+import { BiometricService } from "../services/BiometricService"
 import PaymentService, { type PaymentMethod } from "../services/PaymentService"
 import type { Event } from "../models/Event"
 import type { TicketType } from "../models/Ticket"
