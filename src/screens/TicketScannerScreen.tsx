@@ -2,304 +2,230 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Dimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { useAuth } from "../contexts/AuthContext"
-import TicketService from "../services/TicketService"
+import QRCodeService, { type QRScanResult } from "../services/QRCodeService"
 import { BiometricService } from "../services/BiometricService"
-import QRCodeService from "../services/QRCodeService"
-import type { TicketScannerScreenProps } from "../navigation/types"
-import type { QRCodeData } from "../services/QRCodeService"
+import TicketService from "../services/TicketService"
+
+interface TicketScannerScreenProps {
+  navigation: any
+}
+
+const { width, height } = Dimensions.get("window")
 
 const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation }) => {
-  const { user } = useAuth()
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null)
-  const [scanning, setScanning] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
+  const [cameraPermission, setCameraPermission] = useState<boolean | null>(null)
+  const [scanResult, setScanResult] = useState<QRScanResult | null>(null)
   const [validating, setValidating] = useState(false)
-  const [showCamera, setShowCamera] = useState(false)
-  const [scannedData, setScannedData] = useState<string | null>(null)
-  const [qrCodeInfo, setQrCodeInfo] = useState<QRCodeData | null>(null)
-  const [showBiometricCapture, setShowBiometricCapture] = useState(false)
+  const [biometricRequired, setBiometricRequired] = useState(false)
+
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
-    requestCameraPermissions()
+    requestCameraPermission()
     return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current)
-      }
+      stopScanning()
     }
   }, [])
 
-  const requestCameraPermissions = async () => {
+  const requestCameraPermission = async () => {
     try {
-      const isAvailable = await BiometricService.isAvailable()
-      setHasPermission(isAvailable)
+      const hasPermission = await BiometricService.requestCameraPermission()
+      setCameraPermission(hasPermission)
+      if (hasPermission) {
+        startScanning()
+      }
     } catch (error) {
-      console.error("Error requesting camera permissions:", error)
-      setHasPermission(false)
+      console.error("Camera permission error:", error)
+      setCameraPermission(false)
     }
   }
 
-  const handleStartScanning = async () => {
-    if (!hasPermission) {
-      Alert.alert("Permission Required", "Camera permission is required to scan tickets")
-      return
-    }
-
-    setShowCamera(true)
-    setScanning(true)
-
+  const startScanning = async () => {
     try {
-      if (videoRef.current) {
-        await BiometricService.startCameraPreview(videoRef.current)
-        startQRScanning()
+      setIsScanning(true)
+      const stream = await BiometricService.startCamera()
+
+      if (stream && videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.play()
+
+        // Start scanning for QR codes
+        scanIntervalRef.current = setInterval(scanForQRCode, 500)
       }
     } catch (error) {
       console.error("Error starting camera:", error)
-      Alert.alert("Camera Error", "Failed to start camera")
-      setShowCamera(false)
-      setScanning(false)
+      Alert.alert("Error", "Failed to start camera")
+      setIsScanning(false)
     }
   }
 
-  const startQRScanning = () => {
+  const stopScanning = () => {
+    setIsScanning(false)
+    BiometricService.stopCamera()
+
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
+      scanIntervalRef.current = null
     }
+  }
 
-    scanIntervalRef.current = setInterval(async () => {
-      if (videoRef.current && scanning) {
-        try {
-          const qrData = await QRCodeService.scanQRCodeFromVideo(videoRef.current)
-          if (qrData) {
-            handleQRCodeDetected(qrData)
-          }
-        } catch (error) {
-          console.error("Error scanning QR code:", error)
+  const scanForQRCode = async () => {
+    if (!videoRef.current || !isScanning) return
+
+    try {
+      const result = await QRCodeService.scanFromVideo(videoRef.current)
+      if (result.success && result.data) {
+        setScanResult(result)
+        stopScanning()
+
+        // Check if biometric verification is required
+        const requiresBiometric = await checkBiometricRequirement(result.data.ticketId)
+        setBiometricRequired(requiresBiometric)
+
+        if (!requiresBiometric) {
+          validateTicket(result.data.ticketId, result.data)
         }
       }
-    }, 500) // Scan every 500ms
-  }
-
-  const handleQRCodeDetected = (data: string) => {
-    if (!scanning) return
-
-    console.log("QR Code scanned:", data.substring(0, 50) + "...")
-    setScannedData(data)
-    setScanning(false)
-    setShowCamera(false)
-
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-    }
-
-    BiometricService.stopCameraPreview()
-
-    // Parse QR code to determine ticket type
-    try {
-      const decodedString = atob(data)
-      const qrData: QRCodeData = JSON.parse(decodedString)
-      setQrCodeInfo(qrData)
-
-      if (qrData.ticketType === "secure") {
-        // For secure tickets, require biometric verification
-        setShowBiometricCapture(true)
-      } else {
-        // For regular tickets, validate immediately
-        handleValidateTicket(data)
-      }
     } catch (error) {
-      Alert.alert("Invalid QR Code", "The scanned QR code is not valid")
-      setScannedData(null)
+      console.error("QR scan error:", error)
     }
   }
 
-  const handleValidateTicket = async (qrData: string, biometricData?: string) => {
-    if (!user) {
-      Alert.alert("Error", "Please sign in to validate tickets")
-      return
-    }
+  const checkBiometricRequirement = async (ticketId: string): Promise<boolean> => {
+    // In a real implementation, you would check the ticket's security level
+    // For now, we'll require biometric for all tickets
+    return true
+  }
+
+  const handleBiometricCapture = async () => {
+    if (!scanResult?.data) return
 
     try {
       setValidating(true)
 
-      const result = await TicketService.validateTicket(qrData, biometricData, user.id, "Event Entrance")
+      // Start camera for biometric capture
+      const stream = await BiometricService.startCamera()
+      if (!stream || !videoRef.current) {
+        throw new Error("Failed to start camera for biometric capture")
+      }
 
-      if (result.success && result.ticket) {
-        const ticketTypeText = result.ticket.ticketType === "secure" ? "Secure Ticket" : "Regular Ticket"
-        const securityInfo =
-          result.ticket.ticketType === "secure"
-            ? "\n🔒 Biometric verification successful"
-            : "\n📱 QR code verification successful"
+      videoRef.current.srcObject = stream
+      await videoRef.current.play()
 
+      // Wait a moment for the camera to stabilize
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Capture biometric data
+      const biometricResult = await BiometricService.processForTicketValidation(videoRef.current)
+
+      if (biometricResult.success && biometricResult.biometricData) {
+        await validateTicket(scanResult.data.ticketId, scanResult.data, biometricResult.biometricData.hash)
+      } else {
+        Alert.alert("Biometric Capture Failed", biometricResult.error || "Please try again")
+      }
+    } catch (error) {
+      console.error("Biometric capture error:", error)
+      Alert.alert("Error", "Failed to capture biometric data")
+    } finally {
+      setValidating(false)
+      BiometricService.stopCamera()
+    }
+  }
+
+  const validateTicket = async (ticketId: string, qrData: any, biometricHash?: string) => {
+    try {
+      setValidating(true)
+
+      const result = await TicketService.validateTicket(ticketId, qrData, biometricHash)
+
+      if (result.success) {
         Alert.alert(
-          "✅ Entry Granted",
-          `${ticketTypeText} validated successfully!${securityInfo}\n\nTicket ID: ${result.ticket.id}\nEvent: ${result.ticket.eventName}\nHolder: ${result.ticket.buyerName}`,
+          "Ticket Valid! ✅",
+          `${result.message}\n\nTicket: ${ticketId}\nEvent: ${result.ticket?.eventName}`,
           [
             {
-              text: "OK",
+              text: "Scan Another",
               onPress: () => {
-                resetScanner()
+                setScanResult(null)
+                setBiometricRequired(false)
+                startScanning()
               },
+            },
+            {
+              text: "Done",
+              onPress: () => navigation.goBack(),
             },
           ],
         )
       } else {
-        const ticketTypeText = qrCodeInfo?.ticketType === "secure" ? "Secure Ticket" : "Regular Ticket"
-        Alert.alert("❌ Entry Denied", `${ticketTypeText} validation failed: ${result.reason}`, [
+        Alert.alert("Invalid Ticket ❌", result.error || result.message, [
           {
-            text: "OK",
+            text: "Try Again",
             onPress: () => {
-              resetScanner()
+              setScanResult(null)
+              setBiometricRequired(false)
+              startScanning()
             },
           },
         ])
       }
     } catch (error) {
+      console.error("Ticket validation error:", error)
       Alert.alert("Error", "Failed to validate ticket")
-      resetScanner()
     } finally {
       setValidating(false)
-      setShowBiometricCapture(false)
     }
   }
 
-  const handleBiometricCapture = async () => {
-    if (!scannedData) {
-      Alert.alert("Error", "No ticket data found")
-      return
-    }
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
 
     try {
       setValidating(true)
+      const result = await QRCodeService.scanFromFile(file)
 
-      Alert.alert(
-        "Biometric Verification Required",
-        "This is a secure ticket. Please ask the ticket holder to look at the camera for biometric verification.",
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => {
-              setShowBiometricCapture(false)
-              resetScanner()
-            },
-          },
-          {
-            text: "Start Biometric Scan",
-            onPress: async () => {
-              try {
-                const biometricData = await BiometricService.captureBiometric()
-                await handleValidateTicket(scannedData, biometricData)
-              } catch (error) {
-                Alert.alert("Error", "Failed to capture biometric data")
-                setShowBiometricCapture(false)
-                resetScanner()
-              }
-            },
-          },
-        ],
-      )
+      if (result.success && result.data) {
+        setScanResult(result)
+        const requiresBiometric = await checkBiometricRequirement(result.data.ticketId)
+        setBiometricRequired(requiresBiometric)
+
+        if (!requiresBiometric) {
+          await validateTicket(result.data.ticketId, result.data)
+        }
+      } else {
+        Alert.alert("Scan Failed", result.error || "No QR code found in image")
+      }
     } catch (error) {
-      Alert.alert("Error", "Failed to start biometric verification")
-      setShowBiometricCapture(false)
-      resetScanner()
+      console.error("File upload error:", error)
+      Alert.alert("Error", "Failed to scan uploaded image")
     } finally {
       setValidating(false)
     }
   }
 
-  const handleManualEntry = () => {
-    Alert.prompt(
-      "Manual Ticket Entry",
-      "Enter ticket ID or QR code data:",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Validate",
-          onPress: async (ticketData) => {
-            if (ticketData) {
-              try {
-                // Try to parse as QR code data first
-                const decodedString = atob(ticketData)
-                const qrData: QRCodeData = JSON.parse(decodedString)
-                setQrCodeInfo(qrData)
-                setScannedData(ticketData)
-
-                if (qrData.ticketType === "secure") {
-                  setShowBiometricCapture(true)
-                } else {
-                  await handleValidateTicket(ticketData)
-                }
-              } catch (error) {
-                // If parsing fails, treat as regular ticket ID
-                await handleValidateTicket(ticketData)
-              }
-            }
-          },
-        },
-      ],
-      "plain-text",
-    )
-  }
-
-  const handleFileUpload = () => {
-    const input = document.createElement("input")
-    input.type = "file"
-    input.accept = "image/*"
-    input.onchange = async (event) => {
-      const file = (event.target as HTMLInputElement).files?.[0]
-      if (file) {
-        try {
-          const qrData = await QRCodeService.scanQRCodeFromImage(file)
-          if (qrData) {
-            handleQRCodeDetected(qrData)
-          } else {
-            Alert.alert("No QR Code Found", "No QR code was detected in the uploaded image")
-          }
-        } catch (error) {
-          Alert.alert("Error", "Failed to scan QR code from image")
-        }
-      }
-    }
-    input.click()
-  }
-
-  const resetScanner = () => {
-    setScannedData(null)
-    setQrCodeInfo(null)
-    setShowBiometricCapture(false)
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-    }
-    BiometricService.stopCameraPreview()
-  }
-
-  const stopScanning = () => {
-    setShowCamera(false)
-    setScanning(false)
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-    }
-    BiometricService.stopCameraPreview()
-  }
-
-  if (hasPermission === null) {
+  if (cameraPermission === null) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.permissionText}>Requesting camera permission...</Text>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Requesting camera permission...</Text>
       </View>
     )
   }
 
-  if (hasPermission === false) {
+  if (cameraPermission === false) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.permissionText}>No access to camera</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestCameraPermissions}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+      <View style={styles.errorContainer}>
+        <Ionicons name="camera-off" size={64} color="#666" />
+        <Text style={styles.errorText}>Camera permission denied</Text>
+        <Text style={styles.errorSubtext}>Please enable camera access to scan QR codes</Text>
+        <TouchableOpacity style={styles.retryButton} onPress={requestCameraPermission}>
+          <Text style={styles.retryButtonText}>Try Again</Text>
         </TouchableOpacity>
       </View>
     )
@@ -307,202 +233,64 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ticket Scanner</Text>
-      </View>
+      {/* Camera View */}
+      <View style={styles.cameraContainer}>
+        <video ref={videoRef} style={styles.camera} autoPlay playsInline muted />
 
-      <View style={styles.content}>
-        <View style={styles.scannerArea}>
-          <Ionicons name="qr-code" size={120} color="#2196F3" />
-          <Text style={styles.scannerText}>Scan ticket QR code or upload image</Text>
-        </View>
-
-        <View style={styles.instructions}>
-          <Text style={styles.instructionTitle}>Validation Process:</Text>
-          <Text style={styles.instructionText}>
-            1. Scan the ticket QR code{"\n"}
-            2. For regular tickets: Entry granted immediately{"\n"}
-            3. For secure tickets: Biometric verification required{"\n"}
-            4. Grant or deny entry based on validation result
-          </Text>
-        </View>
-
-        <View style={styles.ticketTypeInfo}>
-          <Text style={styles.ticketTypeTitle}>Supported Ticket Types:</Text>
-          <View style={styles.ticketTypeItem}>
-            <Ionicons name="qr-code" size={20} color="#4CAF50" />
-            <Text style={styles.ticketTypeText}>Regular Tickets - QR code only</Text>
+        {/* Scanning Overlay */}
+        {isScanning && (
+          <View style={styles.scanningOverlay}>
+            <View style={styles.scanFrame} />
+            <Text style={styles.scanningText}>Position QR code within the frame</Text>
           </View>
-          <View style={styles.ticketTypeItem}>
-            <Ionicons name="shield-checkmark" size={20} color="#FF9800" />
-            <Text style={styles.ticketTypeText}>Secure Tickets - QR code + Biometric</Text>
-          </View>
-        </View>
+        )}
 
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity
-            style={[styles.scanButton, (scanning || validating) && styles.scanButtonDisabled]}
-            onPress={handleStartScanning}
-            disabled={scanning || validating}
-          >
-            {scanning ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="scan" size={24} color="#FFFFFF" />
-                <Text style={styles.scanButtonText}>Scan QR Code</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.uploadButton, validating && styles.scanButtonDisabled]}
-            onPress={handleFileUpload}
-            disabled={validating}
-          >
-            <Ionicons name="cloud-upload" size={24} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>Upload Image</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.manualButton, validating && styles.scanButtonDisabled]}
-            onPress={handleManualEntry}
-            disabled={validating}
-          >
-            <Ionicons name="keypad" size={24} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>Manual Entry</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.statusSection}>
-          <Text style={styles.statusTitle}>Scanner Status</Text>
-          <View style={styles.statusItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.statusText}>Camera Ready</Text>
-          </View>
-          <View style={styles.statusItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.statusText}>Biometric Scanner Ready</Text>
-          </View>
-          <View style={styles.statusItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.statusText}>Network Connected</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Camera Modal */}
-      <Modal visible={showCamera} animationType="slide" onRequestClose={stopScanning}>
-        <View style={styles.cameraContainer}>
-          <View style={styles.cameraHeader}>
-            <TouchableOpacity onPress={stopScanning}>
-              <Ionicons name="close" size={30} color="#FFFFFF" />
-            </TouchableOpacity>
-            <Text style={styles.cameraTitle}>Scan QR Code</Text>
-          </View>
-
-          <div style={{ flex: 1, position: "relative" }}>
-            <video
-              ref={videoRef}
-              style={{
-                width: "100%",
-                height: "100%",
-                objectFit: "cover",
-              }}
-              autoPlay
-              muted
-              playsInline
-            />
-
-            <div
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "50%",
-                transform: "translate(-50%, -50%)",
-                width: "250px",
-                height: "250px",
-                border: "2px solid #2196F3",
-                borderRadius: "12px",
-                backgroundColor: "transparent",
-              }}
-            />
-
-            <div
-              style={{
-                position: "absolute",
-                bottom: "20px",
-                left: "50%",
-                transform: "translateX(-50%)",
-                backgroundColor: "rgba(0, 0, 0, 0.7)",
-                color: "white",
-                padding: "10px",
-                borderRadius: "8px",
-                textAlign: "center",
-              }}
-            >
-              Position the QR code within the frame
-            </div>
-          </div>
-        </View>
-      </Modal>
-
-      {/* Biometric Capture Modal */}
-      <Modal
-        visible={showBiometricCapture}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => {
-          setShowBiometricCapture(false)
-          resetScanner()
-        }}
-      >
-        <View style={styles.biometricModalOverlay}>
-          <View style={styles.biometricModalContent}>
-            <Ionicons name="shield-checkmark" size={48} color="#FF9800" />
-            <Text style={styles.biometricModalTitle}>Secure Ticket Detected</Text>
-            <Text style={styles.biometricModalText}>
-              This is a secure ticket that requires biometric verification. Please capture the ticket holder's biometric
-              data to complete validation.
-            </Text>
-
-            <View style={styles.ticketInfo}>
-              <Text style={styles.ticketInfoLabel}>Ticket Type:</Text>
-              <Text style={styles.ticketInfoValue}>🔒 Secure Ticket</Text>
+        {/* QR Code Found Overlay */}
+        {scanResult && !biometricRequired && (
+          <View style={styles.resultOverlay}>
+            <View style={styles.resultCard}>
+              <Ionicons name="qr-code" size={48} color="#4CAF50" />
+              <Text style={styles.resultText}>QR Code Detected!</Text>
+              <Text style={styles.resultSubtext}>Validating ticket...</Text>
             </View>
+          </View>
+        )}
 
-            <View style={styles.biometricModalButtons}>
-              <TouchableOpacity
-                style={styles.biometricCancelButton}
-                onPress={() => {
-                  setShowBiometricCapture(false)
-                  resetScanner()
-                }}
-              >
-                <Text style={styles.biometricCancelText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.biometricStartButton}
-                onPress={handleBiometricCapture}
-                disabled={validating}
-              >
+        {/* Biometric Required Overlay */}
+        {biometricRequired && (
+          <View style={styles.resultOverlay}>
+            <View style={styles.resultCard}>
+              <Ionicons name="finger-print" size={48} color="#FF9800" />
+              <Text style={styles.resultText}>Biometric Verification Required</Text>
+              <Text style={styles.resultSubtext}>Please look at the camera for face verification</Text>
+              <TouchableOpacity style={styles.biometricButton} onPress={handleBiometricCapture} disabled={validating}>
                 {validating ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <>
-                    <Ionicons name="eye" size={20} color="#FFFFFF" />
-                    <Text style={styles.biometricStartText}>Start Verification</Text>
-                  </>
+                  <Text style={styles.biometricButtonText}>Capture Biometric</Text>
                 )}
               </TouchableOpacity>
             </View>
           </View>
+        )}
+      </View>
+
+      {/* Controls */}
+      <View style={styles.controls}>
+        <TouchableOpacity style={styles.controlButton} onPress={isScanning ? stopScanning : startScanning}>
+          <Ionicons name={isScanning ? "stop" : "play"} size={24} color="#FFFFFF" />
+          <Text style={styles.controlButtonText}>{isScanning ? "Stop Scanning" : "Start Scanning"}</Text>
+        </TouchableOpacity>
+
+        {/* File Upload Option */}
+        <View style={styles.uploadContainer}>
+          <Text style={styles.uploadText}>Or upload QR code image:</Text>
+          <input type="file" accept="image/*" onChange={handleFileUpload} style={styles.fileInput} />
         </View>
-      </Modal>
+      </View>
+
+      {/* Hidden canvas for image processing */}
+      <canvas ref={canvasRef} style={{ display: "none" }} />
     </View>
   )
 }
@@ -512,250 +300,158 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#121212",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
-  },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginLeft: 16,
-  },
-  content: {
+  loadingContainer: {
     flex: 1,
-    padding: 16,
-  },
-  scannerArea: {
-    alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 40,
-    marginBottom: 24,
+    alignItems: "center",
+    backgroundColor: "#121212",
   },
-  scannerText: {
-    fontSize: 16,
-    color: "#DDDDDD",
-    textAlign: "center",
+  loadingText: {
+    color: "#FFFFFF",
     marginTop: 16,
-    lineHeight: 24,
-  },
-  instructions: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  instructionTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 12,
-  },
-  instructionText: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    lineHeight: 20,
-  },
-  ticketTypeInfo: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 24,
-  },
-  ticketTypeTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 12,
   },
-  ticketTypeItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  ticketTypeText: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    marginLeft: 8,
-  },
-  buttonContainer: {
-    marginBottom: 24,
-  },
-  scanButton: {
-    flexDirection: "row",
-    alignItems: "center",
+  errorContainer: {
+    flex: 1,
     justifyContent: "center",
-    backgroundColor: "#2196F3",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  uploadButton: {
-    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: "#121212",
+    padding: 32,
   },
-  manualButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF9800",
-    padding: 16,
-    borderRadius: 8,
-  },
-  scanButtonDisabled: {
-    backgroundColor: "#666666",
-  },
-  scanButtonText: {
+  errorText: {
     color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
-    marginLeft: 8,
-  },
-  statusSection: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
-  },
-  statusTitle: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 12,
-  },
-  statusItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  statusText: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    marginLeft: 8,
-  },
-  permissionText: {
-    fontSize: 18,
-    color: "#FFFFFF",
+    marginTop: 16,
     textAlign: "center",
-    marginTop: 100,
   },
-  permissionButton: {
+  errorSubtext: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  retryButton: {
     backgroundColor: "#2196F3",
-    padding: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 8,
-    margin: 20,
+    marginTop: 24,
   },
-  permissionButtonText: {
+  retryButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
-    textAlign: "center",
   },
   cameraContainer: {
     flex: 1,
-    backgroundColor: "#000000",
+    position: "relative",
   },
-  cameraHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-  },
-  cameraTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginLeft: 16,
-  },
-  biometricModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
+  camera: {
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+  } as any,
+  scanningOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  biometricModalContent: {
-    backgroundColor: "#1E1E1E",
+  scanFrame: {
+    width: 250,
+    height: 250,
+    borderWidth: 2,
+    borderColor: "#2196F3",
     borderRadius: 12,
-    padding: 24,
-    width: "85%",
-    maxWidth: 400,
-    alignItems: "center",
+    backgroundColor: "transparent",
   },
-  biometricModalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+  scanningText: {
     color: "#FFFFFF",
+    fontSize: 16,
+    marginTop: 24,
     textAlign: "center",
+  },
+  resultOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+  },
+  resultCard: {
+    backgroundColor: "#1E1E1E",
+    padding: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    marginHorizontal: 32,
+  },
+  resultText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
     marginTop: 16,
+    textAlign: "center",
+  },
+  resultSubtext: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  biometricButton: {
+    backgroundColor: "#FF9800",
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  biometricButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  controls: {
+    backgroundColor: "#1E1E1E",
+    padding: 16,
+  },
+  controlButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 16,
+    borderRadius: 8,
     marginBottom: 16,
   },
-  biometricModalText: {
-    fontSize: 16,
-    color: "#DDDDDD",
-    textAlign: "center",
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  ticketInfo: {
-    backgroundColor: "#333333",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 24,
-    width: "100%",
-  },
-  ticketInfoLabel: {
-    fontSize: 14,
-    color: "#AAAAAA",
-    marginBottom: 4,
-  },
-  ticketInfoValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  biometricModalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  biometricCancelButton: {
-    flex: 1,
-    backgroundColor: "#666666",
-    padding: 16,
-    borderRadius: 8,
-    marginRight: 8,
-  },
-  biometricCancelText: {
+  controlButtonText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
-    textAlign: "center",
+    marginLeft: 8,
   },
-  biometricStartButton: {
-    flex: 1,
-    flexDirection: "row",
+  uploadContainer: {
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF9800",
-    padding: 16,
-    borderRadius: 8,
-    marginLeft: 8,
   },
-  biometricStartText: {
+  uploadText: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    marginBottom: 8,
+  },
+  fileInput: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
+    backgroundColor: "#333",
+    padding: 8,
+    borderRadius: 4,
+    border: "1px solid #555",
+  } as any,
 })
 
 export default TicketScannerScreen
