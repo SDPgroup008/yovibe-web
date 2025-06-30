@@ -1,21 +1,31 @@
-import type { PaymentIntent } from "../models/Ticket"
-
 export interface PaymentMethod {
   id: string
   type: "mobile_money" | "card" | "bank_transfer"
   provider: string
-  isActive: boolean
+  enabled: boolean
+}
+
+export interface PaymentIntent {
+  id: string
+  amount: number
+  currency: string
+  eventId: string
+  buyerId: string
+  venueRevenue: number
+  appCommission: number
+  status: "pending" | "processing" | "succeeded" | "failed"
+  createdAt: Date
 }
 
 export interface PaymentResult {
   success: boolean
   transactionId?: string
   error?: string
-  amount?: number
 }
 
 export class PaymentService {
   private static readonly APP_COMMISSION_RATE = 0.05 // 5%
+  private static readonly CURRENCY = "UGX"
 
   static getAvailablePaymentMethods(): PaymentMethod[] {
     return [
@@ -23,63 +33,55 @@ export class PaymentService {
         id: "mtn_momo",
         type: "mobile_money",
         provider: "MTN Mobile Money",
-        isActive: true,
+        enabled: true,
       },
       {
         id: "airtel_money",
         type: "mobile_money",
         provider: "Airtel Money",
-        isActive: true,
+        enabled: true,
       },
       {
         id: "visa_card",
         type: "card",
         provider: "Visa Card",
-        isActive: true,
+        enabled: true,
       },
       {
         id: "mastercard",
         type: "card",
         provider: "Mastercard",
-        isActive: true,
+        enabled: true,
       },
       {
         id: "bank_transfer",
         type: "bank_transfer",
         provider: "Bank Transfer",
-        isActive: true,
+        enabled: true,
       },
     ]
   }
 
-  static calculateRevenueSplit(totalAmount: number): {
-    appCommission: number
-    venueRevenue: number
-  } {
+  static calculateRevenueSplit(totalAmount: number): { appCommission: number; venueRevenue: number } {
     const appCommission = Math.round(totalAmount * this.APP_COMMISSION_RATE)
     const venueRevenue = totalAmount - appCommission
 
-    return {
-      appCommission,
-      venueRevenue,
-    }
+    return { appCommission, venueRevenue }
   }
 
   static async createPaymentIntent(amount: number, eventId: string, buyerId: string): Promise<PaymentIntent> {
     try {
-      console.log("Creating payment intent for amount:", amount)
-
       const { appCommission, venueRevenue } = this.calculateRevenueSplit(amount)
 
       const paymentIntent: PaymentIntent = {
         id: `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         amount,
-        currency: "UGX",
-        status: "pending",
+        currency: this.CURRENCY,
         eventId,
         buyerId,
         venueRevenue,
         appCommission,
+        status: "pending",
         createdAt: new Date(),
       }
 
@@ -99,235 +101,105 @@ export class PaymentService {
     try {
       console.log("Processing payment:", paymentIntentId, "Method:", paymentMethod.provider)
 
-      // Simulate payment processing delay
+      // Simulate payment processing
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      // Simulate payment processing based on method type
-      switch (paymentMethod.type) {
-        case "mobile_money":
-          return await this.processMobileMoneyPayment(paymentMethod, amount)
+      // Simulate different success rates for different payment methods
+      const successRate = paymentMethod.type === "mobile_money" ? 0.95 : 0.98
+      const isSuccess = Math.random() < successRate
 
-        case "card":
-          return await this.processCardPayment(paymentMethod, amount)
+      if (isSuccess) {
+        const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
-        case "bank_transfer":
-          return await this.processBankTransferPayment(paymentMethod, amount)
+        console.log("Payment successful:", transactionId)
+        return {
+          success: true,
+          transactionId,
+        }
+      } else {
+        const errorMessages = ["Insufficient funds", "Payment method declined", "Network error", "Payment timeout"]
+        const error = errorMessages[Math.floor(Math.random() * errorMessages.length)]
 
-        default:
-          return {
-            success: false,
-            error: "Unsupported payment method",
-          }
+        console.log("Payment failed:", error)
+        return {
+          success: false,
+          error,
+        }
       }
     } catch (error) {
       console.error("Error processing payment:", error)
       return {
         success: false,
-        error: "Payment processing failed",
-      }
-    }
-  }
-
-  private static async processMobileMoneyPayment(paymentMethod: PaymentMethod, amount: number): Promise<PaymentResult> {
-    // Simulate mobile money payment processing
-    console.log(`Processing ${paymentMethod.provider} payment for UGX ${amount}`)
-
-    // In a real implementation, you would integrate with:
-    // - MTN MoMo API
-    // - Airtel Money API
-    // - Other mobile money providers
-
-    // Simulate success/failure (90% success rate)
-    const isSuccess = Math.random() > 0.1
-
-    if (isSuccess) {
-      return {
-        success: true,
-        transactionId: `momo_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        amount,
-      }
-    } else {
-      return {
-        success: false,
-        error: "Insufficient balance or payment declined",
-      }
-    }
-  }
-
-  private static async processCardPayment(paymentMethod: PaymentMethod, amount: number): Promise<PaymentResult> {
-    // Simulate card payment processing
-    console.log(`Processing ${paymentMethod.provider} payment for UGX ${amount}`)
-
-    // In a real implementation, you would integrate with:
-    // - Stripe
-    // - PayPal
-    // - Local payment processors
-
-    // Simulate success/failure (85% success rate)
-    const isSuccess = Math.random() > 0.15
-
-    if (isSuccess) {
-      return {
-        success: true,
-        transactionId: `card_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        amount,
-      }
-    } else {
-      const errors = ["Card declined", "Insufficient funds", "Invalid card details", "Payment timeout"]
-      return {
-        success: false,
-        error: errors[Math.floor(Math.random() * errors.length)],
-      }
-    }
-  }
-
-  private static async processBankTransferPayment(
-    paymentMethod: PaymentMethod,
-    amount: number,
-  ): Promise<PaymentResult> {
-    // Simulate bank transfer processing
-    console.log(`Processing ${paymentMethod.provider} payment for UGX ${amount}`)
-
-    // In a real implementation, you would integrate with:
-    // - Bank APIs
-    // - SWIFT network
-    // - Local banking systems
-
-    // Bank transfers typically have higher success rate but take longer
-    const isSuccess = Math.random() > 0.05
-
-    if (isSuccess) {
-      return {
-        success: true,
-        transactionId: `bank_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        amount,
-      }
-    } else {
-      return {
-        success: false,
-        error: "Bank transfer failed or account details invalid",
+        error: "Payment processing error",
       }
     }
   }
 
   static validatePaymentMethod(paymentMethod: PaymentMethod, paymentDetails: any): boolean {
-    switch (paymentMethod.type) {
-      case "mobile_money":
-        return this.validateMobileMoneyDetails(paymentDetails)
+    try {
+      switch (paymentMethod.type) {
+        case "mobile_money":
+          return (
+            paymentDetails.phoneNumber &&
+            paymentDetails.phoneNumber.length >= 10 &&
+            /^\+?[0-9]{10,15}$/.test(paymentDetails.phoneNumber)
+          )
 
-      case "card":
-        return this.validateCardDetails(paymentDetails)
+        case "card":
+          return (
+            paymentDetails.cardNumber &&
+            paymentDetails.expiryDate &&
+            paymentDetails.cvv &&
+            paymentDetails.cardNumber.replace(/\s/g, "").length >= 13 &&
+            /^[0-9]{3,4}$/.test(paymentDetails.cvv) &&
+            /^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(paymentDetails.expiryDate)
+          )
 
-      case "bank_transfer":
-        return this.validateBankTransferDetails(paymentDetails)
+        case "bank_transfer":
+          return paymentDetails.accountNumber && paymentDetails.bankCode && paymentDetails.accountNumber.length >= 8
 
-      default:
-        return false
+        default:
+          return false
+      }
+    } catch (error) {
+      console.error("Error validating payment method:", error)
+      return false
     }
-  }
-
-  private static validateMobileMoneyDetails(details: any): boolean {
-    const phoneNumber = details.phoneNumber
-    if (!phoneNumber) return false
-
-    // Basic phone number validation for Uganda
-    const ugandaPhoneRegex = /^(\+256|0)[7-9]\d{8}$/
-    return ugandaPhoneRegex.test(phoneNumber)
-  }
-
-  private static validateCardDetails(details: any): boolean {
-    const { cardNumber, expiryDate, cvv } = details
-
-    if (!cardNumber || !expiryDate || !cvv) return false
-
-    // Basic card number validation (Luhn algorithm would be better)
-    const cardNumberClean = cardNumber.replace(/\s/g, "")
-    if (cardNumberClean.length < 13 || cardNumberClean.length > 19) return false
-
-    // Basic expiry date validation
-    const expiryRegex = /^(0[1-9]|1[0-2])\/\d{2}$/
-    if (!expiryRegex.test(expiryDate)) return false
-
-    // Basic CVV validation
-    const cvvRegex = /^\d{3,4}$/
-    return cvvRegex.test(cvv)
-  }
-
-  private static validateBankTransferDetails(details: any): boolean {
-    const { accountNumber, bankCode } = details
-
-    if (!accountNumber || !bankCode) return false
-
-    // Basic account number validation
-    if (accountNumber.length < 8 || accountNumber.length > 20) return false
-
-    // Basic bank code validation
-    if (bankCode.length < 3 || bankCode.length > 10) return false
-
-    return true
   }
 
   static async refundPayment(paymentIntentId: string, amount: number): Promise<boolean> {
     try {
-      console.log("Processing refund for payment:", paymentIntentId, "Amount:", amount)
+      console.log("Processing refund:", paymentIntentId, "Amount:", amount)
 
       // Simulate refund processing
       await new Promise((resolve) => setTimeout(resolve, 1500))
 
-      // In a real implementation, you would:
-      // - Call the payment provider's refund API
-      // - Handle different refund policies
-      // - Update transaction records
+      // Simulate 90% success rate for refunds
+      const isSuccess = Math.random() < 0.9
 
-      // Simulate refund success (95% success rate)
-      const isSuccess = Math.random() > 0.05
-
-      if (isSuccess) {
-        console.log("Refund processed successfully")
-        return true
-      } else {
-        console.log("Refund failed")
-        return false
-      }
+      console.log("Refund result:", isSuccess ? "SUCCESS" : "FAILED")
+      return isSuccess
     } catch (error) {
       console.error("Error processing refund:", error)
       return false
     }
   }
 
-  static formatCurrency(amount: number, currency = "UGX"): string {
-    return `${currency} ${amount.toLocaleString()}`
-  }
-
-  static async getPaymentHistory(userId: string): Promise<any[]> {
-    // This would typically fetch from a database
-    // For now, return empty array
-    return []
-  }
-
-  static async getPaymentStatus(paymentIntentId: string): Promise<string> {
-    // This would typically check the payment status from the payment provider
-    // For simulation, return random status
-    const statuses = ["pending", "succeeded", "failed"]
-    return statuses[Math.floor(Math.random() * statuses.length)]
+  static async getPaymentStatus(paymentIntentId: string): Promise<PaymentIntent | null> {
+    try {
+      // In a real implementation, this would query the payment provider
+      console.log("Getting payment status:", paymentIntentId)
+      return null
+    } catch (error) {
+      console.error("Error getting payment status:", error)
+      return null
+    }
   }
 
   // Web-specific payment methods
-  static async initializeStripe(publishableKey: string): Promise<void> {
-    // Initialize Stripe for card payments
-    // This would load the Stripe SDK and configure it
-    console.log("Initializing Stripe with key:", publishableKey.substring(0, 10) + "...")
-  }
-
-  static async initializePayPal(clientId: string): Promise<void> {
-    // Initialize PayPal for payments
-    // This would load the PayPal SDK and configure it
-    console.log("Initializing PayPal with client ID:", clientId.substring(0, 10) + "...")
-  }
-
   static async processWebPayment(paymentData: any): Promise<PaymentResult> {
-    // Process web-specific payments (Stripe, PayPal, etc.)
     try {
+      // This would integrate with Stripe, PayPal, or other web payment processors
       console.log("Processing web payment:", paymentData)
 
       // Simulate web payment processing
@@ -335,14 +207,38 @@ export class PaymentService {
 
       return {
         success: true,
-        transactionId: `web_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        amount: paymentData.amount,
+        transactionId: `web_txn_${Date.now()}`,
       }
     } catch (error) {
+      console.error("Error processing web payment:", error)
       return {
         success: false,
         error: "Web payment processing failed",
       }
+    }
+  }
+
+  static async setupPaymentGateway(gatewayType: "stripe" | "paypal" | "flutterwave"): Promise<boolean> {
+    try {
+      console.log("Setting up payment gateway:", gatewayType)
+
+      // Gateway-specific setup logic would go here
+      switch (gatewayType) {
+        case "stripe":
+          // Initialize Stripe
+          break
+        case "paypal":
+          // Initialize PayPal
+          break
+        case "flutterwave":
+          // Initialize Flutterwave for African payments
+          break
+      }
+
+      return true
+    } catch (error) {
+      console.error("Error setting up payment gateway:", error)
+      return false
     }
   }
 }
