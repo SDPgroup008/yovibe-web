@@ -28,9 +28,11 @@ export interface TicketValidation {
   ticketId: string
   validatedAt: Date
   validatedBy: string
+  biometricHash?: string
+  validationType: "qr_only" | "biometric"
   biometricMatch?: boolean // Only for secure tickets
   location?: string
-  status: ValidationStatus
+  status?: ValidationStatus
   reason?: string
 }
 
