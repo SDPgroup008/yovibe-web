@@ -46,8 +46,8 @@ class FirebaseService {
     console.log("Firebase service initialized")
     this.app = initializeApp({
        apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
-  authDomain: "eco-guardian-bd74f.firebaseapp.com",
-  projectId: "eco-guardian-bd74f",
+        authDomain: "eco-guardian-bd74f.firebaseapp.com",
+        projectId: "eco-guardian-bd74f",
   storageBucket: "eco-guardian-bd74f.appspot.com",
   messagingSenderId: "917905910857",
   appId: "1:917905910857:android:5886ab1db46cec56912398",
@@ -1553,4 +1553,4 @@ class FirebaseService {
 
 // Export a singleton instance as default
 const firebaseService = FirebaseService.getInstance()
-export default firebaseService
+export default firebaseSe
