@@ -1,8 +1,15 @@
 export interface BiometricData {
-  faceImage: string
   hash: string
-  timestamp: Date
   confidence: number
+  timestamp: Date
+  features: number[]
+}
+
+export interface BiometricResult {
+  success: boolean
+  biometricData?: BiometricData
+  error?: string
+  message?: string
 }
 
 export interface BiometricVerificationResult {
@@ -12,120 +19,251 @@ export interface BiometricVerificationResult {
 }
 
 export class BiometricService {
-  private static instance: BiometricService
-  private stream: MediaStream | null = null
+  private static stream: MediaStream | null = null
+  private static isCapturing = false
 
-  static getInstance(): BiometricService {
-    if (!BiometricService.instance) {
-      BiometricService.instance = new BiometricService()
+  static async isAvailable(): Promise<boolean> {
+    try {
+      return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+    } catch (error) {
+      console.error("BiometricService: Error checking availability:", error)
+      return false
     }
-    return BiometricService.instance
   }
 
-  async requestCameraPermission(): Promise<boolean> {
+  static async requestCameraPermission(): Promise<boolean> {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn("Camera not supported in this browser")
-        return false
-      }
-
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           facingMode: "user",
         },
       })
 
-      // Test if we can access the camera
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop())
-        return true
-      }
-      return false
+      // Stop the stream immediately after getting permission
+      stream.getTracks().forEach((track) => track.stop())
+      return true
     } catch (error) {
-      console.error("Camera permission denied:", error)
+      console.error("BiometricService: Camera permission denied:", error)
       return false
     }
   }
 
-  async startCamera(): Promise<MediaStream | null> {
+  static async startCamera(): Promise<MediaStream | null> {
     try {
       if (this.stream) {
-        return this.stream
+        this.stopCamera()
       }
 
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           facingMode: "user",
         },
       })
 
       return this.stream
     } catch (error) {
-      console.error("Error starting camera:", error)
-      return null
+      console.error("BiometricService: Error starting camera:", error)
+      throw error
     }
   }
 
-  stopCamera(): void {
+  static stopCamera(): void {
     if (this.stream) {
       this.stream.getTracks().forEach((track) => track.stop())
       this.stream = null
     }
+    this.isCapturing = false
   }
 
-  async captureImage(videoElement: HTMLVideoElement): Promise<string> {
-    return new Promise((resolve, reject) => {
-      try {
-        const canvas = document.createElement("canvas")
-        const context = canvas.getContext("2d")
-
-        if (!context) {
-          reject(new Error("Could not get canvas context"))
-          return
-        }
-
-        canvas.width = videoElement.videoWidth || 640
-        canvas.height = videoElement.videoHeight || 480
-
-        context.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
-
-        const imageData = canvas.toDataURL("image/jpeg", 0.8)
-        resolve(imageData)
-      } catch (error) {
-        reject(error)
-      }
-    })
-  }
-
-  async generateBiometricHash(imageData: string): Promise<string> {
+  static async startCameraPreview(videoElement: HTMLVideoElement): Promise<void> {
     try {
-      // Convert base64 to array buffer
-      const base64Data = imageData.split(",")[1]
-      const binaryString = atob(base64Data)
-      const bytes = new Uint8Array(binaryString.length)
+      const stream = await this.startCamera()
+      if (stream && videoElement) {
+        videoElement.srcObject = stream
+        await videoElement.play()
+      }
+    } catch (error) {
+      console.error("BiometricService: Error starting camera preview:", error)
+      throw error
+    }
+  }
 
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
+  static stopCameraPreview(): void {
+    this.stopCamera()
+  }
+
+  static async captureBiometric(): Promise<string> {
+    try {
+      if (this.isCapturing) {
+        throw new Error("Biometric capture already in progress")
       }
 
-      // Generate hash using Web Crypto API
-      const hashBuffer = await crypto.subtle.digest("SHA-256", bytes)
+      this.isCapturing = true
+
+      // Start camera if not already started
+      if (!this.stream) {
+        await this.startCamera()
+      }
+
+      // Create a video element for capture
+      const video = document.createElement("video")
+      video.srcObject = this.stream
+      video.autoplay = true
+      video.muted = true
+
+      // Wait for video to be ready
+      await new Promise((resolve) => {
+        video.onloadedmetadata = () => resolve(void 0)
+      })
+
+      // Wait a moment for the camera to stabilize
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      // Capture frame
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")!
+      canvas.width = video.videoWidth
+      canvas.height = video.videoHeight
+
+      ctx.drawImage(video, 0, 0)
+
+      // Get image data
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      // Generate biometric hash from image data
+      const hash = await this.generateBiometricHash(imageData)
+
+      this.isCapturing = false
+      return hash
+    } catch (error) {
+      this.isCapturing = false
+      console.error("BiometricService: Error capturing biometric:", error)
+      throw error
+    }
+  }
+
+  static async processForTicketValidation(videoElement: HTMLVideoElement): Promise<BiometricResult> {
+    try {
+      if (!videoElement || videoElement.videoWidth === 0) {
+        return {
+          success: false,
+          error: "Video element not ready",
+        }
+      }
+
+      // Capture frame from video
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")!
+      canvas.width = videoElement.videoWidth
+      canvas.height = videoElement.videoHeight
+
+      ctx.drawImage(videoElement, 0, 0)
+
+      // Get image data
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      // Simulate face detection
+      const faceDetected = await this.detectFace(imageData)
+      if (!faceDetected) {
+        return {
+          success: false,
+          error: "No face detected. Please look directly at the camera.",
+        }
+      }
+
+      // Generate biometric hash
+      const hash = await this.generateBiometricHash(imageData)
+
+      // Extract features (simplified)
+      const features = this.extractFeatures(imageData)
+
+      const biometricData: BiometricData = {
+        hash,
+        confidence: 0.85 + Math.random() * 0.1, // Simulate confidence
+        timestamp: new Date(),
+        features,
+      }
+
+      return {
+        success: true,
+        biometricData,
+        message: "Biometric data captured successfully",
+      }
+    } catch (error) {
+      console.error("BiometricService: Error processing for validation:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      }
+    }
+  }
+
+  static async verifyBiometric(storedHash: string, capturedHash: string): Promise<BiometricVerificationResult> {
+    try {
+      // In a real implementation, this would use sophisticated biometric matching algorithms
+      // For now, we'll simulate the verification process
+
+      if (!storedHash || !capturedHash) {
+        return {
+          isValid: false,
+          confidence: 0,
+          message: "Missing biometric data",
+        }
+      }
+
+      // Remove placeholder suffix if present
+      const cleanStoredHash = storedHash.replace("_PLACEHOLDER", "")
+
+      // Simulate biometric matching with some tolerance
+      const similarity = this.calculateHashSimilarity(cleanStoredHash, capturedHash)
+      const threshold = 0.7 // 70% similarity threshold
+
+      const isValid = similarity >= threshold
+
+      return {
+        isValid,
+        confidence: similarity,
+        message: isValid
+          ? `Biometric verification successful (${Math.round(similarity * 100)}% match)`
+          : `Biometric verification failed (${Math.round(similarity * 100)}% match, required ${Math.round(threshold * 100)}%)`,
+      }
+    } catch (error) {
+      console.error("BiometricService: Error verifying biometric:", error)
+      return {
+        isValid: false,
+        confidence: 0,
+        message: "Verification error occurred",
+      }
+    }
+  }
+
+  private static async generateBiometricHash(imageData: ImageData): Promise<string> {
+    try {
+      // Convert image data to a string representation
+      const dataString = Array.from(imageData.data).join(",")
+
+      // Use Web Crypto API to generate hash
+      const encoder = new TextEncoder()
+      const data = encoder.encode(dataString)
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data)
+
+      // Convert to hex string
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
 
       return hashHex
     } catch (error) {
-      console.error("Error generating biometric hash:", error)
+      console.error("BiometricService: Error generating hash:", error)
       // Fallback to simple hash
-      return this.simpleHash(imageData)
+      return this.simpleHash(imageData.data.toString())
     }
   }
 
-  private simpleHash(str: string): string {
+  private static simpleHash(str: string): string {
     let hash = 0
     for (let i = 0; i < str.length; i++) {
       const char = str.charCodeAt(i)
@@ -135,98 +273,97 @@ export class BiometricService {
     return Math.abs(hash).toString(16)
   }
 
-  async captureBiometricData(videoElement: HTMLVideoElement): Promise<BiometricData> {
-    try {
-      const faceImage = await this.captureImage(videoElement)
-      const hash = await this.generateBiometricHash(faceImage)
+  private static async detectFace(imageData: ImageData): Promise<boolean> {
+    // Simplified face detection simulation
+    // In a real implementation, you would use a library like face-api.js or MediaPipe
 
-      return {
-        faceImage,
-        hash,
-        timestamp: new Date(),
-        confidence: 0.85, // Simulated confidence score
-      }
-    } catch (error) {
-      console.error("Error capturing biometric data:", error)
-      throw error
-    }
-  }
+    const { width, height, data } = imageData
 
-  async verifyBiometric(capturedHash: string, storedHash: string): Promise<BiometricVerificationResult> {
-    try {
-      // Simple hash comparison for now
-      const isValid = capturedHash === storedHash
+    // Look for skin-tone pixels in the center region (very basic)
+    const centerX = Math.floor(width / 2)
+    const centerY = Math.floor(height / 2)
+    const regionSize = Math.min(width, height) / 4
 
-      return {
-        isValid,
-        confidence: isValid ? 0.95 : 0.1,
-        message: isValid ? "Biometric verification successful" : "Biometric verification failed",
-      }
-    } catch (error) {
-      console.error("Error verifying biometric:", error)
-      return {
-        isValid: false,
-        confidence: 0,
-        message: "Verification error occurred",
-      }
-    }
-  }
+    let skinPixels = 0
+    let totalPixels = 0
 
-  // Face detection simulation (placeholder for real implementation)
-  async detectFace(imageData: string): Promise<boolean> {
-    try {
-      // This is a placeholder - in a real implementation, you would use
-      // a face detection library like face-api.js or TensorFlow.js
+    for (let y = centerY - regionSize; y < centerY + regionSize; y++) {
+      for (let x = centerX - regionSize; x < centerX + regionSize; x++) {
+        if (x >= 0 && x < width && y >= 0 && y < height) {
+          const index = (y * width + x) * 4
+          const r = data[index]
+          const g = data[index + 1]
+          const b = data[index + 2]
 
-      // For now, we'll simulate face detection by checking image size and format
-      if (!imageData || !imageData.startsWith("data:image/")) {
-        return false
-      }
-
-      // Simulate processing time
-      await new Promise((resolve) => setTimeout(resolve, 100))
-
-      // Return true if image seems valid (90% success rate simulation)
-      return Math.random() > 0.1
-    } catch (error) {
-      console.error("Error detecting face:", error)
-      return false
-    }
-  }
-
-  async processForTicketValidation(videoElement: HTMLVideoElement): Promise<{
-    success: boolean
-    biometricData?: BiometricData
-    error?: string
-  }> {
-    try {
-      // Capture the image
-      const faceImage = await this.captureImage(videoElement)
-
-      // Check if face is detected
-      const faceDetected = await this.detectFace(faceImage)
-      if (!faceDetected) {
-        return {
-          success: false,
-          error: "No face detected. Please position your face clearly in the camera.",
+          // Very basic skin tone detection
+          if (this.isSkinTone(r, g, b)) {
+            skinPixels++
+          }
+          totalPixels++
         }
       }
+    }
 
-      // Generate biometric data
-      const biometricData = await this.captureBiometricData(videoElement)
+    const skinRatio = skinPixels / totalPixels
+    return skinRatio > 0.1 // At least 10% skin-tone pixels
+  }
 
-      return {
-        success: true,
-        biometricData,
-      }
-    } catch (error) {
-      console.error("Error processing biometric for ticket validation:", error)
-      return {
-        success: false,
-        error: "Failed to process biometric data. Please try again.",
+  private static isSkinTone(r: number, g: number, b: number): boolean {
+    // Very basic skin tone detection
+    return r > 95 && g > 40 && b > 20 && r > g && r > b && r - g > 15 && Math.abs(r - g) > 15
+  }
+
+  private static extractFeatures(imageData: ImageData): number[] {
+    // Simplified feature extraction
+    // In a real implementation, you would extract facial landmarks, distances, etc.
+
+    const features: number[] = []
+    const { width, height, data } = imageData
+
+    // Extract some basic statistical features
+    let rSum = 0,
+      gSum = 0,
+      bSum = 0
+    let rVar = 0,
+      gVar = 0,
+      bVar = 0
+
+    for (let i = 0; i < data.length; i += 4) {
+      rSum += data[i]
+      gSum += data[i + 1]
+      bSum += data[i + 2]
+    }
+
+    const pixelCount = data.length / 4
+    const rMean = rSum / pixelCount
+    const gMean = gSum / pixelCount
+    const bMean = bSum / pixelCount
+
+    for (let i = 0; i < data.length; i += 4) {
+      rVar += Math.pow(data[i] - rMean, 2)
+      gVar += Math.pow(data[i + 1] - gMean, 2)
+      bVar += Math.pow(data[i + 2] - bMean, 2)
+    }
+
+    features.push(rMean, gMean, bMean)
+    features.push(rVar / pixelCount, gVar / pixelCount, bVar / pixelCount)
+    features.push(width, height)
+
+    return features
+  }
+
+  private static calculateHashSimilarity(hash1: string, hash2: string): number {
+    if (hash1 === hash2) return 1.0
+
+    const minLength = Math.min(hash1.length, hash2.length)
+    let matches = 0
+
+    for (let i = 0; i < minLength; i++) {
+      if (hash1[i] === hash2[i]) {
+        matches++
       }
     }
+
+    return matches / Math.max(hash1.length, hash2.length)
   }
 }
-
-export default BiometricService.getInstance()
