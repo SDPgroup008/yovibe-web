@@ -10,6 +10,7 @@ import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import BiometricService from "../services/BiometricService"
 import type { TicketScannerScreenProps } from "../navigation/types"
+import type { QRCodeData } from "../services/QRCodeService"
 
 const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation }) => {
   const { user } = useAuth()
@@ -18,6 +19,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
   const [validating, setValidating] = useState(false)
   const [showCamera, setShowCamera] = useState(false)
   const [scannedData, setScannedData] = useState<string | null>(null)
+  const [qrCodeInfo, setQrCodeInfo] = useState<QRCodeData | null>(null)
   const [showBiometricCapture, setShowBiometricCapture] = useState(false)
   const cameraRef = useRef<Camera>(null)
 
@@ -48,13 +50,78 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
     setScanning(false)
     setShowCamera(false)
 
-    // Start biometric capture process
-    setShowBiometricCapture(true)
+    // Parse QR code to determine ticket type
+    try {
+      const decodedString = atob(data)
+      const qrData: QRCodeData = JSON.parse(decodedString)
+      setQrCodeInfo(qrData)
+
+      if (qrData.ticketType === "secure") {
+        // For secure tickets, require biometric verification
+        setShowBiometricCapture(true)
+      } else {
+        // For regular tickets, validate immediately
+        handleValidateTicket(data)
+      }
+    } catch (error) {
+      Alert.alert("Invalid QR Code", "The scanned QR code is not valid")
+      setScannedData(null)
+    }
+  }
+
+  const handleValidateTicket = async (qrData: string, biometricData?: string) => {
+    if (!user) {
+      Alert.alert("Error", "Please sign in to validate tickets")
+      return
+    }
+
+    try {
+      setValidating(true)
+
+      const result = await TicketService.validateTicket(qrData, biometricData, user.id, "Event Entrance")
+
+      if (result.success && result.ticket) {
+        const ticketTypeText = result.ticket.ticketType === "secure" ? "Secure Ticket" : "Regular Ticket"
+        const securityInfo =
+          result.ticket.ticketType === "secure"
+            ? "\n🔒 Biometric verification successful"
+            : "\n📱 QR code verification successful"
+
+        Alert.alert(
+          "✅ Entry Granted",
+          `${ticketTypeText} validated successfully!${securityInfo}\n\nTicket ID: ${result.ticket.id}\nEvent: ${result.ticket.eventName}\nHolder: ${result.ticket.buyerName}`,
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                resetScanner()
+              },
+            },
+          ],
+        )
+      } else {
+        const ticketTypeText = qrCodeInfo?.ticketType === "secure" ? "Secure Ticket" : "Regular Ticket"
+        Alert.alert("❌ Entry Denied", `${ticketTypeText} validation failed: ${result.reason}`, [
+          {
+            text: "OK",
+            onPress: () => {
+              resetScanner()
+            },
+          },
+        ])
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to validate ticket")
+      resetScanner()
+    } finally {
+      setValidating(false)
+      setShowBiometricCapture(false)
+    }
   }
 
   const handleBiometricCapture = async () => {
-    if (!user || !scannedData) {
-      Alert.alert("Error", "Missing required data for validation")
+    if (!scannedData) {
+      Alert.alert("Error", "No ticket data found")
       return
     }
 
@@ -62,56 +129,36 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
       setValidating(true)
 
       Alert.alert(
-        "Biometric Verification",
-        "Please ask the ticket holder to look at the camera for biometric verification.",
+        "Biometric Verification Required",
+        "This is a secure ticket. Please ask the ticket holder to look at the camera for biometric verification.",
         [
-          { text: "Cancel", style: "cancel", onPress: () => setShowBiometricCapture(false) },
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => {
+              setShowBiometricCapture(false)
+              resetScanner()
+            },
+          },
           {
             text: "Start Biometric Scan",
             onPress: async () => {
               try {
                 const biometricData = await BiometricService.captureBiometric()
-
-                const result = await TicketService.validateTicket(scannedData, biometricData, user.id, "Event Entrance")
-
-                setShowBiometricCapture(false)
-
-                if (result.success) {
-                  Alert.alert(
-                    "✅ Entry Granted",
-                    `Ticket validated successfully!\n\nTicket ID: ${result.ticket?.id}\nEvent: ${result.ticket?.eventName}\nHolder: ${result.ticket?.buyerName}`,
-                    [
-                      {
-                        text: "OK",
-                        onPress: () => {
-                          setScannedData(null)
-                          // Ready for next scan
-                        },
-                      },
-                    ],
-                  )
-                } else {
-                  Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [
-                    {
-                      text: "OK",
-                      onPress: () => {
-                        setScannedData(null)
-                        // Ready for next scan
-                      },
-                    },
-                  ])
-                }
+                await handleValidateTicket(scannedData, biometricData)
               } catch (error) {
                 Alert.alert("Error", "Failed to capture biometric data")
                 setShowBiometricCapture(false)
+                resetScanner()
               }
             },
           },
         ],
       )
     } catch (error) {
-      Alert.alert("Error", "Failed to validate ticket")
+      Alert.alert("Error", "Failed to start biometric verification")
       setShowBiometricCapture(false)
+      resetScanner()
     } finally {
       setValidating(false)
     }
@@ -127,14 +174,34 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           text: "Validate",
           onPress: async (ticketData) => {
             if (ticketData) {
-              setScannedData(ticketData)
-              setShowBiometricCapture(true)
+              try {
+                // Try to parse as QR code data first
+                const decodedString = atob(ticketData)
+                const qrData: QRCodeData = JSON.parse(decodedString)
+                setQrCodeInfo(qrData)
+                setScannedData(ticketData)
+
+                if (qrData.ticketType === "secure") {
+                  setShowBiometricCapture(true)
+                } else {
+                  await handleValidateTicket(ticketData)
+                }
+              } catch (error) {
+                // If parsing fails, treat as regular ticket ID
+                await handleValidateTicket(ticketData)
+              }
             }
           },
         },
       ],
       "plain-text",
     )
+  }
+
+  const resetScanner = () => {
+    setScannedData(null)
+    setQrCodeInfo(null)
+    setShowBiometricCapture(false)
   }
 
   if (hasPermission === null) {
@@ -175,9 +242,22 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           <Text style={styles.instructionTitle}>Validation Process:</Text>
           <Text style={styles.instructionText}>
             1. Scan the ticket QR code{"\n"}
-            2. Ask ticket holder for biometric verification{"\n"}
-            3. Grant or deny entry based on validation result
+            2. For regular tickets: Entry granted immediately{"\n"}
+            3. For secure tickets: Biometric verification required{"\n"}
+            4. Grant or deny entry based on validation result
           </Text>
+        </View>
+
+        <View style={styles.ticketTypeInfo}>
+          <Text style={styles.ticketTypeTitle}>Supported Ticket Types:</Text>
+          <View style={styles.ticketTypeItem}>
+            <Ionicons name="qr-code" size={20} color="#4CAF50" />
+            <Text style={styles.ticketTypeText}>Regular Tickets - QR code only</Text>
+          </View>
+          <View style={styles.ticketTypeItem}>
+            <Ionicons name="shield-checkmark" size={20} color="#FF9800" />
+            <Text style={styles.ticketTypeText}>Secure Tickets - QR code + Biometric</Text>
+          </View>
         </View>
 
         <View style={styles.buttonContainer}>
@@ -259,21 +339,31 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
         visible={showBiometricCapture}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowBiometricCapture(false)}
+        onRequestClose={() => {
+          setShowBiometricCapture(false)
+          resetScanner()
+        }}
       >
         <View style={styles.biometricModalOverlay}>
           <View style={styles.biometricModalContent}>
-            <Text style={styles.biometricModalTitle}>Biometric Verification Required</Text>
+            <Ionicons name="shield-checkmark" size={48} color="#FF9800" />
+            <Text style={styles.biometricModalTitle}>Secure Ticket Detected</Text>
             <Text style={styles.biometricModalText}>
-              QR code scanned successfully. Now capture the ticket holder's biometric data for verification.
+              This is a secure ticket that requires biometric verification. Please capture the ticket holder's biometric
+              data to complete validation.
             </Text>
+
+            <View style={styles.ticketInfo}>
+              <Text style={styles.ticketInfoLabel}>Ticket Type:</Text>
+              <Text style={styles.ticketInfoValue}>🔒 Secure Ticket</Text>
+            </View>
 
             <View style={styles.biometricModalButtons}>
               <TouchableOpacity
                 style={styles.biometricCancelButton}
                 onPress={() => {
                   setShowBiometricCapture(false)
-                  setScannedData(null)
+                  resetScanner()
                 }}
               >
                 <Text style={styles.biometricCancelText}>Cancel</Text>
@@ -287,7 +377,10 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
                 {validating ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.biometricStartText}>Start Verification</Text>
+                  <>
+                    <Ionicons name="eye" size={20} color="#FFFFFF" />
+                    <Text style={styles.biometricStartText}>Start Verification</Text>
+                  </>
                 )}
               </TouchableOpacity>
             </View>
@@ -338,7 +431,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#1E1E1E",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 24,
+    marginBottom: 16,
   },
   instructionTitle: {
     fontSize: 18,
@@ -350,6 +443,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#DDDDDD",
     lineHeight: 20,
+  },
+  ticketTypeInfo: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 24,
+  },
+  ticketTypeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: 12,
+  },
+  ticketTypeItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  ticketTypeText: {
+    fontSize: 14,
+    color: "#DDDDDD",
+    marginLeft: 8,
   },
   buttonContainer: {
     marginBottom: 24,
@@ -477,12 +592,14 @@ const styles = StyleSheet.create({
     padding: 24,
     width: "85%",
     maxWidth: 400,
+    alignItems: "center",
   },
   biometricModalTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
     textAlign: "center",
+    marginTop: 16,
     marginBottom: 16,
   },
   biometricModalText: {
@@ -490,25 +607,36 @@ const styles = StyleSheet.create({
     color: "#DDDDDD",
     textAlign: "center",
     lineHeight: 24,
+    marginBottom: 20,
+  },
+  ticketInfo: {
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    padding: 12,
     marginBottom: 24,
+    width: "100%",
+  },
+  ticketInfoLabel: {
+    fontSize: 14,
+    color: "#AAAAAA",
+    marginBottom: 4,
+  },
+  ticketInfoValue: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FFFFFF",
   },
   biometricModalButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
+    width: "100%",
   },
   biometricCancelButton: {
+    flex: 1,
     backgroundColor: "#666666",
     padding: 16,
     borderRadius: 8,
-    flex: 1,
     marginRight: 8,
-  },
-  biometricStartButton: {
-    backgroundColor: "#4CAF50",
-    padding: 16,
-    borderRadius: 8,
-    flex: 1,
-    marginLeft: 8,
   },
   biometricCancelText: {
     color: "#FFFFFF",
@@ -516,11 +644,21 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
+  biometricStartButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF9800",
+    padding: 16,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
   biometricStartText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
-    textAlign: "center",
+    marginLeft: 8,
   },
 })
 
