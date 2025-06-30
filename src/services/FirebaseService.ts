@@ -1415,6 +1415,7 @@ class FirebaseService {
         appCommission: data.appCommission,
         purchaseDate: data.purchaseDate.toDate(),
         qrCode: data.qrCode,
+        ticketType: data.ticketType || "regular", // Add this line
         biometricHash: data.biometricHash,
         status: data.status,
         validationHistory: data.validationHistory || [],
@@ -1448,6 +1449,7 @@ class FirebaseService {
           appCommission: data.appCommission,
           purchaseDate: data.purchaseDate.toDate(),
           qrCode: data.qrCode,
+          ticketType: data.ticketType || "regular",
           biometricHash: data.biometricHash,
           status: data.status,
           validationHistory: data.validationHistory || [],
@@ -1485,6 +1487,7 @@ class FirebaseService {
           appCommission: data.appCommission,
           purchaseDate: data.purchaseDate.toDate(),
           qrCode: data.qrCode,
+          ticketType: data.ticketType || "regular",
           biometricHash: data.biometricHash,
           status: data.status,
           validationHistory: data.validationHistory || [],
