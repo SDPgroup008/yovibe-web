@@ -221,7 +221,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
   if (cameraPermission === false) {
     return (
       <View style={styles.errorContainer}>
-        <Ionicons name="camera-off" size={64} color="#666" />
+        <Ionicons name="videocam-off" size={64} color="#666" />
         <Text style={styles.errorText}>Camera permission denied</Text>
         <Text style={styles.errorSubtext}>Please enable camera access to scan QR codes</Text>
         <TouchableOpacity style={styles.retryButton} onPress={requestCameraPermission}>
