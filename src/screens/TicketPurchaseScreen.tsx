@@ -1,447 +1,259 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ActivityIndicator,
-  ScrollView,
-  TextInput,
-  Modal,
-} from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, Image } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
-import TicketService from "../services/TicketService"
-import { BiometricService } from "../services/BiometricService"
+import FirebaseService from "../services/FirebaseService"
+import TicketService, { type TicketPurchaseRequest } from "../services/TicketService"
 import PaymentService, { type PaymentMethod } from "../services/PaymentService"
 import type { Event } from "../models/Event"
-import type { TicketType } from "../models/Ticket"
 
 interface TicketPurchaseScreenProps {
+  navigation: any
   route: {
     params: {
-      event: Event
+      eventId: string
     }
   }
-  navigation: any
 }
 
-const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navigation }) => {
-  const { event } = route.params
+const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ navigation, route }) => {
   const { user } = useAuth()
+  const { eventId } = route.params
+
+  const [event, setEvent] = useState<Event | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [purchasing, setPurchasing] = useState(false)
   const [quantity, setQuantity] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [selectedTicketType, setSelectedTicketType] = useState<TicketType>("regular")
-  const [biometricCaptured, setBiometricCaptured] = useState(false)
-  const [biometricHash, setBiometricHash] = useState("")
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null)
-  const [showPaymentMethods, setShowPaymentMethods] = useState(false)
-  const [paymentDetails, setPaymentDetails] = useState<any>({})
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
 
-  const ticketPrice = Number.parseInt(event.entryFee?.replace(/[^0-9]/g, "") || "0")
-  const totalAmount = ticketPrice * quantity
-  const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(totalAmount)
+  useEffect(() => {
+    loadEventDetails()
+    loadPaymentMethods()
+  }, [eventId])
 
-  const paymentMethods = PaymentService.getAvailablePaymentMethods()
-
-  const handleTicketTypeChange = (type: TicketType) => {
-    setSelectedTicketType(type)
-    if (type === "regular") {
-      setBiometricCaptured(false)
-      setBiometricHash("")
-    }
-  }
-
-  const handleCaptureBiometric = async () => {
+  const loadEventDetails = async () => {
     try {
-      setLoading(true)
-
-      const isAvailable = await BiometricService.isAvailable()
-      if (!isAvailable) {
-        Alert.alert("Error", "Biometric scanner not available on this device")
-        return
+      const eventData = await FirebaseService.getEventById(eventId)
+      if (eventData) {
+        setEvent(eventData)
+      } else {
+        Alert.alert("Error", "Event not found")
+        navigation.goBack()
       }
-
-      Alert.alert(
-        "Biometric Capture",
-        "Please look directly at the camera for eye scanning. This will be used to verify your identity at the event.",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Start Scan",
-            onPress: async () => {
-              try {
-                const hash = await BiometricService.captureBiometric()
-                setBiometricHash(hash)
-                setBiometricCaptured(true)
-                Alert.alert("Success", "Biometric data captured successfully!")
-              } catch (error) {
-                Alert.alert("Error", "Failed to capture biometric data")
-              }
-            },
-          },
-        ],
-      )
     } catch (error) {
-      Alert.alert("Error", "Failed to initialize biometric scanner")
+      console.error("Error loading event:", error)
+      Alert.alert("Error", "Failed to load event details")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSelectPaymentMethod = (method: PaymentMethod) => {
-    setSelectedPaymentMethod(method)
-    setShowPaymentMethods(false)
-    setPaymentDetails({}) // Reset payment details
+  const loadPaymentMethods = () => {
+    const methods = PaymentService.getAvailablePaymentMethods()
+    setPaymentMethods(methods)
+    if (methods.length > 0) {
+      setSelectedPaymentMethod(methods[0])
+    }
+  }
+
+  const calculateTicketPrice = (): number => {
+    if (!event) return 0
+
+    if (event.entryFee && event.entryFee !== "Free Entry") {
+      const priceMatch = event.entryFee.match(/(\d+(?:,\d+)*)/)
+      if (priceMatch) {
+        return Number.parseInt(priceMatch[1].replace(/,/g, ""))
+      }
+    }
+
+    switch (event.priceIndicator) {
+      case 1:
+        return 10000
+      case 2:
+        return 25000
+      case 3:
+        return 50000
+      default:
+        return 15000
+    }
+  }
+
+  const getTotalAmount = (): number => {
+    return calculateTicketPrice() * quantity
+  }
+
+  const handleQuantityChange = (delta: number) => {
+    const newQuantity = quantity + delta
+    if (newQuantity >= 1 && newQuantity <= 10) {
+      setQuantity(newQuantity)
+    }
   }
 
   const handlePurchase = async () => {
-    if (!user) {
-      Alert.alert("Error", "Please sign in to purchase tickets")
+    if (!user || !event || !selectedPaymentMethod) {
+      Alert.alert("Error", "Missing required information")
       return
     }
 
-    if (selectedTicketType === "secure" && !biometricCaptured) {
-      Alert.alert("Biometric Required", "Please capture your biometric data for secure tickets")
-      return
-    }
-
-    if (!selectedPaymentMethod) {
-      Alert.alert("Payment Method Required", "Please select a payment method")
-      return
-    }
-
-    // Validate payment details
-    if (!PaymentService.validatePaymentMethod(selectedPaymentMethod, paymentDetails)) {
-      Alert.alert("Invalid Payment Details", "Please check your payment information")
-      return
-    }
+    setPurchasing(true)
 
     try {
-      setLoading(true)
-
-      const ticket = await TicketService.purchaseTicket(
-        event,
-        user.id,
-        user.displayName || user.email || "Unknown",
-        user.email || "",
+      const purchaseRequest: TicketPurchaseRequest = {
+        eventId: event.id,
         quantity,
-        selectedTicketType,
-        selectedTicketType === "secure" ? biometricHash : undefined,
-        selectedPaymentMethod,
-      )
+        buyerInfo: {
+          name: user.displayName || user.email,
+          email: user.email,
+          phone: user.phone,
+        },
+        paymentMethod: selectedPaymentMethod,
+      }
 
-      const ticketTypeText = selectedTicketType === "secure" ? "Secure Ticket" : "Regular Ticket"
-      const securityInfo =
-        selectedTicketType === "secure"
-          ? "\n\n🔒 Secure ticket with biometric verification required at entry."
-          : "\n\n📱 Regular ticket - QR code scanning only at entry."
+      const result = await TicketService.purchaseTickets(purchaseRequest)
 
-      Alert.alert(
-        "Purchase Successful!",
-        `Your ${ticketTypeText.toLowerCase()} has been purchased successfully.\n\nTicket ID: ${ticket.id}${securityInfo}`,
-        [
+      if (result.success && result.tickets) {
+        Alert.alert("Success!", result.message, [
           {
-            text: "View Ticket",
+            text: "View Tickets",
             onPress: () => {
-              // Navigate to ticket details screen
-              navigation.navigate("TicketDetails", { ticket })
+              navigation.navigate("MyTickets", {
+                newTickets: result.tickets,
+              })
             },
           },
-          {
-            text: "OK",
-            onPress: () => navigation.goBack(),
-          },
-        ],
-      )
+        ])
+      } else {
+        Alert.alert("Purchase Failed", result.error || result.message)
+      }
     } catch (error) {
       console.error("Purchase error:", error)
-      Alert.alert(
-        "Purchase Failed",
-        error instanceof Error ? error.message : "Failed to purchase ticket. Please try again.",
-      )
+      Alert.alert("Error", "Failed to purchase tickets. Please try again.")
     } finally {
-      setLoading(false)
+      setPurchasing(false)
     }
   }
 
-  const renderPaymentMethodDetails = () => {
-    if (!selectedPaymentMethod) return null
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading event details...</Text>
+      </View>
+    )
+  }
 
-    switch (selectedPaymentMethod.type) {
-      case "mobile_money":
-        return (
-          <View style={styles.paymentDetails}>
-            <Text style={styles.paymentLabel}>Phone Number:</Text>
-            <TextInput
-              style={styles.paymentInput}
-              placeholder="e.g., +256701234567"
-              value={paymentDetails.phoneNumber || ""}
-              onChangeText={(text) => setPaymentDetails({ ...paymentDetails, phoneNumber: text })}
-              keyboardType="phone-pad"
-            />
-          </View>
-        )
-
-      case "card":
-        return (
-          <View style={styles.paymentDetails}>
-            <Text style={styles.paymentLabel}>Card Number:</Text>
-            <TextInput
-              style={styles.paymentInput}
-              placeholder="1234 5678 9012 3456"
-              value={paymentDetails.cardNumber || ""}
-              onChangeText={(text) => setPaymentDetails({ ...paymentDetails, cardNumber: text })}
-              keyboardType="numeric"
-            />
-            <View style={styles.cardRow}>
-              <View style={styles.cardField}>
-                <Text style={styles.paymentLabel}>Expiry:</Text>
-                <TextInput
-                  style={styles.paymentInput}
-                  placeholder="MM/YY"
-                  value={paymentDetails.expiryDate || ""}
-                  onChangeText={(text) => setPaymentDetails({ ...paymentDetails, expiryDate: text })}
-                />
-              </View>
-              <View style={styles.cardField}>
-                <Text style={styles.paymentLabel}>CVV:</Text>
-                <TextInput
-                  style={styles.paymentInput}
-                  placeholder="123"
-                  value={paymentDetails.cvv || ""}
-                  onChangeText={(text) => setPaymentDetails({ ...paymentDetails, cvv: text })}
-                  keyboardType="numeric"
-                  secureTextEntry
-                />
-              </View>
-            </View>
-          </View>
-        )
-
-      case "bank_transfer":
-        return (
-          <View style={styles.paymentDetails}>
-            <Text style={styles.paymentLabel}>Account Number:</Text>
-            <TextInput
-              style={styles.paymentInput}
-              placeholder="Account Number"
-              value={paymentDetails.accountNumber || ""}
-              onChangeText={(text) => setPaymentDetails({ ...paymentDetails, accountNumber: text })}
-              keyboardType="numeric"
-            />
-            <Text style={styles.paymentLabel}>Bank Code:</Text>
-            <TextInput
-              style={styles.paymentInput}
-              placeholder="Bank Code"
-              value={paymentDetails.bankCode || ""}
-              onChangeText={(text) => setPaymentDetails({ ...paymentDetails, bankCode: text })}
-            />
-          </View>
-        )
-
-      default:
-        return null
-    }
+  if (!event) {
+    return (
+      <View style={styles.errorContainer}>
+        <Text style={styles.errorText}>Event not found</Text>
+      </View>
+    )
   }
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Purchase Tickets</Text>
-      </View>
-
-      <View style={styles.eventInfo}>
-        <Text style={styles.eventName}>{event.name}</Text>
-        <Text style={styles.eventVenue}>{event.venueName}</Text>
-        <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
-      </View>
-
-      {/* Ticket Type Selection */}
-      <View style={styles.ticketTypeSection}>
-        <Text style={styles.sectionTitle}>Select Ticket Type</Text>
-
-        <TouchableOpacity
-          style={[styles.ticketTypeOption, selectedTicketType === "regular" && styles.ticketTypeSelected]}
-          onPress={() => handleTicketTypeChange("regular")}
-        >
-          <View style={styles.ticketTypeHeader}>
-            <Ionicons name="qr-code" size={24} color={selectedTicketType === "regular" ? "#2196F3" : "#DDDDDD"} />
-            <Text style={[styles.ticketTypeName, selectedTicketType === "regular" && styles.ticketTypeNameSelected]}>
-              Regular Ticket
-            </Text>
-            <Text style={styles.ticketTypePrice}>UGX {ticketPrice.toLocaleString()}</Text>
-          </View>
-          <Text style={styles.ticketTypeDescription}>
-            Standard entry with QR code verification only. Quick and easy entry process.
+      {/* Event Header */}
+      <View style={styles.eventHeader}>
+        <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+        <View style={styles.eventInfo}>
+          <Text style={styles.eventName}>{event.name}</Text>
+          <Text style={styles.eventDate}>
+            {event.date.toLocaleDateString()} at {event.date.toLocaleTimeString()}
           </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.ticketTypeOption, selectedTicketType === "secure" && styles.ticketTypeSelected]}
-          onPress={() => handleTicketTypeChange("secure")}
-        >
-          <View style={styles.ticketTypeHeader}>
-            <Ionicons
-              name="shield-checkmark"
-              size={24}
-              color={selectedTicketType === "secure" ? "#2196F3" : "#DDDDDD"}
-            />
-            <Text style={[styles.ticketTypeName, selectedTicketType === "secure" && styles.ticketTypeNameSelected]}>
-              Secure Ticket
-            </Text>
-            <Text style={styles.ticketTypePrice}>UGX {ticketPrice.toLocaleString()}</Text>
-          </View>
-          <Text style={styles.ticketTypeDescription}>
-            Enhanced security with biometric verification. Requires eye scan for both purchase and entry.
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.ticketSection}>
-        <Text style={styles.sectionTitle}>Ticket Details</Text>
-
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Price per ticket:</Text>
-          <Text style={styles.priceValue}>UGX {ticketPrice.toLocaleString()}</Text>
-        </View>
-
-        <View style={styles.quantitySection}>
-          <Text style={styles.quantityLabel}>Quantity:</Text>
-          <View style={styles.quantityControls}>
-            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
-              <Ionicons name="remove" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-            <TextInput
-              style={styles.quantityInput}
-              value={quantity.toString()}
-              onChangeText={(text) => setQuantity(Math.max(1, Number.parseInt(text) || 1))}
-              keyboardType="numeric"
-            />
-            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(quantity + 1)}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.eventLocation}>{event.location}</Text>
+          <Text style={styles.eventVenue}>{event.venueName}</Text>
         </View>
       </View>
 
-      {/* Biometric Section - Only for Secure Tickets */}
-      {selectedTicketType === "secure" && (
-        <View style={styles.biometricSection}>
-          <Text style={styles.sectionTitle}>Security Verification</Text>
-          <Text style={styles.biometricInfo}>
-            For secure tickets, we need to capture your biometric data. This will be used to verify your identity at the
-            event entrance.
-          </Text>
+      {/* Ticket Selection */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Ticket Quantity</Text>
+        <View style={styles.quantityContainer}>
+          <TouchableOpacity
+            style={styles.quantityButton}
+            onPress={() => handleQuantityChange(-1)}
+            disabled={quantity <= 1}
+          >
+            <Ionicons name="remove" size={24} color={quantity <= 1 ? "#666" : "#FFFFFF"} />
+          </TouchableOpacity>
+
+          <Text style={styles.quantityText}>{quantity}</Text>
 
           <TouchableOpacity
-            style={[styles.biometricButton, biometricCaptured && styles.biometricCaptured]}
-            onPress={handleCaptureBiometric}
-            disabled={loading || biometricCaptured}
+            style={styles.quantityButton}
+            onPress={() => handleQuantityChange(1)}
+            disabled={quantity >= 10}
           >
-            <Ionicons name={biometricCaptured ? "checkmark-circle" : "eye"} size={24} color="#FFFFFF" />
-            <Text style={styles.biometricButtonText}>
-              {biometricCaptured ? "Biometric Captured" : "Capture Biometric"}
-            </Text>
+            <Ionicons name="add" size={24} color={quantity >= 10 ? "#666" : "#FFFFFF"} />
           </TouchableOpacity>
         </View>
-      )}
+      </View>
 
-      <View style={styles.paymentSection}>
+      {/* Payment Method Selection */}
+      <View style={styles.section}>
         <Text style={styles.sectionTitle}>Payment Method</Text>
-
-        <TouchableOpacity style={styles.paymentMethodSelector} onPress={() => setShowPaymentMethods(true)}>
-          <Text style={styles.paymentMethodText}>
-            {selectedPaymentMethod ? selectedPaymentMethod.provider : "Select Payment Method"}
-          </Text>
-          <Ionicons name="chevron-down" size={20} color="#FFFFFF" />
-        </TouchableOpacity>
-
-        {renderPaymentMethodDetails()}
+        {paymentMethods.map((method) => (
+          <TouchableOpacity
+            key={method.id}
+            style={[styles.paymentMethod, selectedPaymentMethod?.id === method.id && styles.selectedPaymentMethod]}
+            onPress={() => setSelectedPaymentMethod(method)}
+          >
+            <View style={styles.paymentMethodInfo}>
+              <Text style={styles.paymentMethodName}>{method.name}</Text>
+              <Text style={styles.paymentMethodProvider}>{method.provider}</Text>
+            </View>
+            {selectedPaymentMethod?.id === method.id && <Ionicons name="checkmark-circle" size={24} color="#2196F3" />}
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <View style={styles.summarySection}>
-        <Text style={styles.sectionTitle}>Order Summary</Text>
-
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>
-            {selectedTicketType === "secure" ? "Secure Tickets" : "Regular Tickets"} ({quantity}x):
-          </Text>
-          <Text style={styles.summaryValue}>UGX {totalAmount.toLocaleString()}</Text>
+      {/* Price Summary */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Price Summary</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Ticket Price:</Text>
+          <Text style={styles.priceValue}>{PaymentService.formatCurrency(calculateTicketPrice())}</Text>
         </View>
-
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>App Fee (5%):</Text>
-          <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
+        <View style={styles.priceRow}>
+          <Text style={styles.priceLabel}>Quantity:</Text>
+          <Text style={styles.priceValue}>{quantity}</Text>
         </View>
-
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Venue Revenue:</Text>
-          <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
-        </View>
-
-        <View style={[styles.summaryRow, styles.totalRow]}>
+        <View style={[styles.priceRow, styles.totalRow]}>
           <Text style={styles.totalLabel}>Total:</Text>
-          <Text style={styles.totalValue}>UGX {totalAmount.toLocaleString()}</Text>
+          <Text style={styles.totalValue}>{PaymentService.formatCurrency(getTotalAmount())}</Text>
         </View>
       </View>
 
+      {/* Purchase Button */}
       <TouchableOpacity
-        style={[
-          styles.purchaseButton,
-          (!selectedPaymentMethod || loading || (selectedTicketType === "secure" && !biometricCaptured)) &&
-            styles.purchaseButtonDisabled,
-        ]}
+        style={[styles.purchaseButton, purchasing && styles.disabledButton]}
         onPress={handlePurchase}
-        disabled={!selectedPaymentMethod || loading || (selectedTicketType === "secure" && !biometricCaptured)}
+        disabled={purchasing || !selectedPaymentMethod}
       >
-        {loading ? (
+        {purchasing ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>
-            <Ionicons name="card" size={24} color="#FFFFFF" />
+            <Ionicons name="card" size={20} color="#FFFFFF" />
             <Text style={styles.purchaseButtonText}>
-              Purchase {selectedTicketType === "secure" ? "Secure" : "Regular"} Tickets
+              Purchase Tickets - {PaymentService.formatCurrency(getTotalAmount())}
             </Text>
           </>
         )}
       </TouchableOpacity>
 
-      {/* Payment Method Selection Modal */}
-      <Modal
-        visible={showPaymentMethods}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowPaymentMethods(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Select Payment Method</Text>
-
-            {paymentMethods.map((method) => (
-              <TouchableOpacity
-                key={method.id}
-                style={styles.paymentMethodOption}
-                onPress={() => handleSelectPaymentMethod(method)}
-              >
-                <Text style={styles.paymentMethodName}>{method.provider}</Text>
-                <Text style={styles.paymentMethodType}>{method.type.replace("_", " ")}</Text>
-              </TouchableOpacity>
-            ))}
-
-            <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowPaymentMethods(false)}>
-              <Text style={styles.modalCloseText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {/* Security Notice */}
+      <View style={styles.securityNotice}>
+        <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
+        <Text style={styles.securityText}>
+          Your payment is secure and encrypted. Tickets will include QR codes and biometric verification for enhanced
+          security.
+        </Text>
+      </View>
     </ScrollView>
   )
 }
@@ -451,119 +263,79 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#121212",
   },
-  header: {
-    flexDirection: "row",
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
+    backgroundColor: "#121212",
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
+  loadingText: {
     color: "#FFFFFF",
-    marginLeft: 16,
+    marginTop: 16,
+    fontSize: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#121212",
+  },
+  errorText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+  },
+  eventHeader: {
+    flexDirection: "row",
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    marginBottom: 16,
+  },
+  eventImage: {
+    width: 80,
+    height: 120,
+    borderRadius: 8,
+    marginRight: 16,
   },
   eventInfo: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  eventName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 8,
-  },
-  eventVenue: {
-    fontSize: 16,
-    color: "#2196F3",
-    marginBottom: 4,
-  },
-  eventDate: {
-    fontSize: 14,
-    color: "#DDDDDD",
-  },
-  ticketTypeSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  ticketTypeOption: {
-    backgroundColor: "#333333",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  ticketTypeSelected: {
-    borderColor: "#2196F3",
-    backgroundColor: "#1A2332",
-  },
-  ticketTypeHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  ticketTypeName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#DDDDDD",
-    marginLeft: 12,
     flex: 1,
   },
-  ticketTypeNameSelected: {
+  eventName: {
     color: "#FFFFFF",
-  },
-  ticketTypePrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#4CAF50",
-  },
-  ticketTypeDescription: {
-    fontSize: 14,
-    color: "#AAAAAA",
-    lineHeight: 20,
-  },
-  ticketSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 16,
-  },
-  priceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  priceLabel: {
-    fontSize: 16,
-    color: "#DDDDDD",
-  },
-  priceValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#4CAF50",
-  },
-  quantitySection: {
-    marginBottom: 16,
-  },
-  quantityLabel: {
-    fontSize: 16,
-    color: "#DDDDDD",
     marginBottom: 8,
   },
-  quantityControls: {
+  eventDate: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  eventLocation: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  eventVenue: {
+    color: "#2196F3",
+    fontSize: 14,
+  },
+  section: {
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    borderRadius: 8,
+  },
+  sectionTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 16,
+  },
+  quantityContainer: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
   },
   quantityButton: {
     backgroundColor: "#2196F3",
@@ -573,123 +345,66 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  quantityInput: {
-    backgroundColor: "#333333",
+  quantityText: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "bold",
-    textAlign: "center",
-    marginHorizontal: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    minWidth: 60,
+    marginHorizontal: 32,
   },
-  biometricSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  biometricInfo: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    lineHeight: 20,
-    marginBottom: 16,
-  },
-  biometricButton: {
+  paymentMethod: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF9800",
-    padding: 16,
-    borderRadius: 8,
-  },
-  biometricCaptured: {
-    backgroundColor: "#4CAF50",
-  },
-  biometricButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
-  paymentSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  paymentMethodSelector: {
-    flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#333333",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  paymentMethodText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-  },
-  paymentDetails: {
-    marginTop: 8,
-  },
-  paymentLabel: {
-    color: "#DDDDDD",
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  paymentInput: {
-    backgroundColor: "#333333",
-    color: "#FFFFFF",
     padding: 12,
     borderRadius: 8,
-    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 8,
   },
-  cardRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
+  selectedPaymentMethod: {
+    borderColor: "#2196F3",
+    backgroundColor: "rgba(33, 150, 243, 0.1)",
   },
-  cardField: {
+  paymentMethodInfo: {
     flex: 1,
-    marginHorizontal: 4,
   },
-  summarySection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
+  paymentMethodName: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
   },
-  summaryRow: {
+  paymentMethodProvider: {
+    color: "#CCCCCC",
+    fontSize: 14,
+  },
+  priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: "#DDDDDD",
+  priceLabel: {
+    color: "#CCCCCC",
+    fontSize: 16,
   },
-  summaryValue: {
-    fontSize: 14,
+  priceValue: {
     color: "#FFFFFF",
+    fontSize: 16,
   },
   totalRow: {
     borderTopWidth: 1,
-    borderTopColor: "#333333",
+    borderTopColor: "#333",
     paddingTop: 8,
     marginTop: 8,
   },
   totalLabel: {
+    color: "#FFFFFF",
     fontSize: 18,
     fontWeight: "bold",
-    color: "#FFFFFF",
   },
   totalValue: {
+    color: "#2196F3",
     fontSize: 18,
     fontWeight: "bold",
-    color: "#4CAF50",
   },
   purchaseButton: {
     flexDirection: "row",
@@ -700,60 +415,30 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 8,
   },
-  purchaseButtonDisabled: {
-    backgroundColor: "#666666",
+  disabledButton: {
+    opacity: 0.6,
   },
   purchaseButtonText: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     marginLeft: 8,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
+  securityNotice: {
+    flexDirection: "row",
     alignItems: "center",
-  },
-  modalContent: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 20,
-    width: "80%",
-    maxHeight: "70%",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  paymentMethodOption: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  paymentMethodName: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  paymentMethodType: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    textTransform: "capitalize",
-  },
-  modalCloseButton: {
-    backgroundColor: "#666666",
-    padding: 16,
+    backgroundColor: "rgba(76, 175, 80, 0.1)",
+    margin: 16,
+    padding: 12,
     borderRadius: 8,
-    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "#4CAF50",
   },
-  modalCloseText: {
-    color: "#FFFFFF",
-    textAlign: "center",
-    fontSize: 16,
+  securityText: {
+    color: "#4CAF50",
+    fontSize: 12,
+    marginLeft: 8,
+    flex: 1,
   },
 })
 
