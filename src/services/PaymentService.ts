@@ -1,246 +1,257 @@
 export interface PaymentMethod {
   id: string
+  name: string
   type: "mobile_money" | "card" | "bank_transfer"
   provider: string
-  enabled: boolean
+  isAvailable: boolean
 }
 
-export interface PaymentIntent {
-  id: string
+export interface PaymentRequest {
   amount: number
   currency: string
-  eventId: string
-  buyerId: string
-  venueRevenue: number
-  appCommission: number
-  status: "pending" | "processing" | "succeeded" | "failed"
-  createdAt: Date
+  method: PaymentMethod
+  customerInfo: {
+    name: string
+    email: string
+    phone?: string
+  }
+  metadata?: Record<string, any>
 }
 
 export interface PaymentResult {
   success: boolean
   transactionId?: string
+  reference?: string
+  message: string
   error?: string
 }
 
 export class PaymentService {
-  private static readonly APP_COMMISSION_RATE = 0.05 // 5%
-  private static readonly CURRENCY = "UGX"
+  private static instance: PaymentService
 
-  static getAvailablePaymentMethods(): PaymentMethod[] {
+  static getInstance(): PaymentService {
+    if (!PaymentService.instance) {
+      PaymentService.instance = new PaymentService()
+    }
+    return PaymentService.instance
+  }
+
+  getAvailablePaymentMethods(): PaymentMethod[] {
     return [
       {
         id: "mtn_momo",
+        name: "MTN Mobile Money",
         type: "mobile_money",
-        provider: "MTN Mobile Money",
-        enabled: true,
+        provider: "MTN",
+        isAvailable: true,
       },
       {
         id: "airtel_money",
+        name: "Airtel Money",
         type: "mobile_money",
-        provider: "Airtel Money",
-        enabled: true,
+        provider: "Airtel",
+        isAvailable: true,
       },
       {
         id: "visa_card",
+        name: "Visa Card",
         type: "card",
-        provider: "Visa Card",
-        enabled: true,
+        provider: "Visa",
+        isAvailable: true,
       },
       {
         id: "mastercard",
+        name: "Mastercard",
         type: "card",
         provider: "Mastercard",
-        enabled: true,
+        isAvailable: true,
       },
       {
         id: "bank_transfer",
+        name: "Bank Transfer",
         type: "bank_transfer",
-        provider: "Bank Transfer",
-        enabled: true,
+        provider: "Various Banks",
+        isAvailable: true,
       },
     ]
   }
 
-  static calculateRevenueSplit(totalAmount: number): { appCommission: number; venueRevenue: number } {
-    const appCommission = Math.round(totalAmount * this.APP_COMMISSION_RATE)
-    const venueRevenue = totalAmount - appCommission
+  validatePaymentRequest(request: PaymentRequest): { isValid: boolean; errors: string[] } {
+    const errors: string[] = []
 
-    return { appCommission, venueRevenue }
-  }
+    if (!request.amount || request.amount <= 0) {
+      errors.push("Amount must be greater than 0")
+    }
 
-  static async createPaymentIntent(amount: number, eventId: string, buyerId: string): Promise<PaymentIntent> {
-    try {
-      const { appCommission, venueRevenue } = this.calculateRevenueSplit(amount)
+    if (!request.currency) {
+      errors.push("Currency is required")
+    }
 
-      const paymentIntent: PaymentIntent = {
-        id: `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        amount,
-        currency: this.CURRENCY,
-        eventId,
-        buyerId,
-        venueRevenue,
-        appCommission,
-        status: "pending",
-        createdAt: new Date(),
-      }
+    if (!request.method) {
+      errors.push("Payment method is required")
+    }
 
-      console.log("Payment intent created:", paymentIntent.id)
-      return paymentIntent
-    } catch (error) {
-      console.error("Error creating payment intent:", error)
-      throw error
+    if (!request.customerInfo.name) {
+      errors.push("Customer name is required")
+    }
+
+    if (!request.customerInfo.email) {
+      errors.push("Customer email is required")
+    }
+
+    if (request.method?.type === "mobile_money" && !request.customerInfo.phone) {
+      errors.push("Phone number is required for mobile money payments")
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors,
     }
   }
 
-  static async processPayment(
-    paymentIntentId: string,
-    paymentMethod: PaymentMethod,
-    amount: number,
-  ): Promise<PaymentResult> {
+  async processPayment(request: PaymentRequest): Promise<PaymentResult> {
     try {
-      console.log("Processing payment:", paymentIntentId, "Method:", paymentMethod.provider)
-
-      // Simulate payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
-
-      // Simulate different success rates for different payment methods
-      const successRate = paymentMethod.type === "mobile_money" ? 0.95 : 0.98
-      const isSuccess = Math.random() < successRate
-
-      if (isSuccess) {
-        const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-
-        console.log("Payment successful:", transactionId)
-        return {
-          success: true,
-          transactionId,
-        }
-      } else {
-        const errorMessages = ["Insufficient funds", "Payment method declined", "Network error", "Payment timeout"]
-        const error = errorMessages[Math.floor(Math.random() * errorMessages.length)]
-
-        console.log("Payment failed:", error)
+      // Validate request
+      const validation = this.validatePaymentRequest(request)
+      if (!validation.isValid) {
         return {
           success: false,
-          error,
+          message: "Payment validation failed",
+          error: validation.errors.join(", "),
         }
       }
+
+      // Simulate payment processing
+      console.log("Processing payment:", request)
+
+      // Simulate different payment methods
+      switch (request.method.type) {
+        case "mobile_money":
+          return await this.processMobileMoneyPayment(request)
+        case "card":
+          return await this.processCardPayment(request)
+        case "bank_transfer":
+          return await this.processBankTransferPayment(request)
+        default:
+          return {
+            success: false,
+            message: "Unsupported payment method",
+            error: "Payment method not supported",
+          }
+      }
     } catch (error) {
-      console.error("Error processing payment:", error)
+      console.error("Payment processing error:", error)
       return {
         success: false,
-        error: "Payment processing error",
+        message: "Payment processing failed",
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
 
-  static validatePaymentMethod(paymentMethod: PaymentMethod, paymentDetails: any): boolean {
-    try {
-      switch (paymentMethod.type) {
-        case "mobile_money":
-          return (
-            paymentDetails.phoneNumber &&
-            paymentDetails.phoneNumber.length >= 10 &&
-            /^\+?[0-9]{10,15}$/.test(paymentDetails.phoneNumber)
-          )
+  private async processMobileMoneyPayment(request: PaymentRequest): Promise<PaymentResult> {
+    // Simulate mobile money payment processing
+    await this.simulateProcessingDelay()
 
-        case "card":
-          return (
-            paymentDetails.cardNumber &&
-            paymentDetails.expiryDate &&
-            paymentDetails.cvv &&
-            paymentDetails.cardNumber.replace(/\s/g, "").length >= 13 &&
-            /^[0-9]{3,4}$/.test(paymentDetails.cvv) &&
-            /^(0[1-9]|1[0-2])\/([0-9]{2})$/.test(paymentDetails.expiryDate)
-          )
+    // Simulate success/failure (90% success rate)
+    const isSuccess = Math.random() > 0.1
 
-        case "bank_transfer":
-          return paymentDetails.accountNumber && paymentDetails.bankCode && paymentDetails.accountNumber.length >= 8
-
-        default:
-          return false
+    if (isSuccess) {
+      return {
+        success: true,
+        transactionId: this.generateTransactionId(),
+        reference: this.generateReference("MM"),
+        message: `Payment of ${request.amount} ${request.currency} successful via ${request.method.name}`,
       }
-    } catch (error) {
-      console.error("Error validating payment method:", error)
-      return false
+    } else {
+      return {
+        success: false,
+        message: "Mobile money payment failed",
+        error: "Insufficient balance or network error",
+      }
     }
   }
 
-  static async refundPayment(paymentIntentId: string, amount: number): Promise<boolean> {
-    try {
-      console.log("Processing refund:", paymentIntentId, "Amount:", amount)
+  private async processCardPayment(request: PaymentRequest): Promise<PaymentResult> {
+    // Simulate card payment processing
+    await this.simulateProcessingDelay()
 
-      // Simulate refund processing
-      await new Promise((resolve) => setTimeout(resolve, 1500))
+    // Simulate success/failure (95% success rate)
+    const isSuccess = Math.random() > 0.05
 
-      // Simulate 90% success rate for refunds
-      const isSuccess = Math.random() < 0.9
-
-      console.log("Refund result:", isSuccess ? "SUCCESS" : "FAILED")
-      return isSuccess
-    } catch (error) {
-      console.error("Error processing refund:", error)
-      return false
+    if (isSuccess) {
+      return {
+        success: true,
+        transactionId: this.generateTransactionId(),
+        reference: this.generateReference("CD"),
+        message: `Card payment of ${request.amount} ${request.currency} successful`,
+      }
+    } else {
+      return {
+        success: false,
+        message: "Card payment failed",
+        error: "Card declined or insufficient funds",
+      }
     }
   }
 
-  static async getPaymentStatus(paymentIntentId: string): Promise<PaymentIntent | null> {
-    try {
-      // In a real implementation, this would query the payment provider
-      console.log("Getting payment status:", paymentIntentId)
-      return null
-    } catch (error) {
-      console.error("Error getting payment status:", error)
-      return null
+  private async processBankTransferPayment(request: PaymentRequest): Promise<PaymentResult> {
+    // Simulate bank transfer processing
+    await this.simulateProcessingDelay()
+
+    // Bank transfers are usually successful but take longer
+    return {
+      success: true,
+      transactionId: this.generateTransactionId(),
+      reference: this.generateReference("BT"),
+      message: `Bank transfer of ${request.amount} ${request.currency} initiated successfully. Processing may take 1-3 business days.`,
     }
   }
 
-  // Web-specific payment methods
-  static async processWebPayment(paymentData: any): Promise<PaymentResult> {
-    try {
-      // This would integrate with Stripe, PayPal, or other web payment processors
-      console.log("Processing web payment:", paymentData)
+  private async simulateProcessingDelay(): Promise<void> {
+    // Simulate network delay
+    const delay = Math.random() * 2000 + 1000 // 1-3 seconds
+    return new Promise((resolve) => setTimeout(resolve, delay))
+  }
 
-      // Simulate web payment processing
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+  private generateTransactionId(): string {
+    return "TXN_" + Date.now() + "_" + Math.random().toString(36).substring(2, 8).toUpperCase()
+  }
+
+  private generateReference(prefix: string): string {
+    return prefix + "_" + Date.now().toString().slice(-8) + Math.random().toString(36).substring(2, 6).toUpperCase()
+  }
+
+  async verifyPayment(transactionId: string): Promise<PaymentResult> {
+    try {
+      // Simulate payment verification
+      await this.simulateProcessingDelay()
+
+      // In a real implementation, you would call the payment provider's API
+      // to verify the transaction status
 
       return {
         success: true,
-        transactionId: `web_txn_${Date.now()}`,
+        transactionId,
+        message: "Payment verified successfully",
       }
     } catch (error) {
-      console.error("Error processing web payment:", error)
+      console.error("Payment verification error:", error)
       return {
         success: false,
-        error: "Web payment processing failed",
+        message: "Payment verification failed",
+        error: error instanceof Error ? error.message : "Unknown error",
       }
     }
   }
 
-  static async setupPaymentGateway(gatewayType: "stripe" | "paypal" | "flutterwave"): Promise<boolean> {
-    try {
-      console.log("Setting up payment gateway:", gatewayType)
-
-      // Gateway-specific setup logic would go here
-      switch (gatewayType) {
-        case "stripe":
-          // Initialize Stripe
-          break
-        case "paypal":
-          // Initialize PayPal
-          break
-        case "flutterwave":
-          // Initialize Flutterwave for African payments
-          break
-      }
-
-      return true
-    } catch (error) {
-      console.error("Error setting up payment gateway:", error)
-      return false
-    }
+  formatCurrency(amount: number, currency = "UGX"): string {
+    return new Intl.NumberFormat("en-UG", {
+      style: "currency",
+      currency: currency,
+      minimumFractionDigits: 0,
+    }).format(amount)
   }
 }
 
-export default PaymentService
+export default PaymentService.getInstance()
