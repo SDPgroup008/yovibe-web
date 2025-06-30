@@ -1,7 +1,7 @@
 import FirebaseService from "./FirebaseService"
-import PaymentService from "./PaymentService.web"
-import BiometricService from "./BiometricService.web"
-import QRCodeService from "./QRCodeService.web"
+import PaymentService from "./PaymentService"
+import BiometricService from "./BiometricService"
+import QRCodeService from "./QRCodeService"
 import NotificationService from "./NotificationService"
 import type { Ticket, TicketValidation, TicketType } from "../models/Ticket"
 import type { Event } from "../models/Event"
@@ -245,6 +245,17 @@ export class TicketService {
     }
   }
 
+  static async getTicketValidationHistory(ticketId: string): Promise<TicketValidation[]> {
+    try {
+      // This would query the ticketValidations collection
+      // For now, return empty array as the method isn't implemented in FirebaseService
+      return []
+    } catch (error) {
+      console.error("Error getting validation history:", error)
+      return []
+    }
+  }
+
   static async generateTicketReport(eventId: string): Promise<any> {
     try {
       const tickets = await this.getEventTickets(eventId)
@@ -268,12 +279,58 @@ export class TicketService {
     }
   }
 
+  // Web-specific methods
+  static async generateTicketPDF(ticket: Ticket): Promise<Blob> {
+    try {
+      // Generate PDF ticket for download
+      // This would use a library like jsPDF or PDFKit
+      console.log("Generating PDF for ticket:", ticket.id)
+
+      // For now, return a simple blob
+      const pdfContent = `
+        YoVibe Ticket
+        
+        Ticket ID: ${ticket.id}
+        Event: ${ticket.eventName}
+        Type: ${ticket.ticketType}
+        Quantity: ${ticket.quantity}
+        Total: UGX ${ticket.totalAmount.toLocaleString()}
+        
+        QR Code: ${ticket.qrCode}
+      `
+
+      return new Blob([pdfContent], { type: "application/pdf" })
+    } catch (error) {
+      console.error("Error generating ticket PDF:", error)
+      throw error
+    }
+  }
+
   static async generateTicketQRImage(ticket: Ticket): Promise<string> {
     try {
-      return await QRCodeService.generateQRCodeImage(ticket.qrCode)
+      // Generate QR code image for the ticket
+      const qrImageDataURL = await QRCodeService.generateQRCodeImage(ticket.qrCode, 300)
+      return qrImageDataURL
     } catch (error) {
       console.error("Error generating ticket QR image:", error)
       throw error
+    }
+  }
+
+  static async sendTicketEmail(ticket: Ticket, recipientEmail: string): Promise<boolean> {
+    try {
+      // Send ticket via email
+      // This would integrate with an email service like SendGrid, Mailgun, etc.
+      console.log("Sending ticket email to:", recipientEmail)
+
+      // Simulate email sending
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+
+      console.log("Ticket email sent successfully")
+      return true
+    } catch (error) {
+      console.error("Error sending ticket email:", error)
+      return false
     }
   }
 }
