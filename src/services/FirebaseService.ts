@@ -26,7 +26,7 @@ import {
   deleteDoc,
 } from "firebase/firestore"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { auth, db, firebaseConfig } from "../config/firebase"
+import { auth, db } from "../config/firebase"
 import type { User as AppUser } from "../models/User"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
@@ -44,7 +44,15 @@ class FirebaseService {
 
   private constructor() {
     console.log("Firebase service initialized")
-    this.app = initializeApp(firebaseConfig)
+    this.app = initializeApp({
+      apiKey: "AIzaSyBXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX",
+      authDomain: "your-project.firebaseapp.com",
+      projectId: "your-project-id",
+      storageBucket: "your-project.appspot.com",
+      messagingSenderId: "123456789012",
+      appId: "1:123456789012:web:abcdef123456789012345",
+      measurementId: "G-XXXXXXXXXX",
+    })
     this.authOriginal = getAuth(this.app)
     this.dbOriginal = getFirestore(this.app)
     this.storage = getStorage(this.app)
@@ -279,19 +287,25 @@ class FirebaseService {
             const userData = userDoc.data()
             callback({
               id: user.uid,
+              uid: user.uid,
               email: user.email!,
               displayName: user.displayName || userData.displayName || "",
               photoURL: user.photoURL || userData.photoURL || "",
               userType: userData.userType || "user",
-            })
+              createdAt: userData.createdAt?.toDate() || new Date(),
+              lastLoginAt: userData.lastLoginAt?.toDate() || new Date(),
+            } as AppUser)
           } else {
             callback({
               id: user.uid,
+              uid: user.uid,
               email: user.email!,
               displayName: user.displayName || "",
               photoURL: user.photoURL || "",
               userType: "user",
-            })
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+            } as AppUser)
           }
         } catch (error) {
           console.error("Error getting user profile:", error)
