@@ -4,11 +4,12 @@ export interface User {
   id: string
   uid: string
   email: string
-  userType: UserType
   displayName?: string
   photoURL?: string
+  userType: UserType
   venueId?: string
   isFrozen?: boolean
+  phone?: string
   createdAt: Date
   lastLoginAt: Date
 }
