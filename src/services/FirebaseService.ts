@@ -255,10 +255,13 @@ class FirebaseService {
       // Create user profile in Firestore
       const newUser: AppUser = {
         id: user.uid,
+        uid: user.uid,
         email: user.email!,
         displayName,
         photoURL: "",
         userType,
+        createdAt: new Date(),
+        lastLoginAt: new Date(),
       }
 
       await this.createUserProfile(newUser)
