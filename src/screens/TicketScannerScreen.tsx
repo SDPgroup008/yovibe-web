@@ -6,7 +6,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Mod
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
-import BiometricService from "../services/BiometricService"
+import { BiometricService } from "../services/BiometricService"
 import QRCodeService from "../services/QRCodeService"
 import type { TicketScannerScreenProps } from "../navigation/types"
 import type { QRCodeData } from "../services/QRCodeService"
