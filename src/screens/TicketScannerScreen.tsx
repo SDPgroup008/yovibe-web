@@ -4,11 +4,10 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import type { Camera } from "expo-camera"
-import { BarCodeScanner } from "expo-barcode-scanner"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import BiometricService from "../services/BiometricService"
+import QRCodeService from "../services/QRCodeService"
 import type { TicketScannerScreenProps } from "../navigation/types"
 import type { QRCodeData } from "../services/QRCodeService"
 
@@ -21,15 +20,26 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
   const [scannedData, setScannedData] = useState<string | null>(null)
   const [qrCodeInfo, setQrCodeInfo] = useState<QRCodeData | null>(null)
   const [showBiometricCapture, setShowBiometricCapture] = useState(false)
-  const cameraRef = useRef<Camera>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const scanIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     requestCameraPermissions()
+    return () => {
+      if (scanIntervalRef.current) {
+        clearInterval(scanIntervalRef.current)
+      }
+    }
   }, [])
 
   const requestCameraPermissions = async () => {
-    const { status } = await BarCodeScanner.requestPermissionsAsync()
-    setHasPermission(status === "granted")
+    try {
+      const isAvailable = await BiometricService.isAvailable()
+      setHasPermission(isAvailable)
+    } catch (error) {
+      console.error("Error requesting camera permissions:", error)
+      setHasPermission(false)
+    }
   }
 
   const handleStartScanning = async () => {
@@ -40,15 +50,52 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
 
     setShowCamera(true)
     setScanning(true)
+
+    try {
+      if (videoRef.current) {
+        await BiometricService.startCameraPreview(videoRef.current)
+        startQRScanning()
+      }
+    } catch (error) {
+      console.error("Error starting camera:", error)
+      Alert.alert("Camera Error", "Failed to start camera")
+      setShowCamera(false)
+      setScanning(false)
+    }
   }
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const startQRScanning = () => {
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+    }
+
+    scanIntervalRef.current = setInterval(async () => {
+      if (videoRef.current && scanning) {
+        try {
+          const qrData = await QRCodeService.scanQRCodeFromVideo(videoRef.current)
+          if (qrData) {
+            handleQRCodeDetected(qrData)
+          }
+        } catch (error) {
+          console.error("Error scanning QR code:", error)
+        }
+      }
+    }, 500) // Scan every 500ms
+  }
+
+  const handleQRCodeDetected = (data: string) => {
     if (!scanning) return
 
     console.log("QR Code scanned:", data.substring(0, 50) + "...")
     setScannedData(data)
     setScanning(false)
     setShowCamera(false)
+
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+    }
+
+    BiometricService.stopCameraPreview()
 
     // Parse QR code to determine ticket type
     try {
@@ -198,10 +245,45 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
     )
   }
 
+  const handleFileUpload = () => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.accept = "image/*"
+    input.onchange = async (event) => {
+      const file = (event.target as HTMLInputElement).files?.[0]
+      if (file) {
+        try {
+          const qrData = await QRCodeService.scanQRCodeFromImage(file)
+          if (qrData) {
+            handleQRCodeDetected(qrData)
+          } else {
+            Alert.alert("No QR Code Found", "No QR code was detected in the uploaded image")
+          }
+        } catch (error) {
+          Alert.alert("Error", "Failed to scan QR code from image")
+        }
+      }
+    }
+    input.click()
+  }
+
   const resetScanner = () => {
     setScannedData(null)
     setQrCodeInfo(null)
     setShowBiometricCapture(false)
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+    }
+    BiometricService.stopCameraPreview()
+  }
+
+  const stopScanning = () => {
+    setShowCamera(false)
+    setScanning(false)
+    if (scanIntervalRef.current) {
+      clearInterval(scanIntervalRef.current)
+    }
+    BiometricService.stopCameraPreview()
   }
 
   if (hasPermission === null) {
@@ -235,7 +317,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
       <View style={styles.content}>
         <View style={styles.scannerArea}>
           <Ionicons name="qr-code" size={120} color="#2196F3" />
-          <Text style={styles.scannerText}>Scan ticket QR code or enter ticket ID manually</Text>
+          <Text style={styles.scannerText}>Scan ticket QR code or upload image</Text>
         </View>
 
         <View style={styles.instructions}>
@@ -277,6 +359,15 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           </TouchableOpacity>
 
           <TouchableOpacity
+            style={[styles.uploadButton, validating && styles.scanButtonDisabled]}
+            onPress={handleFileUpload}
+            disabled={validating}
+          >
+            <Ionicons name="cloud-upload" size={24} color="#FFFFFF" />
+            <Text style={styles.scanButtonText}>Upload Image</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
             style={[styles.manualButton, validating && styles.scanButtonDisabled]}
             onPress={handleManualEntry}
             disabled={validating}
@@ -304,33 +395,58 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
       </View>
 
       {/* Camera Modal */}
-      <Modal
-        visible={showCamera}
-        animationType="slide"
-        onRequestClose={() => {
-          setShowCamera(false)
-          setScanning(false)
-        }}
-      >
+      <Modal visible={showCamera} animationType="slide" onRequestClose={stopScanning}>
         <View style={styles.cameraContainer}>
           <View style={styles.cameraHeader}>
-            <TouchableOpacity
-              onPress={() => {
-                setShowCamera(false)
-                setScanning(false)
-              }}
-            >
+            <TouchableOpacity onPress={stopScanning}>
               <Ionicons name="close" size={30} color="#FFFFFF" />
             </TouchableOpacity>
             <Text style={styles.cameraTitle}>Scan QR Code</Text>
           </View>
 
-          <BarCodeScanner onBarCodeScanned={scanning ? handleBarCodeScanned : undefined} style={styles.camera} />
+          <div style={{ flex: 1, position: "relative" }}>
+            <video
+              ref={videoRef}
+              style={{
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              }}
+              autoPlay
+              muted
+              playsInline
+            />
 
-          <View style={styles.scannerOverlay}>
-            <View style={styles.scannerFrame} />
-            <Text style={styles.scannerInstructions}>Position the QR code within the frame</Text>
-          </View>
+            <div
+              style={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                width: "250px",
+                height: "250px",
+                border: "2px solid #2196F3",
+                borderRadius: "12px",
+                backgroundColor: "transparent",
+              }}
+            />
+
+            <div
+              style={{
+                position: "absolute",
+                bottom: "20px",
+                left: "50%",
+                transform: "translateX(-50%)",
+                backgroundColor: "rgba(0, 0, 0, 0.7)",
+                color: "white",
+                padding: "10px",
+                borderRadius: "8px",
+                textAlign: "center",
+              }}
+            >
+              Position the QR code within the frame
+            </div>
+          </div>
         </View>
       </Modal>
 
@@ -478,6 +594,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
   manualButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -550,35 +675,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFFFFF",
     marginLeft: 16,
-  },
-  camera: {
-    flex: 1,
-  },
-  scannerOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  scannerFrame: {
-    width: 250,
-    height: 250,
-    borderWidth: 2,
-    borderColor: "#2196F3",
-    borderRadius: 12,
-    backgroundColor: "transparent",
-  },
-  scannerInstructions: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginTop: 20,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    padding: 10,
-    borderRadius: 8,
   },
   biometricModalOverlay: {
     flex: 1,
