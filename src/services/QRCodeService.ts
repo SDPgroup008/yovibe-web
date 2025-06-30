@@ -12,7 +12,7 @@ export interface QRCodeData {
 }
 
 export class QRCodeService {
-  private static readonly SECRET_KEY = "yovibe_secret_key_2024" // In production, use environment variable
+  private static SECRET_KEY = "yovibe_secret_key_2024" // In production, use environment variable
 
   static async generateQRCode(
     ticketId: string,
@@ -34,7 +34,7 @@ export class QRCodeService {
 
       // Generate signature to prevent tampering
       const dataString = JSON.stringify(payload)
-      const signature = await this.generateSignature(dataString)
+      const signature = await this.generateSignature(`${dataString}_${this.SECRET_KEY}`)
 
       // Create final QR code data
       const qrData: QRCodeData = {
@@ -54,11 +54,7 @@ export class QRCodeService {
     }
   }
 
-  static async validateQRCode(qrCodeData: string): Promise<{
-    valid: boolean
-    data?: QRCodeData
-    error?: string
-  }> {
+  static async validateQRCode(qrCodeData: string): Promise<{ valid: boolean; data?: QRCodeData; error?: string }> {
     try {
       // Decode from base64
       const decodedString = atob(qrCodeData)
@@ -74,7 +70,7 @@ export class QRCodeService {
       }
 
       const dataString = JSON.stringify(payload)
-      const expectedSignature = await this.generateSignature(dataString)
+      const expectedSignature = await this.generateSignature(`${dataString}_${this.SECRET_KEY}`)
 
       if (expectedSignature !== qrData.signature) {
         return {
@@ -110,6 +106,7 @@ export class QRCodeService {
 
   static async generateQRCodeImage(data: string, size = 200): Promise<string> {
     try {
+      // Generate QR code as data URL
       const qrCodeDataURL = await QRCode.toDataURL(data, {
         width: size,
         margin: 2,
@@ -126,100 +123,104 @@ export class QRCodeService {
     }
   }
 
-  static async scanQRCodeFromImage(imageData: ImageData): Promise<string | null> {
+  static async scanQRCodeFromVideo(videoElement: HTMLVideoElement): Promise<string | null> {
     try {
+      // Create canvas to capture video frame
+      const canvas = document.createElement("canvas")
+      const context = canvas.getContext("2d")!
+
+      canvas.width = videoElement.videoWidth
+      canvas.height = videoElement.videoHeight
+
+      // Draw current video frame to canvas
+      context.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+
+      // Get image data from canvas
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+
+      // Scan for QR code
       const code = jsQR(imageData.data, imageData.width, imageData.height)
-      return code ? code.data : null
+
+      if (code) {
+        console.log("QR Code detected:", code.data.substring(0, 50) + "...")
+        return code.data
+      }
+
+      return null
+    } catch (error) {
+      console.error("Error scanning QR code:", error)
+      return null
+    }
+  }
+
+  static async scanQRCodeFromImage(imageFile: File): Promise<string | null> {
+    try {
+      return new Promise((resolve, reject) => {
+        const canvas = document.createElement("canvas")
+        const context = canvas.getContext("2d")!
+        const img = new Image()
+
+        img.onload = () => {
+          canvas.width = img.width
+          canvas.height = img.height
+          context.drawImage(img, 0, 0)
+
+          const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+          const code = jsQR(imageData.data, imageData.width, imageData.height)
+
+          if (code) {
+            console.log("QR Code detected from image:", code.data.substring(0, 50) + "...")
+            resolve(code.data)
+          } else {
+            resolve(null)
+          }
+        }
+
+        img.onerror = () => reject(new Error("Failed to load image"))
+        img.src = URL.createObjectURL(imageFile)
+      })
     } catch (error) {
       console.error("Error scanning QR code from image:", error)
       return null
     }
   }
 
-  static async scanQRCodeFromVideo(video: HTMLVideoElement): Promise<string | null> {
-    try {
-      const canvas = document.createElement("canvas")
-      const context = canvas.getContext("2d")
-
-      if (!context) return null
-
-      canvas.width = video.videoWidth
-      canvas.height = video.videoHeight
-
-      context.drawImage(video, 0, 0, canvas.width, canvas.height)
-
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-      const code = jsQR(imageData.data, imageData.width, imageData.height)
-
-      return code ? code.data : null
-    } catch (error) {
-      console.error("Error scanning QR code from video:", error)
-      return null
-    }
-  }
-
   private static async generateSignature(data: string): Promise<string> {
     try {
-      // Use Web Crypto API for signature generation
       const encoder = new TextEncoder()
-      const keyData = encoder.encode(this.SECRET_KEY)
-      const messageData = encoder.encode(data)
-
-      // Import key for HMAC
-      const key = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
-
-      // Generate signature
-      const signature = await crypto.subtle.sign("HMAC", key, messageData)
-
-      // Convert to hex string
-      const signatureArray = Array.from(new Uint8Array(signature))
-      const signatureHex = signatureArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-
-      return signatureHex
+      const dataBuffer = encoder.encode(data)
+      const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+      return hashHex
     } catch (error) {
       console.error("Error generating signature:", error)
       throw error
     }
   }
 
-  static createQRScanner(): {
-    start: (video: HTMLVideoElement, onScan: (data: string) => void) => void
-    stop: () => void
-  } {
-    let isScanning = false
-    let animationFrame: number
+  static generateQRCodeSVG(data: string, size = 200): string {
+    // This is a simplified QR code SVG generator
+    // In production, you'd use the qrcode library's SVG output
+    const cellSize = size / 25 // 25x25 grid
+    let svg = `<svg width="${size}" height="${size}" xmlns="http://www.w3.org/2000/svg">`
 
-    const scanFrame = (video: HTMLVideoElement, onScan: (data: string) => void) => {
-      if (!isScanning) return
+    // Generate a simple pattern based on the data hash
+    const hash = data.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
 
-      this.scanQRCodeFromVideo(video)
-        .then((data) => {
-          if (data) {
-            onScan(data)
-            return
-          }
-
-          // Continue scanning
-          animationFrame = requestAnimationFrame(() => scanFrame(video, onScan))
-        })
-        .catch((error) => {
-          console.error("QR scan error:", error)
-          animationFrame = requestAnimationFrame(() => scanFrame(video, onScan))
-        })
-    }
-
-    return {
-      start: (video: HTMLVideoElement, onScan: (data: string) => void) => {
-        isScanning = true
-        scanFrame(video, onScan)
-      },
-      stop: () => {
-        isScanning = false
-        if (animationFrame) {
-          cancelAnimationFrame(animationFrame)
+    for (let row = 0; row < 25; row++) {
+      for (let col = 0; col < 25; col++) {
+        const shouldFill = (hash + row * col) % 3 === 0
+        if (shouldFill) {
+          const x = col * cellSize
+          const y = row * cellSize
+          svg += `<rect x="${x}" y="${y}" width="${cellSize}" height="${cellSize}" fill="black"/>`
         }
-      },
+      }
     }
+
+    svg += "</svg>"
+    return svg
   }
 }
 
