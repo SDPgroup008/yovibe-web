@@ -1,5 +1,13 @@
 import "react-native-get-random-values" // Add this import at the top
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut } from "firebase/auth"
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  getAuth,
+  updateProfile,
+  onAuthStateChanged,
+  signOut,
+} from "firebase/auth"
 import {
   collection,
   addDoc,
@@ -12,21 +20,37 @@ import {
   Timestamp,
   orderBy,
   limit,
+  serverTimestamp,
+  writeBatch,
+  getFirestore,
+  deleteDoc,
 } from "firebase/firestore"
-import { auth, db } from "../config/firebase"
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { auth, db, firebaseConfig } from "../config/firebase"
+import type { User as AppUser } from "../models/User"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import type { VibeImage } from "../models/VibeImage"
 import type { Ticket, TicketValidation } from "../models/Ticket"
+import { initializeApp } from "firebase/app"
 
 class FirebaseService {
   private static instance: FirebaseService
+  private app
+  private authOriginal
+  private dbOriginal
+  private storage
 
   private constructor() {
     console.log("Firebase service initialized")
+    this.app = initializeApp(firebaseConfig)
+    this.authOriginal = getAuth(this.app)
+    this.dbOriginal = getFirestore(this.app)
+    this.storage = getStorage(this.app)
   }
 
-  public static getInstance(): FirebaseService {
+  static getInstance(): FirebaseService {
     if (!FirebaseService.instance) {
       FirebaseService.instance = new FirebaseService()
     }
@@ -171,6 +195,144 @@ class FirebaseService {
     }
   }
 
+  async signInOriginal(email: string, password: string): Promise<AppUser> {
+    try {
+      console.log(`FirebaseService: Signing in user ${email}`)
+      const userCredential = await signInWithEmailAndPassword(this.authOriginal, email, password)
+      const user = userCredential.user
+
+      // Get user profile from Firestore
+      const userDoc = await getDoc(doc(this.dbOriginal, "users", user.uid))
+      if (userDoc.exists()) {
+        const userData = userDoc.data()
+        return {
+          id: user.uid,
+          email: user.email!,
+          displayName: user.displayName || userData.displayName || "",
+          photoURL: user.photoURL || userData.photoURL || "",
+          userType: userData.userType || "user",
+        }
+      } else {
+        // Create user profile if it doesn't exist
+        const newUser: AppUser = {
+          id: user.uid,
+          email: user.email!,
+          displayName: user.displayName || "",
+          photoURL: user.photoURL || "",
+          userType: "user",
+        }
+        await this.createUserProfile(newUser)
+        return newUser
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error signing in:", error)
+      throw error
+    }
+  }
+
+  async signUpOriginal(
+    email: string,
+    password: string,
+    displayName: string,
+    userType: "user" | "club_owner" = "user",
+  ): Promise<AppUser> {
+    try {
+      console.log(`FirebaseService: Creating user ${email}`)
+      const userCredential = await createUserWithEmailAndPassword(this.authOriginal, email, password)
+      const user = userCredential.user
+
+      // Update the user's display name
+      await updateProfile(user, { displayName })
+
+      // Create user profile in Firestore
+      const newUser: AppUser = {
+        id: user.uid,
+        email: user.email!,
+        displayName,
+        photoURL: "",
+        userType,
+      }
+
+      await this.createUserProfile(newUser)
+      return newUser
+    } catch (error) {
+      console.error("FirebaseService: Error creating user:", error)
+      throw error
+    }
+  }
+
+  async signOutOriginal(): Promise<void> {
+    try {
+      await signOut(this.authOriginal)
+    } catch (error) {
+      console.error("FirebaseService: Error signing out:", error)
+      throw error
+    }
+  }
+
+  onAuthStateChanged(callback: (user: AppUser | null) => void): () => void {
+    return onAuthStateChanged(this.authOriginal, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(this.dbOriginal, "users", user.uid))
+          if (userDoc.exists()) {
+            const userData = userDoc.data()
+            callback({
+              id: user.uid,
+              email: user.email!,
+              displayName: user.displayName || userData.displayName || "",
+              photoURL: user.photoURL || userData.photoURL || "",
+              userType: userData.userType || "user",
+            })
+          } else {
+            callback({
+              id: user.uid,
+              email: user.email!,
+              displayName: user.displayName || "",
+              photoURL: user.photoURL || "",
+              userType: "user",
+            })
+          }
+        } catch (error) {
+          console.error("Error getting user profile:", error)
+          callback(null)
+        }
+      } else {
+        callback(null)
+      }
+    })
+  }
+
+  async updateUserProfileOriginal(userId: string, updates: Partial<AppUser>): Promise<void> {
+    try {
+      const userRef = doc(this.dbOriginal, "users", userId)
+      await updateDoc(userRef, updates)
+
+      // Also update Firebase Auth profile if displayName or photoURL changed
+      if (this.authOriginal.currentUser && (updates.displayName !== undefined || updates.photoURL !== undefined)) {
+        const profileUpdates: { displayName?: string; photoURL?: string } = {}
+        if (updates.displayName !== undefined) profileUpdates.displayName = updates.displayName
+        if (updates.photoURL !== undefined) profileUpdates.photoURL = updates.photoURL
+        await updateProfile(this.authOriginal.currentUser, profileUpdates)
+      }
+    } catch (error) {
+      console.error("Error updating user profile:", error)
+      throw error
+    }
+  }
+
+  private async createUserProfile(user: AppUser): Promise<void> {
+    try {
+      await addDoc(collection(this.dbOriginal, "users"), {
+        ...user,
+        createdAt: serverTimestamp(),
+      })
+    } catch (error) {
+      console.error("Error creating user profile:", error)
+      throw error
+    }
+  }
+
   // Venue methods
   async getVenues(): Promise<Venue[]> {
     try {
@@ -307,39 +469,28 @@ class FirebaseService {
     ]
   }
 
-  async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
+  async createVenue(venue: Omit<Venue, "id">): Promise<string> {
     try {
-      const venuesRef = collection(db, "venues")
-      const q = query(venuesRef, where("ownerId", "==", ownerId))
-      const querySnapshot = await getDocs(q)
-      const venues: Venue[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        // Only include non-deleted venues
-        if (!data.isDeleted) {
-          venues.push({
-            id: doc.id,
-            name: data.name,
-            location: data.location,
-            description: data.description,
-            backgroundImageUrl: data.backgroundImageUrl,
-            categories: data.categories,
-            vibeRating: data.vibeRating,
-            todayImages: data.todayImages || [],
-            latitude: data.latitude,
-            longitude: data.longitude,
-            weeklyPrograms: data.weeklyPrograms || {},
-            ownerId: data.ownerId,
-            createdAt: data.createdAt.toDate(),
-            venueType: data.venueType || "nightlife",
-          })
-        }
+      const docRef = await addDoc(collection(this.dbOriginal, "venues"), {
+        ...venue,
+        createdAt: serverTimestamp(),
       })
-
-      return venues
+      return docRef.id
     } catch (error) {
-      console.error("Error getting venues by owner:", error)
+      console.error("Error creating venue:", error)
+      throw error
+    }
+  }
+
+  async getVenuesOriginal(): Promise<Venue[]> {
+    try {
+      const querySnapshot = await getDocs(collection(this.dbOriginal, "venues"))
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Venue[]
+    } catch (error) {
+      console.error("Error getting venues:", error)
       throw error
     }
   }
@@ -382,6 +533,557 @@ class FirebaseService {
     }
   }
 
+  async updateVenue(venueId: string, updates: Partial<Venue>): Promise<void> {
+    try {
+      const venueRef = doc(db, "venues", venueId)
+      await updateDoc(venueRef, updates)
+      return
+    } catch (error) {
+      console.error("Error updating venue:", error)
+      throw error
+    }
+  }
+
+  async deleteVenueOriginal(venueId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(this.dbOriginal, "venues", venueId))
+    } catch (error) {
+      console.error("Error deleting venue:", error)
+      throw error
+    }
+  }
+
+  async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
+    try {
+      const venuesRef = collection(db, "venues")
+      const q = query(venuesRef, where("ownerId", "==", ownerId))
+      const querySnapshot = await getDocs(q)
+      const venues: Venue[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        // Only include non-deleted venues
+        if (!data.isDeleted) {
+          venues.push({
+            id: doc.id,
+            name: data.name,
+            location: data.location,
+            description: data.description,
+            backgroundImageUrl: data.backgroundImageUrl,
+            categories: data.categories,
+            vibeRating: data.vibeRating,
+            todayImages: data.todayImages || [],
+            latitude: data.latitude,
+            longitude: data.longitude,
+            weeklyPrograms: data.weeklyPrograms || {},
+            ownerId: data.ownerId,
+            createdAt: data.createdAt.toDate(),
+            venueType: data.venueType || "nightlife",
+          })
+        }
+      })
+
+      return venues
+    } catch (error) {
+      console.error("Error getting venues by owner:", error)
+      throw error
+    }
+  }
+
+  // Event methods
+  async createEvent(event: Omit<Event, "id">): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(this.dbOriginal, "events"), {
+        ...event,
+        createdAt: serverTimestamp(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error creating event:", error)
+      throw error
+    }
+  }
+
+  async getEvents(): Promise<Event[]> {
+    try {
+      console.log("FirebaseService: Getting events")
+
+      try {
+        const eventsRef = collection(db, "events")
+        const querySnapshot = await getDocs(eventsRef)
+        const events: Event[] = []
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data()
+
+          // Only include non-deleted events
+          if (!data.isDeleted) {
+            const eventDate = data.date && data.date.toDate ? data.date.toDate() : new Date(data.date)
+
+            // Only include future events
+            if (eventDate >= new Date()) {
+              events.push({
+                id: doc.id,
+                name: data.name,
+                venueId: data.venueId,
+                venueName: data.venueName,
+                description: data.description,
+                date: eventDate,
+                posterImageUrl: data.posterImageUrl,
+                artists: data.artists,
+                isFeatured: data.isFeatured,
+                location: data.location, // Make sure this is included
+                priceIndicator: data.priceIndicator || 1,
+                entryFee: data.entryFee, // Make sure this is included
+                attendees: data.attendees || [],
+                createdAt: data.createdAt && data.createdAt.toDate ? data.createdAt.toDate() : new Date(),
+                createdBy: data.createdBy,
+                createdByType: data.createdByType,
+              })
+            }
+          }
+        })
+
+        console.log("FirebaseService: Found", events.length, "events")
+
+        // Sort events by date (closest to today first)
+        const sortedEvents = events.sort((a, b) => {
+          return a.date.getTime() - b.date.getTime()
+        })
+
+        return sortedEvents
+      } catch (error) {
+        console.error("Error getting events from Firestore:", error)
+        return []
+      }
+    } catch (error) {
+      console.error("Error getting events:", error)
+      throw error
+    }
+  }
+
+  async getEventByIdOriginal(eventId: string): Promise<Event | null> {
+    try {
+      const docRef = doc(this.dbOriginal, "events", eventId)
+      const docSnap = await getDoc(docRef)
+
+      if (docSnap.exists()) {
+        const data = docSnap.data()
+        return {
+          id: docSnap.id,
+          ...data,
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+        } as Event
+      } else {
+        return null
+      }
+    } catch (error) {
+      console.error("Error getting event:", error)
+      throw error
+    }
+  }
+
+  async updateEventOriginal(eventId: string, updates: Partial<Event>): Promise<void> {
+    try {
+      const eventRef = doc(this.dbOriginal, "events", eventId)
+      await updateDoc(eventRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      })
+    } catch (error) {
+      console.error("Error updating event:", error)
+      throw error
+    }
+  }
+
+  async deleteEventOriginal(eventId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(this.dbOriginal, "events", eventId))
+    } catch (error) {
+      console.error("Error deleting event:", error)
+      throw error
+    }
+  }
+
+  async getEventsByVenueOriginal(venueId: string): Promise<Event[]> {
+    try {
+      const q = query(collection(this.dbOriginal, "events"), where("venueId", "==", venueId))
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          ...data,
+          date: data.date?.toDate ? data.date.toDate() : new Date(data.date),
+        }
+      }) as Event[]
+    } catch (error) {
+      console.error("Error getting events by venue:", error)
+      throw error
+    }
+  }
+
+  async getFeaturedEvents(): Promise<Event[]> {
+    try {
+      const eventsRef = collection(db, "events")
+      const q = query(eventsRef, where("isFeatured", "==", true))
+      const querySnapshot = await getDocs(q)
+      const events: Event[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+
+        // Only include non-deleted events
+        if (!data.isDeleted) {
+          const eventDate = data.date.toDate()
+
+          // Only include future events
+          if (eventDate >= new Date()) {
+            events.push({
+              id: doc.id,
+              name: data.name,
+              venueId: data.venueId,
+              venueName: data.venueName,
+              description: data.description,
+              date: eventDate,
+              posterImageUrl: data.posterImageUrl,
+              artists: data.artists,
+              isFeatured: data.isFeatured,
+              location: data.location, // Make sure this is included
+              priceIndicator: data.priceIndicator || 1,
+              entryFee: data.entryFee, // Make sure this is included
+              attendees: data.attendees || [],
+              createdAt: data.createdAt.toDate(),
+              createdBy: data.createdBy,
+              createdByType: data.createdByType,
+            })
+          }
+        }
+      })
+
+      return events
+    } catch (error) {
+      console.error("Error getting featured events:", error)
+      return []
+    }
+  }
+
+  async deleteEventsByVenueOriginal(venueId: string): Promise<void> {
+    try {
+      const q = query(collection(this.dbOriginal, "events"), where("venueId", "==", venueId))
+      const querySnapshot = await getDocs(q)
+      const batch = writeBatch(this.dbOriginal)
+
+      querySnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref)
+      })
+
+      await batch.commit()
+    } catch (error) {
+      console.error("Error deleting events by venue:", error)
+      throw error
+    }
+  }
+
+  async deletePastEventsOriginal(): Promise<void> {
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const q = query(collection(this.dbOriginal, "events"))
+      const querySnapshot = await getDocs(q)
+      const batch = writeBatch(this.dbOriginal)
+
+      querySnapshot.docs.forEach((doc) => {
+        const data = doc.data()
+        const eventDate = data.date?.toDate ? data.date.toDate() : new Date(data.date)
+
+        if (eventDate < today) {
+          batch.delete(doc.ref)
+        }
+      })
+
+      await batch.commit()
+    } catch (error) {
+      console.error("Error deleting past events:", error)
+      throw error
+    }
+  }
+
+  // Storage methods
+  async uploadVenueImage(imageUri: string): Promise<string> {
+    try {
+      const response = await fetch(imageUri)
+      const blob = await response.blob()
+      const filename = `venues/${Date.now()}-${Math.random().toString(36).substring(7)}`
+      const storageRef = ref(this.storage, filename)
+      await uploadBytes(storageRef, blob)
+      return await getDownloadURL(storageRef)
+    } catch (error) {
+      console.error("Error uploading venue image:", error)
+      throw error
+    }
+  }
+
+  async uploadEventImage(imageUri: string): Promise<string> {
+    try {
+      const response = await fetch(imageUri)
+      const blob = await response.blob()
+      const filename = `events/${Date.now()}-${Math.random().toString(36).substring(7)}`
+      const storageRef = ref(this.storage, filename)
+      await uploadBytes(storageRef, blob)
+      return await getDownloadURL(storageRef)
+    } catch (error) {
+      console.error("Error uploading event image:", error)
+      throw error
+    }
+  }
+
+  async uploadVibeImage(imageUri: string): Promise<string> {
+    try {
+      const response = await fetch(imageUri)
+      const blob = await response.blob()
+      const filename = `vibes/${Date.now()}-${Math.random().toString(36).substring(7)}`
+      const storageRef = ref(this.storage, filename)
+      await uploadBytes(storageRef, blob)
+      return await getDownloadURL(storageRef)
+    } catch (error) {
+      console.error("Error uploading vibe image:", error)
+      throw error
+    }
+  }
+
+  // User management methods
+  async getUsers(): Promise<AppUser[]> {
+    try {
+      const querySnapshot = await getDocs(collection(this.dbOriginal, "users"))
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as AppUser[]
+    } catch (error) {
+      console.error("Error getting users:", error)
+      throw error
+    }
+  }
+
+  async deleteUserOriginal(userId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(this.dbOriginal, "users", userId))
+    } catch (error) {
+      console.error("Error deleting user:", error)
+      throw error
+    }
+  }
+
+  // Vibe methods
+  async saveVibeImage(vibeImage: Omit<VibeImage, "id">): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(this.dbOriginal, "vibeImages"), {
+        ...vibeImage,
+        createdAt: serverTimestamp(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error saving vibe image:", error)
+      throw error
+    }
+  }
+
+  async getVibeImagesByVenueAndDateOriginal(venueId: string, date: Date): Promise<VibeImage[]> {
+    try {
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const q = query(
+        collection(this.dbOriginal, "vibeImages"),
+        where("venueId", "==", venueId),
+        where("createdAt", ">=", startOfDay),
+        where("createdAt", "<=", endOfDay),
+        orderBy("createdAt", "desc"),
+      )
+
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as VibeImage[]
+    } catch (error) {
+      console.error("Error getting vibe images by venue and date:", error)
+      throw error
+    }
+  }
+
+  async getVibeImagesByVenueAndWeekOriginal(venueId: string, startDate: Date): Promise<VibeImage[]> {
+    try {
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 7)
+
+      const q = query(
+        collection(this.dbOriginal, "vibeImages"),
+        where("venueId", "==", venueId),
+        where("createdAt", ">=", startDate),
+        where("createdAt", "<=", endDate),
+        orderBy("createdAt", "desc"),
+      )
+
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as VibeImage[]
+    } catch (error) {
+      console.error("Error getting vibe images by venue and week:", error)
+      throw error
+    }
+  }
+
+  async saveVibeRating(venueId: string, rating: number): Promise<void> {
+    try {
+      await addDoc(collection(this.dbOriginal, "vibeRatings"), {
+        venueId,
+        rating,
+        createdAt: serverTimestamp(),
+      })
+    } catch (error) {
+      console.error("Error saving vibe rating:", error)
+      throw error
+    }
+  }
+
+  async getLatestVibeRating(venueId: string): Promise<number | null> {
+    try {
+      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
+
+      // Query for the latest vibe rating for this venue
+      const vibeRatingsRef = collection(db, "vibeRatings")
+      const q = query(vibeRatingsRef, where("venueId", "==", venueId), orderBy("createdAt", "desc"), limit(1))
+
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        console.log("FirebaseService: No vibe ratings found for venue", venueId)
+        return null
+      }
+
+      const latestRating = querySnapshot.docs[0].data()
+      console.log("FirebaseService: Latest vibe rating found:", latestRating.rating)
+
+      return latestRating.rating || null
+    } catch (error) {
+      console.error("Error getting latest vibe rating:", error)
+      // Return a fallback rating instead of throwing
+      return Math.random() * 5
+    }
+  }
+
+  // Ticket methods
+  async saveTicketOriginal(ticket: Omit<Ticket, "id">): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(this.dbOriginal, "tickets"), {
+        ...ticket,
+        createdAt: serverTimestamp(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error saving ticket:", error)
+      throw error
+    }
+  }
+
+  async getTicketByIdOriginal(ticketId: string): Promise<Ticket | null> {
+    try {
+      const docRef = doc(this.dbOriginal, "tickets", ticketId)
+      const docSnap = await getDoc(docRef)
+
+      if (docSnap.exists()) {
+        const data = docSnap.data()
+        return {
+          id: docSnap.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate() || new Date(),
+        } as Ticket
+      } else {
+        return null
+      }
+    } catch (error) {
+      console.error("Error getting ticket:", error)
+      throw error
+    }
+  }
+
+  async getTicketsByEventOriginal(eventId: string): Promise<Ticket[]> {
+    try {
+      const q = query(collection(this.dbOriginal, "tickets"), where("eventId", "==", eventId))
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate() || new Date(),
+        }
+      }) as Ticket[]
+    } catch (error) {
+      console.error("Error getting tickets by event:", error)
+      throw error
+    }
+  }
+
+  async getTicketsByUserOriginal(userId: string): Promise<Ticket[]> {
+    try {
+      const q = query(collection(this.dbOriginal, "tickets"), where("buyerId", "==", userId))
+      const querySnapshot = await getDocs(q)
+      return querySnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate() || new Date(),
+        }
+      }) as Ticket[]
+    } catch (error) {
+      console.error("Error getting tickets by user:", error)
+      throw error
+    }
+  }
+
+  async updateTicketOriginal(ticketId: string, updates: Partial<Ticket>): Promise<void> {
+    try {
+      const ticketRef = doc(this.dbOriginal, "tickets", ticketId)
+      await updateDoc(ticketRef, {
+        ...updates,
+        updatedAt: serverTimestamp(),
+      })
+    } catch (error) {
+      console.error("Error updating ticket:", error)
+      throw error
+    }
+  }
+
+  async saveTicketValidationOriginal(validation: {
+    ticketId: string
+    eventId: string
+    validatedBy: string
+    validatedAt: Date
+    biometricData?: string
+  }): Promise<void> {
+    try {
+      await addDoc(collection(this.dbOriginal, "ticketValidations"), {
+        ...validation,
+        createdAt: serverTimestamp(),
+      })
+    } catch (error) {
+      console.error("Error saving ticket validation:", error)
+      throw error
+    }
+  }
+
   async addVenue(venueData: Omit<Venue, "id">): Promise<string> {
     try {
       const venueRef = await addDoc(collection(db, "venues"), {
@@ -393,17 +1095,6 @@ class FirebaseService {
       return venueRef.id
     } catch (error) {
       console.error("Error adding venue:", error)
-      throw error
-    }
-  }
-
-  async updateVenue(venueId: string, data: Partial<Venue>): Promise<void> {
-    try {
-      const venueRef = doc(db, "venues", venueId)
-      await updateDoc(venueRef, data)
-      return
-    } catch (error) {
-      console.error("Error updating venue:", error)
       throw error
     }
   }
@@ -490,155 +1181,6 @@ class FirebaseService {
     }
   }
 
-  // Event methods
-  async getEvents(): Promise<Event[]> {
-    try {
-      console.log("FirebaseService: Getting events")
-
-      try {
-        const eventsRef = collection(db, "events")
-        const querySnapshot = await getDocs(eventsRef)
-        const events: Event[] = []
-
-        querySnapshot.forEach((doc) => {
-          const data = doc.data()
-
-          // Only include non-deleted events
-          if (!data.isDeleted) {
-            const eventDate = data.date.toDate()
-
-            // Only include future events
-            if (eventDate >= new Date()) {
-              events.push({
-                id: doc.id,
-                name: data.name,
-                venueId: data.venueId,
-                venueName: data.venueName,
-                description: data.description,
-                date: eventDate,
-                posterImageUrl: data.posterImageUrl,
-                artists: data.artists,
-                isFeatured: data.isFeatured,
-                location: data.location, // Make sure this is included
-                priceIndicator: data.priceIndicator || 1,
-                entryFee: data.entryFee, // Make sure this is included
-                attendees: data.attendees || [],
-                createdAt: data.createdAt.toDate(),
-                createdBy: data.createdBy,
-                createdByType: data.createdByType,
-              })
-            }
-          }
-        })
-
-        console.log("FirebaseService: Found", events.length, "events")
-
-        // Sort events by date (closest to today first)
-        const sortedEvents = events.sort((a, b) => {
-          return a.date.getTime() - b.date.getTime()
-        })
-
-        return sortedEvents
-      } catch (error) {
-        console.error("Error getting events from Firestore:", error)
-        return []
-      }
-    } catch (error) {
-      console.error("Error getting events:", error)
-      throw error
-    }
-  }
-
-  async getFeaturedEvents(): Promise<Event[]> {
-    try {
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("isFeatured", "==", true))
-      const querySnapshot = await getDocs(q)
-      const events: Event[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-
-        // Only include non-deleted events
-        if (!data.isDeleted) {
-          const eventDate = data.date.toDate()
-
-          // Only include future events
-          if (eventDate >= new Date()) {
-            events.push({
-              id: doc.id,
-              name: data.name,
-              venueId: data.venueId,
-              venueName: data.venueName,
-              description: data.description,
-              date: eventDate,
-              posterImageUrl: data.posterImageUrl,
-              artists: data.artists,
-              isFeatured: data.isFeatured,
-              location: data.location, // Make sure this is included
-              priceIndicator: data.priceIndicator || 1,
-              entryFee: data.entryFee, // Make sure this is included
-              attendees: data.attendees || [],
-              createdAt: data.createdAt.toDate(),
-              createdBy: data.createdBy,
-              createdByType: data.createdByType,
-            })
-          }
-        }
-      })
-
-      return events
-    } catch (error) {
-      console.error("Error getting featured events:", error)
-      return []
-    }
-  }
-
-  async getEventsByVenue(venueId: string): Promise<Event[]> {
-    try {
-      const eventsRef = collection(db, "events")
-      const q = query(eventsRef, where("venueId", "==", venueId))
-      const querySnapshot = await getDocs(q)
-      const events: Event[] = []
-
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-
-        // Only include non-deleted events
-        if (!data.isDeleted) {
-          const eventDate = data.date.toDate()
-
-          // Only include future events
-          if (eventDate >= new Date()) {
-            events.push({
-              id: doc.id,
-              name: data.name,
-              venueId: data.venueId,
-              venueName: data.venueName,
-              description: data.description,
-              date: eventDate,
-              posterImageUrl: data.posterImageUrl,
-              artists: data.artists,
-              isFeatured: data.isFeatured,
-              location: data.location, // Make sure this is included
-              priceIndicator: data.priceIndicator || 1,
-              entryFee: data.entryFee, // Make sure this is included
-              attendees: data.attendees || [],
-              createdAt: data.createdAt.toDate(),
-              createdBy: data.createdBy,
-              createdByType: data.createdByType,
-            })
-          }
-        }
-      })
-
-      return events
-    } catch (error) {
-      console.error("Error getting events by venue:", error)
-      throw error
-    }
-  }
-
   async getEventById(eventId: string): Promise<Event | null> {
     try {
       const eventRef = doc(db, "events", eventId)
@@ -695,6 +1237,10 @@ class FirebaseService {
         priceIndicator: eventData.priceIndicator,
         entryFee: eventData.entryFee,
         attendees: eventData.attendees || [],
+        createdAt: Timestamp.now(),
+        createdBy: eventData.createdBy,
+        createdByType: eventData.createdByType,
+        isDeleted: false,
       }
 
       const eventRef = await addDoc(collection(db, "events"), firestoreEventData)
@@ -702,32 +1248,6 @@ class FirebaseService {
     } catch (error) {
       console.error("Error adding event:", error)
       throw error
-    }
-  }
-
-  async getLatestVibeRating(venueId: string): Promise<number | null> {
-    try {
-      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
-
-      // Query for the latest vibe rating for this venue
-      const vibeRatingsRef = collection(db, "vibeRatings")
-      const q = query(vibeRatingsRef, where("venueId", "==", venueId), orderBy("createdAt", "desc"), limit(1))
-
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        console.log("FirebaseService: No vibe ratings found for venue", venueId)
-        return null
-      }
-
-      const latestRating = querySnapshot.docs[0].data()
-      console.log("FirebaseService: Latest vibe rating found:", latestRating.rating)
-
-      return latestRating.rating || null
-    } catch (error) {
-      console.error("Error getting latest vibe rating:", error)
-      // Return a fallback rating instead of throwing
-      return Math.random() * 5
     }
   }
 
