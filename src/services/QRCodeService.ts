@@ -41,7 +41,6 @@ export default class QRCodeService {
       const qrCodeDataURL = await QRCode.toDataURL(base64Data, {
         errorCorrectionLevel: "M",
         type: "image/png",
-        quality: 0.92,
         margin: 1,
         color: {
           dark: "#000000",
@@ -62,7 +61,6 @@ export default class QRCodeService {
       return await QRCode.toDataURL(data, {
         errorCorrectionLevel: "M",
         type: "image/png",
-        quality: 0.92,
         margin: 1,
         color: {
           dark: "#000000",
