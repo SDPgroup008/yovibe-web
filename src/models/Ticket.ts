@@ -1,3 +1,5 @@
+export type TicketType = "regular" | "secure"
+
 export interface Ticket {
   id: string
   eventId: string
@@ -11,9 +13,12 @@ export interface Ticket {
   appCommission: number
   purchaseDate: Date
   qrCode: string
-  biometricHash: string
+  ticketType: TicketType
+  biometricHash?: string // Only for secure tickets
   status: "active" | "used" | "cancelled"
   validationHistory: TicketValidation[]
+  cancelReason?: string
+  cancelledAt?: Date
 }
 
 export interface TicketValidation {
@@ -21,7 +26,7 @@ export interface TicketValidation {
   ticketId: string
   validatedAt: Date
   validatedBy: string
-  biometricMatch: boolean
+  biometricMatch?: boolean // Only applicable for secure tickets
   location?: string
   status: "granted" | "denied"
   reason?: string
