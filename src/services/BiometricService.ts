@@ -244,4 +244,4 @@ export class BiometricService {
   }
 }
 
-export * from "./BiometricService.web"
+export * from "./BiometricService"
