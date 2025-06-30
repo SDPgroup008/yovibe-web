@@ -465,4 +465,4 @@ export class BiometricService {
   }
 }
 
-export deauBiometricService.web"
+export DBiometricService.web"
