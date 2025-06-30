@@ -1,7 +1,7 @@
 import FirebaseService from "./FirebaseService"
-import PaymentService from "./PaymentService"
-import BiometricService from "./BiometricService"
-import QRCodeService from "./QRCodeService"
+import PaymentService from "./PaymentService.web"
+import BiometricService from "./BiometricService.web"
+import QRCodeService from "./QRCodeService.web"
 import NotificationService from "./NotificationService"
 import type { Ticket, TicketValidation, TicketType } from "../models/Ticket"
 import type { Event } from "../models/Event"
@@ -245,17 +245,6 @@ export class TicketService {
     }
   }
 
-  static async getTicketValidationHistory(ticketId: string): Promise<TicketValidation[]> {
-    try {
-      // This would query the ticketValidations collection
-      // For now, return empty array as the method isn't implemented in FirebaseService
-      return []
-    } catch (error) {
-      console.error("Error getting validation history:", error)
-      return []
-    }
-  }
-
   static async generateTicketReport(eventId: string): Promise<any> {
     try {
       const tickets = await this.getEventTickets(eventId)
@@ -276,6 +265,15 @@ export class TicketService {
     } catch (error) {
       console.error("Error generating ticket report:", error)
       return null
+    }
+  }
+
+  static async generateTicketQRImage(ticket: Ticket): Promise<string> {
+    try {
+      return await QRCodeService.generateQRCodeImage(ticket.qrCode)
+    } catch (error) {
+      console.error("Error generating ticket QR image:", error)
+      throw error
     }
   }
 }
