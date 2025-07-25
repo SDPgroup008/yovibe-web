@@ -21,11 +21,12 @@ import TicketService from "../services/TicketService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type { Ticket } from "../models/Ticket"
-import type { EventDetailScreenProps } from "../navigation/types"  
+import type { EventDetailScreenProps } from "../navigation/types"
 
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
   const { eventId } = route.params
   const { user } = useAuth()
+
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [isGoing, setIsGoing] = useState(false)
@@ -37,7 +38,20 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   useEffect(() => {
     const loadEvent = async () => {
       try {
+        if (!eventId) {
+          console.error("EventDetailScreen: No eventId provided")
+          Alert.alert("Error", "Event ID is missing")
+          navigation.goBack()
+          return
+        }
+
         const eventData = await FirebaseService.getEventById(eventId)
+        if (!eventData) {
+          Alert.alert("Error", "Event not found")
+          navigation.goBack()
+          return
+        }
+
         setEvent(eventData)
 
         // Check if current user is attending
@@ -50,31 +64,31 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
         // Load tickets if user is event owner
         if (user && eventData && eventData.createdBy === user.id) {
-          const tickets = await TicketService.getEventTickets(eventId)
+          const tickets = await TicketService.getTicketsByEvent(eventId)
           setEventTickets(tickets)
         }
       } catch (error) {
         console.error("Error loading event details:", error)
+        Alert.alert("Error", "Failed to load event details")
+        navigation.goBack()
       } finally {
         setLoading(false)
       }
     }
 
     loadEvent()
-  }, [eventId, user])
+  }, [eventId, user, navigation])
 
   const handleToggleGoing = async () => {
     if (!user) {
       Alert.alert("Sign In Required", "Please sign in to mark yourself as attending this event.")
       return
     }
-
     if (!event) return
 
     try {
       const updatedIsGoing = !isGoing
       setIsGoing(updatedIsGoing)
-
       // Update attendee count optimistically
       setAttendeeCount((prevCount) => (updatedIsGoing ? prevCount + 1 : prevCount - 1))
 
@@ -104,17 +118,19 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       Alert.alert("Sign In Required", "Please sign in to purchase tickets.")
       return
     }
-
     if (!event) return
 
-    const ticketPrice = Number.parseInt(event.entryFee?.replace(/[^0-9]/g, "") || "0")
+    // Parse entry fee to get numeric value
+    const entryFeeString = event.entryFee || "0"
+    const ticketPrice = Number.parseFloat(entryFeeString.replace(/[^0-9.]/g, "")) || 0
 
     if (ticketPrice === 0) {
       Alert.alert("Free Event", "This is a free event. No tickets required!")
       return
     }
 
-    navigation.navigate("TicketPurchase", { event })
+    // Navigate with eventId instead of event object
+    navigation.navigate("TicketPurchase", { eventId: event.id })
   }
 
   const handleShare = async () => {
@@ -211,11 +227,16 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Event not found</Text>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Text style={styles.backButtonText}>Go Back</Text>
+        </TouchableOpacity>
       </View>
     )
   }
 
-  const ticketPrice = Number.parseInt(event.entryFee?.replace(/[^0-9]/g, "") || "0")
+  // Parse entry fee to get numeric value
+  const entryFeeString = event.entryFee || "0"
+  const ticketPrice = Number.parseFloat(entryFeeString.replace(/[^0-9.]/g, "")) || 0
   const isEventOwner = user && event.createdBy === user.id
 
   return (
@@ -226,13 +247,11 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
-
             <View style={styles.eventHeaderInfo}>
               <Text style={styles.eventName}>{event.name}</Text>
               <Text style={styles.eventLocation}>
                 {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
               </Text>
-
               <View style={styles.eventMeta}>
                 {attendeeCount > 0 && (
                   <View style={styles.attendeeCount}>
@@ -284,7 +303,10 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
               <Text style={styles.ownerButtonText}>View Ticket Sales ({eventTickets.length})</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.scannerButton} onPress={() => navigation.navigate("TicketScanner")}>
+            <TouchableOpacity
+              style={styles.scannerButton}
+              onPress={() => navigation.navigate("TicketScanner", { eventId: event.id })}
+            >
               <Ionicons name="scan" size={20} color="#FFFFFF" />
               <Text style={styles.ownerButtonText}>Ticket Scanner</Text>
             </TouchableOpacity>
@@ -376,6 +398,19 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
   },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  backButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
   headerImage: {
     width: "100%",
     height: 300,
@@ -386,14 +421,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     paddingTop: Platform.OS === "ios" ? 50 : 16,
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
   },
   eventHeaderInfo: {
     marginBottom: 16,

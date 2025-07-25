@@ -1,4 +1,4 @@
-import "react-native-get-random-values" // Add this import at the top
+import "react-native-get-random-values"
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -31,9 +31,10 @@ import type { User as AppUser } from "../models/User"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import { getDefaultTicketTypes, parseEntryFee } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
-import type { Ticket, TicketValidation } from "../models/Ticket"
-import { initializeApp } from "firebase/app"
+import type { Ticket, TicketValidation, PaymentConfirmation } from "../models/Ticket"
+import { initializeApp, getApps } from "firebase/app"
 
 class FirebaseService {
   private static instance: FirebaseService
@@ -44,14 +45,24 @@ class FirebaseService {
 
   private constructor() {
     console.log("Firebase service initialized")
-    this.app = initializeApp({
-       apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
-        authDomain: "eco-guardian-bd74f.firebaseapp.com",
-        projectId: "eco-guardian-bd74f",
-        storageBucket: "eco-guardian-bd74f.appspot.com",
-        messagingSenderId: "917905910857",
-        appId: "1:917905910857:android:5886ab1db46cec56912398",
-    })
+
+    // Firebase configuration - use environment variables if available, otherwise fallback
+    const firebaseConfig = {
+      apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
+      authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || "eco-guardian-bd74f.firebaseapp.com",
+      projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || "eco-guardian-bd74f",
+      storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || "eco-guardian-bd74f.appspot.com",
+      messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "917905910857",
+      appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || "1:917905910857:android:5886ab1db46cec56912398",
+    }
+
+    // Check if Firebase app already exists to prevent duplicate initialization
+    if (getApps().length === 0) {
+      this.app = initializeApp(firebaseConfig)
+    } else {
+      this.app = getApps()[0]
+    }
+
     this.authOriginal = getAuth(this.app)
     this.dbOriginal = getFirestore(this.app)
     this.storage = getStorage(this.app)
@@ -519,7 +530,13 @@ class FirebaseService {
 
   async getVenueById(venueId: string): Promise<Venue | null> {
     try {
-      const venueRef = doc(db, "venues", venueId)
+      // Add validation for venueId
+      if (!venueId || typeof venueId !== "string" || venueId.trim() === "") {
+        console.error("FirebaseService: Invalid venueId provided:", venueId)
+        return null
+      }
+
+      const venueRef = doc(db, "venues", venueId.trim())
       const venueDoc = await getDoc(venueRef)
 
       if (!venueDoc.exists()) {
@@ -654,13 +671,18 @@ class FirebaseService {
                 posterImageUrl: data.posterImageUrl,
                 artists: data.artists,
                 isFeatured: data.isFeatured,
-                location: data.location, // Make sure this is included
+                location: data.location,
                 priceIndicator: data.priceIndicator || 1,
-                entryFee: data.entryFee, // Make sure this is included
+                entryFee: data.entryFee,
                 attendees: data.attendees || [],
                 createdAt: data.createdAt && data.createdAt.toDate ? data.createdAt.toDate() : new Date(),
                 createdBy: data.createdBy,
                 createdByType: data.createdByType,
+                ticketTypes: data.ticketTypes || getDefaultTicketTypes(parseEntryFee(data.entryFee)),
+                paymentAccounts: data.paymentAccounts || [],
+                totalRevenue: data.totalRevenue || 0,
+                appCommission: data.appCommission || 0,
+                netRevenue: data.netRevenue || 0,
               })
             }
           }
@@ -771,13 +793,18 @@ class FirebaseService {
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
-              location: data.location, // Make sure this is included
+              location: data.location,
               priceIndicator: data.priceIndicator || 1,
-              entryFee: data.entryFee, // Make sure this is included
+              entryFee: data.entryFee,
               attendees: data.attendees || [],
               createdAt: data.createdAt.toDate(),
               createdBy: data.createdBy,
               createdByType: data.createdByType,
+              ticketTypes: data.ticketTypes || getDefaultTicketTypes(parseEntryFee(data.entryFee)),
+              paymentAccounts: data.paymentAccounts || [],
+              totalRevenue: data.totalRevenue || 0,
+              appCommission: data.appCommission || 0,
+              netRevenue: data.netRevenue || 0,
             })
           }
         }
@@ -1205,7 +1232,13 @@ class FirebaseService {
 
   async getEventById(eventId: string): Promise<Event | null> {
     try {
-      const eventRef = doc(db, "events", eventId)
+      // Add validation for eventId
+      if (!eventId || typeof eventId !== "string" || eventId.trim() === "") {
+        console.error("FirebaseService: Invalid eventId provided:", eventId)
+        return null
+      }
+
+      const eventRef = doc(db, "events", eventId.trim())
       const eventDoc = await getDoc(eventRef)
 
       if (!eventDoc.exists()) {
@@ -1229,17 +1262,22 @@ class FirebaseService {
         posterImageUrl: data.posterImageUrl,
         artists: data.artists,
         isFeatured: data.isFeatured,
-        location: data.location, // Make sure this is included
+        location: data.location,
         priceIndicator: data.priceIndicator || 1,
-        entryFee: data.entryFee, // Make sure this is included
+        entryFee: data.entryFee,
         attendees: data.attendees || [],
         createdAt: data.createdAt.toDate(),
         createdBy: data.createdBy,
         createdByType: data.createdByType,
+        ticketTypes: data.ticketTypes || getDefaultTicketTypes(parseEntryFee(data.entryFee)),
+        paymentAccounts: data.paymentAccounts || [],
+        totalRevenue: data.totalRevenue || 0,
+        appCommission: data.appCommission || 0,
+        netRevenue: data.netRevenue || 0,
       }
     } catch (error) {
       console.error("Error getting event by ID:", error)
-      throw error
+      return null
     }
   }
 
@@ -1262,6 +1300,11 @@ class FirebaseService {
         createdAt: Timestamp.now(),
         createdBy: eventData.createdBy,
         createdByType: eventData.createdByType,
+        ticketTypes: eventData.ticketTypes || getDefaultTicketTypes(parseEntryFee(eventData.entryFee)),
+        paymentAccounts: eventData.paymentAccounts || [],
+        totalRevenue: eventData.totalRevenue || 0,
+        appCommission: eventData.appCommission || 0,
+        netRevenue: eventData.netRevenue || 0,
         isDeleted: false,
       }
 
@@ -1399,14 +1442,44 @@ class FirebaseService {
     }
   }
 
-  // Ticket methods
+  // Enhanced Ticket methods with proper null handling
   async saveTicket(ticket: Ticket): Promise<void> {
     try {
       console.log("FirebaseService: Saving ticket", ticket.id)
-      await addDoc(collection(db, "tickets"), {
-        ...ticket,
+
+      // Clean the ticket data to remove undefined values
+      const cleanTicketData = {
+        id: ticket.id,
+        eventId: ticket.eventId,
+        eventName: ticket.eventName,
+        eventPosterUrl: ticket.eventPosterUrl || null,
+        buyerId: ticket.buyerId,
+        buyerName: ticket.buyerName,
+        buyerEmail: ticket.buyerEmail,
+        buyerPhone: ticket.buyerPhone || null, // Convert undefined to null
+        buyerImageUrl: ticket.buyerImageUrl || null,
+        quantity: ticket.quantity,
+        ticketType: ticket.ticketType,
+        ticketTypeName: ticket.ticketTypeName,
+        pricePerTicket: ticket.pricePerTicket,
+        totalAmount: ticket.totalAmount,
+        paymentFees: ticket.paymentFees,
+        appCommission: ticket.appCommission,
+        sellerRevenue: ticket.sellerRevenue,
+        paymentMethod: ticket.paymentMethod,
+        paymentReference: ticket.paymentReference || null,
+        paymentAccount: ticket.paymentAccount || null,
+        qrCode: ticket.qrCode,
+        qrData: ticket.qrData || null,
+        status: ticket.status,
         purchaseDate: Timestamp.fromDate(ticket.purchaseDate),
-      })
+        validationHistory: ticket.validationHistory || [],
+        isVerified: ticket.isVerified,
+        createdAt: Timestamp.fromDate(ticket.createdAt),
+        updatedAt: Timestamp.fromDate(ticket.updatedAt),
+      }
+
+      await addDoc(collection(db, "tickets"), cleanTicketData)
       console.log("FirebaseService: Ticket saved successfully")
     } catch (error) {
       console.error("Error saving ticket:", error)
@@ -1428,19 +1501,31 @@ class FirebaseService {
         id: ticketDoc.id,
         eventId: data.eventId,
         eventName: data.eventName,
+        eventPosterUrl: data.eventPosterUrl,
         buyerId: data.buyerId,
         buyerName: data.buyerName,
         buyerEmail: data.buyerEmail,
+        buyerPhone: data.buyerPhone,
+        buyerImageUrl: data.buyerImageUrl,
         quantity: data.quantity,
+        ticketType: data.ticketType,
+        ticketTypeName: data.ticketTypeName,
+        pricePerTicket: data.pricePerTicket,
         totalAmount: data.totalAmount,
-        venueRevenue: data.venueRevenue,
+        paymentFees: data.paymentFees,
         appCommission: data.appCommission,
-        purchaseDate: data.purchaseDate.toDate(),
+        sellerRevenue: data.sellerRevenue,
+        paymentMethod: data.paymentMethod,
+        paymentReference: data.paymentReference,
+        paymentAccount: data.paymentAccount,
         qrCode: data.qrCode,
-        ticketType: data.ticketType || "regular", // Add this line
-        biometricHash: data.biometricHash,
+        qrData: data.qrData,
         status: data.status,
+        purchaseDate: data.purchaseDate.toDate(),
         validationHistory: data.validationHistory || [],
+        isVerified: data.isVerified,
+        createdAt: data.createdAt.toDate(),
+        updatedAt: data.updatedAt.toDate(),
       }
     } catch (error) {
       console.error("Error getting ticket by ID:", error)
@@ -1462,19 +1547,31 @@ class FirebaseService {
           id: doc.id,
           eventId: data.eventId,
           eventName: data.eventName,
+          eventPosterUrl: data.eventPosterUrl,
           buyerId: data.buyerId,
           buyerName: data.buyerName,
           buyerEmail: data.buyerEmail,
+          buyerPhone: data.buyerPhone,
+          buyerImageUrl: data.buyerImageUrl,
           quantity: data.quantity,
+          ticketType: data.ticketType,
+          ticketTypeName: data.ticketTypeName,
+          pricePerTicket: data.pricePerTicket,
           totalAmount: data.totalAmount,
-          venueRevenue: data.venueRevenue,
+          paymentFees: data.paymentFees,
           appCommission: data.appCommission,
-          purchaseDate: data.purchaseDate.toDate(),
+          sellerRevenue: data.sellerRevenue,
+          paymentMethod: data.paymentMethod,
+          paymentReference: data.paymentReference,
+          paymentAccount: data.paymentAccount,
           qrCode: data.qrCode,
-          ticketType: data.ticketType || "regular",
-          biometricHash: data.biometricHash,
+          qrData: data.qrData,
           status: data.status,
+          purchaseDate: data.purchaseDate.toDate(),
           validationHistory: data.validationHistory || [],
+          isVerified: data.isVerified,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
         })
       })
 
@@ -1500,19 +1597,31 @@ class FirebaseService {
           id: doc.id,
           eventId: data.eventId,
           eventName: data.eventName,
+          eventPosterUrl: data.eventPosterUrl,
           buyerId: data.buyerId,
           buyerName: data.buyerName,
           buyerEmail: data.buyerEmail,
+          buyerPhone: data.buyerPhone,
+          buyerImageUrl: data.buyerImageUrl,
           quantity: data.quantity,
+          ticketType: data.ticketType,
+          ticketTypeName: data.ticketTypeName,
+          pricePerTicket: data.pricePerTicket,
           totalAmount: data.totalAmount,
-          venueRevenue: data.venueRevenue,
+          paymentFees: data.paymentFees,
           appCommission: data.appCommission,
-          purchaseDate: data.purchaseDate.toDate(),
+          sellerRevenue: data.sellerRevenue,
+          paymentMethod: data.paymentMethod,
+          paymentReference: data.paymentReference,
+          paymentAccount: data.paymentAccount,
           qrCode: data.qrCode,
-          ticketType: data.ticketType || "regular",
-          biometricHash: data.biometricHash,
+          qrData: data.qrData,
           status: data.status,
+          purchaseDate: data.purchaseDate.toDate(),
           validationHistory: data.validationHistory || [],
+          isVerified: data.isVerified,
+          createdAt: data.createdAt.toDate(),
+          updatedAt: data.updatedAt.toDate(),
         })
       })
 
@@ -1528,7 +1637,20 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Updating ticket", ticketId)
       const ticketRef = doc(db, "tickets", ticketId)
-      await updateDoc(ticketRef, data)
+
+      // Clean the update data to handle undefined values
+      const cleanUpdateData: any = {}
+      Object.keys(data).forEach((key) => {
+        const value = (data as any)[key]
+        if (value !== undefined) {
+          cleanUpdateData[key] = value
+        }
+      })
+
+      // Always update the updatedAt timestamp
+      cleanUpdateData.updatedAt = Timestamp.now()
+
+      await updateDoc(ticketRef, cleanUpdateData)
       console.log("FirebaseService: Ticket updated successfully")
     } catch (error) {
       console.error("Error updating ticket:", error)
@@ -1547,6 +1669,96 @@ class FirebaseService {
     } catch (error) {
       console.error("Error saving ticket validation:", error)
       throw error
+    }
+  }
+
+  async savePaymentConfirmation(confirmation: PaymentConfirmation): Promise<void> {
+    try {
+      console.log("FirebaseService: Saving payment confirmation")
+      await addDoc(collection(db, "paymentConfirmations"), {
+        ...confirmation,
+        timestamp: Timestamp.fromDate(confirmation.timestamp),
+      })
+      console.log("FirebaseService: Payment confirmation saved successfully")
+    } catch (error) {
+      console.error("Error saving payment confirmation:", error)
+      throw error
+    }
+  }
+
+  async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
+    try {
+      console.log("FirebaseService: Adding vibe image")
+
+      // Ensure the vibeImageData has the correct structure
+      const firestoreVibeData = {
+        venueId: vibeImageData.venueId,
+        venueName: vibeImageData.venueName,
+        userId: vibeImageData.userId,
+        userName: vibeImageData.userName,
+        imageUrl: vibeImageData.imageUrl,
+        vibeScore: vibeImageData.vibeScore,
+        uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
+        // Add any other fields that might be in VibeImage
+        vibeRating: vibeImageData.vibeScore, // Map vibeScore to vibeRating for compatibility
+      }
+
+      const vibeImageRef = await addDoc(collection(db, "vibeImages"), firestoreVibeData)
+
+      // Update venue's vibe rating based on this new image
+      if (vibeImageData.vibeScore) {
+        await this.updateVenueVibeRating(vibeImageData.venueId, vibeImageData.vibeScore)
+      }
+
+      console.log("FirebaseService: Vibe image added successfully")
+      return vibeImageRef.id
+    } catch (error) {
+      console.error("Error adding vibe image:", error)
+      throw error
+    }
+  }
+
+  private async updateVenueVibeRating(venueId: string, newRating: number): Promise<void> {
+    try {
+      // Get recent vibe images for this venue to calculate average
+      const endDate = new Date()
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - 7) // Last 7 days
+
+      const vibeImagesRef = collection(db, "vibeImages")
+      const q = query(
+        vibeImagesRef,
+        where("venueId", "==", venueId),
+        where("uploadedAt", ">=", Timestamp.fromDate(startDate)),
+        where("uploadedAt", "<=", Timestamp.fromDate(endDate)),
+      )
+
+      const querySnapshot = await getDocs(q)
+      const ratings: number[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        if (data.vibeRating || data.vibeScore) {
+          ratings.push(data.vibeRating || data.vibeScore)
+        }
+      })
+
+      // Include the new rating
+      ratings.push(newRating)
+
+      // Calculate average
+      const averageRating = ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+
+      // Update venue's vibe rating
+      const venueRef = doc(db, "venues", venueId)
+      await updateDoc(venueRef, {
+        vibeRating: Math.round(averageRating * 10) / 10, // Round to 1 decimal place
+      })
+
+      console.log("FirebaseService: Updated venue vibe rating to", averageRating)
+    } catch (error) {
+      console.error("Error updating venue vibe rating:", error)
+      // Don't throw error, just log it
     }
   }
 }

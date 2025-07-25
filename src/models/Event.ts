@@ -1,6 +1,22 @@
 import type { Timestamp } from "firebase/firestore"
 import type { UserType } from "./User"
 
+export interface TicketType {
+  id: string
+  name: string
+  price: number
+  description?: string
+  maxQuantity?: number
+  isAvailable: boolean
+}
+
+export interface PaymentAccount {
+  type: "mtn" | "airtel" | "bank"
+  accountNumber: string
+  accountName: string
+  isActive: boolean
+}
+
 export interface Event {
   id: string
   name: string
@@ -14,10 +30,19 @@ export interface Event {
   createdAt: Date
   createdBy?: string
   createdByType?: UserType
-  location?: string // Added for city/location display
-  priceIndicator?: number // Added for price indicator (1-3)
-  entryFee?: string // Added for entry fee in UGX
-  attendees?: string[] // Added to track users who are going
+  location?: string
+  priceIndicator?: number
+  entryFee?: string
+  attendees?: string[]
+
+  // New fields for enhanced ticket system
+  ticketTypes: TicketType[]
+  paymentAccounts: PaymentAccount[]
+
+  // Revenue tracking
+  totalRevenue?: number
+  appCommission?: number
+  netRevenue?: number
 }
 
 // Add a new interface for Firestore storage
@@ -37,4 +62,39 @@ export interface FirestoreEvent {
   priceIndicator?: number
   entryFee?: string
   attendees?: string[]
+  ticketTypes: TicketType[]
+  paymentAccounts: PaymentAccount[]
+  totalRevenue?: number
+  appCommission?: number
+  netRevenue?: number
+}
+
+// Default ticket types
+export const getDefaultTicketTypes = (basePrice: number): TicketType[] => [
+  {
+    id: "regular",
+    name: "Regular",
+    price: basePrice,
+    description: "Standard entry ticket",
+    isAvailable: true,
+  },
+  {
+    id: "secure",
+    name: "Secure",
+    price: basePrice,
+    description: "Entry with photo verification",
+    isAvailable: true,
+  },
+]
+
+// Helper function to parse entry fee
+export const parseEntryFee = (entryFee: string | number | undefined): number => {
+  if (typeof entryFee === "number") return entryFee
+  if (typeof entryFee === "string") {
+    const match = entryFee.match(/[\d,]+/)
+    if (match) {
+      return Number.parseInt(match[0].replace(/,/g, ""))
+    }
+  }
+  return 0
 }
