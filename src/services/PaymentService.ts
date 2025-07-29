@@ -132,102 +132,139 @@ class PaymentService {
   }
 
   // MTN Mobile Money payment initialization
-  async initiateMtnPayment(request: {
-    amount: number
-    currency: string
-    externalId: string
-    payer: { partyIdType: string; partyId: string }
-    payerMessage: string
-    payeeNote: string
-  }): Promise<PaymentResponse> {
-    console.log("Initiating MTN Mobile Money payment:", request)
+async initiateMtnPayment(request: {
+  amount: number
+  currency: string
+  externalId: string
+  payer: { partyIdType: string; partyId: string }
+  payerMessage: string
+  payeeNote: string
+}): Promise<PaymentResponse> {
+  console.log("Initiating MTN Mobile Money payment:", request)
 
-    try {
-      const referenceId = request.externalId || this.generateReferenceId()
-      const phoneNumber = request.payer.partyId
+  try {
+    const referenceId = request.externalId || this.generateReferenceId()
+    const phoneNumber = request.payer.partyId
 
-      console.log("Generated reference ID:", referenceId)
-      console.log("Phone number for payment:", phoneNumber)
+    console.log("Generated reference ID:", referenceId)
+    console.log("Phone number for payment:", phoneNumber)
 
-      if (!this.validateMTNPhoneNumber(phoneNumber)) {
-        console.error("Invalid MTN phone number:", phoneNumber)
-        return {
-          success: false,
-          message:
-            "Invalid MTN phone number format. MTN numbers should start with 25676, 25677, 25678, or 25679 (12 digits) or 076, 077, 078, or 079 (10 digits with leading 0)",
-          errorCode: "INVALID_PHONE_NUMBER",
-        }
-      }
-
-      console.log("Phone number validation passed")
-
-      const fetchUrl = `https://cors-anywhere.herokuapp.com/https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay`;
-      console.log("Fetching from:", fetchUrl);
-      const requestHeaders = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${MTN_CONFIG.collection.accessToken}`,
-        "X-Reference-Id": referenceId,
-        "X-Target-Environment": MTN_CONFIG.collection.environment,
-        "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
-        "X-Requested-With": "XMLHttpRequest",
-      };
-      console.log("Request headers:", requestHeaders);
-      // Convert amount to string
-      const payload = {
-        ...request,
-        amount: request.amount.toString(),
-      };
-      console.log("Request payload:", JSON.stringify(payload, null, 2));
-      const requestToPayResponse = await fetch(fetchUrl, {
-        method: "POST",
-        headers: requestHeaders,
-        body: JSON.stringify(payload),
-      })
-
-      console.log("MTN API response status:", requestToPayResponse.status)
-      const responseHeaders = Object.fromEntries(requestToPayResponse.headers.entries());
-      console.log("MTN API response headers:", responseHeaders);
-      const responseText = await requestToPayResponse.clone().text();
-      console.log("MTN API raw response:", responseText);
-
-      if (!requestToPayResponse.ok) {
-        const errorData = responseText;
-        console.error("MTN Request to Pay failed:", errorData)
-        return {
-          success: false,
-          message: "Failed to initiate MTN Mobile Money payment. Please try again.",
-          errorCode: "REQUEST_TO_PAY_FAILED",
-        }
-      }
-
-      let responseData;
-      try {
-        responseData = await requestToPayResponse.json();
-      } catch (jsonError) {
-        console.error("Failed to parse JSON:", responseText);
-        return {
-          success: false,
-          message: "Invalid response from MTN API. Please contact support.",
-          errorCode: "INVALID_RESPONSE",
-        };
-      }
-      console.log("MTN Request to Pay response:", responseData)
-
-      return {
-        success: true,
-        transactionId: responseData.financialTransactionId || referenceId,
-        reference: referenceId,
-        message: "MTN Mobile Money payment initiated successfully. Please approve on your MoMo app.",
-      }
-    } catch (error) {
-      console.error("MTN Payment initialization error:", error)
+    if (!this.validateMTNPhoneNumber(phoneNumber)) {
+      console.error("Invalid MTN phoneNumber:", phoneNumber)
       return {
         success: false,
-        message: "MTN Mobile Money payment initialization failed due to technical error. Please try again.",
-        errorCode: "TECHNICAL_ERROR",
+        message:
+          "Invalid MTN phone number format. MTN numbers should start with 25676, 25677, 25678, or 25679 (12 digits) or 076, 077, 078, or 079 (10 digits with leading 0)",
+        errorCode: "INVALID_PHONE_NUMBER",
       }
     }
+
+    console.log("Phone number validation passed")
+
+    const fetchUrl = `https://cors-anywhere.herokuapp.com/https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay`;
+    console.log("Fetching from:", fetchUrl);
+    const requestHeaders = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${MTN_CONFIG.collection.accessToken}`,
+      "X-Reference-Id": referenceId,
+      "X-Target-Environment": MTN_CONFIG.collection.environment,
+      "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
+      "X-Requested-With": "XMLHttpRequest",
+    };
+    console.log("Request headers:", requestHeaders);
+    const payload = {
+      ...request,
+      amount: request.amount.toString(),
+    };
+    console.log("Request payload:", JSON.stringify(payload, null, 2));
+    const requestToPayResponse = await fetch(fetchUrl, {
+      method: "POST",
+      headers: requestHeaders,
+      body: JSON.stringify(payload),
+    })
+
+    console.log("MTN API response status:", requestToPayResponse.status)
+    const responseHeaders = Object.fromEntries(requestToPayResponse.headers.entries());
+    console.log("MTN API response headers:", responseHeaders);
+    const responseText = await requestToPayResponse.clone().text();
+    console.log("MTN API raw response:", responseText);
+
+    if (!requestToPayResponse.ok) {
+      const errorData = responseText;
+      console.error("MTN Request to Pay failed:", errorData)
+      return {
+        success: false,
+        message: "Failed to initiate MTN Mobile Money payment. Please try again.",
+        errorCode: "REQUEST_TO_PAY_FAILED",
+      }
+    }
+
+    // Poll status
+    let attempts = 0;
+    const maxAttempts = 30;
+    while (attempts < maxAttempts) {
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Wait 2 seconds
+      attempts++;
+      console.log(`Checking payment status, attempt ${attempts}/${maxAttempts}`);
+
+      const statusResponse = await fetch(
+        `https://cors-anywhere.herokuapp.com/https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${referenceId}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${MTN_CONFIG.collection.accessToken}`,
+            "X-Target-Environment": MTN_CONFIG.collection.environment,
+            "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
+            "X-Requested-With": "XMLHttpRequest",
+          },
+        }
+      );
+
+      console.log("Status response status:", statusResponse.status);
+      const statusText = await statusResponse.clone().text();
+      console.log("Status raw response:", statusText);
+
+      if (statusResponse.ok) {
+        let statusData;
+        try {
+          statusData = await statusResponse.json();
+          console.log("Status response data:", statusData);
+          if (statusData.status === "SUCCESSFUL") {
+            return {
+              success: true,
+              transactionId: statusData.financialTransactionId || referenceId,
+              reference: referenceId,
+              message: `Payment successful via MTN Mobile Money. Transaction ID: ${statusData.financialTransactionId || referenceId}`,
+              processingTime: attempts * 2000,
+            };
+          } else if (statusData.status === "FAILED") {
+            return {
+              success: false,
+              message: statusData.reason || "MTN Mobile Money payment failed.",
+              errorCode: "PAYMENT_FAILED",
+              processingTime: attempts * 2000,
+            };
+          }
+        } catch (jsonError) {
+          console.error("Failed to parse status JSON:", statusText);
+        }
+      }
+    }
+
+    return {
+      success: false,
+      message: "Payment timeout. Please check your MTN Mobile Money account.",
+      errorCode: "PAYMENT_TIMEOUT",
+    };
+  } catch (error) {
+    console.error("MTN Payment initialization error:", error)
+    return {
+      success: false,
+      message: "MTN Mobile Money payment initialization failed due to technical error. Please try again.",
+      errorCode: "TECHNICAL_ERROR",
+    }
   }
+}
 
   // MTN Mobile Money payment processing
   async processMTNPayment(request: PaymentRequest): Promise<PaymentResponse> {
