@@ -740,4 +740,11 @@ class PaymentService {
     }
 
     if (!/^\d{16}$/.test(cardDetails.cardNumber.replace(/\s/g, ""))) {
-      return { valid: false, messa
+      return { valid: false, message: "Invalid card number" };
+    }
+
+    return { valid: true, message: "Valid card details" };
+  }
+}
+
+export default PaymentService.getInstance()
