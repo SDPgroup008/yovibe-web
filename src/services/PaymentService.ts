@@ -176,30 +176,30 @@ class PaymentService {
       })
 
       console.log("MTN API response status:", requestToPayResponse.status)
-      const responseText = await requestToPayResponse.text();
-      console.log("MTN API raw response:", responseText);
+const responseText = await requestToPayResponse.clone().text();
+console.log("MTN API raw response:", responseText);
 
-      if (!requestToPayResponse.ok) {
-        const errorData = responseText;
-        console.error("MTN Request to Pay failed:", errorData)
-        return {
-          success: false,
-          message: "Failed to initiate MTN Mobile Money payment. Please try again.",
-          errorCode: "REQUEST_TO_PAY_FAILED",
-        }
-      }
+if (!requestToPayResponse.ok) {
+  const errorData = responseText;
+  console.error("MTN Request to Pay failed:", errorData)
+  return {
+    success: false,
+    message: "Failed to initiate MTN Mobile Money payment. Please try again.",
+    errorCode: "REQUEST_TO_PAY_FAILED",
+  }
+}
 
-      let responseData;
-      try {
-        responseData = await requestToPayResponse.json(); // This will fail after text()
-      } catch (jsonError) {
-        console.error("Failed to parse JSON:", responseText);
-        return {
-          success: false,
-          message: "Invalid response from MTN API. Please contact support.",
-          errorCode: "INVALID_RESPONSE",
-        };
-      }
+let responseData;
+try {
+  responseData = await requestToPayResponse.json();
+} catch (jsonError) {
+  console.error("Failed to parse JSON:", responseText);
+  return {
+    success: false,
+    message: "Invalid response from MTN API. Please contact support.",
+    errorCode: "INVALID_RESPONSE",
+  };
+}
       console.log("MTN Request to Pay response:", responseData)
 
       return {
