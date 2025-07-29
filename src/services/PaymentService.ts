@@ -746,4 +746,5 @@ class PaymentService {
     return { valid: true, message: "Valid card details" };
   }
 }
-
+
+export default PaymentService.getInstance()
