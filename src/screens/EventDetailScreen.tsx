@@ -26,7 +26,6 @@ import type { EventDetailScreenProps } from "../navigation/types"
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
   const { eventId } = route.params
   const { user } = useAuth()
-
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [isGoing, setIsGoing] = useState(false)
@@ -64,8 +63,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
         // Load tickets if user is event owner
         if (user && eventData && eventData.createdBy === user.id) {
-          const tickets = await TicketService.getTicketsByEvent(eventId)
-          setEventTickets(tickets)
+          try {
+            const tickets = await TicketService.getTicketsByEvent(eventId)
+            setEventTickets(tickets)
+          } catch (error) {
+            console.error("Error loading event tickets:", error)
+            // Don't show error to user, just log it
+          }
         }
       } catch (error) {
         console.error("Error loading event details:", error)
@@ -84,11 +88,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       Alert.alert("Sign In Required", "Please sign in to mark yourself as attending this event.")
       return
     }
+
     if (!event) return
 
     try {
       const updatedIsGoing = !isGoing
       setIsGoing(updatedIsGoing)
+
       // Update attendee count optimistically
       setAttendeeCount((prevCount) => (updatedIsGoing ? prevCount + 1 : prevCount - 1))
 
@@ -118,6 +124,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       Alert.alert("Sign In Required", "Please sign in to purchase tickets.")
       return
     }
+
     if (!event) return
 
     // Parse entry fee to get numeric value
@@ -168,7 +175,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   }
 
   const renderTicketsList = () => {
-    const totalRevenue = eventTickets.reduce((sum, ticket) => sum + ticket.venueRevenue, 0)
+    const totalRevenue = eventTickets.reduce((sum, ticket) => sum + (ticket.sellerRevenue || 0), 0)
     const totalTickets = eventTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
 
     return (
@@ -199,10 +206,11 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
                   <Text style={styles.ticketBuyer}>{ticket.buyerName}</Text>
                   <Text style={styles.ticketEmail}>{ticket.buyerEmail}</Text>
                   <Text style={styles.ticketDate}>Purchased: {ticket.purchaseDate.toLocaleDateString()}</Text>
+                  <Text style={styles.ticketPayment}>Payment: {ticket.paymentMethod}</Text>
                 </View>
                 <View style={styles.ticketDetails}>
                   <Text style={styles.ticketQuantity}>{ticket.quantity}x</Text>
-                  <Text style={styles.ticketAmount}>UGX {ticket.venueRevenue.toLocaleString()}</Text>
+                  <Text style={styles.ticketAmount}>UGX {(ticket.sellerRevenue || 0).toLocaleString()}</Text>
                   <View style={[styles.ticketStatus, ticket.status === "used" && styles.ticketStatusUsed]}>
                     <Text style={styles.ticketStatusText}>{ticket.status === "used" ? "Used" : "Active"}</Text>
                   </View>
@@ -247,6 +255,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
+
             <View style={styles.eventHeaderInfo}>
               <Text style={styles.eventName}>{event.name}</Text>
               <Text style={styles.eventLocation}>
@@ -686,6 +695,11 @@ const styles = StyleSheet.create({
   ticketDate: {
     fontSize: 12,
     color: "#999999",
+    marginBottom: 2,
+  },
+  ticketPayment: {
+    fontSize: 12,
+    color: "#2196F3",
   },
   ticketDetails: {
     alignItems: "flex-end",

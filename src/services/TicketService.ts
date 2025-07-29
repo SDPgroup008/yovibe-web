@@ -1,7 +1,9 @@
 import FirebaseService from "./FirebaseService"
 import QRCodeService from "./QRCodeService"
 import PaymentService from "./PaymentService"
-import type { Ticket } from "../models/Ticket"
+import { NotificationService } from "./NotificationService"
+import type { Ticket, TicketValidation } from "../models/Ticket"
+import type { Event } from "../models/Event"
 
 export interface TicketPurchaseData {
   eventId: string
@@ -112,33 +114,108 @@ class TicketService {
     }
   }
 
-  async validateTicket(ticketId: string, validatorId: string): Promise<boolean> {
+  async validateTicket(
+    ticketId: string,
+    validatorId: string,
+  ): Promise<{
+    success: boolean
+    ticket?: Ticket
+    event?: Event
+    paymentProcessed?: boolean
+    message: string
+  }> {
     try {
+      console.log("TicketService: Starting ticket validation process")
+
       const ticket = await this.getTicketById(ticketId)
       if (!ticket) {
-        throw new Error("Ticket not found")
+        return {
+          success: false,
+          message: "Ticket not found",
+        }
       }
 
       if (ticket.status !== "active") {
-        throw new Error("Ticket is not active")
+        return {
+          success: false,
+          message: `Ticket is ${ticket.status}`,
+        }
       }
 
-      // Add validation record
-      const validationRecord = {
+      // Get event details
+      const event = await FirebaseService.getEventById(ticket.eventId)
+      if (!event) {
+        return {
+          success: false,
+          message: "Event not found",
+        }
+      }
+
+      // Create validation record
+      const validation: TicketValidation = {
+        id: this.generateValidationId(),
+        ticketId: ticket.id,
+        eventId: ticket.eventId,
         validatedBy: validatorId,
         validatedAt: new Date(),
-        location: "Event Entrance", // This could be dynamic
+        validationType: "qr",
+        location: "Event Entrance",
+        notes: "Ticket scanned and verified successfully",
       }
 
-      ticket.validationHistory.push(validationRecord)
+      // Update ticket status
+      ticket.validationHistory.push(validation)
       ticket.status = "used"
       ticket.updatedAt = new Date()
 
-      await this.saveTicket(ticket)
-      return true
+      // Save validation and update ticket
+      await Promise.all([FirebaseService.saveTicketValidation(validation), this.saveTicket(ticket)])
+
+      // Process payment to event owner
+      let paymentProcessed = false
+      if (event.ownerPaymentPhone && event.ownerPaymentName && ticket.sellerRevenue && ticket.sellerRevenue > 0) {
+        try {
+          console.log(`Processing payment to event owner: UGX ${ticket.sellerRevenue}`)
+
+          const paymentResult = await PaymentService.payEventOwner(
+            event.ownerPaymentPhone,
+            event.ownerPaymentName,
+            ticket.sellerRevenue,
+            event.name,
+            ticket.id,
+          )
+
+          if (paymentResult.success) {
+            console.log("Payment to event owner successful:", paymentResult.transactionId)
+            paymentProcessed = true
+
+            // Send notification to event owner
+            await NotificationService.notifyTicketValidation(ticket, validation)
+          } else {
+            console.error("Payment to event owner failed:", paymentResult.message)
+            // Log this for manual processing but don't fail validation
+          }
+        } catch (paymentError) {
+          console.error("Error processing payment to event owner:", paymentError)
+          // Don't fail validation due to payment issues
+        }
+      }
+
+      return {
+        success: true,
+        ticket,
+        event,
+        paymentProcessed,
+        message: paymentProcessed
+          ? "Ticket validated successfully and payment processed to event owner"
+          : "Ticket validated successfully",
+      }
     } catch (error) {
-      console.error("Error validating ticket:", error)
-      throw error
+      console.error("TicketService: Error validating ticket:", error)
+      return {
+        success: false,
+        message: "Validation failed due to technical error",
+      }
     }
   }
 
@@ -185,7 +262,7 @@ class TicketService {
 
   async updateTicketStatus(ticketId: string, status: "active" | "used" | "cancelled" | "refunded"): Promise<void> {
     try {
-      await FirebaseService.updateTicketStatus(ticketId, status)
+      await FirebaseService.updateTicket(ticketId, { status })
     } catch (error) {
       console.error("Error updating ticket status:", error)
       throw error
@@ -226,6 +303,10 @@ class TicketService {
     const timestamp = Date.now().toString(36)
     const random = Math.random().toString(36).substring(2, 8)
     return `validation_${timestamp}_${random}`
+  }
+
+  private generateValidationId(): string {
+    return TicketService.generateValidationId()
   }
 
   static async refundTicket(ticketId: string, reason: string): Promise<boolean> {

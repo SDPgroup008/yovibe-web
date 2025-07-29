@@ -15,7 +15,7 @@ export interface QRScanResult {
   error?: string
 }
 
-export default class QRCodeService {
+export class QRCodeService {
   private static readonly SECRET_KEY = "YoVibe_QR_Secret_2024"
   private static readonly VERSION = "1.0"
 
@@ -33,9 +33,16 @@ export default class QRCodeService {
     }
   }
 
-  static async generateQRCode(data: QRCodeData): Promise<string> {
+  static async generateQRCode(data: string | QRCodeData): Promise<string> {
     try {
-      const jsonString = JSON.stringify(data)
+      let jsonString: string
+
+      if (typeof data === "string") {
+        jsonString = data
+      } else {
+        jsonString = JSON.stringify(data)
+      }
+
       const base64Data = btoa(jsonString)
 
       const qrCodeDataURL = await QRCode.toDataURL(base64Data, {
@@ -290,3 +297,5 @@ export default class QRCodeService {
     }
   }
 }
+
+export default QRCodeService

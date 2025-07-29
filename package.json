@@ -2,6 +2,7 @@
   "name": "yovibe-web",
   "version": "1.0.0",
   "main": "index.js",
+  "proxy": "https://sandbox.momodeveloper.mtn.com",
   "scripts": {
     "start": "expo start --web",
     "build": "expo export --platform web --clear",
@@ -61,4 +62,5 @@
     "typescript": "^5.3.0"
   },
   "private": true
+   
 }

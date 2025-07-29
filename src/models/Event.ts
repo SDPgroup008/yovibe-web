@@ -39,6 +39,10 @@ export interface Event {
   ticketTypes: TicketType[]
   paymentAccounts: PaymentAccount[]
 
+  // Event owner payment information
+  ownerPaymentPhone?: string
+  ownerPaymentName?: string
+
   // Revenue tracking
   totalRevenue?: number
   appCommission?: number
@@ -64,6 +68,8 @@ export interface FirestoreEvent {
   attendees?: string[]
   ticketTypes: TicketType[]
   paymentAccounts: PaymentAccount[]
+  ownerPaymentPhone?: string
+  ownerPaymentName?: string
   totalRevenue?: number
   appCommission?: number
   netRevenue?: number
