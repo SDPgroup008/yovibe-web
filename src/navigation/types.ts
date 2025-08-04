@@ -1,3 +1,5 @@
+import type { NavigationProp, RouteProp } from "@react-navigation/native"
+
 export type RootStackParamList = {
   // Auth screens
   Login: undefined
@@ -12,7 +14,7 @@ export type RootStackParamList = {
 
   // Venue screens
   Venues: undefined
-  VenueDetail: { venueId: string }
+  VenueDetail: { venueId: string; refresh?: number }
   AddVenue: undefined
   MyVenues: undefined
 
@@ -32,13 +34,13 @@ export type RootStackParamList = {
 
   // Vibe screens
   TodaysVibe: undefined
-  AddVibe: undefined
+  AddVibe: { venueId: string; venueName: string }
 
   // Map screens
   Map: { destinationVenueId?: string }
 
   // Program screens
-  ManagePrograms: undefined
+  ManagePrograms: { venueId: string }
 }
 
 export type TabParamList = {
@@ -49,39 +51,33 @@ export type TabParamList = {
   Profile: undefined
 }
 
-// Navigation prop types
-export type NavigationProp = {
-  navigate: (screen: keyof RootStackParamList, params?: any) => void
-  goBack: () => void
-  push: (screen: keyof RootStackParamList, params?: any) => void
-  replace: (screen: keyof RootStackParamList, params?: any) => void
-  reset: (state: any) => void
-}
-
-// Route prop types
-export type RouteProp<T extends keyof RootStackParamList> = {
-  params: RootStackParamList[T]
-  key: string
-  name: T
-}
-
 // Screen props types
 export type EventDetailScreenProps = {
-  route: RouteProp<"EventDetail">
-  navigation: NavigationProp
+  route: RouteProp<RootStackParamList, "EventDetail">
+  navigation: NavigationProp<RootStackParamList, "EventDetail">
 }
 
 export type TicketPurchaseScreenProps = {
-  route: RouteProp<"TicketPurchase">
-  navigation: NavigationProp
+  route: RouteProp<RootStackParamList, "TicketPurchase">
+  navigation: NavigationProp<RootStackParamList, "TicketPurchase">
 }
 
 export type MapScreenProps = {
-  route: RouteProp<"Map">
-  navigation: NavigationProp
+  route: RouteProp<RootStackParamList, "Map">
+  navigation: NavigationProp<RootStackParamList, "Map">
 }
 
 export type ProfileScreenProps = {
-  route: RouteProp<"Profile">
-  navigation: NavigationProp
+  route: RouteProp<RootStackParamList, "Profile">
+  navigation: NavigationProp<RootStackParamList, "Profile">
+}
+
+export type VenueDetailScreenProps = {
+  route: RouteProp<RootStackParamList, "VenueDetail">
+  navigation: NavigationProp<RootStackParamList, "VenueDetail">
+}
+
+export type AddVibeScreenProps = {
+  route: RouteProp<RootStackParamList, "AddVibe">
+  navigation: NavigationProp<RootStackParamList, "AddVibe">
 }
