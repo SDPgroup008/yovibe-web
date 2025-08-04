@@ -101,7 +101,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 
     // Validate phone number format for mobile money
     if (selectedPaymentMethod === "mtn" || selectedPaymentMethod === "airtel") {
-      const validation = PaymentService.validatePhoneNumber(paymentAccount)
+      const validation = PaymentService.validatePaymentAccount(selectedPaymentMethod, paymentAccount)
       if (!validation.valid) {
         Alert.alert("Error", validation.message)
         return false
