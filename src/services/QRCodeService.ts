@@ -37,7 +37,6 @@ class QRCodeService {
       const qrCodeDataURL = await QRCode.toDataURL(qrData, {
         errorCorrectionLevel: "M",
         type: "image/png",
-        quality: 0.92,
         margin: 1,
         color: {
           dark: "#000000",
@@ -95,6 +94,32 @@ class QRCodeService {
     return {
       ...ticketData,
       verificationCode: this.generateVerificationCode(),
+    }
+  }
+
+  // Scan QR code from video (web implementation)
+  async scanQRCodeFromVideo(video: HTMLVideoElement): Promise<string | null> {
+    try {
+      // This is a placeholder implementation for web
+      // In a real implementation, you'd use a library like jsQR
+      console.log("Scanning QR code from video (placeholder)")
+      return null
+    } catch (error) {
+      console.error("Error scanning QR code from video:", error)
+      return null
+    }
+  }
+
+  // Scan QR code from image file
+  async scanQRCodeFromImage(file: File): Promise<string | null> {
+    try {
+      // This is a placeholder implementation
+      // In a real implementation, you'd use a library like jsQR
+      console.log("Scanning QR code from image file (placeholder)")
+      return null
+    } catch (error) {
+      console.error("Error scanning QR code from image:", error)
+      return null
     }
   }
 }
