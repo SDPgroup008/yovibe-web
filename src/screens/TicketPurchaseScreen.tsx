@@ -142,7 +142,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         eventId: event.id,
         eventName: event.name,
         ticketType: selectedTicketType.name,
-        buyerName: user.name,
+        buyerName: user.displayName || user.email,
         buyerEmail: user.email,
         purchaseDate: new Date().toISOString(),
         isSecure: selectedTicketType.name.toLowerCase().includes("secure"),
@@ -160,9 +160,10 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
           type: selectedPaymentMethod,
           accountNumber: paymentAccount,
           accountName: accountName,
+          isActive: true,
         },
         buyerInfo: {
-          name: user.name,
+          name: user.displayName || user.email,
           email: user.email,
           phone: selectedPaymentMethod !== "card" ? paymentAccount : undefined,
         },
@@ -187,31 +188,45 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 
       if (paymentResult.success) {
         // Create ticket record
-        const ticketRecord: Omit<Ticket, "id"> = {
+        const ticketRecord: Ticket = {
+          id: ticketData.ticketId,
           eventId: event.id,
           eventName: event.name,
-          venueName: event.venueName,
+          eventPosterUrl: event.posterImageUrl,
           buyerId: user.id,
-          buyerName: user.name,
+          buyerName: user.displayName || user.email,
           buyerEmail: user.email,
-          ticketType: selectedTicketType.name,
+          buyerPhone: selectedPaymentMethod !== "card" ? paymentAccount : undefined,
+          buyerImageUrl: selectedTicketType.name.toLowerCase().includes("secure") ? user.photoURL : undefined,
           quantity: quantity,
+          ticketType: selectedTicketType.id,
+          ticketTypeName: selectedTicketType.name,
+          pricePerTicket: selectedTicketType.price,
           totalAmount: breakdown.totalAmount,
+          paymentFees: breakdown.paymentFees,
+          appCommission: breakdown.appCommission,
+          sellerRevenue: breakdown.sellerRevenue,
           paymentMethod: selectedPaymentMethod,
           paymentReference: paymentResult.reference || paymentResult.transactionId || "",
-          transactionId: paymentResult.transactionId || "",
-          qrCodeData: JSON.stringify(ticketData),
-          qrCodeImage: qrCodeDataURL,
-          purchaseDate: new Date(),
+          paymentAccount: {
+            type: selectedPaymentMethod,
+            accountNumber: paymentAccount,
+            accountName: accountName,
+            isActive: true,
+          },
+          qrCode: qrCodeDataURL,
+          qrData: JSON.stringify(ticketData),
           status: "active",
+          purchaseDate: new Date(),
+          validationHistory: [],
           isVerified: false,
-          verificationDate: null,
-          buyerPhoto: selectedTicketType.name.toLowerCase().includes("secure") ? user.profileImageUrl : undefined,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         }
 
         console.log("Saving ticket to database...")
-        const ticketId = await FirebaseService.addTicket(ticketRecord)
-        console.log("Ticket saved with ID:", ticketId)
+        await FirebaseService.saveTicket(ticketRecord)
+        console.log("Ticket saved successfully")
 
         // Show success message
         Alert.alert(
