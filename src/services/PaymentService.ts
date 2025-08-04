@@ -739,7 +739,7 @@ class PaymentService {
         fees: PAYMENT_FEES.card,
       },
     ]
-  }
+  } 
 
   calculatePaymentFees(amount: number, method: any): number {
     const paymentMethod = typeof method === "string" ? method : method.id
