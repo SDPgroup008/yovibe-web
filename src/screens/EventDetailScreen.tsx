@@ -353,11 +353,8 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         <TouchableOpacity
           style={styles.venueContainer}
           onPress={() => {
-            // Use the correct navigation approach for cross-stack navigation
-            navigation.navigate("Venues", {
-              screen: "VenueDetail",
-              params: { venueId: event.venueId },
-            })
+            // Navigate to venue detail screen
+            navigation.navigate("VenueDetail", { venueId: event.venueId })
           }}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
