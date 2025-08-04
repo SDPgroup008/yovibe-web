@@ -9,14 +9,16 @@ export interface ImagePickerOptions {
   base64?: boolean
 }
 
+export interface ImagePickerAsset {
+  uri: string
+  width?: number
+  height?: number
+  base64?: string
+}
+
 export interface ImagePickerResult {
   canceled: boolean
-  assets?: Array<{
-    uri: string
-    width?: number
-    height?: number
-    base64?: string
-  }>
+  assets?: ImagePickerAsset[]
 }
 
 class ImagePickerService {
@@ -46,6 +48,18 @@ class ImagePickerService {
     }
   }
 
+  async requestMediaLibraryPermissionsAsync(): Promise<{ status: string }> {
+    try {
+      if (Platform.OS === "web") {
+        return { status: "granted" }
+      }
+      return await ImagePicker.requestMediaLibraryPermissionsAsync()
+    } catch (error) {
+      console.error("ImagePickerService: Error requesting media library permissions:", error)
+      return { status: "denied" }
+    }
+  }
+
   async pickImage(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
     try {
       console.log("ImagePickerService: Starting image picker")
@@ -67,11 +81,27 @@ class ImagePickerService {
       })
 
       console.log("ImagePickerService: Image picker result:", result)
-      return result
+
+      // Convert the result to match our interface
+      const convertedResult: ImagePickerResult = {
+        canceled: result.canceled,
+        assets: result.assets?.map((asset) => ({
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          base64: asset.base64 || undefined, // Convert null to undefined
+        })),
+      }
+
+      return convertedResult
     } catch (error) {
       console.error("ImagePickerService: Error picking image:", error)
       return { canceled: true }
     }
+  }
+
+  async launchImageLibraryAsync(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    return this.pickImage(options)
   }
 
   async launchCamera(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
@@ -95,7 +125,19 @@ class ImagePickerService {
       })
 
       console.log("ImagePickerService: Camera result:", result)
-      return result
+
+      // Convert the result to match our interface
+      const convertedResult: ImagePickerResult = {
+        canceled: result.canceled,
+        assets: result.assets?.map((asset) => ({
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          base64: asset.base64 || undefined, // Convert null to undefined
+        })),
+      }
+
+      return convertedResult
     } catch (error) {
       console.error("ImagePickerService: Error launching camera:", error)
       return { canceled: true }
