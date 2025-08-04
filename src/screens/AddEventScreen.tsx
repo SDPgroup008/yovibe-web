@@ -18,7 +18,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import ImagePickerService from "../services/ImagePickerService"
+import imagePickerService from "../services/ImagePickerService"
 import type { Event, TicketType, PaymentAccount } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import type { PaymentMethod } from "../models/Ticket"
@@ -97,7 +97,9 @@ const AddEventScreen: React.FC = () => {
   const handleImagePicker = async () => {
     try {
       console.log("Opening image picker...")
-      const result = await ImagePickerService.pickImage({
+
+      // Use the service instance directly
+      const result = await imagePickerService.pickImage({
         mediaTypes: "Images",
         allowsEditing: true,
         aspect: [16, 9],
