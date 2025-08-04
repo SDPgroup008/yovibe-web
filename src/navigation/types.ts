@@ -35,7 +35,7 @@ export type RootStackParamList = {
   AddVibe: undefined
 
   // Map screens
-  Map: undefined
+  Map: { destinationVenueId?: string }
 
   // Program screens
   ManagePrograms: undefined
@@ -63,4 +63,25 @@ export type RouteProp<T extends keyof RootStackParamList> = {
   params: RootStackParamList[T]
   key: string
   name: T
+}
+
+// Screen props types
+export type EventDetailScreenProps = {
+  route: RouteProp<"EventDetail">
+  navigation: NavigationProp
+}
+
+export type TicketPurchaseScreenProps = {
+  route: RouteProp<"TicketPurchase">
+  navigation: NavigationProp
+}
+
+export type MapScreenProps = {
+  route: RouteProp<"Map">
+  navigation: NavigationProp
+}
+
+export type ProfileScreenProps = {
+  route: RouteProp<"Profile">
+  navigation: NavigationProp
 }
