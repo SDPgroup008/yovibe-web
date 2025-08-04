@@ -10,20 +10,20 @@ import {
 } from "firebase/auth"
 import {
   collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  updateDoc,
   doc,
+  addDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
   query,
   where,
-  Timestamp,
   orderBy,
   limit,
+  Timestamp,
   serverTimestamp,
   writeBatch,
   getFirestore,
-  deleteDoc,
 } from "firebase/firestore"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
 import { auth, db } from "../config/firebase"
@@ -33,15 +33,30 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import { getDefaultTicketTypes, parseEntryFee } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
-import type { Ticket, TicketValidation, PaymentConfirmation } from "../models/Ticket"
+import type { Ticket, TicketValidation } from "../models/Ticket"
 import { initializeApp, getApps } from "firebase/app"
+
+// Payment confirmation interface
+export interface PaymentConfirmation {
+  id: string
+  ticketId: string
+  eventId: string
+  buyerId: string
+  sellerId: string
+  amount: number
+  paymentMethod: string
+  paymentReference: string
+  timestamp: Date
+  type: "purchase" | "refund" | "commission"
+  status: "success" | "failed" | "pending"
+}
 
 class FirebaseService {
   private static instance: FirebaseService
   private app
   private authOriginal
   private dbOriginal
-  private storage
+  private storageOriginal
 
   private constructor() {
     console.log("Firebase service initialized")
@@ -65,7 +80,7 @@ class FirebaseService {
 
     this.authOriginal = getAuth(this.app)
     this.dbOriginal = getFirestore(this.app)
-    this.storage = getStorage(this.app)
+    this.storageOriginal = getStorage(this.app)
   }
 
   static getInstance(): FirebaseService {
@@ -727,9 +742,9 @@ class FirebaseService {
     }
   }
 
-  async updateEventOriginal(eventId: string, updates: Partial<Event>): Promise<void> {
+  async updateEvent(eventId: string, updates: Partial<Event>): Promise<void> {
     try {
-      const eventRef = doc(this.dbOriginal, "events", eventId)
+      const eventRef = doc(db, "events", eventId)
       await updateDoc(eventRef, {
         ...updates,
         updatedAt: serverTimestamp(),
@@ -740,18 +755,18 @@ class FirebaseService {
     }
   }
 
-  async deleteEventOriginal(eventId: string): Promise<void> {
+  async deleteEvent(eventId: string): Promise<void> {
     try {
-      await deleteDoc(doc(this.dbOriginal, "events", eventId))
+      await deleteDoc(doc(db, "events", eventId))
     } catch (error) {
       console.error("Error deleting event:", error)
       throw error
     }
   }
 
-  async getEventsByVenueOriginal(venueId: string): Promise<Event[]> {
+  async getEventsByVenue(venueId: string): Promise<Event[]> {
     try {
-      const q = query(collection(this.dbOriginal, "events"), where("venueId", "==", venueId))
+      const q = query(collection(db, "events"), where("venueId", "==", venueId))
       const querySnapshot = await getDocs(q)
       return querySnapshot.docs.map((doc) => {
         const data = doc.data()
@@ -865,7 +880,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `venues/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -879,7 +894,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `events/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -893,7 +908,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `vibes/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -1351,7 +1366,7 @@ class FirebaseService {
     }
   }
 
-  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<any[]> {
+  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
     try {
       console.log("FirebaseService: Getting vibe images for venue", venueId, "on", date.toDateString())
 
@@ -1371,7 +1386,7 @@ class FirebaseService {
       )
 
       const querySnapshot = await getDocs(q)
-      const vibeImages: any[] = []
+      const vibeImages: VibeImage[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
@@ -1394,7 +1409,7 @@ class FirebaseService {
     }
   }
 
-  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, any[]>> {
+  async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
     try {
       console.log("FirebaseService: Getting vibe images for venue", venueId, "for the week")
 
@@ -1412,7 +1427,7 @@ class FirebaseService {
       )
 
       const querySnapshot = await getDocs(q)
-      const weekData: Record<string, any[]> = {}
+      const weekData: Record<string, VibeImage[]> = {}
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
@@ -1693,21 +1708,17 @@ class FirebaseService {
       // Ensure the vibeImageData has the correct structure
       const firestoreVibeData = {
         venueId: vibeImageData.venueId,
-        venueName: vibeImageData.venueName,
-        userId: vibeImageData.userId,
-        userName: vibeImageData.userName,
         imageUrl: vibeImageData.imageUrl,
-        vibeScore: vibeImageData.vibeScore,
+        vibeRating: vibeImageData.vibeRating,
         uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
-        // Add any other fields that might be in VibeImage
-        vibeRating: vibeImageData.vibeScore, // Map vibeScore to vibeRating for compatibility
+        uploadedBy: vibeImageData.uploadedBy,
       }
 
       const vibeImageRef = await addDoc(collection(db, "vibeImages"), firestoreVibeData)
 
       // Update venue's vibe rating based on this new image
-      if (vibeImageData.vibeScore) {
-        await this.updateVenueVibeRating(vibeImageData.venueId, vibeImageData.vibeScore)
+      if (vibeImageData.vibeRating) {
+        await this.updateVenueVibeRating(vibeImageData.venueId, vibeImageData.vibeRating)
       }
 
       console.log("FirebaseService: Vibe image added successfully")
@@ -1738,8 +1749,8 @@ class FirebaseService {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        if (data.vibeRating || data.vibeScore) {
-          ratings.push(data.vibeRating || data.vibeScore)
+        if (data.vibeRating) {
+          ratings.push(data.vibeRating)
         }
       })
 
@@ -1759,6 +1770,21 @@ class FirebaseService {
     } catch (error) {
       console.error("Error updating venue vibe rating:", error)
       // Don't throw error, just log it
+    }
+  }
+
+  // Add ticket method for compatibility
+  async addTicket(ticketData: Omit<Ticket, "id">): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(db, "tickets"), {
+        ...ticketData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error adding ticket:", error)
+      throw error
     }
   }
 }
