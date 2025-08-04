@@ -28,6 +28,7 @@ export interface PaymentResponse {
   reference?: string
   message: string
   errorCode?: string
+  
   processingTime?: number
 }
 
