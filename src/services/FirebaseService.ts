@@ -10,23 +10,24 @@ import {
 } from "firebase/auth"
 import {
   collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  updateDoc,
   doc,
+  addDoc,
+  getDoc,
+  getDocs,
+  updateDoc,
+  deleteDoc,
   query,
   where,
-  Timestamp,
   orderBy,
   limit,
+  Timestamp,
   serverTimestamp,
   writeBatch,
   getFirestore,
-  deleteDoc,
+  getStorage,
 } from "firebase/firestore"
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage"
-import { auth, db } from "../config/firebase"
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage"
+import { auth, db, storage } from "../config/firebase"
 import type { User as AppUser } from "../models/User"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
@@ -41,7 +42,7 @@ class FirebaseService {
   private app
   private authOriginal
   private dbOriginal
-  private storage
+  private storageOriginal
 
   private constructor() {
     console.log("Firebase service initialized")
@@ -65,7 +66,7 @@ class FirebaseService {
 
     this.authOriginal = getAuth(this.app)
     this.dbOriginal = getFirestore(this.app)
-    this.storage = getStorage(this.app)
+    this.storageOriginal = getStorage(this.app)
   }
 
   static getInstance(): FirebaseService {
@@ -865,7 +866,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `venues/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -879,7 +880,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `events/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -893,7 +894,7 @@ class FirebaseService {
       const response = await fetch(imageUri)
       const blob = await response.blob()
       const filename = `vibes/${Date.now()}-${Math.random().toString(36).substring(7)}`
-      const storageRef = ref(this.storage, filename)
+      const storageRef = ref(this.storageOriginal, filename)
       await uploadBytes(storageRef, blob)
       return await getDownloadURL(storageRef)
     } catch (error) {
@@ -1763,6 +1764,516 @@ class FirebaseService {
   }
 }
 
-// Export a singleton instance as default
-const firebaseService = FirebaseService.getInstance()
-export default firebaseService
+// User operations\
+async
+createUser(userData: Omit<User, "id\">): Promise<string> {\
+    try {\
+      const docRef = await addDoc(collection(db, \"users"), {
+        ...userData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),\
+      }
+)
+return docRef.id
+\
+    } catch (error)
+{
+  console.error("Error creating user:", error)
+  throw error
+}
+\
+  }
+
+  async getUserById(userId: string): Promise<User | null>
+{
+  try {
+    const docRef = doc(db, "users", userId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as User
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting user:", error)
+    throw error
+  }
+}
+\
+  async getUserByEmail(email: string): Promise<User | null>
+{
+  try {
+    const q = query(collection(db, "users"), where("email", "==", email))
+    const querySnapshot = await getDocs(q)
+
+    if (!querySnapshot.empty) {
+      const doc = querySnapshot.docs[0]
+      return { id: doc.id, ...doc.data() } as User
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting user by email:", error)
+    throw error
+  }
+}
+\
+  async updateUser(userId: string, userData: Partial<User>): Promise<void>
+{
+  try {
+    const docRef = doc(db, "users", userId)
+    await updateDoc(docRef, {
+      ...userData,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error updating user:", error)
+    throw error
+  }
+}
+
+// Venue operations\
+async
+addVenue(venueData: Omit<Venue, "id\">): Promise<string> {\
+    try {\
+      const docRef = await addDoc(collection(db, \"venues"), {
+        ...venueData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),\
+      }
+)
+return docRef.id
+\
+    } catch (error)
+{
+  console.error("Error adding venue:", error)
+  throw error
+}
+\
+  }
+
+  async getVenues(): Promise<Venue[]>
+{
+  try {
+    const querySnapshot = await getDocs(collection(db, "venues"))
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Venue[]
+  } catch (error) {
+    console.error("Error getting venues:", error)
+    throw error
+  }
+}
+\
+  async getVenueById(venueId: string): Promise<Venue | null>
+{
+  try {
+    const docRef = doc(db, "venues", venueId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      return { id: docSnap.id, ...docSnap.data() } as Venue
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting venue:", error)
+    throw error
+  }
+}
+\
+  async getVenuesByOwner(ownerId: string): Promise<Venue[]>
+{
+  try {
+    const q = query(collection(db, "venues"), where("ownerId", "==", ownerId))
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Venue[]
+  } catch (error) {
+    console.error("Error getting venues by owner:", error)
+    throw error
+  }
+}
+\
+  async updateVenue(venueId: string, venueData: Partial<Venue>): Promise<void>
+{
+  try {
+    const docRef = doc(db, "venues", venueId)
+    await updateDoc(docRef, {
+      ...venueData,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error updating venue:", error)
+    throw error
+  }
+}
+\
+  async deleteVenue(venueId: string): Promise<void>
+{
+  try {
+    const docRef = doc(db, "venues", venueId)
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error("Error deleting venue:", error)
+    throw error
+  }
+}
+
+// Event operations\
+async
+addEvent(eventData: Omit<Event, "id\">): Promise<string> {\
+    try {\
+      const docRef = await addDoc(collection(db, \"events"), {
+        ...eventData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),\
+      }
+)
+return docRef.id
+\
+    } catch (error)
+{
+  console.error("Error adding event:", error)
+  throw error
+}
+\
+  }
+
+  async getEvents(): Promise<Event[]>
+{
+  try {
+    const q = query(collection(db, "events"), orderBy("date", "desc"))
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date(),
+      })) as Event[]
+  } catch (error) {
+    console.error("Error getting events:", error)
+    throw error
+  }
+}
+
+async
+getEventById(eventId: string)
+: Promise<Event | null>
+{
+  try {
+    const docRef = doc(db, "events", eventId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      const data = docSnap.data()
+      return {
+          id: docSnap.id,
+          ...data,
+          date: data.date?.toDate() || new Date(),
+        } as Event
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting event:", error)
+    throw error
+  }
+}
+
+async
+getEventsByVenue(venueId: string)
+: Promise<Event[]>
+{
+  try {
+    const q = query(collection(db, "events"), where("venueId", "==", venueId), orderBy("date", "desc"))
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date?.toDate() || new Date(),
+      })) as Event[]
+  } catch (error) {
+    console.error("Error getting events by venue:", error)
+    throw error
+  }
+}
+
+async
+updateEvent(eventId: string, eventData: Partial<Event>)
+: Promise<void>
+{
+  try {
+    const docRef = doc(db, "events", eventId)
+    await updateDoc(docRef, {
+      ...eventData,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error updating event:", error)
+    throw error
+  }
+}
+
+async
+deleteEvent(eventId: string)
+: Promise<void>
+{
+  try {
+    const docRef = doc(db, "events", eventId)
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error("Error deleting event:", error)
+    throw error
+  }
+}
+
+async
+deleteEventsByVenue(venueId: string)
+: Promise<void>
+{
+  try {
+    const q = query(collection(db, "events"), where("venueId", "==", venueId))
+    const querySnapshot = await getDocs(q)
+
+    const batch = writeBatch(db)
+    querySnapshot.docs.forEach((doc) => {
+      batch.delete(doc.ref)
+    })
+
+    await batch.commit()
+  } catch (error) {
+    console.error("Error deleting events by venue:", error)
+    throw error
+  }
+}
+
+// Ticket operations
+async
+addTicket(ticketData: Omit<Ticket, "id">)
+: Promise<string>
+{
+  try {
+    const docRef = await addDoc(collection(db, "tickets"), {
+      ...ticketData,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+    return docRef.id
+  } catch (error) {
+    console.error("Error adding ticket:", error)
+    throw error
+  }
+}
+
+async
+getTicketById(ticketId: string)
+: Promise<Ticket | null>
+{
+  try {
+    const docRef = doc(db, "tickets", ticketId)
+    const docSnap = await getDoc(docRef)
+
+    if (docSnap.exists()) {
+      const data = docSnap.data()
+      return {
+          id: docSnap.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate() || new Date(),
+          verificationDate: data.verificationDate?.toDate() || null,
+        } as Ticket
+    }
+    return null
+  } catch (error) {
+    console.error("Error getting ticket:", error)
+    throw error
+  }
+}
+
+async
+getTicketsByUser(userId: string)
+: Promise<Ticket[]>
+{
+  try {
+    const q = query(collection(db, "tickets"), where("buyerId", "==", userId), orderBy("purchaseDate", "desc"))
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        purchaseDate: doc.data().purchaseDate?.toDate() || new Date(),
+        verificationDate: doc.data().verificationDate?.toDate() || null,
+      })) as Ticket[]
+  } catch (error) {
+    console.error("Error getting tickets by user:", error)
+    throw error
+  }
+}
+
+async
+updateTicket(ticketId: string, ticketData: Partial<Ticket>)
+: Promise<void>
+{
+  try {
+    const docRef = doc(db, "tickets", ticketId)
+    await updateDoc(docRef, {
+      ...ticketData,
+      updatedAt: serverTimestamp(),
+    })
+  } catch (error) {
+    console.error("Error updating ticket:", error)
+    throw error
+  }
+}
+
+// Image upload operations
+async
+uploadVenueImage(imageUri: string)
+: Promise<string>
+{
+  try {
+    const response = await fetch(imageUri)
+    const blob = await response.blob()
+    const filename = `venues/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`
+    const storageRef = ref(storage, filename)
+
+    await uploadBytes(storageRef, blob)
+    return await getDownloadURL(storageRef)
+  } catch (error) {
+    console.error("Error uploading venue image:", error)
+    throw error
+  }
+}
+
+async
+uploadEventImage(imageUri: string)
+: Promise<string>
+{
+  try {
+    const response = await fetch(imageUri)
+    const blob = await response.blob()
+    const filename = `events/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`
+    const storageRef = ref(storage, filename)
+
+    await uploadBytes(storageRef, blob)
+    return await getDownloadURL(storageRef)
+  } catch (error) {
+    console.error("Error uploading event image:", error)
+    throw error
+  }
+}
+
+async
+uploadVibeImage(imageUri: string)
+: Promise<string>
+{
+  try {
+    const response = await fetch(imageUri)
+    const blob = await response.blob()
+    const filename = `vibes/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`
+    const storageRef = ref(storage, filename)
+
+    await uploadBytes(storageRef, blob)
+    return await getDownloadURL(storageRef)
+  } catch (error) {
+    console.error("Error uploading vibe image:", error)
+    throw error
+  }
+}
+
+// Vibe operations
+async
+addVibeImage(vibeData: Omit<VibeImage, "id">)
+: Promise<string>
+{
+  try {
+    const docRef = await addDoc(collection(db, "vibeImages"), {
+      ...vibeData,
+      createdAt: serverTimestamp(),
+    })
+    return docRef.id
+  } catch (error) {
+    console.error("Error adding vibe image:", error)
+    throw error
+  }
+}
+
+async
+getVibeImagesByVenue(venueId: string)
+: Promise<VibeImage[]>
+{
+  try {
+    const q = query(
+      collection(db, "vibeImages"),
+      where("venueId", "==", venueId),
+      orderBy("createdAt", "desc"),
+      limit(50),
+    )
+    const querySnapshot = await getDocs(q)
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate() || new Date(),
+      })) as VibeImage[]
+  } catch (error) {
+    console.error("Error getting vibe images:", error)
+    throw error
+  }
+}
+
+async
+getLatestVibeRating(venueId: string)
+: Promise<number | null>
+{
+  try {
+    const q = query(
+      collection(db, "vibeImages"),
+      where("venueId", "==", venueId),
+      orderBy("createdAt", "desc"),
+      limit(10),
+    )
+    const querySnapshot = await getDocs(q)
+
+    if (querySnapshot.empty) return null
+
+    const ratings = querySnapshot.docs.map((doc) => doc.data().vibeRating).filter((rating) => rating !== undefined)
+
+    if (ratings.length === 0) return null
+
+    return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+  } catch (error) {
+    console.error("Error getting latest vibe rating:", error)
+    return null
+  }
+}
+
+// Admin operations
+async
+getAllUsers()
+: Promise<User[]>
+{
+  try {
+    const querySnapshot = await getDocs(collection(db, "users"))
+    return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as User[]
+  } catch (error) {
+    console.error("Error getting all users:", error)
+    throw error
+  }
+}
+
+async
+deleteUser(userId: string)
+: Promise<void>
+{
+  try {
+    const docRef = doc(db, "users", userId)
+    await deleteDoc(docRef)
+  } catch (error) {
+    console.error("Error deleting user:", error)
+    throw error
+  }
+}
+}
+
+export default FirebaseService.getInstance()
