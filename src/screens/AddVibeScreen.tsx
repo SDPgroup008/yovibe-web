@@ -9,16 +9,7 @@ import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
-
-interface AddVibeScreenProps {
-  navigation: any
-  route: {
-    params: {
-      venueId: string
-      venueName: string
-    }
-  }
-}
+import type { AddVibeScreenProps } from "../navigation/types"
 
 const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
   const { venueId, venueName } = route.params
@@ -87,7 +78,6 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         vibeRating: analysisResult.vibeRating,
         uploadedAt: new Date(),
         uploadedBy: user.id,
-        analysisData: analysisResult.analysisData,
       }
 
       // Save to Firestore (this will also update the venue's vibe rating)
@@ -97,8 +87,12 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         {
           text: "OK",
           onPress: () => {
-            // Navigate back to the venue detail screen
+            // Navigate back and refresh the parent screens
             navigation.goBack()
+            // Trigger a refresh on the parent screens by navigating to them
+            setTimeout(() => {
+              navigation.navigate("VenueDetail", { venueId, refresh: Date.now() })
+            }, 100)
           },
         },
       ])
