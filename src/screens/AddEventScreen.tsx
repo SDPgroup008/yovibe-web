@@ -6,7 +6,7 @@ import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, Styl
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import { ImagePickerService } from "../services/ImagePickerService"
+import ImagePickerService from "../services/ImagePickerService"
 import type { Event, TicketType, PaymentAccount } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import type { PaymentMethod } from "../models/Ticket"
@@ -156,7 +156,7 @@ const AddEventScreen: React.FC = () => {
         return /^(256)?(76|77|78|79)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
       case "airtel":
         return /^(256)?(70|74|75)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
-      case "bank":
+      case "card":
         return accountNumber.length >= 10 && accountNumber.length <= 20
       default:
         return false
@@ -452,7 +452,7 @@ const AddEventScreen: React.FC = () => {
               <Text style={styles.formTitle}>Add Payment Account</Text>
 
               <View style={styles.paymentTypeButtons}>
-                {(["mtn", "airtel", "bank"] as PaymentMethod[]).map((type) => (
+                {(["mtn", "airtel", "card"] as PaymentMethod[]).map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={[
@@ -475,10 +475,10 @@ const AddEventScreen: React.FC = () => {
 
               <TextInput
                 style={styles.input}
-                placeholder={newPaymentAccount.type === "bank" ? "Account Number" : "Phone Number"}
+                placeholder={newPaymentAccount.type === "card" ? "Card Number" : "Phone Number"}
                 value={newPaymentAccount.accountNumber}
                 onChangeText={(value) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: value })}
-                keyboardType={newPaymentAccount.type === "bank" ? "default" : "phone-pad"}
+                keyboardType={newPaymentAccount.type === "card" ? "default" : "phone-pad"}
                 placeholderTextColor="#666"
               />
 
