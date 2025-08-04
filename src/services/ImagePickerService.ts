@@ -1,98 +1,111 @@
-// Platform-agnostic ImagePickerService
-// This file doesn't directly import expo-image-picker to avoid web bundling issues
+import { Platform } from "react-native"
+import * as ImagePicker from "expo-image-picker"
+
+export interface ImagePickerOptions {
+  mediaTypes?: "Images" | "Videos" | "All"
+  allowsEditing?: boolean
+  aspect?: [number, number]
+  quality?: number
+  base64?: boolean
+}
 
 export interface ImagePickerResult {
   canceled: boolean
   assets?: Array<{
     uri: string
-    type?: string
-    name?: string
-    file?: File // Web-specific, contains the actual File object
+    width?: number
+    height?: number
+    base64?: string
   }>
 }
 
-export interface ImagePickerOptions {
-  mediaTypes: "Images" | "Videos" | "All"
-  allowsEditing?: boolean
-  aspect?: [number, number]
-  quality?: number
-}
-
-// Constants to match expo-image-picker API
-export const MediaTypeOptions = {
-  Images: "Images",
-  Videos: "Videos",
-  All: "All",
-}
-
-/**
- * Web implementation of image picker using HTML file input
- */
 class ImagePickerService {
-  /**
-   * Launch the device's image library and let the user select an image
-   */
-  async launchImageLibraryAsync(options: ImagePickerOptions): Promise<ImagePickerResult> {
-    return new Promise((resolve) => {
-      // Create a file input element
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = "image/*"
-      input.style.display = "none"
+  private static instance: ImagePickerService
 
-      // Handle file selection
-      input.onchange = (event) => {
-        const target = event.target as HTMLInputElement
-        const files = target.files
+  private constructor() {}
 
-        if (!files || files.length === 0) {
-          resolve({ canceled: true })
-          document.body.removeChild(input)
-          return
-        }
+  static getInstance(): ImagePickerService {
+    if (!ImagePickerService.instance) {
+      ImagePickerService.instance = new ImagePickerService()
+    }
+    return ImagePickerService.instance
+  }
 
-        const file = files[0]
-        const reader = new FileReader()
-
-        reader.onload = (e) => {
-          const uri = e.target?.result as string
-          console.log("Image loaded successfully, size:", uri.length)
-          resolve({
-            canceled: false,
-            assets: [
-              {
-                uri,
-                type: file.type,
-                name: file.name,
-                file, // Store the actual File object for later upload
-              },
-            ],
-          })
-          document.body.removeChild(input)
-        }
-
-        reader.onerror = (error) => {
-          console.error("Error reading file:", error)
-          resolve({ canceled: true })
-          document.body.removeChild(input)
-        }
-
-        // Read the file as a data URL
-        reader.readAsDataURL(file)
+  async requestPermissions(): Promise<boolean> {
+    try {
+      if (Platform.OS === "web") {
+        // Web doesn't need explicit permissions for file input
+        return true
       }
 
-      // Add to DOM and trigger click
-      document.body.appendChild(input)
-      input.click()
-    })
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+      return status === "granted"
+    } catch (error) {
+      console.error("ImagePickerService: Error requesting permissions:", error)
+      return false
+    }
   }
 
-  /**
-   * Request permissions - not needed for web
-   */
-  async requestMediaLibraryPermissionsAsync() {
-    return { status: "granted" }
+  async pickImage(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    try {
+      console.log("ImagePickerService: Starting image picker")
+
+      // Request permissions first
+      const hasPermissions = await this.requestPermissions()
+      if (!hasPermissions) {
+        console.error("ImagePickerService: Permissions not granted")
+        return { canceled: true }
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: options.allowsEditing ?? true,
+        aspect: options.aspect ?? [1, 1],
+        quality: options.quality ?? 0.8,
+        base64: options.base64 ?? false,
+      })
+
+      console.log("ImagePickerService: Image picker result:", result)
+      return result
+    } catch (error) {
+      console.error("ImagePickerService: Error picking image:", error)
+      return { canceled: true }
+    }
+  }
+
+  async launchCamera(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    try {
+      console.log("ImagePickerService: Starting camera")
+
+      // Request camera permissions
+      const { status } = await ImagePicker.requestCameraPermissionsAsync()
+      if (status !== "granted") {
+        console.error("ImagePickerService: Camera permissions not granted")
+        return { canceled: true }
+      }
+
+      // Launch camera
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: options.allowsEditing ?? true,
+        aspect: options.aspect ?? [1, 1],
+        quality: options.quality ?? 0.8,
+        base64: options.base64 ?? false,
+      })
+
+      console.log("ImagePickerService: Camera result:", result)
+      return result
+    } catch (error) {
+      console.error("ImagePickerService: Error launching camera:", error)
+      return { canceled: true }
+    }
   }
 }
 
-export default new ImagePickerService()
+// Export singleton instance as default
+const imagePickerService = ImagePickerService.getInstance()
+export default imagePickerService
+
+// Also export the class for named imports
+export { ImagePickerService }
