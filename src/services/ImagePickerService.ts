@@ -21,17 +21,6 @@ export interface ImagePickerResult {
 }
 
 class ImagePickerService {
-  private static instance: ImagePickerService
-
-  private constructor() {}
-
-  static getInstance(): ImagePickerService {
-    if (!ImagePickerService.instance) {
-      ImagePickerService.instance = new ImagePickerService()
-    }
-    return ImagePickerService.instance
-  }
-
   async requestMediaLibraryPermissionsAsync(): Promise<ImagePicker.MediaLibraryPermissionResponse> {
     return await ImagePicker.requestMediaLibraryPermissionsAsync()
   }
@@ -80,7 +69,7 @@ class ImagePickerService {
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
-          base64: asset.base64 || undefined, // Convert null to undefined
+          base64: asset.base64 || undefined,
         })) || []
 
       return {
@@ -107,7 +96,7 @@ class ImagePickerService {
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
-          base64: asset.base64 || undefined, // Convert null to undefined
+          base64: asset.base64 || undefined,
         })) || []
 
       return {
@@ -159,7 +148,7 @@ class ImagePickerService {
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
-          base64: asset.base64 || undefined, // Convert null to undefined
+          base64: asset.base64 || undefined,
         })) || []
 
       return {
@@ -173,6 +162,9 @@ class ImagePickerService {
   }
 }
 
-// Export singleton instance
-const imagePickerService = ImagePickerService.getInstance()
+// Create and export a single instance
+const imagePickerService = new ImagePickerService()
 export default imagePickerService
+
+// Also export the class for named imports if needed
+export { ImagePickerService }
