@@ -84,6 +84,7 @@ const AddEventScreen: React.FC = () => {
 
   const handleImagePicker = async () => {
     try {
+      console.log("Opening image picker...")
       const result = await ImagePickerService.pickImage({
         mediaTypes: "Images",
         allowsEditing: true,
@@ -91,8 +92,11 @@ const AddEventScreen: React.FC = () => {
         quality: 0.8,
       })
 
+      console.log("Image picker result:", result)
+
       if (result && !result.canceled && result.assets?.[0]) {
         setPosterImage(result.assets[0].uri)
+        console.log("Poster image set:", result.assets[0].uri)
       }
     } catch (error) {
       console.error("Error picking image:", error)
@@ -149,9 +153,9 @@ const AddEventScreen: React.FC = () => {
   const validateAccountNumber = (type: PaymentMethod, accountNumber: string): boolean => {
     switch (type) {
       case "mtn":
-        return /^(077|078|076)\d{7}$/.test(accountNumber)
+        return /^(256)?(76|77|78|79)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
       case "airtel":
-        return /^(070|075)\d{7}$/.test(accountNumber)
+        return /^(256)?(70|74|75)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
       case "bank":
         return accountNumber.length >= 10 && accountNumber.length <= 20
       default:
@@ -353,7 +357,7 @@ const AddEventScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Event Poster</Text>
           <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
             {posterImage ? (
-              <Image source={{ uri: posterImage }} style={styles.posterPreview} />
+              <Image source={{ uri: posterImage }} style={styles.posterPreview} resizeMode="cover" />
             ) : (
               <View style={styles.imagePlaceholder}>
                 <Text style={styles.imagePlaceholderText}>Tap to select poster image</Text>
@@ -611,7 +615,6 @@ const styles = StyleSheet.create({
   posterPreview: {
     width: "100%",
     height: 200,
-    resizeMode: "cover",
   },
   imagePlaceholder: {
     backgroundColor: "#1a1a1a",
