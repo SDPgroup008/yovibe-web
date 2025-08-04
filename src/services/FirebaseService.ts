@@ -971,11 +971,17 @@ class FirebaseService {
       )
 
       const querySnapshot = await getDocs(q)
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as VibeImage[]
+      return querySnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating,
+          uploadedAt: data.createdAt?.toDate() || new Date(),
+          uploadedBy: data.uploadedBy,
+        }
+      }) as VibeImage[]
     } catch (error) {
       console.error("Error getting vibe images by venue and date:", error)
       throw error
@@ -996,11 +1002,17 @@ class FirebaseService {
       )
 
       const querySnapshot = await getDocs(q)
-      return querySnapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-        createdAt: doc.data().createdAt?.toDate() || new Date(),
-      })) as VibeImage[]
+      return querySnapshot.docs.map((doc) => {
+        const data = doc.data()
+        return {
+          id: doc.id,
+          venueId: data.venueId,
+          imageUrl: data.imageUrl,
+          vibeRating: data.vibeRating,
+          uploadedAt: data.createdAt?.toDate() || new Date(),
+          uploadedBy: data.uploadedBy,
+        }
+      }) as VibeImage[]
     } catch (error) {
       console.error("Error getting vibe images by venue and week:", error)
       throw error
