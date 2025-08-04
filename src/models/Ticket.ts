@@ -18,6 +18,18 @@ export interface TicketValidation {
   notes?: string
 }
 
+export interface QRTicketData {
+  ticketId: string
+  eventId: string
+  eventName: string
+  buyerId: string
+  buyerName: string
+  ticketType: string
+  quantity: number
+  purchaseDate: string
+  verificationCode: string
+}
+
 export interface Ticket {
   id: string
   eventId: string
