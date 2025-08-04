@@ -1,61 +1,61 @@
-import type { PaymentMethod, PaymentAccount } from "../models/Ticket";
-import { calculatePaymentFees, calculateAppCommission, calculateSellerRevenue, PAYMENT_FEES } from "../models/Ticket";
-import axios from "axios";
+import type { PaymentMethod, PaymentAccount } from "../models/Ticket"
+import { calculatePaymentFees, calculateAppCommission, calculateSellerRevenue, PAYMENT_FEES } from "../models/Ticket"
+import axios from "axios"
 
 export interface PaymentRequest {
-  amount: number;
-  paymentMethod: PaymentMethod;
-  paymentAccount: PaymentAccount;
+  amount: number
+  paymentMethod: PaymentMethod
+  paymentAccount: PaymentAccount
   buyerInfo: {
-    name: string;
-    email: string;
-    phone?: string;
-  };
+    name: string
+    email: string
+    phone?: string
+  }
   eventInfo: {
-    id: string;
-    name: string;
-    venueName: string;
-  };
+    id: string
+    name: string
+    venueName: string
+  }
   ticketInfo: {
-    type: string;
-    quantity: number;
-    pricePerTicket: number;
-  };
+    type: string
+    quantity: number
+    pricePerTicket: number
+  }
 }
 
 export interface PaymentResponse {
-  success: boolean;
-  transactionId?: string;
-  reference?: string;
-  message: string;
-  errorCode?: string;
-  processingTime?: number;
+  success: boolean
+  transactionId?: string
+  reference?: string
+  message: string
+  errorCode?: string
+  processingTime?: number
 }
 
 export interface PaymentBreakdown {
-  ticketPrice: number;
-  quantity: number;
-  subtotal: number;
-  paymentFees: number;
-  totalAmount: number;
-  appCommission: number;
-  sellerRevenue: number;
+  ticketPrice: number
+  quantity: number
+  subtotal: number
+  paymentFees: number
+  totalAmount: number
+  appCommission: number
+  sellerRevenue: number
 }
 
 export interface DisbursementRequest {
-  amount: number;
-  recipientPhone: string;
-  recipientName: string;
-  reference: string;
-  description: string;
+  amount: number
+  recipientPhone: string
+  recipientName: string
+  reference: string
+  description: string
 }
 
 export interface DisbursementResponse {
-  success: boolean;
-  transactionId?: string;
-  reference?: string;
-  message: string;
-  errorCode?: string;
+  success: boolean
+  transactionId?: string
+  reference?: string
+  message: string
+  errorCode?: string
 }
 
 // MTN MoMo API Configuration
@@ -72,32 +72,32 @@ const MTN_CONFIG = {
     baseUrl: "https://sandbox.momodeveloper.mtn.com/disbursement",
     environment: "sandbox",
   },
-};
+}
 
 // Admin configuration for commission payments
 const ADMIN_CONFIG = {
   phone: "256777123456",
   name: "YoVibe Admin",
-};
+}
 
 class PaymentService {
-  private static instance: PaymentService;
-  private collectionToken: string | null = null;
-  private disbursementToken: string | null = null;
+  private static instance: PaymentService
+  private collectionToken: string | null = null
+  private disbursementToken: string | null = null
 
   private constructor() {}
 
   static getInstance(): PaymentService {
     if (!PaymentService.instance) {
-      PaymentService.instance = new PaymentService();
+      PaymentService.instance = new PaymentService()
     }
-    return PaymentService.instance;
+    return PaymentService.instance
   }
 
   // Generate access token for a given API
   private async generateAccessToken(apiType: "collection" | "disbursement"): Promise<string> {
-    const config = MTN_CONFIG[apiType];
-    const auth = Buffer.from(`${config.apiUser}:${config.apiKey}`).toString("base64");
+    const config = MTN_CONFIG[apiType]
+    const auth = Buffer.from(`${config.apiUser}:${config.apiKey}`).toString("base64")
 
     try {
       const response = await axios.post(
@@ -108,82 +108,83 @@ class PaymentService {
             Authorization: `Basic ${auth}`,
             "X-Target-Environment": config.environment,
           },
-        }
-      );
-      return response.data.access_token; // Adjust based on actual response field
+        },
+      )
+      return response.data.access_token // Adjust based on actual response field
     } catch (error) {
-      console.error(`Failed to generate ${apiType} token:`, error);
-      throw new Error(`Token generation failed for ${apiType}`);
+      console.error(`Failed to generate ${apiType} token:`, error)
+      throw new Error(`Token generation failed for ${apiType}`)
     }
   }
 
   // Ensure tokens are valid and refreshed if needed
   private async getToken(apiType: "collection" | "disbursement"): Promise<string> {
-    const tokenKey = `${apiType}Token`;
-    const token = this[tokenKey as keyof PaymentService] as string | null;
+    const tokenKey = `${apiType}Token`
+    const token = this[tokenKey as keyof PaymentService] as string | null
 
     if (!token || this.isTokenExpired(token)) {
-      this[tokenKey as keyof PaymentService] = await this.generateAccessToken(apiType);
-      console.log(`${apiType} token refreshed`);
+      this[tokenKey as keyof PaymentService] = await this.generateAccessToken(apiType)
+      console.log(`${apiType} token refreshed`)
     }
-    return this[tokenKey as keyof PaymentService] as string;
+
+    return this[tokenKey as keyof PaymentService] as string
   }
 
   private isTokenExpired(token: string): boolean {
     // Simplified check; in production, decode JWT and check 'exp'
-    const [, payload] = token.split(".");
-    const decoded = JSON.parse(Buffer.from(payload, "base64").toString());
-    const expiry = new Date(decoded.expires).getTime();
-    return expiry < Date.now();
+    const [, payload] = token.split(".")
+    const decoded = JSON.parse(Buffer.from(payload, "base64").toString())
+    const expiry = new Date(decoded.expires).getTime()
+    return expiry < Date.now()
   }
 
   // Calculate payment breakdown
   calculatePaymentBreakdown(ticketPrice: number, quantity: number, paymentMethod: PaymentMethod): PaymentBreakdown {
-    const subtotal = ticketPrice * quantity;
-    const paymentFees = calculatePaymentFees(subtotal, paymentMethod);
-    const totalAmount = subtotal + paymentFees;
-    const appCommission = calculateAppCommission(subtotal);
-    const sellerRevenue = calculateSellerRevenue(ticketPrice, quantity);
+    const subtotal = ticketPrice * quantity
+    const paymentFees = calculatePaymentFees(subtotal, paymentMethod)
+    const totalAmount = subtotal + paymentFees
+    const appCommission = calculateAppCommission(subtotal)
+    const sellerRevenue = calculateSellerRevenue(ticketPrice, quantity)
 
-    return { ticketPrice, quantity, subtotal, paymentFees, totalAmount, appCommission, sellerRevenue };
+    return { ticketPrice, quantity, subtotal, paymentFees, totalAmount, appCommission, sellerRevenue }
   }
 
   // Generate unique reference ID
   private generateReferenceId(): string {
-    return `yovibe_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+    return `yovibe_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`
   }
 
   // Validate MTN phone number format
   private validateMTNPhoneNumber(phoneNumber: string): boolean {
-    const mtnPattern = /^256(76|77|78|79)[0-9]{7}$|^0(76|77|78|79)[0-9]{7}$/;
-    return mtnPattern.test(phoneNumber.replace(/\s+/g, ""));
+    const mtnPattern = /^256(76|77|78|79)[0-9]{7}$|^0(76|77|78|79)[0-9]{7}$/
+    return mtnPattern.test(phoneNumber.replace(/\s+/g, ""))
   }
 
   // Validate Airtel phone number format
   private validateAirtelPhoneNumber(phoneNumber: string): boolean {
-    const airtelPattern = /^256(70|74|75)[0-9]{7}$|^0(70|74|75)[0-9]{7}$/;
-    return airtelPattern.test(phoneNumber.replace(/\s+/g, ""));
+    const airtelPattern = /^256(70|74|75)[0-9]{7}$|^0(70|74|75)[0-9]{7}$/
+    return airtelPattern.test(phoneNumber.replace(/\s+/g, ""))
   }
 
   // MTN Mobile Money payment initialization
   async initiateMtnPayment(request: {
-    amount: number;
-    currency: string;
-    externalId: string;
-    payer: { partyIdType: string; partyId: string };
-    payerMessage: string;
-    payeeNote: string;
+    amount: number
+    currency: string
+    externalId: string
+    payer: { partyIdType: string; partyId: string }
+    payerMessage: string
+    payeeNote: string
   }): Promise<PaymentResponse> {
-    const token = await this.getToken("collection");
-    const referenceId = request.externalId || this.generateReferenceId();
-    const phoneNumber = request.payer.partyId;
+    const token = await this.getToken("collection")
+    const referenceId = request.externalId || this.generateReferenceId()
+    const phoneNumber = request.payer.partyId
 
     if (!this.validateMTNPhoneNumber(phoneNumber)) {
       return {
         success: false,
         message: "Invalid MTN phone number format",
         errorCode: "INVALID_PHONE_NUMBER",
-      };
+      }
     }
 
     try {
@@ -198,33 +199,31 @@ class PaymentService {
             "X-Target-Environment": MTN_CONFIG.collection.environment,
             "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
           },
-        }
-      );
+        },
+      )
 
       if (response.status !== 202) {
         return {
           success: false,
           message: "Failed to initiate MTN payment",
           errorCode: "REQUEST_TO_PAY_FAILED",
-        };
+        }
       }
 
-      let attempts = 0;
-      const maxAttempts = 30;
-      while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        attempts++;
+      let attempts = 0
+      const maxAttempts = 30
 
-        const statusResponse = await axios.get(
-          `${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay/${referenceId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "X-Target-Environment": MTN_CONFIG.collection.environment,
-              "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
-            },
-          }
-        );
+      while (attempts < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        attempts++
+
+        const statusResponse = await axios.get(`${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay/${referenceId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Target-Environment": MTN_CONFIG.collection.environment,
+            "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
+          },
+        })
 
         if (statusResponse.data.status === "SUCCESSFUL") {
           return {
@@ -233,14 +232,14 @@ class PaymentService {
             reference: referenceId,
             message: `Payment successful. Transaction ID: ${statusResponse.data.financialTransactionId || referenceId}`,
             processingTime: attempts * 2000,
-          };
+          }
         } else if (statusResponse.data.status === "FAILED") {
           return {
             success: false,
             message: statusResponse.data.reason || "Payment failed",
             errorCode: "PAYMENT_FAILED",
             processingTime: attempts * 2000,
-          };
+          }
         }
       }
 
@@ -248,29 +247,29 @@ class PaymentService {
         success: false,
         message: "Payment timeout",
         errorCode: "PAYMENT_TIMEOUT",
-      };
+      }
     } catch (error) {
-      console.error("MTN Payment error:", error);
+      console.error("MTN Payment error:", error)
       return {
         success: false,
         message: "Technical error during payment",
         errorCode: "TECHNICAL_ERROR",
-      };
+      }
     }
   }
 
   // MTN Mobile Money payment processing
   async processMTNPayment(request: PaymentRequest): Promise<PaymentResponse> {
-    const token = await this.getToken("collection");
-    const referenceId = this.generateReferenceId();
-    const phoneNumber = request.paymentAccount.accountNumber;
+    const token = await this.getToken("collection")
+    const referenceId = this.generateReferenceId()
+    const phoneNumber = request.paymentAccount.accountNumber
 
     if (!this.validateMTNPhoneNumber(phoneNumber)) {
       return {
         success: false,
         message: "Invalid MTN phone number format",
         errorCode: "INVALID_PHONE_NUMBER",
-      };
+      }
     }
 
     const requestToPayPayload = {
@@ -280,64 +279,58 @@ class PaymentService {
       payer: { partyIdType: "MSISDN", partyId: phoneNumber },
       payerMessage: `Payment for ${request.eventInfo.name} tickets`,
       payeeNote: `YoVibe ticket purchase - ${request.ticketInfo.type} x${request.ticketInfo.quantity}`,
-    };
+    }
 
     try {
-      const response = await axios.post(
-        `${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay`,
-        requestToPayPayload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            "X-Reference-Id": referenceId,
-            "X-Target-Environment": MTN_CONFIG.collection.environment,
-            "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
-          },
-        }
-      );
+      const response = await axios.post(`${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay`, requestToPayPayload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Reference-Id": referenceId,
+          "X-Target-Environment": MTN_CONFIG.collection.environment,
+          "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
+        },
+      })
 
       if (response.status !== 202) {
         return {
           success: false,
           message: "Failed to initiate MTN payment",
           errorCode: "REQUEST_TO_PAY_FAILED",
-        };
+        }
       }
 
-      let attempts = 0;
-      const maxAttempts = 30;
-      while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        attempts++;
+      let attempts = 0
+      const maxAttempts = 30
 
-        const statusResponse = await axios.get(
-          `${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay/${referenceId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "X-Target-Environment": MTN_CONFIG.collection.environment,
-              "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
-            },
-          }
-        );
+      while (attempts < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        attempts++
+
+        const statusResponse = await axios.get(`${MTN_CONFIG.collection.baseUrl}/v1_0/requesttopay/${referenceId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Target-Environment": MTN_CONFIG.collection.environment,
+            "Ocp-Apim-Subscription-Key": MTN_CONFIG.collection.apiKey,
+          },
+        })
 
         if (statusResponse.data.status === "SUCCESSFUL") {
-          await this.processCommissionPayment(request, referenceId);
+          await this.processCommissionPayment(request, referenceId)
           return {
             success: true,
             transactionId: statusResponse.data.financialTransactionId || referenceId,
             reference: referenceId,
             message: `Payment successful via MTN Mobile Money. Transaction ID: ${statusResponse.data.financialTransactionId || referenceId}`,
             processingTime: attempts * 2000,
-          };
+          }
         } else if (statusResponse.data.status === "FAILED") {
           return {
             success: false,
             message: statusResponse.data.reason || "MTN Mobile Money payment failed",
             errorCode: "PAYMENT_FAILED",
             processingTime: attempts * 2000,
-          };
+          }
         }
       }
 
@@ -345,14 +338,14 @@ class PaymentService {
         success: false,
         message: "Payment timeout",
         errorCode: "PAYMENT_TIMEOUT",
-      };
+      }
     } catch (error) {
-      console.error("MTN Payment processing error:", error);
+      console.error("MTN Payment processing error:", error)
       return {
         success: false,
         message: "MTN Mobile Money payment failed due to technical error",
         errorCode: "TECHNICAL_ERROR",
-      };
+      }
     }
   }
 
@@ -361,7 +354,7 @@ class PaymentService {
       request.ticketInfo.pricePerTicket,
       request.ticketInfo.quantity,
       request.paymentMethod,
-    );
+    )
 
     if (breakdown.appCommission > 0) {
       const commissionRequest: DisbursementRequest = {
@@ -370,25 +363,25 @@ class PaymentService {
         recipientName: ADMIN_CONFIG.name,
         reference: `commission_${originalReference}`,
         description: `Commission from ${request.eventInfo.name} ticket sale`,
-      };
+      }
 
-      const commissionResult = await this.processMTNDisbursement(commissionRequest);
+      const commissionResult = await this.processMTNDisbursement(commissionRequest)
       if (!commissionResult.success) {
-        console.error("Commission payment failed:", commissionResult.message);
+        console.error("Commission payment failed:", commissionResult.message)
       }
     }
   }
 
   async processMTNDisbursement(request: DisbursementRequest): Promise<DisbursementResponse> {
-    const token = await this.getToken("disbursement");
-    const referenceId = this.generateReferenceId();
+    const token = await this.getToken("disbursement")
+    const referenceId = this.generateReferenceId()
 
     if (!this.validateMTNPhoneNumber(request.recipientPhone)) {
       return {
         success: false,
         message: "Invalid MTN phone number format for disbursement",
         errorCode: "INVALID_PHONE_NUMBER",
-      };
+      }
     }
 
     const depositPayload = {
@@ -401,47 +394,41 @@ class PaymentService {
       },
       payerMessage: request.description,
       payeeNote: `YoVibe payment: ${request.description}`,
-    };
+    }
 
     try {
-      const response = await axios.post(
-        `${MTN_CONFIG.disbursement.baseUrl}/v1_0/deposit`,
-        depositPayload,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            "X-Reference-Id": referenceId,
-            "X-Target-Environment": MTN_CONFIG.disbursement.environment,
-            "Ocp-Apim-Subscription-Key": MTN_CONFIG.disbursement.apiKey,
-          },
-        }
-      );
+      const response = await axios.post(`${MTN_CONFIG.disbursement.baseUrl}/v1_0/deposit`, depositPayload, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          "X-Reference-Id": referenceId,
+          "X-Target-Environment": MTN_CONFIG.disbursement.environment,
+          "Ocp-Apim-Subscription-Key": MTN_CONFIG.disbursement.apiKey,
+        },
+      })
 
       if (response.status !== 202) {
         return {
           success: false,
           message: "Failed to initiate MTN disbursement",
           errorCode: "DEPOSIT_FAILED",
-        };
+        }
       }
 
-      let attempts = 0;
-      const maxAttempts = 30;
-      while (attempts < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        attempts++;
+      let attempts = 0
+      const maxAttempts = 30
 
-        const statusResponse = await axios.get(
-          `${MTN_CONFIG.disbursement.baseUrl}/v1_0/deposit/${referenceId}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "X-Target-Environment": MTN_CONFIG.disbursement.environment,
-              "Ocp-Apim-Subscription-Key": MTN_CONFIG.disbursement.apiKey,
-            },
-          }
-        );
+      while (attempts < maxAttempts) {
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        attempts++
+
+        const statusResponse = await axios.get(`${MTN_CONFIG.disbursement.baseUrl}/v1_0/deposit/${referenceId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "X-Target-Environment": MTN_CONFIG.disbursement.environment,
+            "Ocp-Apim-Subscription-Key": MTN_CONFIG.disbursement.apiKey,
+          },
+        })
 
         if (statusResponse.data.status === "SUCCESSFUL") {
           return {
@@ -449,13 +436,13 @@ class PaymentService {
             transactionId: statusResponse.data.financialTransactionId || referenceId,
             reference: referenceId,
             message: `Transfer successful to ${request.recipientPhone}. Amount: UGX ${request.amount}`,
-          };
+          }
         } else if (statusResponse.data.status === "FAILED") {
           return {
             success: false,
             message: statusResponse.data.reason || "MTN disbursement failed",
             errorCode: "DEPOSIT_FAILED",
-          };
+          }
         }
       }
 
@@ -463,14 +450,14 @@ class PaymentService {
         success: false,
         message: "Disbursement timeout",
         errorCode: "DEPOSIT_TIMEOUT",
-      };
+      }
     } catch (error) {
-      console.error("MTN Disbursement error:", error);
+      console.error("MTN Disbursement error:", error)
       return {
         success: false,
         message: "Technical error during disbursement",
         errorCode: "TECHNICAL_ERROR",
-      };
+      }
     }
   }
 
@@ -487,9 +474,9 @@ class PaymentService {
       recipientName: eventOwnerName,
       reference: `payout_${ticketReference}`,
       description: `Revenue from ${eventName} ticket verification`,
-    };
+    }
 
-    return await this.processMTNDisbursement(disbursementRequest);
+    return await this.processMTNDisbursement(disbursementRequest)
   }
 
   async processAirtelPayment(request: PaymentRequest): Promise<PaymentResponse> {
@@ -498,7 +485,8 @@ class PaymentService {
     if (!this.validateAirtelPhoneNumber(request.paymentAccount.accountNumber)) {
       return {
         success: false,
-        message: "Invalid Airtel phone number format. Airtel numbers should start with 25670, 25674, or 25675 (12 digits) or 070, 074, or 075 (9 digits)",
+        message:
+          "Invalid Airtel phone number format. Airtel numbers should start with 25670, 25674, or 25675 (12 digits) or 070, 074, or 075 (9 digits)",
         errorCode: "INVALID_PHONE_NUMBER",
       }
     }
@@ -677,52 +665,54 @@ class PaymentService {
   }
 
   validatePhoneNumber(phoneNumber: string) {
-    const cleanNumber = phoneNumber.replace(/\s+/g, "").replace(/^\+/, "");
-    console.log("Validating phone number, cleaned to:", cleanNumber);
+    const cleanNumber = phoneNumber.replace(/\s+/g, "").replace(/^\+/, "")
+    console.log("Validating phone number, cleaned to:", cleanNumber)
 
-    const mtnPatternFull = /^256(76|77|78|79)[0-9]{7}$/;
-    const mtnPatternLocal = /^0(76|77|78|79)[0-9]{7}$/;
-    const airtelPatternFull = /^256(70|74|75)[0-9]{7}$/;
-    const airtelPatternLocal = /^0(70|74|75)[0-9]{7}$/;
+    const mtnPatternFull = /^256(76|77|78|79)[0-9]{7}$/
+    const mtnPatternLocal = /^0(76|77|78|79)[0-9]{7}$/
+    const airtelPatternFull = /^256(70|74|75)[0-9]{7}$/
+    const airtelPatternLocal = /^0(70|74|75)[0-9]{7}$/
 
-    console.log("MTN Full test:", mtnPatternFull.test(cleanNumber));
-    console.log("MTN Local test:", mtnPatternLocal.test(cleanNumber));
-    console.log("Airtel Full test:", airtelPatternFull.test(cleanNumber));
-    console.log("Airtel Local test:", airtelPatternLocal.test(cleanNumber));
+    console.log("MTN Full test:", mtnPatternFull.test(cleanNumber))
+    console.log("MTN Local test:", mtnPatternLocal.test(cleanNumber))
+    console.log("Airtel Full test:", airtelPatternFull.test(cleanNumber))
+    console.log("Airtel Local test:", airtelPatternLocal.test(cleanNumber))
 
     if (mtnPatternFull.test(cleanNumber) || mtnPatternLocal.test(cleanNumber)) {
-      console.log("Phone number validated as MTN");
-      return { valid: true, message: "Valid MTN number" };
+      console.log("Phone number validated as MTN")
+      return { valid: true, message: "Valid MTN number" }
     }
+
     if (airtelPatternFull.test(cleanNumber) || airtelPatternLocal.test(cleanNumber)) {
-      console.log("Phone number validated as Airtel");
-      return { valid: true, message: "Valid Airtel number" };
+      console.log("Phone number validated as Airtel")
+      return { valid: true, message: "Valid Airtel number" }
     }
 
     // Fallback for 12-digit MTN numbers starting with 2567
     if (/^2567[0-9]{8}$/.test(cleanNumber)) {
-      console.log("Fallback: Validated as 12-digit MTN number");
-      return { valid: true, message: "Valid MTN number (fallback)" };
+      console.log("Fallback: Validated as 12-digit MTN number")
+      return { valid: true, message: "Valid MTN number (fallback)" }
     }
 
-    console.log("Phone number validation failed");
+    console.log("Phone number validation failed")
     return {
       valid: false,
-      message: "Invalid phone number format. MTN: 25676/25677/25678/25679 or 076/077/078/079, Airtel: 25670/25674/25675 or 070/074/075 (XXXXXXXXX or 256XXXXXXXXX)",
-    };
+      message:
+        "Invalid phone number format. MTN: 25676/25677/25678/25679 or 076/077/078/079, Airtel: 25670/25674/25675 or 070/074/075 (XXXXXXXXX or 256XXXXXXXXX)",
+    }
   }
 
   validateCreditCard(cardDetails: any) {
     if (!cardDetails.cardNumber || !cardDetails.expiryMonth || !cardDetails.expiryYear || !cardDetails.cvv) {
-      return { valid: false, message: "All card fields are required" };
+      return { valid: false, message: "All card fields are required" }
     }
 
     if (!/^\d{16}$/.test(cardDetails.cardNumber.replace(/\s/g, ""))) {
-      return { valid: false, message: "Invalid card number" };
+      return { valid: false, message: "Invalid card number" }
     }
 
-    return { valid: true, message: "Valid card details" };
+    return { valid: true, message: "Valid card details" }
   }
 }
 
-export default PaymentService.getInstance();
+export default PaymentService.getInstance()
