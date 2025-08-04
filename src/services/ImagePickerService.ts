@@ -1,12 +1,11 @@
-import { Platform } from "react-native"
 import * as ImagePicker from "expo-image-picker"
 
 export interface ImagePickerOptions {
-  mediaTypes?: "Images" | "Videos" | "All"
+  mediaTypes: "Images" | "Videos" | "All"
   allowsEditing?: boolean
   aspect?: [number, number]
   quality?: number
-  base64?: boolean
+  allowsMultipleSelection?: boolean
 }
 
 export interface ImagePickerAsset {
@@ -33,121 +32,147 @@ class ImagePickerService {
     return ImagePickerService.instance
   }
 
-  async requestPermissions(): Promise<boolean> {
-    try {
-      if (Platform.OS === "web") {
-        // Web doesn't need explicit permissions for file input
-        return true
-      }
-
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
-      return status === "granted"
-    } catch (error) {
-      console.error("ImagePickerService: Error requesting permissions:", error)
-      return false
-    }
+  async requestMediaLibraryPermissionsAsync(): Promise<ImagePicker.MediaLibraryPermissionResponse> {
+    return await ImagePicker.requestMediaLibraryPermissionsAsync()
   }
 
-  async requestMediaLibraryPermissionsAsync(): Promise<{ status: string }> {
-    try {
-      if (Platform.OS === "web") {
-        return { status: "granted" }
-      }
-      return await ImagePicker.requestMediaLibraryPermissionsAsync()
-    } catch (error) {
-      console.error("ImagePickerService: Error requesting media library permissions:", error)
-      return { status: "denied" }
-    }
+  async requestCameraPermissionsAsync(): Promise<ImagePicker.CameraPermissionResponse> {
+    return await ImagePicker.requestCameraPermissionsAsync()
   }
 
-  async pickImage(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+  async pickImage(options: ImagePickerOptions = { mediaTypes: "Images" }): Promise<ImagePickerResult> {
     try {
-      console.log("ImagePickerService: Starting image picker")
+      console.log("ImagePickerService: Requesting media library permissions...")
 
-      // Request permissions first
-      const hasPermissions = await this.requestPermissions()
-      if (!hasPermissions) {
-        console.error("ImagePickerService: Permissions not granted")
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
+
+      if (permissionResult.granted === false) {
+        console.log("ImagePickerService: Permission denied")
         return { canceled: true }
       }
 
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      console.log("ImagePickerService: Launching image library...")
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes:
+          options.mediaTypes === "Images"
+            ? ImagePicker.MediaTypeOptions.Images
+            : options.mediaTypes === "Videos"
+              ? ImagePicker.MediaTypeOptions.Videos
+              : ImagePicker.MediaTypeOptions.All,
         allowsEditing: options.allowsEditing ?? true,
-        aspect: options.aspect ?? [1, 1],
-        quality: options.quality ?? 0.8,
-        base64: options.base64 ?? false,
-      })
+        aspect: options.aspect,
+        quality: options.quality ?? 1,
+        allowsMultipleSelection: options.allowsMultipleSelection ?? false,
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions)
 
       console.log("ImagePickerService: Image picker result:", result)
 
-      // Convert the result to match our interface
-      const convertedResult: ImagePickerResult = {
-        canceled: result.canceled,
-        assets: result.assets?.map((asset) => ({
+      if (result.canceled) {
+        return { canceled: true }
+      }
+
+      // Convert the result to our interface
+      const assets: ImagePickerAsset[] =
+        result.assets?.map((asset) => ({
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
           base64: asset.base64 || undefined, // Convert null to undefined
-        })),
-      }
+        })) || []
 
-      return convertedResult
+      return {
+        canceled: false,
+        assets,
+      }
     } catch (error) {
       console.error("ImagePickerService: Error picking image:", error)
       return { canceled: true }
     }
   }
 
-  async launchImageLibraryAsync(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
-    return this.pickImage(options)
-  }
-
-  async launchCamera(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+  async launchImageLibraryAsync(options?: ImagePicker.ImagePickerOptions): Promise<ImagePickerResult> {
     try {
-      console.log("ImagePickerService: Starting camera")
+      const result = await ImagePicker.launchImageLibraryAsync(options)
 
-      // Request camera permissions
-      const { status } = await ImagePicker.requestCameraPermissionsAsync()
-      if (status !== "granted") {
-        console.error("ImagePickerService: Camera permissions not granted")
+      if (result.canceled) {
         return { canceled: true }
       }
 
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: options.allowsEditing ?? true,
-        aspect: options.aspect ?? [1, 1],
-        quality: options.quality ?? 0.8,
-        base64: options.base64 ?? false,
-      })
-
-      console.log("ImagePickerService: Camera result:", result)
-
-      // Convert the result to match our interface
-      const convertedResult: ImagePickerResult = {
-        canceled: result.canceled,
-        assets: result.assets?.map((asset) => ({
+      // Convert the result to our interface
+      const assets: ImagePickerAsset[] =
+        result.assets?.map((asset) => ({
           uri: asset.uri,
           width: asset.width,
           height: asset.height,
           base64: asset.base64 || undefined, // Convert null to undefined
-        })),
+        })) || []
+
+      return {
+        canceled: false,
+        assets,
+      }
+    } catch (error) {
+      console.error("ImagePickerService: Error launching image library:", error)
+      return { canceled: true }
+    }
+  }
+
+  async takePhoto(options: ImagePickerOptions = { mediaTypes: "Images" }): Promise<ImagePickerResult> {
+    try {
+      console.log("ImagePickerService: Requesting camera permissions...")
+
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync()
+
+      if (permissionResult.granted === false) {
+        console.log("ImagePickerService: Camera permission denied")
+        return { canceled: true }
       }
 
-      return convertedResult
+      console.log("ImagePickerService: Launching camera...")
+
+      const pickerOptions: ImagePicker.ImagePickerOptions = {
+        mediaTypes:
+          options.mediaTypes === "Images"
+            ? ImagePicker.MediaTypeOptions.Images
+            : options.mediaTypes === "Videos"
+              ? ImagePicker.MediaTypeOptions.Videos
+              : ImagePicker.MediaTypeOptions.All,
+        allowsEditing: options.allowsEditing ?? true,
+        aspect: options.aspect,
+        quality: options.quality ?? 1,
+      }
+
+      const result = await ImagePicker.launchCameraAsync(pickerOptions)
+
+      console.log("ImagePickerService: Camera result:", result)
+
+      if (result.canceled) {
+        return { canceled: true }
+      }
+
+      // Convert the result to our interface
+      const assets: ImagePickerAsset[] =
+        result.assets?.map((asset) => ({
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          base64: asset.base64 || undefined, // Convert null to undefined
+        })) || []
+
+      return {
+        canceled: false,
+        assets,
+      }
     } catch (error) {
-      console.error("ImagePickerService: Error launching camera:", error)
+      console.error("ImagePickerService: Error taking photo:", error)
       return { canceled: true }
     }
   }
 }
 
-// Export singleton instance as default
+// Export singleton instance
 const imagePickerService = ImagePickerService.getInstance()
 export default imagePickerService
-
-// Also export the class for named imports
-export { ImagePickerService }
