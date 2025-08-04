@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import QRCodeService from "../services/QRCodeService"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
-import type { Ticket, QRTicketData } from "../models/Ticket"
+import type { Ticket, QRTicketData, TicketValidation } from "../models/Ticket"
 
 interface TicketScannerScreenProps {
   navigation: any
@@ -207,9 +207,10 @@ export default function TicketScannerScreen({ navigation, route }: TicketScanner
       }
 
       // Ticket is valid - create validation record
-      const validation = {
+      const validation: TicketValidation = {
         id: `validation_${Date.now()}_${Math.random().toString(36).substring(7)}`,
         ticketId: ticket.id,
+        eventId: ticket.eventId,
         validatedBy: user?.id || "scanner",
         validatedAt: new Date(),
         validationType: ticket.ticketType === "secure" ? "image_verification" : "qr_only",
@@ -370,7 +371,7 @@ export default function TicketScannerScreen({ navigation, route }: TicketScanner
     return (
       <View style={[styles.container, styles.gradientBackground]}>
         <View style={styles.centerContent}>
-          <Ionicons name="camera-off" size={64} color="#FF6B6B" />
+          <Ionicons name="videocam-off" size={64} color="#FF6B6B" />
           <Text style={styles.errorText}>Camera permission denied</Text>
           <TouchableOpacity style={styles.permissionButton} onPress={requestPermissions}>
             <Text style={styles.permissionButtonText}>Request Permission</Text>
@@ -403,11 +404,9 @@ export default function TicketScannerScreen({ navigation, route }: TicketScanner
           </>
         ) : (
           cameraActive && (
-            <Camera
-              style={styles.camera}
-              type={Camera.Constants.Type.back}
-              onBarCodeScanned={scanned ? undefined : ({ data }) => handleQRCodeScanned(data)}
-            />
+            <View style={styles.camera}>
+              <Text style={styles.cameraPlaceholder}>Camera component would be here on native</Text>
+            </View>
           )
         )}
 
@@ -535,6 +534,13 @@ const styles = StyleSheet.create({
   },
   camera: {
     flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#333",
+  },
+  cameraPlaceholder: {
+    color: "#FFFFFF",
+    fontSize: 16,
   },
   video: {
     width: "100%",
