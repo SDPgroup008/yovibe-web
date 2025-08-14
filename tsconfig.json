@@ -1,44 +1,22 @@
 {
+  "extends": "expo/tsconfig.base",
   "compilerOptions": {
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
-    "allowJs": true,
-    "target": "es2020",
-    "skipLibCheck": true,
     "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
+    "target": "es2020",
     "module": "es2020",
     "moduleResolution": "node",
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react-jsx",
+    "declaration": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowJs": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "react-jsx",
+    "noEmit": true,
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
-    "allowSyntheticDefaultImports": true,
-    "forceConsistentCasingInFileNames": true
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
-  "include": [
-    "next-env.d.ts",
-    "src/**/*",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ],
-  "extends": "expo/tsconfig.base"
+  "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
+  "exclude": ["node_modules"]
 }
