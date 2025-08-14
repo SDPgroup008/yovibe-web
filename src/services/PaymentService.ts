@@ -1,47 +1,68 @@
+import type { PaymentMethod } from "../models/Ticket"
+import { calculatePaymentFees, calculateAppCommission } from "../models/Ticket"
+
+export interface PaymentRequest {
+  amount: number
+  phoneNumber: string
+  eventId: string
+  ticketType: string
+  quantity: number
+  buyerId: string
+  buyerName: string
+  eventName: string
+  paymentMethod: PaymentMethod
+}
+
+export interface PaymentResponse {
+  success: boolean
+  transactionId?: string
+  ticketId?: string
+  message?: string
+  error?: string
+  qrCodeData?: string
+  qrCodeImage?: string
+}
+
 export interface PaymentIntent {
   id: string
   amount: number
-  currency: string
   eventId: string
   buyerId: string
   status: "pending" | "processing" | "completed" | "failed"
   createdAt: Date
 }
 
-export interface PaymentMethod {
+export interface PaymentMethodInfo {
   id: string
   name: string
-  provider: "mtn" | "airtel" | "card"
+  provider: PaymentMethod
   icon: string
   isAvailable: boolean
 }
 
-export interface PaymentResult {
-  success: boolean
-  transactionId?: string
-  error?: string
-  paymentMethod?: string
-}
-
 export default class PaymentService {
-  private static readonly COMMISSION_RATE = 0.05 // 5%
+  private static readonly MTN_API_URL = "https://sandbox.momodeveloper.mtn.com"
+  private static readonly AIRTEL_API_URL = "https://openapiuat.airtel.africa"
+  private static readonly ADMIN_PHONE = "0777123456"
+  private static readonly COMMISSION_RATE = 0.05
 
+  // Create payment intent
   static async createPaymentIntent(amount: number, eventId: string, buyerId: string): Promise<PaymentIntent> {
     const paymentIntent: PaymentIntent = {
       id: `pi_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
       amount,
-      currency: "UGX",
       eventId,
       buyerId,
       status: "pending",
       createdAt: new Date(),
     }
 
-    console.log("PaymentService.web: Created payment intent:", paymentIntent)
+    console.log("PaymentService: Created payment intent:", paymentIntent)
     return paymentIntent
   }
 
-  static getAvailablePaymentMethods(): PaymentMethod[] {
+  // Get available payment methods
+  static getAvailablePaymentMethods(): PaymentMethodInfo[] {
     return [
       {
         id: "mtn_mobile_money",
@@ -67,45 +88,38 @@ export default class PaymentService {
     ]
   }
 
+  // Process payment with selected method
   static async processPayment(
     paymentIntentId: string,
-    paymentMethod: PaymentMethod,
+    paymentMethod: PaymentMethodInfo,
     amount: number,
-  ): Promise<PaymentResult> {
+  ): Promise<PaymentResponse> {
     try {
-      console.log("PaymentService.web: Processing payment:", {
-        paymentIntentId,
-        paymentMethod: paymentMethod.provider,
-        amount,
-      })
+      console.log(`PaymentService: Processing payment with ${paymentMethod.provider}`)
 
-      // Simulate payment processing delay
+      // Simulate API call delay
       await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      // Simulate payment success/failure (90% success rate)
-      const isSuccess = Math.random() > 0.1
+      // Simulate success rate (90% for mobile money, 95% for cards)
+      const successRate = paymentMethod.provider === "card" ? 0.95 : 0.9
+      const isSuccess = Math.random() < successRate
 
       if (!isSuccess) {
         return {
           success: false,
-          error: "Payment failed. Please try again.",
+          error: `${paymentMethod.name} payment failed. Please try again.`,
         }
       }
 
-      const transactionId = `txn_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
-
-      console.log("PaymentService.web: Payment successful:", {
-        transactionId,
-        paymentMethod: paymentMethod.provider,
-      })
+      const transactionId = this.generateTransactionId(paymentMethod.provider.toUpperCase())
 
       return {
         success: true,
         transactionId,
-        paymentMethod: paymentMethod.provider,
+        message: `Payment successful via ${paymentMethod.name}`,
       }
     } catch (error) {
-      console.error("PaymentService.web: Payment processing error:", error)
+      console.error("PaymentService: Payment processing error:", error)
       return {
         success: false,
         error: error instanceof Error ? error.message : "Payment processing failed",
@@ -113,39 +127,194 @@ export default class PaymentService {
     }
   }
 
-  static validatePhoneNumber(phoneNumber: string, provider: "mtn" | "airtel"): boolean {
-    const cleanPhone = phoneNumber.replace(/\s+/g, "")
+  // MTN Mobile Money payment
+  static async processMTNPayment(request: PaymentRequest): Promise<PaymentResponse> {
+    try {
+      console.log("PaymentService: Processing MTN payment:", {
+        amount: request.amount,
+        phone: request.phoneNumber,
+        eventId: request.eventId,
+      })
 
-    switch (provider) {
-      case "mtn":
-        return /^(077|078|076)\d{7}$/.test(cleanPhone) || /^(\+256)(77|78|76)\d{7}$/.test(cleanPhone)
-      case "airtel":
-        return /^(070|075)\d{7}$/.test(cleanPhone) || /^(\+256)(70|75)\d{7}$/.test(cleanPhone)
-      default:
-        return false
+      // Validate MTN phone number format
+      if (!this.validateMTNNumber(request.phoneNumber)) {
+        return {
+          success: false,
+          error: "Invalid MTN phone number format. Use 077XXXXXXX, 078XXXXXXX, or 076XXXXXXX",
+        }
+      }
+
+      // Generate unique transaction ID
+      const transactionId = this.generateTransactionId("MTN")
+
+      // Calculate fees using the new fee structure
+      const paymentFees = calculatePaymentFees(request.amount, "mtn")
+      const totalWithFees = request.amount + paymentFees
+
+      console.log("PaymentService: Payment breakdown:", {
+        baseAmount: request.amount,
+        paymentFees,
+        totalWithFees,
+      })
+
+      // Simulate API call delay
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // Simulate successful payment (90% success rate)
+      const isSuccess = Math.random() > 0.1
+
+      if (!isSuccess) {
+        return {
+          success: false,
+          error: "Payment failed. Please check your account balance and try again.",
+        }
+      }
+
+      console.log("PaymentService: MTN payment successful:", { transactionId })
+
+      return {
+        success: true,
+        transactionId,
+        message: "Payment successful! Your ticket has been generated.",
+      }
+    } catch (error) {
+      console.error("PaymentService: MTN payment error:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Payment processing failed",
+      }
     }
   }
 
-  static detectPaymentProvider(phoneNumber: string): "mtn" | "airtel" | null {
-    const cleanPhone = phoneNumber.replace(/\s+/g, "")
+  // Airtel Money payment
+  static async processAirtelPayment(request: PaymentRequest): Promise<PaymentResponse> {
+    try {
+      console.log("PaymentService: Processing Airtel payment:", {
+        amount: request.amount,
+        phone: request.phoneNumber,
+        eventId: request.eventId,
+      })
 
-    if (/^(077|078|076)/.test(cleanPhone) || /^(\+256)(77|78|76)/.test(cleanPhone)) {
+      // Validate Airtel phone number format
+      if (!this.validateAirtelNumber(request.phoneNumber)) {
+        return {
+          success: false,
+          error: "Invalid Airtel phone number format. Use 070XXXXXXX or 075XXXXXXX",
+        }
+      }
+
+      const transactionId = this.generateTransactionId("AIRTEL")
+
+      // Calculate fees
+      const paymentFees = calculatePaymentFees(request.amount, "airtel")
+      const totalWithFees = request.amount + paymentFees
+
+      console.log("PaymentService: Payment breakdown:", {
+        baseAmount: request.amount,
+        paymentFees,
+        totalWithFees,
+      })
+
+      // Simulate API call
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // Simulate success
+      const isSuccess = Math.random() > 0.1
+
+      if (!isSuccess) {
+        return {
+          success: false,
+          error: "Payment failed. Please check your account balance and try again.",
+        }
+      }
+
+      return {
+        success: true,
+        transactionId,
+        message: "Payment successful! Your ticket has been generated.",
+      }
+    } catch (error) {
+      console.error("PaymentService: Airtel payment error:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Payment processing failed",
+      }
+    }
+  }
+
+  // Card payment
+  static async processCardPayment(request: PaymentRequest): Promise<PaymentResponse> {
+    try {
+      console.log("PaymentService: Processing card payment:", {
+        amount: request.amount,
+        eventId: request.eventId,
+      })
+
+      const transactionId = this.generateTransactionId("CARD")
+
+      // Calculate fees
+      const paymentFees = calculatePaymentFees(request.amount, "card")
+      const totalWithFees = request.amount + paymentFees
+
+      console.log("PaymentService: Payment breakdown:", {
+        baseAmount: request.amount,
+        paymentFees,
+        totalWithFees,
+      })
+
+      // Simulate card processing
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+
+      const isSuccess = Math.random() > 0.05 // 95% success rate for cards
+
+      if (!isSuccess) {
+        return {
+          success: false,
+          error: "Card payment failed. Please check your card details and try again.",
+        }
+      }
+
+      return {
+        success: true,
+        transactionId,
+        message: "Payment successful! Your ticket has been generated.",
+      }
+    } catch (error) {
+      console.error("PaymentService: Card payment error:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Payment processing failed",
+      }
+    }
+  }
+
+  // Utility methods
+  private static validateMTNNumber(phoneNumber: string): boolean {
+    return /^(077|078|076)\d{7}$/.test(phoneNumber)
+  }
+
+  private static validateAirtelNumber(phoneNumber: string): boolean {
+    return /^(070|075)\d{7}$/.test(phoneNumber)
+  }
+
+  private static generateTransactionId(provider: string): string {
+    const timestamp = Date.now()
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase()
+    return `${provider}_${timestamp}_${random}`
+  }
+
+  // Get payment method from phone number
+  static getPaymentMethodFromPhone(phoneNumber: string): PaymentMethod | null {
+    if (this.validateMTNNumber(phoneNumber)) {
       return "mtn"
     }
-    if (/^(070|075)/.test(cleanPhone) || /^(\+256)(70|75)/.test(cleanPhone)) {
+    if (this.validateAirtelNumber(phoneNumber)) {
       return "airtel"
     }
     return null
   }
 
-  static calculateCommission(amount: number): number {
-    return Math.round(amount * this.COMMISSION_RATE)
-  }
-
-  static calculateEventOwnerAmount(amount: number): number {
-    return amount - this.calculateCommission(amount)
-  }
-
+  // Format amount for display
   static formatAmount(amount: number): string {
     return new Intl.NumberFormat("en-UG", {
       style: "currency",
@@ -154,46 +323,28 @@ export default class PaymentService {
     }).format(amount)
   }
 
-  static async processAdminCommission(amount: number, transactionId: string): Promise<boolean> {
-    try {
-      console.log("PaymentService.web: Processing admin commission:", {
-        amount,
-        transactionId,
-      })
+  // Calculate total with fees and commission
+  static calculatePricing(
+    baseAmount: number,
+    paymentMethod: PaymentMethod,
+  ): {
+    baseAmount: number
+    paymentFees: number
+    appCommission: number
+    eventOwnerAmount: number
+    total: number
+  } {
+    const paymentFees = calculatePaymentFees(baseAmount, paymentMethod)
+    const appCommission = calculateAppCommission(baseAmount)
+    const eventOwnerAmount = baseAmount - appCommission
+    const total = baseAmount + paymentFees
 
-      // Simulate instant commission payment
-      await new Promise((resolve) => setTimeout(resolve, 500))
-
-      console.log("PaymentService.web: Admin commission processed successfully")
-      return true
-    } catch (error) {
-      console.error("PaymentService.web: Error processing admin commission:", error)
-      return false
-    }
-  }
-
-  static async processEventOwnerPayout(
-    amount: number,
-    eventId: string,
-    ownerPhoneNumber: string,
-    transactionId: string,
-  ): Promise<boolean> {
-    try {
-      console.log("PaymentService.web: Processing event owner payout:", {
-        amount,
-        eventId,
-        ownerPhoneNumber,
-        transactionId,
-      })
-
-      // Simulate payout processing
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      console.log("PaymentService.web: Event owner payout processed successfully")
-      return true
-    } catch (error) {
-      console.error("PaymentService.web: Error processing event owner payout:", error)
-      return false
+    return {
+      baseAmount,
+      paymentFees,
+      appCommission,
+      eventOwnerAmount,
+      total,
     }
   }
 }
