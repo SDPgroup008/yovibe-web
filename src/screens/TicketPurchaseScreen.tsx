@@ -2,49 +2,49 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  TextInput,
-  Alert,
-  ActivityIndicator,
-  Image,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, StyleSheet, Image } from "react-native"
+import { useNavigation, useRoute } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
-import FirebaseService from "../services/FirebaseService"
+import firebaseService from "../services/FirebaseService"
 import PaymentService from "../services/PaymentService"
-import QRCodeService from "../services/QRCodeService"
 import type { Event, TicketType } from "../models/Event"
 import type { Ticket, PaymentMethod } from "../models/Ticket"
-import type { TicketPurchaseScreenProps } from "../navigation/types"
+import { Ionicons } from "@expo/vector-icons"
 
-const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navigation }) => {
-  const { eventId } = route.params
+interface RouteParams {
+  eventId: string
+}
+
+const TicketPurchaseScreen: React.FC = () => {
+  const navigation = useNavigation()
+  const route = useRoute()
+  const { eventId } = route.params as RouteParams
   const { user } = useAuth()
 
-  // State
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [purchasing, setPurchasing] = useState(false)
   const [selectedTicketType, setSelectedTicketType] = useState<TicketType | null>(null)
   const [quantity, setQuantity] = useState(1)
-  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod>("mtn")
-  const [paymentAccount, setPaymentAccount] = useState("")
-  const [accountName, setAccountName] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null)
 
   useEffect(() => {
-    loadEventData()
+    loadEvent()
   }, [eventId])
 
-  const loadEventData = async () => {
-    try {
-      console.log("Loading event data for ID:", eventId)
-      const eventData = await FirebaseService.getEventById(eventId)
+  useEffect(() => {
+    // Auto-detect payment method from phone number
+    if (phoneNumber) {
+      const detectedMethod = PaymentService.getPaymentMethodFromPhone(phoneNumber)
+      setPaymentMethod(detectedMethod)
+    }
+  }, [phoneNumber])
 
+  const loadEvent = async () => {
+    try {
+      setLoading(true)
+      const eventData = await firebaseService.getEvent(eventId)
       if (eventData) {
         setEvent(eventData)
         // Set default ticket type to the first available one
@@ -52,7 +52,6 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         if (availableTickets.length > 0) {
           setSelectedTicketType(availableTickets[0])
         }
-        console.log("Event data loaded successfully:", eventData.name)
       } else {
         Alert.alert("Error", "Event not found")
         navigation.goBack()
@@ -66,194 +65,151 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
     }
   }
 
-  const validatePurchaseForm = (): boolean => {
-    console.log("Validating purchase form...")
+  const calculateTotal = () => {
+    if (!selectedTicketType) return 0
+    return selectedTicketType.price * quantity
+  }
 
-    if (!user) {
-      Alert.alert("Error", "Please log in to purchase tickets")
-      return false
+  const calculatePricing = () => {
+    const total = calculateTotal()
+    return PaymentService.calculatePricing(total)
+  }
+
+  const validatePhoneNumber = (phone: string): boolean => {
+    // Remove any spaces or special characters
+    const cleanPhone = phone.replace(/\s+/g, "")
+
+    // Check MTN format
+    if (/^(077|078|076)\d{7}$/.test(cleanPhone)) {
+      return true
     }
 
-    if (!event) {
-      Alert.alert("Error", "Event data not loaded")
-      return false
+    // Check Airtel format
+    if (/^(070|075)\d{7}$/.test(cleanPhone)) {
+      return true
+    }
+
+    return false
+  }
+
+  const handlePurchase = async () => {
+    if (!user) {
+      Alert.alert("Error", "Please log in to purchase tickets")
+      return
     }
 
     if (!selectedTicketType) {
       Alert.alert("Error", "Please select a ticket type")
-      return false
+      return
+    }
+
+    if (!phoneNumber.trim()) {
+      Alert.alert("Error", "Please enter your phone number")
+      return
+    }
+
+    if (!validatePhoneNumber(phoneNumber)) {
+      Alert.alert("Error", "Please enter a valid MTN (077/078/076) or Airtel (070/075) phone number")
+      return
     }
 
     if (quantity < 1) {
       Alert.alert("Error", "Please select at least 1 ticket")
-      return false
-    }
-
-    if (!paymentAccount.trim()) {
-      Alert.alert("Error", "Please enter your payment account details")
-      return false
-    }
-
-    if (!accountName.trim()) {
-      Alert.alert("Error", "Please enter the account name")
-      return false
-    }
-
-    // Validate phone number format for mobile money
-    if (selectedPaymentMethod === "mtn" || selectedPaymentMethod === "airtel") {
-      const validation = PaymentService.validatePaymentAccount(selectedPaymentMethod, paymentAccount)
-      if (!validation.valid) {
-        Alert.alert("Error", validation.message)
-        return false
-      }
-    }
-
-    console.log("Form validation passed")
-    return true
-  }
-
-  const handlePurchase = async () => {
-    console.log("Purchase button clicked!")
-
-    if (!validatePurchaseForm()) {
       return
     }
 
-    console.log("Starting purchase process...")
+    const total = calculateTotal()
+    if (total <= 0) {
+      Alert.alert("Error", "Invalid ticket price")
+      return
+    }
+
     setPurchasing(true)
 
     try {
-      if (!event || !selectedTicketType || !user) {
-        throw new Error("Missing required data for purchase")
-      }
-
-      // Calculate payment breakdown
-      const breakdown = PaymentService.calculatePaymentBreakdown(
-        selectedTicketType.price,
-        quantity,
-        selectedPaymentMethod,
-      )
-
-      console.log("Payment breakdown:", breakdown)
-
-      // Create ticket data for QR code
-      const ticketData = QRCodeService.createTicketQRData({
-        ticketId: `ticket_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`,
-        eventId: event.id,
-        eventName: event.name,
+      console.log("TicketPurchaseScreen: Starting purchase process", {
+        eventId,
         ticketType: selectedTicketType.name,
-        buyerName: user.displayName || user.email,
-        buyerEmail: user.email,
-        purchaseDate: new Date().toISOString(),
-        isSecure: selectedTicketType.name.toLowerCase().includes("secure"),
+        quantity,
+        total,
+        phoneNumber,
+        paymentMethod,
       })
 
-      console.log("Generating QR code...")
-      const qrCodeDataURL = await QRCodeService.generateQRCode(ticketData)
-      console.log("QR code generated successfully")
-
-      // Prepare payment request
       const paymentRequest = {
-        amount: breakdown.totalAmount,
-        paymentMethod: selectedPaymentMethod,
-        paymentAccount: {
-          type: selectedPaymentMethod,
-          accountNumber: paymentAccount,
-          accountName: accountName,
-          isActive: true,
-        },
-        buyerInfo: {
-          name: user.displayName || user.email,
-          email: user.email,
-          phone: selectedPaymentMethod !== "card" ? paymentAccount : undefined,
-        },
-        eventInfo: {
-          id: event.id,
-          name: event.name,
-          venueName: event.venueName,
-        },
-        ticketInfo: {
-          type: selectedTicketType.name,
-          quantity: quantity,
-          pricePerTicket: selectedTicketType.price,
-        },
+        amount: total,
+        phoneNumber: phoneNumber.replace(/\s+/g, ""),
+        eventId,
+        ticketType: selectedTicketType.name,
+        quantity,
+        buyerId: user.id,
+        buyerName: user.displayName || user.email || "Unknown User",
+        eventName: event?.name || "Unknown Event",
+        paymentMethod: paymentMethod || "mtn",
       }
 
-      console.log("Processing payment with request:", paymentRequest)
+      let paymentResult
 
-      // Process payment
-      const paymentResult = await PaymentService.processPayment(paymentRequest)
+      // Process payment based on detected method
+      if (paymentMethod === "mtn") {
+        paymentResult = await PaymentService.processMTNPayment(paymentRequest)
+      } else if (paymentMethod === "airtel") {
+        paymentResult = await PaymentService.processAirtelPayment(paymentRequest)
+      } else {
+        // Default to MTN if detection fails
+        paymentResult = await PaymentService.processMTNPayment(paymentRequest)
+      }
 
-      console.log("Payment result:", paymentResult)
+      console.log("TicketPurchaseScreen: Payment result:", paymentResult)
 
-      if (paymentResult.success) {
-        // Create ticket record
-        const ticketRecord: Ticket = {
-          id: ticketData.ticketId,
-          eventId: event.id,
-          eventName: event.name,
-          eventPosterUrl: event.posterImageUrl,
+      if (paymentResult.success && paymentResult.ticketId && paymentResult.qrCodeData && paymentResult.qrCodeImage) {
+        // Create ticket record in Firebase
+        const ticketData: Omit<Ticket, "id"> = {
+          eventId,
+          eventName: event?.name || "Unknown Event",
           buyerId: user.id,
-          buyerName: user.displayName || user.email,
-          buyerEmail: user.email,
-          buyerPhone: selectedPaymentMethod !== "card" ? paymentAccount : undefined,
-          buyerImageUrl: selectedTicketType.name.toLowerCase().includes("secure") ? user.photoURL : undefined,
-          quantity: quantity,
-          ticketType: selectedTicketType.id,
-          ticketTypeName: selectedTicketType.name,
-          pricePerTicket: selectedTicketType.price,
-          totalAmount: breakdown.totalAmount,
-          paymentFees: breakdown.paymentFees,
-          appCommission: breakdown.appCommission,
-          sellerRevenue: breakdown.sellerRevenue,
-          paymentMethod: selectedPaymentMethod,
-          paymentReference: paymentResult.reference || paymentResult.transactionId || "",
-          paymentAccount: {
-            type: selectedPaymentMethod,
-            accountNumber: paymentAccount,
-            accountName: accountName,
-            isActive: true,
-          },
-          qrCode: qrCodeDataURL,
-          qrData: JSON.stringify(ticketData),
-          status: "active",
+          buyerName: user.displayName || user.email || "Unknown User",
+          buyerPhone: phoneNumber.replace(/\s+/g, ""),
+          ticketType: selectedTicketType.name,
+          quantity,
+          totalAmount: total,
+          paymentMethod: paymentMethod || "mtn",
+          transactionId: paymentResult.transactionId!,
+          ticketId: paymentResult.ticketId,
+          qrCodeData: paymentResult.qrCodeData,
+          qrCodeImage: paymentResult.qrCodeImage,
           purchaseDate: new Date(),
-          validationHistory: [],
-          isVerified: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          isUsed: false,
+          usedAt: null,
+          status: "active",
         }
 
-        console.log("Saving ticket to database...")
-        await FirebaseService.saveTicket(ticketRecord)
-        console.log("Ticket saved successfully")
+        await firebaseService.addTicket(ticketData)
 
-        // Show success message
+        console.log("TicketPurchaseScreen: Ticket saved successfully")
+
         Alert.alert(
           "Payment Successful!",
-          `Your ticket has been purchased successfully.\n\nTransaction ID: ${paymentResult.transactionId}\n\nYou can view your ticket in the "My Tickets" section.`,
+          `Your ticket has been purchased successfully.\n\nTicket ID: ${paymentResult.ticketId}\n\nYou can view your ticket in the "My Tickets" section.`,
           [
             {
               text: "View Ticket",
               onPress: () => {
-                navigation.navigate("PurchasedTickets")
+                navigation.navigate("PurchasedTickets" as never)
               },
             },
             {
               text: "OK",
-              onPress: () => {
-                navigation.goBack()
-              },
+              onPress: () => navigation.goBack(),
             },
           ],
         )
       } else {
-        console.error("Payment failed:", paymentResult.message)
-        Alert.alert("Payment Failed", paymentResult.message || "Payment could not be processed. Please try again.")
+        Alert.alert("Payment Failed", paymentResult.error || "Unknown error occurred")
       }
     } catch (error) {
-      console.error("Error processing purchase:", error)
-      Alert.alert("Error", "Failed to process purchase. Please try again.")
+      console.error("TicketPurchaseScreen: Purchase error:", error)
+      Alert.alert("Error", "Failed to process payment. Please try again.")
     } finally {
       setPurchasing(false)
     }
@@ -262,7 +218,6 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
         <Text style={styles.loadingText}>Loading event details...</Text>
       </View>
     )
@@ -270,27 +225,28 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 
   if (!event) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={styles.errorContainer}>
         <Text style={styles.errorText}>Event not found</Text>
       </View>
     )
   }
 
+  const pricing = calculatePricing()
   const availableTickets = event.ticketTypes.filter((ticket) => ticket.isAvailable)
-  const breakdown = selectedTicketType
-    ? PaymentService.calculatePaymentBreakdown(selectedTicketType.price, quantity, selectedPaymentMethod)
-    : null
 
   return (
     <ScrollView style={styles.container}>
       <View style={styles.content}>
         {/* Event Header */}
         <View style={styles.eventHeader}>
-          <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} resizeMode="cover" />
+          {event.posterImageUrl && <Image source={{ uri: event.posterImageUrl }} style={styles.eventPoster} />}
           <View style={styles.eventInfo}>
             <Text style={styles.eventName}>{event.name}</Text>
             <Text style={styles.eventVenue}>{event.venueName}</Text>
-            <Text style={styles.eventDate}>{event.date.toDateString()}</Text>
+            <Text style={styles.eventDate}>
+              {event.date.toLocaleDateString()} at{" "}
+              {event.date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </Text>
           </View>
         </View>
 
@@ -307,7 +263,10 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
                 <Text style={styles.ticketName}>{ticket.name}</Text>
                 <Text style={styles.ticketDescription}>{ticket.description}</Text>
               </View>
-              <Text style={styles.ticketPrice}>{`UGX ${ticket.price.toLocaleString()}`}</Text>
+              <View style={styles.ticketPrice}>
+                <Text style={styles.priceText}>{PaymentService.formatAmount(ticket.price)}</Text>
+                {selectedTicketType?.id === ticket.id && <Ionicons name="checkmark-circle" size={20} color="#6366f1" />}
+              </View>
             </TouchableOpacity>
           ))}
         </View>
@@ -316,106 +275,56 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quantity</Text>
           <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => setQuantity(Math.max(1, quantity - 1))}
-              disabled={quantity <= 1}
-            >
-              <Ionicons name="remove" size={20} color={quantity <= 1 ? "#666" : "#FFF"} />
+            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(Math.max(1, quantity - 1))}>
+              <Ionicons name="remove" size={20} color="#fff" />
             </TouchableOpacity>
             <Text style={styles.quantityText}>{quantity}</Text>
-            <TouchableOpacity
-              style={styles.quantityButton}
-              onPress={() => setQuantity(quantity + 1)}
-              disabled={quantity >= 10}
-            >
-              <Ionicons name="add" size={20} color={quantity >= 10 ? "#666" : "#FFF"} />
+            <TouchableOpacity style={styles.quantityButton} onPress={() => setQuantity(quantity + 1)}>
+              <Ionicons name="add" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
 
-        {/* Payment Method Selection */}
+        {/* Phone Number Input */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
-          <View style={styles.paymentMethods}>
-            <TouchableOpacity
-              style={[styles.paymentMethod, selectedPaymentMethod === "mtn" && styles.paymentMethodSelected]}
-              onPress={() => setSelectedPaymentMethod("mtn")}
-            >
-              <Text style={styles.paymentMethodText}>MTN Mobile Money</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.paymentMethod, selectedPaymentMethod === "airtel" && styles.paymentMethodSelected]}
-              onPress={() => setSelectedPaymentMethod("airtel")}
-            >
-              <Text style={styles.paymentMethodText}>Airtel Money</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.paymentMethod, selectedPaymentMethod === "card" && styles.paymentMethodSelected]}
-              onPress={() => setSelectedPaymentMethod("card")}
-            >
-              <Text style={styles.paymentMethodText}>Credit/Debit Card</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Payment Phone Number</Text>
+          <View style={styles.phoneInputContainer}>
+            <TextInput
+              style={styles.phoneInput}
+              placeholder="Enter MTN or Airtel number (e.g., 0771234567)"
+              value={phoneNumber}
+              onChangeText={setPhoneNumber}
+              keyboardType="phone-pad"
+              placeholderTextColor="#666"
+            />
+            {paymentMethod && (
+              <View style={styles.paymentMethodIndicator}>
+                <Text style={styles.paymentMethodText}>{paymentMethod.toUpperCase()}</Text>
+              </View>
+            )}
           </View>
+          <Text style={styles.phoneHint}>Supported: MTN (077, 078, 076) • Airtel (070, 075)</Text>
         </View>
 
-        {/* Payment Details */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Details</Text>
-          <TextInput
-            style={styles.input}
-            placeholder={
-              selectedPaymentMethod === "card"
-                ? "Card Number"
-                : selectedPaymentMethod === "mtn"
-                  ? "MTN Number (256XXXXXXXXX)"
-                  : "Airtel Number (256XXXXXXXXX)"
-            }
-            value={paymentAccount}
-            onChangeText={setPaymentAccount}
-            keyboardType={selectedPaymentMethod === "card" ? "numeric" : "phone-pad"}
-            placeholderTextColor="#666"
-          />
-          <Text style={styles.phoneHint}>
-            {selectedPaymentMethod === "mtn"
-              ? "MTN numbers: 076, 077, 078, 079"
-              : selectedPaymentMethod === "airtel"
-                ? "Airtel numbers: 070, 074, 075"
-                : "Enter 16-digit card number"}
-          </Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Account/Card Holder Name"
-            value={accountName}
-            onChangeText={setAccountName}
-            placeholderTextColor="#666"
-          />
-        </View>
-
-        {/* Payment Breakdown */}
-        {breakdown && (
+        {/* Pricing Breakdown */}
+        {selectedTicketType && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Payment Summary</Text>
-            <View style={styles.breakdown}>
-              <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>{`${selectedTicketType?.name} x ${quantity}`}</Text>
-                <Text style={styles.breakdownValue}>{`UGX ${breakdown.subtotal.toLocaleString()}`}</Text>
-              </View>
-              <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>Payment Fees</Text>
-                <Text style={styles.breakdownValue}>{`UGX ${breakdown.paymentFees.toLocaleString()}`}</Text>
-              </View>
-              <View style={[styles.breakdownRow, styles.breakdownTotal]}>
-                <Text style={styles.breakdownTotalLabel}>Total Amount</Text>
-                <Text style={styles.breakdownTotalValue}>{`UGX ${breakdown.totalAmount.toLocaleString()}`}</Text>
-              </View>
-              <View style={styles.breakdownNote}>
-                <Text style={styles.breakdownNoteText}>
-                  {`App commission (5%): UGX ${breakdown.appCommission.toLocaleString()}`}
+            <Text style={styles.sectionTitle}>Pricing Breakdown</Text>
+            <View style={styles.pricingCard}>
+              <View style={styles.pricingRow}>
+                <Text style={styles.pricingLabel}>
+                  {selectedTicketType.name} × {quantity}
                 </Text>
-                <Text style={styles.breakdownNoteText}>
-                  {`Event owner receives: UGX ${breakdown.sellerRevenue.toLocaleString()}`}
-                </Text>
+                <Text style={styles.pricingValue}>{PaymentService.formatAmount(pricing.baseAmount)}</Text>
+              </View>
+              <View style={styles.pricingRow}>
+                <Text style={styles.pricingLabel}>App Commission (5%)</Text>
+                <Text style={styles.pricingValue}>{PaymentService.formatAmount(pricing.commission)}</Text>
+              </View>
+              <View style={styles.pricingDivider} />
+              <View style={styles.pricingRow}>
+                <Text style={styles.totalLabel}>Total Amount</Text>
+                <Text style={styles.totalValue}>{PaymentService.formatAmount(pricing.total)}</Text>
               </View>
             </View>
           </View>
@@ -423,21 +332,35 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 
         {/* Purchase Button */}
         <TouchableOpacity
-          style={[styles.purchaseButton, purchasing && styles.purchaseButtonDisabled]}
+          style={[
+            styles.purchaseButton,
+            (!selectedTicketType || !phoneNumber || purchasing) && styles.purchaseButtonDisabled,
+          ]}
           onPress={handlePurchase}
-          disabled={purchasing || !selectedTicketType}
+          disabled={!selectedTicketType || !phoneNumber || purchasing}
         >
           {purchasing ? (
-            <View style={styles.purchaseButtonContent}>
-              <ActivityIndicator size="small" color="#FFF" />
+            <View style={styles.purchasingContainer}>
               <Text style={styles.purchaseButtonText}>Processing Payment...</Text>
             </View>
           ) : (
-            <Text style={styles.purchaseButtonText}>
-              {breakdown ? `Purchase for UGX ${breakdown.totalAmount.toLocaleString()}` : "Select Ticket Type"}
-            </Text>
+            <View style={styles.purchaseContainer}>
+              <Ionicons name="card" size={20} color="#fff" />
+              <Text style={styles.purchaseButtonText}>
+                Purchase Ticket - {PaymentService.formatAmount(calculateTotal())}
+              </Text>
+            </View>
           )}
         </TouchableOpacity>
+
+        {/* Payment Info */}
+        <View style={styles.paymentInfo}>
+          <Text style={styles.paymentInfoText}>• Payment will be deducted from your mobile money account</Text>
+          <Text style={styles.paymentInfoText}>• You will receive an SMS confirmation</Text>
+          <Text style={styles.paymentInfoText}>• Your ticket will be available immediately after payment</Text>
+          <Text style={styles.paymentInfoText}>• Admin commission is paid instantly upon purchase</Text>
+          <Text style={styles.paymentInfoText}>• Event owner receives payment when ticket is verified at entrance</Text>
+        </View>
       </View>
     </ScrollView>
   )
@@ -446,228 +369,226 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: "#000",
   },
   content: {
-    padding: 16,
+    padding: 20,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#121212",
+    backgroundColor: "#000",
   },
   loadingText: {
-    color: "#FFF",
+    color: "#fff",
     fontSize: 16,
-    marginTop: 16,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#000",
   },
   errorText: {
-    color: "#FF3B30",
+    color: "#ef4444",
     fontSize: 16,
   },
   eventHeader: {
-    flexDirection: "row",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
     marginBottom: 24,
   },
-  eventImage: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    marginRight: 16,
+  eventPoster: {
+    width: "100%",
+    height: 200,
+    borderRadius: 12,
+    marginBottom: 12,
   },
   eventInfo: {
-    flex: 1,
+    gap: 4,
   },
   eventName: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#FFF",
-    marginBottom: 4,
+    color: "#fff",
   },
   eventVenue: {
-    fontSize: 14,
-    color: "#BBB",
-    marginBottom: 4,
+    fontSize: 16,
+    color: "#6366f1",
   },
   eventDate: {
     fontSize: 14,
-    color: "#2196F3",
+    color: "#666",
   },
   section: {
     marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFF",
+    fontWeight: "600",
+    color: "#fff",
     marginBottom: 12,
   },
   ticketOption: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#333",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: "#1E1E1E",
-    padding: 16,
-    borderRadius: 8,
-    marginBottom: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
   },
   ticketOptionSelected: {
-    borderColor: "#2196F3",
+    borderColor: "#6366f1",
+    backgroundColor: "#1e1b4b",
   },
   ticketInfo: {
     flex: 1,
   },
   ticketName: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFF",
+    fontWeight: "600",
+    color: "#fff",
     marginBottom: 4,
   },
   ticketDescription: {
     fontSize: 14,
-    color: "#BBB",
+    color: "#666",
   },
   ticketPrice: {
+    alignItems: "flex-end",
+    gap: 4,
+  },
+  priceText: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#2196F3",
+    fontWeight: "600",
+    color: "#6366f1",
   },
   quantityContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 16,
+    gap: 20,
   },
   quantityButton: {
+    backgroundColor: "#6366f1",
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#2A2A2A",
     justifyContent: "center",
     alignItems: "center",
   },
   quantityText: {
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: "bold",
-    color: "#FFF",
-    marginHorizontal: 24,
-  },
-  paymentMethods: {
-    gap: 8,
-  },
-  paymentMethod: {
-    backgroundColor: "#1E1E1E",
-    padding: 16,
-    borderRadius: 8,
-    borderWidth: 2,
-    borderColor: "transparent",
-  },
-  paymentMethodSelected: {
-    borderColor: "#2196F3",
-  },
-  paymentMethodText: {
-    fontSize: 16,
-    color: "#FFF",
+    color: "#fff",
+    minWidth: 40,
     textAlign: "center",
   },
-  input: {
-    backgroundColor: "#1E1E1E",
+  phoneInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  phoneInput: {
+    flex: 1,
+    backgroundColor: "#1a1a1a",
     borderRadius: 8,
-    padding: 16,
-    color: "#FFF",
-    fontSize: 16,
-    marginBottom: 8,
+    padding: 12,
+    color: "#fff",
     borderWidth: 1,
     borderColor: "#333",
+  },
+  paymentMethodIndicator: {
+    backgroundColor: "#6366f1",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  paymentMethodText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
   phoneHint: {
     fontSize: 12,
     color: "#666",
-    marginBottom: 12,
-    fontStyle: "italic",
+    marginTop: 4,
   },
-  breakdown: {
-    backgroundColor: "#1E1E1E",
+  pricingCard: {
+    backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 16,
+    borderWidth: 1,
+    borderColor: "#333",
   },
-  breakdownRow: {
+  pricingRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    marginBottom: 8,
   },
-  breakdownLabel: {
+  pricingLabel: {
     fontSize: 14,
-    color: "#BBB",
-  },
-  breakdownValue: {
-    fontSize: 14,
-    color: "#FFF",
-  },
-  breakdownTotal: {
-    borderTopWidth: 1,
-    borderTopColor: "#333",
-    marginTop: 8,
-    paddingTop: 16,
-  },
-  breakdownTotalLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFF",
-  },
-  breakdownTotalValue: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2196F3",
-  },
-  breakdownNote: {
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: "#333",
-  },
-  breakdownNoteText: {
-    fontSize: 12,
     color: "#666",
-    marginBottom: 4,
+  },
+  pricingValue: {
+    fontSize: 14,
+    color: "#fff",
+  },
+  pricingDivider: {
+    height: 1,
+    backgroundColor: "#333",
+    marginVertical: 8,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  totalValue: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#6366f1",
   },
   purchaseButton: {
-    backgroundColor: "#2196F3",
+    backgroundColor: "#6366f1",
+    paddingVertical: 16,
     borderRadius: 8,
-    padding: 16,
     alignItems: "center",
-    marginTop: 16,
+    marginBottom: 16,
   },
   purchaseButtonDisabled: {
     backgroundColor: "#333",
   },
-  purchaseButtonContent: {
+  purchasingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  purchaseContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
   },
   purchaseButtonText: {
+    color: "#fff",
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFF",
+    fontWeight: "600",
+  },
+  paymentInfo: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  paymentInfoText: {
+    fontSize: 12,
+    color: "#666",
+    marginBottom: 4,
   },
 })
 
 export default TicketPurchaseScreen
-
-
-
-
-
-
-
-
