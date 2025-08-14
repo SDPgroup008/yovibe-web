@@ -2,7 +2,18 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, StyleSheet, Switch } from "react-native"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  ScrollView,
+  Alert,
+  Image,
+  StyleSheet,
+  Switch,
+  Platform,
+} from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
@@ -10,6 +21,8 @@ import { ImagePickerService } from "../services/ImagePickerService"
 import type { Event, TicketType, PaymentAccount } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import type { PaymentMethod } from "../models/Ticket"
+import { Ionicons } from "@expo/vector-icons"
+import DateTimePicker from "@react-native-community/datetimepicker"
 
 const AddEventScreen: React.FC = () => {
   const navigation = useNavigation()
@@ -18,6 +31,12 @@ const AddEventScreen: React.FC = () => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [showVenueDropdown, setShowVenueDropdown] = useState(false)
+
+  // Date and Time picker states
+  const [showDatePicker, setShowDatePicker] = useState(false)
+  const [showTimePicker, setShowTimePicker] = useState(false)
+  const [selectedDate, setSelectedDate] = useState(new Date())
+  const [selectedTime, setSelectedTime] = useState(new Date())
 
   // Event form state
   const [eventName, setEventName] = useState("")
@@ -84,19 +103,70 @@ const AddEventScreen: React.FC = () => {
 
   const handleImagePicker = async () => {
     try {
-      const result = await ImagePickerService.pickImage({
-        mediaTypes: "Images",
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      })
+      console.log("AddEventScreen: Starting image picker")
 
-      if (result && !result.canceled && result.assets?.[0]) {
-        setPosterImage(result.assets[0].uri)
-      }
+      Alert.alert("Select Image", "Choose how you want to select the poster image", [
+        {
+          text: "Camera",
+          onPress: async () => {
+            const result = await ImagePickerService.takePhoto({
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.8,
+            })
+
+            console.log("AddEventScreen: Camera result:", result)
+
+            if (result && !result.canceled && result.assets?.[0]) {
+              setPosterImage(result.assets[0].uri)
+              console.log("AddEventScreen: Poster image set from camera:", result.assets[0].uri)
+            }
+          },
+        },
+        {
+          text: "Gallery",
+          onPress: async () => {
+            const result = await ImagePickerService.pickImage({
+              mediaTypes: "Images",
+              allowsEditing: true,
+              aspect: [16, 9],
+              quality: 0.8,
+            })
+
+            console.log("AddEventScreen: Gallery result:", result)
+
+            if (result && !result.canceled && result.assets?.[0]) {
+              setPosterImage(result.assets[0].uri)
+              console.log("AddEventScreen: Poster image set from gallery:", result.assets[0].uri)
+            }
+          },
+        },
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+      ])
     } catch (error) {
-      console.error("Error picking image:", error)
-      Alert.alert("Error", "Failed to pick image")
+      console.error("AddEventScreen: Error picking image:", error)
+      Alert.alert("Error", "Failed to pick image. Please try again.")
+    }
+  }
+
+  const handleDateChange = (event: any, selectedDate?: Date) => {
+    setShowDatePicker(false)
+    if (selectedDate) {
+      setSelectedDate(selectedDate)
+      const formattedDate = selectedDate.toISOString().split("T")[0] // YYYY-MM-DD
+      setDate(formattedDate)
+    }
+  }
+
+  const handleTimeChange = (event: any, selectedTime?: Date) => {
+    setShowTimePicker(false)
+    if (selectedTime) {
+      setSelectedTime(selectedTime)
+      const formattedTime = selectedTime.toTimeString().slice(0, 5) // HH:MM
+      setTime(formattedTime)
     }
   }
 
@@ -284,21 +354,39 @@ const AddEventScreen: React.FC = () => {
           />
 
           <View style={styles.row}>
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Date (YYYY-MM-DD)"
-              value={date}
-              onChangeText={setDate}
-              placeholderTextColor="#666"
-            />
-            <TextInput
-              style={[styles.input, styles.halfInput]}
-              placeholder="Time (HH:MM)"
-              value={time}
-              onChangeText={setTime}
-              placeholderTextColor="#666"
-            />
+            <View style={styles.dateTimeContainer}>
+              <TouchableOpacity style={styles.dateTimeInput} onPress={() => setShowDatePicker(true)}>
+                <Ionicons name="calendar-outline" size={20} color="#6366f1" />
+                <Text style={date ? styles.dateTimeText : styles.dateTimePlaceholder}>{date || "Select Date"}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dateTimeContainer}>
+              <TouchableOpacity style={styles.dateTimeInput} onPress={() => setShowTimePicker(true)}>
+                <Ionicons name="time-outline" size={20} color="#6366f1" />
+                <Text style={time ? styles.dateTimeText : styles.dateTimePlaceholder}>{time || "Select Time"}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
+
+          {showDatePicker && (
+            <DateTimePicker
+              value={selectedDate}
+              mode="date"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={handleDateChange}
+              minimumDate={new Date()}
+            />
+          )}
+
+          {showTimePicker && (
+            <DateTimePicker
+              value={selectedTime}
+              mode="time"
+              display={Platform.OS === "ios" ? "spinner" : "default"}
+              onChange={handleTimeChange}
+            />
+          )}
 
           <TextInput
             style={styles.input}
@@ -327,6 +415,7 @@ const AddEventScreen: React.FC = () => {
             <Text style={selectedVenue ? styles.dropdownText : styles.dropdownPlaceholder}>
               {selectedVenue ? selectedVenue.name : "Select Venue"}
             </Text>
+            <Ionicons name={showVenueDropdown ? "chevron-up" : "chevron-down"} size={20} color="#666" />
           </TouchableOpacity>
 
           {showVenueDropdown && (
@@ -353,10 +442,18 @@ const AddEventScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Event Poster</Text>
           <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
             {posterImage ? (
-              <Image source={{ uri: posterImage }} style={styles.posterPreview} />
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: posterImage }} style={styles.posterPreview} />
+                <View style={styles.imageOverlay}>
+                  <Ionicons name="camera" size={24} color="#fff" />
+                  <Text style={styles.imageOverlayText}>Tap to change</Text>
+                </View>
+              </View>
             ) : (
               <View style={styles.imagePlaceholder}>
+                <Ionicons name="image-outline" size={48} color="#666" />
                 <Text style={styles.imagePlaceholderText}>Tap to select poster image</Text>
+                <Text style={styles.imagePlaceholderSubtext}>Recommended: 16:9 aspect ratio</Text>
               </View>
             )}
           </TouchableOpacity>
@@ -367,7 +464,8 @@ const AddEventScreen: React.FC = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Ticket Types</Text>
             <TouchableOpacity style={styles.addButton} onPress={addTicketType}>
-              <Text style={styles.addButtonText}>+ Add Type</Text>
+              <Ionicons name="add" size={16} color="#fff" />
+              <Text style={styles.addButtonText}>Add Type</Text>
             </TouchableOpacity>
           </View>
 
@@ -383,7 +481,7 @@ const AddEventScreen: React.FC = () => {
                 />
                 {index > 1 && ( // Don't allow removing Regular and Secure tickets
                   <TouchableOpacity style={styles.removeButton} onPress={() => removeTicketType(index)}>
-                    <Text style={styles.removeButtonText}>×</Text>
+                    <Ionicons name="close" size={16} color="#fff" />
                   </TouchableOpacity>
                 )}
               </View>
@@ -425,18 +523,28 @@ const AddEventScreen: React.FC = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Payment Accounts</Text>
             <TouchableOpacity style={styles.addButton} onPress={() => setShowAddPaymentAccount(true)}>
-              <Text style={styles.addButtonText}>+ Add Account</Text>
+              <Ionicons name="add" size={16} color="#fff" />
+              <Text style={styles.addButtonText}>Add Account</Text>
             </TouchableOpacity>
           </View>
 
           {paymentAccounts.map((account, index) => (
             <View key={index} style={styles.paymentAccountCard}>
               <View style={styles.paymentAccountHeader}>
-                <Text style={styles.paymentAccountType}>
-                  {account.type.toUpperCase()} - {account.accountName}
-                </Text>
+                <View style={styles.paymentAccountInfo}>
+                  <Ionicons
+                    name={
+                      account.type === "mtn" ? "phone-portrait" : account.type === "airtel" ? "phone-portrait" : "card"
+                    }
+                    size={20}
+                    color="#6366f1"
+                  />
+                  <Text style={styles.paymentAccountType}>
+                    {account.type.toUpperCase()} - {account.accountName}
+                  </Text>
+                </View>
                 <TouchableOpacity style={styles.removeButton} onPress={() => removePaymentAccount(index)}>
-                  <Text style={styles.removeButtonText}>×</Text>
+                  <Ionicons name="close" size={16} color="#fff" />
                 </TouchableOpacity>
               </View>
               <Text style={styles.paymentAccountNumber}>{account.accountNumber}</Text>
@@ -457,6 +565,11 @@ const AddEventScreen: React.FC = () => {
                     ]}
                     onPress={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
                   >
+                    <Ionicons
+                      name={type === "bank" ? "card" : "phone-portrait"}
+                      size={16}
+                      color={newPaymentAccount.type === type ? "#fff" : "#666"}
+                    />
                     <Text
                       style={[
                         styles.paymentTypeButtonText,
@@ -504,7 +617,16 @@ const AddEventScreen: React.FC = () => {
           onPress={handleSubmit}
           disabled={loading}
         >
-          <Text style={styles.submitButtonText}>{loading ? "Creating Event..." : "Create Event"}</Text>
+          {loading ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.submitButtonText}>Creating Event...</Text>
+            </View>
+          ) : (
+            <View style={styles.submitContainer}>
+              <Ionicons name="checkmark-circle" size={20} color="#fff" />
+              <Text style={styles.submitButtonText}>Create Event</Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
     </ScrollView>
@@ -557,8 +679,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 12,
   },
-  halfInput: {
+  dateTimeContainer: {
     flex: 1,
+  },
+  dateTimeInput: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "#333",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  dateTimeText: {
+    color: "#fff",
+    fontSize: 16,
+  },
+  dateTimePlaceholder: {
+    color: "#666",
+    fontSize: 16,
   },
   switchRow: {
     flexDirection: "row",
@@ -576,6 +717,9 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: "#333",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   dropdownText: {
     color: "#fff",
@@ -608,10 +752,29 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     overflow: "hidden",
   },
+  imageContainer: {
+    position: "relative",
+  },
   posterPreview: {
     width: "100%",
     height: 200,
     resizeMode: "cover",
+  },
+  imageOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    opacity: 0.8,
+  },
+  imageOverlayText: {
+    color: "#fff",
+    fontSize: 14,
+    marginTop: 4,
   },
   imagePlaceholder: {
     backgroundColor: "#1a1a1a",
@@ -625,12 +788,21 @@ const styles = StyleSheet.create({
   imagePlaceholderText: {
     color: "#666",
     fontSize: 16,
+    marginTop: 8,
+  },
+  imagePlaceholderSubtext: {
+    color: "#555",
+    fontSize: 12,
+    marginTop: 4,
   },
   addButton: {
     backgroundColor: "#6366f1",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
   addButtonText: {
     color: "#fff",
@@ -699,11 +871,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  removeButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
   paymentAccountCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
@@ -717,6 +884,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
+  paymentAccountInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   paymentAccountType: {
     color: "#fff",
     fontSize: 16,
@@ -726,6 +898,7 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 14,
     marginTop: 4,
+    marginLeft: 28,
   },
   addPaymentForm: {
     backgroundColor: "#1a1a1a",
@@ -754,6 +927,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#444",
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 4,
   },
   paymentTypeButtonActive: {
     backgroundColor: "#6366f1",
@@ -805,6 +981,16 @@ const styles = StyleSheet.create({
   },
   submitButtonDisabled: {
     backgroundColor: "#333",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  submitContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   submitButtonText: {
     color: "#fff",
