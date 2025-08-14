@@ -1,301 +1,260 @@
 import QRCode from "qrcode"
-import jsQR from "jsqr"
+import CryptoJS from "crypto-js"
 
 export interface QRCodeData {
   ticketId: string
   eventId: string
+  eventName: string
+  buyerId: string
+  buyerName: string
+  buyerPhone: string
+  ticketType: string
+  quantity: number
+  totalAmount: number
+  purchaseDate: string
   timestamp: number
   signature: string
   version: string
 }
 
-export interface QRScanResult {
+export interface QRCodeGenerationResult {
   success: boolean
-  data?: QRCodeData
+  qrCodeData?: string
+  qrCodeImage?: string
   error?: string
 }
 
-export class QRCodeService {
-  private static readonly SECRET_KEY = "YoVibe_QR_Secret_2024"
-  private static readonly VERSION = "1.0"
+export default class QRCodeService {
+  private static readonly SECRET_KEY = "YoVibe_Production_Secret_Key_2024_v2.0"
+  private static readonly VERSION = "2.0"
 
-  static createTicketQRData(ticketId: string, eventId: string): QRCodeData {
+  static generateTicketId(): string {
     const timestamp = Date.now()
-    const dataToSign = `${ticketId}:${eventId}:${timestamp}`
-    const signature = this.generateSignature(dataToSign)
-
-    return {
-      ticketId,
-      eventId,
-      timestamp,
-      signature,
-      version: this.VERSION,
-    }
+    const random = Math.random().toString(36).substring(2, 8).toUpperCase()
+    const hash = CryptoJS.SHA256(`${timestamp}_${random}`).toString().substring(0, 8).toUpperCase()
+    return `YV_${timestamp}_${hash}`
   }
 
-  static async generateQRCode(data: string | QRCodeData): Promise<string> {
-    try {
-      let jsonString: string
+  static generateHMACSignature(data: Omit<QRCodeData, "signature">): string {
+    const dataString = JSON.stringify(data, Object.keys(data).sort())
+    return CryptoJS.HmacSHA256(dataString, this.SECRET_KEY).toString()
+  }
 
-      if (typeof data === "string") {
-        jsonString = data
-      } else {
-        jsonString = JSON.stringify(data)
+  static async generateQRCode(ticketData: {
+    ticketId: string
+    eventId: string
+    eventName: string
+    buyerId: string
+    buyerName: string
+    buyerPhone: string
+    ticketType: string
+    quantity: number
+    totalAmount: number
+    purchaseDate: string
+  }): Promise<QRCodeGenerationResult> {
+    try {
+      console.log("QRCodeService: Generating QR code for ticket:", ticketData.ticketId)
+
+      const timestamp = Date.now()
+
+      // Create QR code data without signature first
+      const qrDataWithoutSignature: Omit<QRCodeData, "signature"> = {
+        ...ticketData,
+        timestamp,
+        version: this.VERSION,
       }
 
-      const base64Data = btoa(jsonString)
+      // Generate HMAC signature
+      const signature = this.generateHMACSignature(qrDataWithoutSignature)
 
-      const qrCodeDataURL = await QRCode.toDataURL(base64Data, {
-        errorCorrectionLevel: "M",
+      // Complete QR code data with signature
+      const qrCodeData: QRCodeData = {
+        ...qrDataWithoutSignature,
+        signature,
+      }
+
+      console.log("QRCodeService: QR code data prepared:", {
+        ticketId: qrCodeData.ticketId,
+        eventName: qrCodeData.eventName,
+        hasSignature: !!qrCodeData.signature,
+      })
+
+      // Generate QR code image
+      const qrCodeImage = await QRCode.toDataURL(JSON.stringify(qrCodeData), {
+        errorCorrectionLevel: "H",
         type: "image/png",
+        quality: 0.92,
         margin: 1,
         color: {
           dark: "#000000",
           light: "#FFFFFF",
         },
-        width: 256,
+        width: 512,
       })
 
-      return qrCodeDataURL
+      console.log("QRCodeService: QR code generated successfully")
+
+      return {
+        success: true,
+        qrCodeData: JSON.stringify(qrCodeData),
+        qrCodeImage,
+      }
     } catch (error) {
       console.error("QRCodeService: Error generating QR code:", error)
-      throw error
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to generate QR code",
+      }
     }
   }
 
-  static async generateQRCodeImage(data: string, size = 256): Promise<string> {
+  static validateQRCode(qrCodeDataString: string): {
+    valid: boolean
+    data?: QRCodeData
+    error?: string
+  } {
+    try {
+      console.log("QRCodeService: Validating QR code")
+
+      const qrCodeData: QRCodeData = JSON.parse(qrCodeDataString)
+
+      // Validate required fields
+      const requiredFields = [
+        "ticketId",
+        "eventId",
+        "eventName",
+        "buyerId",
+        "buyerName",
+        "buyerPhone",
+        "ticketType",
+        "quantity",
+        "totalAmount",
+        "purchaseDate",
+        "timestamp",
+        "signature",
+        "version",
+      ]
+
+      for (const field of requiredFields) {
+        if (!(field in qrCodeData)) {
+          return {
+            valid: false,
+            error: `Missing required field: ${field}`,
+          }
+        }
+      }
+
+      // Validate ticket ID format
+      if (!this.validateTicketId(qrCodeData.ticketId)) {
+        return {
+          valid: false,
+          error: "Invalid ticket ID format",
+        }
+      }
+
+      // Validate version
+      if (qrCodeData.version !== this.VERSION) {
+        return {
+          valid: false,
+          error: `Unsupported QR code version: ${qrCodeData.version}`,
+        }
+      }
+
+      // Validate HMAC signature
+      const dataWithoutSignature = { ...qrCodeData }
+      delete dataWithoutSignature.signature
+      const expectedSignature = this.generateHMACSignature(dataWithoutSignature)
+
+      if (qrCodeData.signature !== expectedSignature) {
+        return {
+          valid: false,
+          error: "Invalid signature - ticket may be forged",
+        }
+      }
+
+      // Validate timestamp (not too old, not in future)
+      const now = Date.now()
+      const ticketAge = now - qrCodeData.timestamp
+      const maxAge = 365 * 24 * 60 * 60 * 1000 // 1 year
+      const futureThreshold = 5 * 60 * 1000 // 5 minutes
+
+      if (ticketAge > maxAge) {
+        return {
+          valid: false,
+          error: "Ticket is too old",
+        }
+      }
+
+      if (qrCodeData.timestamp > now + futureThreshold) {
+        return {
+          valid: false,
+          error: "Ticket timestamp is in the future",
+        }
+      }
+
+      console.log("QRCodeService: QR code validation successful")
+
+      return {
+        valid: true,
+        data: qrCodeData,
+      }
+    } catch (error) {
+      console.error("QRCodeService: Error validating QR code:", error)
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : "Invalid QR code format",
+      }
+    }
+  }
+
+  static validateTicketId(ticketId: string): boolean {
+    // Format: YV_[timestamp]_[hash]
+    const pattern = /^YV_\d{13}_[A-F0-9]{8}$/
+    return pattern.test(ticketId)
+  }
+
+  static extractTicketInfo(ticketId: string): {
+    timestamp?: number
+    hash?: string
+    valid: boolean
+  } {
+    if (!this.validateTicketId(ticketId)) {
+      return { valid: false }
+    }
+
+    const parts = ticketId.split("_")
+    const timestamp = Number.parseInt(parts[1], 10)
+    const hash = parts[2]
+
+    return {
+      timestamp,
+      hash,
+      valid: true,
+    }
+  }
+
+  static async generateQRCodeImage(
+    data: string,
+    options?: {
+      size?: number
+      errorCorrectionLevel?: "L" | "M" | "Q" | "H"
+    },
+  ): Promise<string> {
     try {
       return await QRCode.toDataURL(data, {
-        errorCorrectionLevel: "M",
+        errorCorrectionLevel: options?.errorCorrectionLevel || "H",
         type: "image/png",
+        quality: 0.92,
         margin: 1,
         color: {
           dark: "#000000",
           light: "#FFFFFF",
         },
-        width: size,
+        width: options?.size || 512,
       })
     } catch (error) {
       console.error("QRCodeService: Error generating QR code image:", error)
       throw error
     }
   }
-
-  static async scanFromVideo(videoElement: HTMLVideoElement): Promise<QRScanResult> {
-    try {
-      if (!videoElement || videoElement.videoWidth === 0) {
-        return {
-          success: false,
-          error: "Video element not ready",
-        }
-      }
-
-      // Create canvas and capture frame
-      const canvas = document.createElement("canvas")
-      const ctx = canvas.getContext("2d")!
-
-      canvas.width = videoElement.videoWidth
-      canvas.height = videoElement.videoHeight
-
-      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
-
-      // Get image data
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-      // Scan for QR code
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "dontInvert",
-      })
-
-      if (code) {
-        return this.parseQRCode(code.data)
-      }
-
-      return {
-        success: false,
-        error: "No QR code detected",
-      }
-    } catch (error) {
-      console.error("QRCodeService: Error scanning from video:", error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "Scan error",
-      }
-    }
-  }
-
-  static async scanFromFile(file: File): Promise<QRScanResult> {
-    try {
-      return new Promise((resolve) => {
-        const reader = new FileReader()
-
-        reader.onload = (event) => {
-          const img = new Image()
-
-          img.onload = () => {
-            const canvas = document.createElement("canvas")
-            const ctx = canvas.getContext("2d")!
-
-            canvas.width = img.width
-            canvas.height = img.height
-
-            ctx.drawImage(img, 0, 0)
-
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
-
-            const code = jsQR(imageData.data, imageData.width, imageData.height, {
-              inversionAttempts: "dontInvert",
-            })
-
-            if (code) {
-              resolve(this.parseQRCode(code.data))
-            } else {
-              resolve({
-                success: false,
-                error: "No QR code found in image",
-              })
-            }
-          }
-
-          img.onerror = () => {
-            resolve({
-              success: false,
-              error: "Failed to load image",
-            })
-          }
-
-          img.src = event.target?.result as string
-        }
-
-        reader.onerror = () => {
-          resolve({
-            success: false,
-            error: "Failed to read file",
-          })
-        }
-
-        reader.readAsDataURL(file)
-      })
-    } catch (error) {
-      console.error("QRCodeService: Error scanning from file:", error)
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : "File scan error",
-      }
-    }
-  }
-
-  static parseQRCode(qrData: string): QRScanResult {
-    try {
-      // Decode base64
-      const jsonString = atob(qrData)
-      const data: QRCodeData = JSON.parse(jsonString)
-
-      // Validate structure
-      if (!data.ticketId || !data.eventId || !data.signature || !data.timestamp) {
-        return {
-          success: false,
-          error: "Invalid QR code format",
-        }
-      }
-
-      // Validate signature
-      if (!this.validateSignature(data)) {
-        return {
-          success: false,
-          error: "Invalid QR code signature",
-        }
-      }
-
-      // Check if not too old (24 hours)
-      const maxAge = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
-      if (Date.now() - data.timestamp > maxAge) {
-        return {
-          success: false,
-          error: "QR code has expired",
-        }
-      }
-
-      return {
-        success: true,
-        data,
-      }
-    } catch (error) {
-      console.error("QRCodeService: Error parsing QR code:", error)
-      return {
-        success: false,
-        error: "Failed to parse QR code",
-      }
-    }
-  }
-
-  static validateSignature(data: QRCodeData): boolean {
-    try {
-      const dataToSign = `${data.ticketId}:${data.eventId}:${data.timestamp}`
-      const expectedSignature = this.generateSignature(dataToSign)
-      return data.signature === expectedSignature
-    } catch (error) {
-      console.error("QRCodeService: Error validating signature:", error)
-      return false
-    }
-  }
-
-  private static generateSignature(data: string): string {
-    // Simple signature generation using the secret key
-    // In production, use a proper HMAC or digital signature
-    let hash = 0
-    const combined = data + this.SECRET_KEY
-
-    for (let i = 0; i < combined.length; i++) {
-      const char = combined.charCodeAt(i)
-      hash = (hash << 5) - hash + char
-      hash = hash & hash // Convert to 32-bit integer
-    }
-
-    return Math.abs(hash).toString(16)
-  }
-
-  static async scanQRCodeFromVideo(videoElement: HTMLVideoElement): Promise<string | null> {
-    try {
-      const result = await this.scanFromVideo(videoElement)
-      if (result.success && result.data) {
-        return btoa(JSON.stringify(result.data))
-      }
-      return null
-    } catch (error) {
-      console.error("QRCodeService: Error scanning QR code from video:", error)
-      return null
-    }
-  }
-
-  static async scanQRCodeFromImage(file: File): Promise<string | null> {
-    try {
-      const result = await this.scanFromFile(file)
-      if (result.success && result.data) {
-        return btoa(JSON.stringify(result.data))
-      }
-      return null
-    } catch (error) {
-      console.error("QRCodeService: Error scanning QR code from image:", error)
-      return null
-    }
-  }
-
-  static async validateQRCode(qrData: string): Promise<{ valid: boolean; data?: QRCodeData; error?: string }> {
-    try {
-      const result = this.parseQRCode(qrData)
-      return {
-        valid: result.success,
-        data: result.data,
-        error: result.error,
-      }
-    } catch (error) {
-      return {
-        valid: false,
-        error: error instanceof Error ? error.message : "Validation error",
-      }
-    }
-  }
 }
-
-export default QRCodeService
