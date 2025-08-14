@@ -35,7 +35,8 @@ const TicketPurchaseScreen: React.FC = () => {
 
   const loadEvent = async () => {
     try {
-      const eventData = await firebaseService.getEvent(eventId)
+      const events = await firebaseService.getEvents()
+      const eventData = events.find((event) => event.id === eventId)
       if (eventData) {
         setEvent(eventData)
         // Set default ticket type to the first available one
@@ -174,7 +175,6 @@ const TicketPurchaseScreen: React.FC = () => {
           commission,
           paymentMethod,
           paymentStatus: "completed",
-          transactionId: paymentResult.transactionId!,
           qrCodeData: individualQRData,
           purchaseDate: new Date(),
           isUsed: false,
@@ -481,29 +481,25 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
-    minHeight: "100vh",
-    overflow: "auto",
   },
   content: {
     padding: 20,
     maxWidth: 600,
-    margin: "0 auto",
+    alignSelf: "center",
   },
   loadingContainer: {
-    display: "flex",
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    height: "50vh",
   },
   loadingText: {
     color: "#fff",
     fontSize: 18,
   },
   errorContainer: {
-    display: "flex",
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    height: "50vh",
   },
   errorText: {
     color: "#ef4444",
@@ -514,19 +510,19 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 20,
-    margin: "0 0 20px 0",
   },
   eventCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 12,
     overflow: "hidden",
     marginBottom: 24,
-    border: "1px solid #333",
+    borderWidth: 1,
+    borderColor: "#333",
   },
   eventImage: {
     width: "100%",
     height: 200,
-    objectFit: "cover",
+    resizeMode: "cover",
   },
   eventInfo: {
     padding: 16,
@@ -536,15 +532,12 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 12,
-    margin: "0 0 12px 0",
   },
   eventDetails: {
-    display: "flex",
-    flexDirection: "column",
     gap: 8,
   },
   eventDetail: {
-    display: "flex",
+    flexDirection: "row",
     alignItems: "center",
     gap: 8,
     color: "#ccc",
@@ -560,27 +553,23 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
     marginBottom: 12,
-    margin: "0 0 12px 0",
   },
   ticketTypes: {
-    display: "flex",
-    flexDirection: "column",
     gap: 12,
   },
   ticketTypeCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 16,
-    border: "2px solid #333",
-    cursor: "pointer",
-    transition: "all 0.2s ease",
+    borderWidth: 2,
+    borderColor: "#333",
   },
   ticketTypeCardSelected: {
     borderColor: "#6366f1",
     backgroundColor: "#1e1b4b",
   },
   ticketTypeHeader: {
-    display: "flex",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 8,
@@ -601,7 +590,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   secureNote: {
-    display: "flex",
+    flexDirection: "row",
     alignItems: "center",
     gap: 6,
     backgroundColor: "#065f46",
@@ -617,24 +606,18 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   quantityContainer: {
-    display: "flex",
+    flexDirection: "row",
     alignItems: "center",
     gap: 16,
     justifyContent: "center",
   },
   quantityButton: {
     backgroundColor: "#6366f1",
-    border: "none",
     borderRadius: 8,
     width: 40,
     height: 40,
-    display: "flex",
-    alignItems: "center",
     justifyContent: "center",
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-    cursor: "pointer",
+    alignItems: "center",
   },
   quantityText: {
     fontSize: 20,
@@ -644,20 +627,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   paymentMethods: {
-    display: "flex",
-    flexDirection: "column",
     gap: 12,
   },
   paymentMethodCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 16,
-    border: "2px solid #333",
-    cursor: "pointer",
-    display: "flex",
+    borderWidth: 2,
+    borderColor: "#333",
+    flexDirection: "row",
     alignItems: "center",
     gap: 12,
-    transition: "all 0.2s ease",
   },
   paymentMethodCardSelected: {
     borderColor: "#6366f1",
@@ -676,10 +656,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     color: "#fff",
-    border: "1px solid #333",
+    borderWidth: 1,
+    borderColor: "#333",
     fontSize: 16,
-    width: "100%",
-    boxSizing: "border-box",
   },
   phoneHint: {
     color: "#666",
@@ -690,21 +669,23 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 16,
-    border: "1px solid #333",
+    borderWidth: 1,
+    borderColor: "#333",
   },
   priceRow: {
-    display: "flex",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
     color: "#ccc",
   },
   priceRowTotal: {
-    display: "flex",
+    flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: 8,
-    borderTop: "1px solid #333",
+    borderTopWidth: 1,
+    borderTopColor: "#333",
     marginTop: 8,
     paddingTop: 16,
     fontSize: 18,
@@ -712,7 +693,7 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   commissionNote: {
-    display: "flex",
+    flexDirection: "row",
     alignItems: "flex-start",
     gap: 8,
     backgroundColor: "#1e3a8a",
@@ -727,25 +708,21 @@ const styles = StyleSheet.create({
   commissionText: {
     color: "#93c5fd",
     fontSize: 12,
-    lineHeight: 1.4,
+    lineHeight: 16.8,
   },
   purchaseButton: {
     backgroundColor: "#6366f1",
-    border: "none",
     borderRadius: 8,
     padding: 16,
-    width: "100%",
-    cursor: "pointer",
     fontSize: 16,
     fontWeight: "600",
     color: "#fff",
   },
   purchaseButtonDisabled: {
     backgroundColor: "#333",
-    cursor: "not-allowed",
   },
   purchaseButtonContent: {
-    display: "flex",
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
