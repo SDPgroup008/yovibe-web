@@ -1,40 +1,51 @@
 import QRCode from "qrcode"
+import jsQR from "jsqr"
 
 export interface QRCodeData {
   ticketId: string
   eventId: string
-  eventName: string
-  ticketType: string
-  buyerName: string
-  buyerEmail: string
-  purchaseDate: string
-  verificationCode: string
-  isSecure?: boolean
-  buyerPhoto?: string
+  timestamp: number
+  signature: string
+  version: string
 }
 
-class QRCodeService {
-  private static instance: QRCodeService
+export interface QRScanResult {
+  success: boolean
+  data?: QRCodeData
+  error?: string
+}
 
-  private constructor() {}
+export class QRCodeService {
+  private static readonly SECRET_KEY = "YoVibe_QR_Secret_2024"
+  private static readonly VERSION = "1.0"
 
-  static getInstance(): QRCodeService {
-    if (!QRCodeService.instance) {
-      QRCodeService.instance = new QRCodeService()
+  static createTicketQRData(ticketId: string, eventId: string): QRCodeData {
+    const timestamp = Date.now()
+    const dataToSign = `${ticketId}:${eventId}:${timestamp}`
+    const signature = this.generateSignature(dataToSign)
+
+    return {
+      ticketId,
+      eventId,
+      timestamp,
+      signature,
+      version: this.VERSION,
     }
-    return QRCodeService.instance
   }
 
-  // Generate QR code from data
-  async generateQRCode(data: QRCodeData | string): Promise<string> {
+  static async generateQRCode(data: string | QRCodeData): Promise<string> {
     try {
-      console.log("Generating QR code with data:", data)
+      let jsonString: string
 
-      // Convert data to string if it's an object
-      const qrData = typeof data === "string" ? data : JSON.stringify(data)
+      if (typeof data === "string") {
+        jsonString = data
+      } else {
+        jsonString = JSON.stringify(data)
+      }
 
-      // Generate QR code as data URL
-      const qrCodeDataURL = await QRCode.toDataURL(qrData, {
+      const base64Data = btoa(jsonString)
+
+      const qrCodeDataURL = await QRCode.toDataURL(base64Data, {
         errorCorrectionLevel: "M",
         type: "image/png",
         margin: 1,
@@ -45,83 +56,246 @@ class QRCodeService {
         width: 256,
       })
 
-      console.log("QR code generated successfully")
       return qrCodeDataURL
     } catch (error) {
-      console.error("Error generating QR code:", error)
-      // Return a fallback QR code with basic data
-      try {
-        const fallbackData = typeof data === "string" ? data : `Ticket: ${data.ticketId}`
-        return await QRCode.toDataURL(fallbackData, {
-          errorCorrectionLevel: "L",
-          width: 256,
-        })
-      } catch (fallbackError) {
-        console.error("Error generating fallback QR code:", fallbackError)
-        // Return a simple data URL as last resort
-        return "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
+      console.error("QRCodeService: Error generating QR code:", error)
+      throw error
+    }
+  }
+
+  static async generateQRCodeImage(data: string, size = 256): Promise<string> {
+    try {
+      return await QRCode.toDataURL(data, {
+        errorCorrectionLevel: "M",
+        type: "image/png",
+        margin: 1,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF",
+        },
+        width: size,
+      })
+    } catch (error) {
+      console.error("QRCodeService: Error generating QR code image:", error)
+      throw error
+    }
+  }
+
+  static async scanFromVideo(videoElement: HTMLVideoElement): Promise<QRScanResult> {
+    try {
+      if (!videoElement || videoElement.videoWidth === 0) {
+        return {
+          success: false,
+          error: "Video element not ready",
+        }
+      }
+
+      // Create canvas and capture frame
+      const canvas = document.createElement("canvas")
+      const ctx = canvas.getContext("2d")!
+
+      canvas.width = videoElement.videoWidth
+      canvas.height = videoElement.videoHeight
+
+      ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height)
+
+      // Get image data
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+      // Scan for QR code
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "dontInvert",
+      })
+
+      if (code) {
+        return this.parseQRCode(code.data)
+      }
+
+      return {
+        success: false,
+        error: "No QR code detected",
+      }
+    } catch (error) {
+      console.error("QRCodeService: Error scanning from video:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Scan error",
       }
     }
   }
 
-  // Verify QR code data
-  verifyQRCode(qrData: string): QRCodeData | null {
+  static async scanFromFile(file: File): Promise<QRScanResult> {
     try {
-      // Try to parse as JSON first
-      const parsedData = JSON.parse(qrData)
+      return new Promise((resolve) => {
+        const reader = new FileReader()
 
-      // Validate required fields
-      if (parsedData.ticketId && parsedData.eventId && parsedData.verificationCode) {
-        return parsedData as QRCodeData
+        reader.onload = (event) => {
+          const img = new Image()
+
+          img.onload = () => {
+            const canvas = document.createElement("canvas")
+            const ctx = canvas.getContext("2d")!
+
+            canvas.width = img.width
+            canvas.height = img.height
+
+            ctx.drawImage(img, 0, 0)
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
+
+            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+              inversionAttempts: "dontInvert",
+            })
+
+            if (code) {
+              resolve(this.parseQRCode(code.data))
+            } else {
+              resolve({
+                success: false,
+                error: "No QR code found in image",
+              })
+            }
+          }
+
+          img.onerror = () => {
+            resolve({
+              success: false,
+              error: "Failed to load image",
+            })
+          }
+
+          img.src = event.target?.result as string
+        }
+
+        reader.onerror = () => {
+          resolve({
+            success: false,
+            error: "Failed to read file",
+          })
+        }
+
+        reader.readAsDataURL(file)
+      })
+    } catch (error) {
+      console.error("QRCodeService: Error scanning from file:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "File scan error",
+      }
+    }
+  }
+
+  static parseQRCode(qrData: string): QRScanResult {
+    try {
+      // Decode base64
+      const jsonString = atob(qrData)
+      const data: QRCodeData = JSON.parse(jsonString)
+
+      // Validate structure
+      if (!data.ticketId || !data.eventId || !data.signature || !data.timestamp) {
+        return {
+          success: false,
+          error: "Invalid QR code format",
+        }
       }
 
-      return null
+      // Validate signature
+      if (!this.validateSignature(data)) {
+        return {
+          success: false,
+          error: "Invalid QR code signature",
+        }
+      }
+
+      // Check if not too old (24 hours)
+      const maxAge = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
+      if (Date.now() - data.timestamp > maxAge) {
+        return {
+          success: false,
+          error: "QR code has expired",
+        }
+      }
+
+      return {
+        success: true,
+        data,
+      }
     } catch (error) {
-      console.error("Error verifying QR code:", error)
-      return null
+      console.error("QRCodeService: Error parsing QR code:", error)
+      return {
+        success: false,
+        error: "Failed to parse QR code",
+      }
     }
   }
 
-  // Generate verification code
-  generateVerificationCode(): string {
-    const timestamp = Date.now().toString(36)
-    const random = Math.random().toString(36).substring(2, 15)
-    return `${timestamp}-${random}`.toUpperCase()
-  }
-
-  // Create ticket QR data
-  createTicketQRData(ticketData: Omit<QRCodeData, "verificationCode">): QRCodeData {
-    return {
-      ...ticketData,
-      verificationCode: this.generateVerificationCode(),
-    }
-  }
-
-  // Scan QR code from video (web implementation)
-  async scanQRCodeFromVideo(video: HTMLVideoElement): Promise<string | null> {
+  static validateSignature(data: QRCodeData): boolean {
     try {
-      // This is a placeholder implementation for web
-      // In a real implementation, you'd use a library like jsQR
-      console.log("Scanning QR code from video (placeholder)")
+      const dataToSign = `${data.ticketId}:${data.eventId}:${data.timestamp}`
+      const expectedSignature = this.generateSignature(dataToSign)
+      return data.signature === expectedSignature
+    } catch (error) {
+      console.error("QRCodeService: Error validating signature:", error)
+      return false
+    }
+  }
+
+  private static generateSignature(data: string): string {
+    // Simple signature generation using the secret key
+    // In production, use a proper HMAC or digital signature
+    let hash = 0
+    const combined = data + this.SECRET_KEY
+
+    for (let i = 0; i < combined.length; i++) {
+      const char = combined.charCodeAt(i)
+      hash = (hash << 5) - hash + char
+      hash = hash & hash // Convert to 32-bit integer
+    }
+
+    return Math.abs(hash).toString(16)
+  }
+
+  static async scanQRCodeFromVideo(videoElement: HTMLVideoElement): Promise<string | null> {
+    try {
+      const result = await this.scanFromVideo(videoElement)
+      if (result.success && result.data) {
+        return btoa(JSON.stringify(result.data))
+      }
       return null
     } catch (error) {
-      console.error("Error scanning QR code from video:", error)
+      console.error("QRCodeService: Error scanning QR code from video:", error)
       return null
     }
   }
 
-  // Scan QR code from image file
-  async scanQRCodeFromImage(file: File): Promise<string | null> {
+  static async scanQRCodeFromImage(file: File): Promise<string | null> {
     try {
-      // This is a placeholder implementation
-      // In a real implementation, you'd use a library like jsQR
-      console.log("Scanning QR code from image file (placeholder)")
+      const result = await this.scanFromFile(file)
+      if (result.success && result.data) {
+        return btoa(JSON.stringify(result.data))
+      }
       return null
     } catch (error) {
-      console.error("Error scanning QR code from image:", error)
+      console.error("QRCodeService: Error scanning QR code from image:", error)
       return null
+    }
+  }
+
+  static async validateQRCode(qrData: string): Promise<{ valid: boolean; data?: QRCodeData; error?: string }> {
+    try {
+      const result = this.parseQRCode(qrData)
+      return {
+        valid: result.success,
+        data: result.data,
+        error: result.error,
+      }
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : "Validation error",
+      }
     }
   }
 }
 
-export default QRCodeService.getInstance()
+export default QRCodeService
