@@ -2,27 +2,14 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  Image,
-  StyleSheet,
-  Switch,
-  Platform,
-} from "react-native"
+import { StyleSheet } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import { ImagePickerService } from "../services/ImagePickerService"
+import ImagePickerService from "../services/ImagePickerService.web"
 import type { Event, TicketType, PaymentAccount } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import type { PaymentMethod } from "../models/Ticket"
-import { Ionicons } from "@expo/vector-icons"
-import DateTimePicker from "@react-native-community/datetimepicker"
 
 const AddEventScreen: React.FC = () => {
   const navigation = useNavigation()
@@ -31,12 +18,6 @@ const AddEventScreen: React.FC = () => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [showVenueDropdown, setShowVenueDropdown] = useState(false)
-
-  // Date and Time picker states
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [showTimePicker, setShowTimePicker] = useState(false)
-  const [selectedDate, setSelectedDate] = useState(new Date())
-  const [selectedTime, setSelectedTime] = useState(new Date())
 
   // Event form state
   const [eventName, setEventName] = useState("")
@@ -97,7 +78,7 @@ const AddEventScreen: React.FC = () => {
       setVenues(venuesList)
     } catch (error) {
       console.error("Error loading venues:", error)
-      Alert.alert("Error", "Failed to load venues")
+      alert("Failed to load venues")
     }
   }
 
@@ -105,68 +86,22 @@ const AddEventScreen: React.FC = () => {
     try {
       console.log("AddEventScreen: Starting image picker")
 
-      Alert.alert("Select Image", "Choose how you want to select the poster image", [
-        {
-          text: "Camera",
-          onPress: async () => {
-            const result = await ImagePickerService.takePhoto({
-              allowsEditing: true,
-              aspect: [16, 9],
-              quality: 0.8,
-            })
+      const result = await ImagePickerService.launchImageLibraryAsync({
+        mediaTypes: "Images",
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      })
 
-            console.log("AddEventScreen: Camera result:", result)
+      console.log("AddEventScreen: Image picker result:", result)
 
-            if (result && !result.canceled && result.assets?.[0]) {
-              setPosterImage(result.assets[0].uri)
-              console.log("AddEventScreen: Poster image set from camera:", result.assets[0].uri)
-            }
-          },
-        },
-        {
-          text: "Gallery",
-          onPress: async () => {
-            const result = await ImagePickerService.pickImage({
-              mediaTypes: "Images",
-              allowsEditing: true,
-              aspect: [16, 9],
-              quality: 0.8,
-            })
-
-            console.log("AddEventScreen: Gallery result:", result)
-
-            if (result && !result.canceled && result.assets?.[0]) {
-              setPosterImage(result.assets[0].uri)
-              console.log("AddEventScreen: Poster image set from gallery:", result.assets[0].uri)
-            }
-          },
-        },
-        {
-          text: "Cancel",
-          style: "cancel",
-        },
-      ])
+      if (result && !result.canceled && result.assets?.[0]) {
+        setPosterImage(result.assets[0].uri)
+        console.log("AddEventScreen: Poster image set:", result.assets[0].uri)
+      }
     } catch (error) {
       console.error("AddEventScreen: Error picking image:", error)
-      Alert.alert("Error", "Failed to pick image. Please try again.")
-    }
-  }
-
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false)
-    if (selectedDate) {
-      setSelectedDate(selectedDate)
-      const formattedDate = selectedDate.toISOString().split("T")[0] // YYYY-MM-DD
-      setDate(formattedDate)
-    }
-  }
-
-  const handleTimeChange = (event: any, selectedTime?: Date) => {
-    setShowTimePicker(false)
-    if (selectedTime) {
-      setSelectedTime(selectedTime)
-      const formattedTime = selectedTime.toTimeString().slice(0, 5) // HH:MM
-      setTime(formattedTime)
+      alert("Failed to pick image. Please try again.")
     }
   }
 
@@ -196,13 +131,13 @@ const AddEventScreen: React.FC = () => {
 
   const addPaymentAccount = () => {
     if (!newPaymentAccount.accountNumber || !newPaymentAccount.accountName) {
-      Alert.alert("Error", "Please fill in all payment account details")
+      alert("Please fill in all payment account details")
       return
     }
 
     // Validate account number format
     if (!validateAccountNumber(newPaymentAccount.type, newPaymentAccount.accountNumber)) {
-      Alert.alert("Error", "Invalid account number format")
+      alert("Invalid account number format")
       return
     }
 
@@ -235,27 +170,27 @@ const AddEventScreen: React.FC = () => {
 
   const handleSubmit = async () => {
     if (!eventName.trim()) {
-      Alert.alert("Error", "Please enter event name")
+      alert("Please enter event name")
       return
     }
 
     if (!selectedVenue) {
-      Alert.alert("Error", "Please select a venue")
+      alert("Please select a venue")
       return
     }
 
     if (!date || !time) {
-      Alert.alert("Error", "Please select date and time")
+      alert("Please select date and time")
       return
     }
 
     if (!posterImage) {
-      Alert.alert("Error", "Please select a poster image")
+      alert("Please select a poster image")
       return
     }
 
     if (paymentAccounts.length === 0) {
-      Alert.alert("Error", "Please add at least one payment account")
+      alert("Please add at least one payment account")
       return
     }
 
@@ -263,7 +198,7 @@ const AddEventScreen: React.FC = () => {
     const validTicketTypes = ticketTypes.filter((ticket) => ticket.name.trim() && ticket.price > 0)
 
     if (validTicketTypes.length === 0) {
-      Alert.alert("Error", "Please configure at least one ticket type")
+      alert("Please configure at least one ticket type")
       return
     }
 
@@ -304,332 +239,305 @@ const AddEventScreen: React.FC = () => {
 
       await firebaseService.addEvent(eventData)
 
-      Alert.alert("Success", "Event created successfully!", [
-        {
-          text: "OK",
-          onPress: () => navigation.goBack(),
-        },
-      ])
+      alert("Event created successfully!")
+      navigation.goBack()
     } catch (error) {
       console.error("Error creating event:", error)
-      Alert.alert("Error", "Failed to create event. Please try again.")
+      alert("Failed to create event. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.content}>
-        <Text style={styles.title}>Create New Event</Text>
+    <div style={styles.container}>
+      <div style={styles.content}>
+        <h1 style={styles.title}>Create New Event</h1>
 
         {/* Basic Event Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Event Details</Text>
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Event Details</h2>
 
-          <TextInput
+          <input
             style={styles.input}
+            type="text"
             placeholder="Event Name"
             value={eventName}
-            onChangeText={setEventName}
-            placeholderTextColor="#666"
+            onChange={(e) => setEventName(e.target.value)}
           />
 
-          <TextInput
-            style={[styles.input, styles.textArea]}
+          <textarea
+            style={{ ...styles.input, ...styles.textArea }}
             placeholder="Event Description"
             value={description}
-            onChangeText={setDescription}
-            multiline
-            numberOfLines={4}
-            placeholderTextColor="#666"
+            onChange={(e) => setDescription(e.target.value)}
+            rows={4}
           />
 
-          <TextInput
+          <input
             style={styles.input}
+            type="text"
             placeholder="Artists (comma separated)"
             value={artists}
-            onChangeText={setArtists}
-            placeholderTextColor="#666"
+            onChange={(e) => setArtists(e.target.value)}
           />
 
-          <View style={styles.row}>
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity style={styles.dateTimeInput} onPress={() => setShowDatePicker(true)}>
-                <Ionicons name="calendar-outline" size={20} color="#6366f1" />
-                <Text style={date ? styles.dateTimeText : styles.dateTimePlaceholder}>{date || "Select Date"}</Text>
-              </TouchableOpacity>
-            </View>
+          <div style={styles.row}>
+            <div style={styles.dateTimeContainer}>
+              <div style={styles.dateTimeInputContainer}>
+                <span style={styles.icon}>📅</span>
+                <input
+                  style={styles.dateTimeInput}
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  min={new Date().toISOString().split("T")[0]}
+                />
+              </div>
+            </div>
 
-            <View style={styles.dateTimeContainer}>
-              <TouchableOpacity style={styles.dateTimeInput} onPress={() => setShowTimePicker(true)}>
-                <Ionicons name="time-outline" size={20} color="#6366f1" />
-                <Text style={time ? styles.dateTimeText : styles.dateTimePlaceholder}>{time || "Select Time"}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+            <div style={styles.dateTimeContainer}>
+              <div style={styles.dateTimeInputContainer}>
+                <span style={styles.icon}>🕐</span>
+                <input
+                  style={styles.dateTimeInput}
+                  type="time"
+                  value={time}
+                  onChange={(e) => setTime(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={selectedDate}
-              mode="date"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={handleDateChange}
-              minimumDate={new Date()}
-            />
-          )}
-
-          {showTimePicker && (
-            <DateTimePicker
-              value={selectedTime}
-              mode="time"
-              display={Platform.OS === "ios" ? "spinner" : "default"}
-              onChange={handleTimeChange}
-            />
-          )}
-
-          <TextInput
+          <input
             style={styles.input}
+            type="number"
             placeholder="Base Ticket Price (UGX)"
             value={basePrice}
-            onChangeText={setBasePrice}
-            keyboardType="numeric"
-            placeholderTextColor="#666"
+            onChange={(e) => setBasePrice(e.target.value)}
           />
 
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Featured Event</Text>
-            <Switch
-              value={isFeatured}
-              onValueChange={setIsFeatured}
-              trackColor={{ false: "#767577", true: "#6366f1" }}
-              thumbColor={isFeatured ? "#f4f3f4" : "#f4f3f4"}
-            />
-          </View>
-        </View>
+          <div style={styles.switchRow}>
+            <span style={styles.switchLabel}>Featured Event</span>
+            <label style={styles.switch}>
+              <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
+              <span style={styles.slider}></span>
+            </label>
+          </div>
+        </div>
 
         {/* Venue Selection */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Venue</Text>
-          <TouchableOpacity style={styles.dropdown} onPress={() => setShowVenueDropdown(!showVenueDropdown)}>
-            <Text style={selectedVenue ? styles.dropdownText : styles.dropdownPlaceholder}>
-              {selectedVenue ? selectedVenue.name : "Select Venue"}
-            </Text>
-            <Ionicons name={showVenueDropdown ? "chevron-up" : "chevron-down"} size={20} color="#666" />
-          </TouchableOpacity>
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Venue</h2>
+          <div style={styles.dropdownContainer}>
+            <button style={styles.dropdown} onClick={() => setShowVenueDropdown(!showVenueDropdown)}>
+              <span style={selectedVenue ? styles.dropdownText : styles.dropdownPlaceholder}>
+                {selectedVenue ? selectedVenue.name : "Select Venue"}
+              </span>
+              <span style={styles.dropdownArrow}>{showVenueDropdown ? "▲" : "▼"}</span>
+            </button>
 
-          {showVenueDropdown && (
-            <View style={styles.dropdownList}>
-              {venues.map((venue) => (
-                <TouchableOpacity
-                  key={venue.id}
-                  style={styles.dropdownItem}
-                  onPress={() => {
-                    setSelectedVenue(venue)
-                    setShowVenueDropdown(false)
-                  }}
-                >
-                  <Text style={styles.dropdownItemText}>{venue.name}</Text>
-                  <Text style={styles.dropdownItemSubtext}>{venue.location}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-        </View>
+            {showVenueDropdown && (
+              <div style={styles.dropdownList}>
+                {venues.map((venue) => (
+                  <div
+                    key={venue.id}
+                    style={styles.dropdownItem}
+                    onClick={() => {
+                      setSelectedVenue(venue)
+                      setShowVenueDropdown(false)
+                    }}
+                  >
+                    <div style={styles.dropdownItemText}>{venue.name}</div>
+                    <div style={styles.dropdownItemSubtext}>{venue.location}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Poster Image */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Event Poster</Text>
-          <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
+        <div style={styles.section}>
+          <h2 style={styles.sectionTitle}>Event Poster</h2>
+          <div style={styles.imageButton} onClick={handleImagePicker}>
             {posterImage ? (
-              <View style={styles.imageContainer}>
-                <Image source={{ uri: posterImage }} style={styles.posterPreview} />
-                <View style={styles.imageOverlay}>
-                  <Ionicons name="camera" size={24} color="#fff" />
-                  <Text style={styles.imageOverlayText}>Tap to change</Text>
-                </View>
-              </View>
+              <div style={styles.imageContainer}>
+                <img src={posterImage || "/placeholder.svg"} style={styles.posterPreview} alt="Event poster" />
+                <div style={styles.imageOverlay}>
+                  <span style={styles.cameraIcon}>📷</span>
+                  <div style={styles.imageOverlayText}>Tap to change</div>
+                </div>
+              </div>
             ) : (
-              <View style={styles.imagePlaceholder}>
-                <Ionicons name="image-outline" size={48} color="#666" />
-                <Text style={styles.imagePlaceholderText}>Tap to select poster image</Text>
-                <Text style={styles.imagePlaceholderSubtext}>Recommended: 16:9 aspect ratio</Text>
-              </View>
+              <div style={styles.imagePlaceholder}>
+                <span style={styles.imageIcon}>🖼️</span>
+                <div style={styles.imagePlaceholderText}>Tap to select poster image</div>
+                <div style={styles.imagePlaceholderSubtext}>Recommended: 16:9 aspect ratio</div>
+              </div>
             )}
-          </TouchableOpacity>
-        </View>
+          </div>
+        </div>
 
         {/* Ticket Types */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Ticket Types</Text>
-            <TouchableOpacity style={styles.addButton} onPress={addTicketType}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.addButtonText}>Add Type</Text>
-            </TouchableOpacity>
-          </View>
+        <div style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>Ticket Types</h2>
+            <button style={styles.addButton} onClick={addTicketType}>
+              <span style={styles.addIcon}>+</span>
+              Add Type
+            </button>
+          </div>
 
           {ticketTypes.map((ticket, index) => (
-            <View key={ticket.id} style={styles.ticketTypeCard}>
-              <View style={styles.ticketTypeHeader}>
-                <TextInput
+            <div key={ticket.id} style={styles.ticketTypeCard}>
+              <div style={styles.ticketTypeHeader}>
+                <input
                   style={styles.ticketNameInput}
+                  type="text"
                   placeholder="Ticket Name"
                   value={ticket.name}
-                  onChangeText={(value) => updateTicketType(index, "name", value)}
-                  placeholderTextColor="#666"
+                  onChange={(e) => updateTicketType(index, "name", e.target.value)}
                 />
                 {index > 1 && ( // Don't allow removing Regular and Secure tickets
-                  <TouchableOpacity style={styles.removeButton} onPress={() => removeTicketType(index)}>
-                    <Ionicons name="close" size={16} color="#fff" />
-                  </TouchableOpacity>
+                  <button style={styles.removeButton} onClick={() => removeTicketType(index)}>
+                    ×
+                  </button>
                 )}
-              </View>
+              </div>
 
-              <TextInput
+              <input
                 style={styles.ticketDescInput}
+                type="text"
                 placeholder="Description"
                 value={ticket.description}
-                onChangeText={(value) => updateTicketType(index, "description", value)}
-                placeholderTextColor="#666"
+                onChange={(e) => updateTicketType(index, "description", e.target.value)}
               />
 
-              <View style={styles.ticketRow}>
-                <TextInput
+              <div style={styles.ticketRow}>
+                <input
                   style={styles.priceInput}
+                  type="number"
                   placeholder="Price (UGX)"
                   value={ticket.price.toString()}
-                  onChangeText={(value) => updateTicketType(index, "price", Number.parseFloat(value) || 0)}
-                  keyboardType="numeric"
-                  placeholderTextColor="#666"
-                  editable={ticket.id !== "regular" && ticket.id !== "secure"} // Base price controls these
+                  onChange={(e) => updateTicketType(index, "price", Number.parseFloat(e.target.value) || 0)}
+                  disabled={ticket.id === "regular" || ticket.id === "secure"} // Base price controls these
                 />
-                <View style={styles.switchContainer}>
-                  <Text style={styles.availableLabel}>Available</Text>
-                  <Switch
-                    value={ticket.isAvailable}
-                    onValueChange={(value) => updateTicketType(index, "isAvailable", value)}
-                    trackColor={{ false: "#767577", true: "#6366f1" }}
-                    thumbColor={ticket.isAvailable ? "#f4f3f4" : "#f4f3f4"}
-                  />
-                </View>
-              </View>
-            </View>
+                <div style={styles.switchContainer}>
+                  <span style={styles.availableLabel}>Available</span>
+                  <label style={styles.switch}>
+                    <input
+                      type="checkbox"
+                      checked={ticket.isAvailable}
+                      onChange={(e) => updateTicketType(index, "isAvailable", e.target.checked)}
+                    />
+                    <span style={styles.slider}></span>
+                  </label>
+                </div>
+              </div>
+            </div>
           ))}
-        </View>
+        </div>
 
         {/* Payment Accounts */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Payment Accounts</Text>
-            <TouchableOpacity style={styles.addButton} onPress={() => setShowAddPaymentAccount(true)}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.addButtonText}>Add Account</Text>
-            </TouchableOpacity>
-          </View>
+        <div style={styles.section}>
+          <div style={styles.sectionHeader}>
+            <h2 style={styles.sectionTitle}>Payment Accounts</h2>
+            <button style={styles.addButton} onClick={() => setShowAddPaymentAccount(true)}>
+              <span style={styles.addIcon}>+</span>
+              Add Account
+            </button>
+          </div>
 
           {paymentAccounts.map((account, index) => (
-            <View key={index} style={styles.paymentAccountCard}>
-              <View style={styles.paymentAccountHeader}>
-                <View style={styles.paymentAccountInfo}>
-                  <Ionicons
-                    name={
-                      account.type === "mtn" ? "phone-portrait" : account.type === "airtel" ? "phone-portrait" : "card"
-                    }
-                    size={20}
-                    color="#6366f1"
-                  />
-                  <Text style={styles.paymentAccountType}>
+            <div key={index} style={styles.paymentAccountCard}>
+              <div style={styles.paymentAccountHeader}>
+                <div style={styles.paymentAccountInfo}>
+                  <span style={styles.paymentIcon}>
+                    {account.type === "mtn" ? "📱" : account.type === "airtel" ? "📱" : "💳"}
+                  </span>
+                  <span style={styles.paymentAccountType}>
                     {account.type.toUpperCase()} - {account.accountName}
-                  </Text>
-                </View>
-                <TouchableOpacity style={styles.removeButton} onPress={() => removePaymentAccount(index)}>
-                  <Ionicons name="close" size={16} color="#fff" />
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.paymentAccountNumber}>{account.accountNumber}</Text>
-            </View>
+                  </span>
+                </div>
+                <button style={styles.removeButton} onClick={() => removePaymentAccount(index)}>
+                  ×
+                </button>
+              </div>
+              <div style={styles.paymentAccountNumber}>{account.accountNumber}</div>
+            </div>
           ))}
 
           {showAddPaymentAccount && (
-            <View style={styles.addPaymentForm}>
-              <Text style={styles.formTitle}>Add Payment Account</Text>
+            <div style={styles.addPaymentForm}>
+              <h3 style={styles.formTitle}>Add Payment Account</h3>
 
-              <View style={styles.paymentTypeButtons}>
+              <div style={styles.paymentTypeButtons}>
                 {(["mtn", "airtel", "bank"] as PaymentMethod[]).map((type) => (
-                  <TouchableOpacity
+                  <button
                     key={type}
-                    style={[
-                      styles.paymentTypeButton,
-                      newPaymentAccount.type === type && styles.paymentTypeButtonActive,
-                    ]}
-                    onPress={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
+                    style={{
+                      ...styles.paymentTypeButton,
+                      ...(newPaymentAccount.type === type ? styles.paymentTypeButtonActive : {}),
+                    }}
+                    onClick={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
                   >
-                    <Ionicons
-                      name={type === "bank" ? "card" : "phone-portrait"}
-                      size={16}
-                      color={newPaymentAccount.type === type ? "#fff" : "#666"}
-                    />
-                    <Text
-                      style={[
-                        styles.paymentTypeButtonText,
-                        newPaymentAccount.type === type && styles.paymentTypeButtonTextActive,
-                      ]}
-                    >
-                      {type.toUpperCase()}
-                    </Text>
-                  </TouchableOpacity>
+                    <span style={styles.paymentTypeIcon}>{type === "bank" ? "💳" : "📱"}</span>
+                    {type.toUpperCase()}
+                  </button>
                 ))}
-              </View>
+              </div>
 
-              <TextInput
+              <input
                 style={styles.input}
+                type={newPaymentAccount.type === "bank" ? "text" : "tel"}
                 placeholder={newPaymentAccount.type === "bank" ? "Account Number" : "Phone Number"}
                 value={newPaymentAccount.accountNumber}
-                onChangeText={(value) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: value })}
-                keyboardType={newPaymentAccount.type === "bank" ? "default" : "phone-pad"}
-                placeholderTextColor="#666"
+                onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: e.target.value })}
               />
 
-              <TextInput
+              <input
                 style={styles.input}
+                type="text"
                 placeholder="Account Name"
                 value={newPaymentAccount.accountName}
-                onChangeText={(value) => setNewPaymentAccount({ ...newPaymentAccount, accountName: value })}
-                placeholderTextColor="#666"
+                onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountName: e.target.value })}
               />
 
-              <View style={styles.formButtons}>
-                <TouchableOpacity style={styles.cancelButton} onPress={() => setShowAddPaymentAccount(false)}>
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.saveButton} onPress={addPaymentAccount}>
-                  <Text style={styles.saveButtonText}>Add Account</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
+              <div style={styles.formButtons}>
+                <button style={styles.cancelButton} onClick={() => setShowAddPaymentAccount(false)}>
+                  Cancel
+                </button>
+                <button style={styles.saveButton} onClick={addPaymentAccount}>
+                  Add Account
+                </button>
+              </div>
+            </div>
           )}
-        </View>
+        </div>
 
         {/* Submit Button */}
-        <TouchableOpacity
-          style={[styles.submitButton, loading && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
+        <button
+          style={{
+            ...styles.submitButton,
+            ...(loading ? styles.submitButtonDisabled : {}),
+          }}
+          onClick={handleSubmit}
           disabled={loading}
         >
           {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.submitButtonText}>Creating Event...</Text>
-            </View>
+            <div style={styles.loadingContainer}>
+              <span>Creating Event...</span>
+            </div>
           ) : (
-            <View style={styles.submitContainer}>
-              <Ionicons name="checkmark-circle" size={20} color="#fff" />
-              <Text style={styles.submitButtonText}>Create Event</Text>
-            </View>
+            <div style={styles.submitContainer}>
+              <span style={styles.checkIcon}>✓</span>
+              Create Event
+            </div>
           )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -637,15 +545,20 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#000",
+    minHeight: "100vh",
+    overflow: "auto",
   },
   content: {
     padding: 20,
+    maxWidth: 800,
+    margin: "0 auto",
   },
   title: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
     marginBottom: 20,
+    margin: 0,
   },
   section: {
     marginBottom: 24,
@@ -655,8 +568,10 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#fff",
     marginBottom: 12,
+    margin: "0 0 12px 0",
   },
   sectionHeader: {
+    display: "flex",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -668,40 +583,47 @@ const styles = StyleSheet.create({
     padding: 12,
     color: "#fff",
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#333",
+    border: "1px solid #333",
+    fontSize: 16,
+    width: "100%",
+    boxSizing: "border-box",
   },
   textArea: {
-    height: 100,
-    textAlignVertical: "top",
+    minHeight: 100,
+    resize: "vertical",
+    fontFamily: "inherit",
   },
   row: {
+    display: "flex",
     flexDirection: "row",
     gap: 12,
   },
   dateTimeContainer: {
     flex: 1,
   },
-  dateTimeInput: {
+  dateTimeInputContainer: {
+    display: "flex",
+    alignItems: "center",
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
+    border: "1px solid #333",
     marginBottom: 12,
+    gap: 8,
   },
-  dateTimeText: {
+  dateTimeInput: {
+    backgroundColor: "transparent",
+    border: "none",
     color: "#fff",
     fontSize: 16,
+    flex: 1,
+    outline: "none",
   },
-  dateTimePlaceholder: {
-    color: "#666",
-    fontSize: 16,
+  icon: {
+    fontSize: 20,
   },
   switchRow: {
+    display: "flex",
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -711,15 +633,37 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
   },
+  switch: {
+    position: "relative",
+    display: "inline-block",
+    width: 60,
+    height: 34,
+  },
+  slider: {
+    position: "absolute",
+    cursor: "pointer",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "#767577",
+    transition: "0.4s",
+    borderRadius: 34,
+  },
+  dropdownContainer: {
+    position: "relative",
+  },
   dropdown: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: "#333",
-    flexDirection: "row",
+    border: "1px solid #333",
+    display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    width: "100%",
+    cursor: "pointer",
+    fontSize: 16,
   },
   dropdownText: {
     color: "#fff",
@@ -727,17 +671,26 @@ const styles = StyleSheet.create({
   dropdownPlaceholder: {
     color: "#666",
   },
+  dropdownArrow: {
+    color: "#666",
+  },
   dropdownList: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     marginTop: 4,
-    borderWidth: 1,
-    borderColor: "#333",
+    border: "1px solid #333",
+    zIndex: 1000,
+    maxHeight: 200,
+    overflow: "auto",
   },
   dropdownItem: {
     padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottom: "1px solid #333",
+    cursor: "pointer",
   },
   dropdownItemText: {
     color: "#fff",
@@ -751,6 +704,7 @@ const styles = StyleSheet.create({
   imageButton: {
     borderRadius: 8,
     overflow: "hidden",
+    cursor: "pointer",
   },
   imageContainer: {
     position: "relative",
@@ -758,7 +712,7 @@ const styles = StyleSheet.create({
   posterPreview: {
     width: "100%",
     height: 200,
-    resizeMode: "cover",
+    objectFit: "cover",
   },
   imageOverlay: {
     position: "absolute",
@@ -767,9 +721,14 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex",
+    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
     opacity: 0.8,
+  },
+  cameraIcon: {
+    fontSize: 24,
   },
   imageOverlayText: {
     color: "#fff",
@@ -779,11 +738,14 @@ const styles = StyleSheet.create({
   imagePlaceholder: {
     backgroundColor: "#1a1a1a",
     height: 200,
+    display: "flex",
+    flexDirection: "column",
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#333",
-    borderStyle: "dashed",
+    border: "2px dashed #333",
+  },
+  imageIcon: {
+    fontSize: 48,
   },
   imagePlaceholderText: {
     color: "#666",
@@ -800,25 +762,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     gap: 4,
-  },
-  addButtonText: {
+    border: "none",
     color: "#fff",
     fontSize: 14,
     fontWeight: "500",
+    cursor: "pointer",
+  },
+  addIcon: {
+    fontSize: 16,
   },
   ticketTypeCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 12,
     marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "#333",
+    border: "1px solid #333",
   },
   ticketTypeHeader: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     gap: 8,
   },
@@ -828,8 +792,8 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
     color: "#fff",
-    borderWidth: 1,
-    borderColor: "#444",
+    border: "1px solid #444",
+    fontSize: 16,
   },
   ticketDescInput: {
     backgroundColor: "#000",
@@ -837,11 +801,13 @@ const styles = StyleSheet.create({
     padding: 8,
     color: "#fff",
     marginVertical: 8,
-    borderWidth: 1,
-    borderColor: "#444",
+    border: "1px solid #444",
+    width: "100%",
+    boxSizing: "border-box",
+    fontSize: 16,
   },
   ticketRow: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     gap: 12,
   },
@@ -851,11 +817,11 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     padding: 8,
     color: "#fff",
-    borderWidth: 1,
-    borderColor: "#444",
+    border: "1px solid #444",
+    fontSize: 16,
   },
   switchContainer: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     gap: 8,
   },
@@ -868,26 +834,34 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
+    display: "flex",
     justifyContent: "center",
     alignItems: "center",
+    border: "none",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+    cursor: "pointer",
   },
   paymentAccountCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 12,
     marginBottom: 8,
-    borderWidth: 1,
-    borderColor: "#333",
+    border: "1px solid #333",
   },
   paymentAccountHeader: {
-    flexDirection: "row",
+    display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
   },
   paymentAccountInfo: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     gap: 8,
+  },
+  paymentIcon: {
+    fontSize: 20,
   },
   paymentAccountType: {
     color: "#fff",
@@ -904,17 +878,17 @@ const styles = StyleSheet.create({
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: "#333",
+    border: "1px solid #333",
   },
   formTitle: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "500",
     marginBottom: 12,
+    margin: "0 0 12px 0",
   },
   paymentTypeButtons: {
-    flexDirection: "row",
+    display: "flex",
     gap: 8,
     marginBottom: 12,
   },
@@ -924,27 +898,26 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 6,
-    borderWidth: 1,
-    borderColor: "#444",
+    border: "1px solid #444",
+    display: "flex",
     alignItems: "center",
-    flexDirection: "row",
     justifyContent: "center",
     gap: 4,
+    color: "#666",
+    fontSize: 14,
+    fontWeight: "500",
+    cursor: "pointer",
   },
   paymentTypeButtonActive: {
     backgroundColor: "#6366f1",
     borderColor: "#6366f1",
-  },
-  paymentTypeButtonText: {
-    color: "#666",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  paymentTypeButtonTextActive: {
     color: "#fff",
   },
+  paymentTypeIcon: {
+    fontSize: 16,
+  },
   formButtons: {
-    flexDirection: "row",
+    display: "flex",
     gap: 12,
     marginTop: 12,
   },
@@ -953,49 +926,52 @@ const styles = StyleSheet.create({
     backgroundColor: "#333",
     paddingVertical: 10,
     borderRadius: 6,
-    alignItems: "center",
-  },
-  cancelButtonText: {
+    border: "none",
     color: "#fff",
     fontSize: 14,
     fontWeight: "500",
+    cursor: "pointer",
   },
   saveButton: {
     flex: 1,
     backgroundColor: "#6366f1",
     paddingVertical: 10,
     borderRadius: 6,
-    alignItems: "center",
-  },
-  saveButtonText: {
+    border: "none",
     color: "#fff",
     fontSize: 14,
     fontWeight: "500",
+    cursor: "pointer",
   },
   submitButton: {
     backgroundColor: "#6366f1",
     paddingVertical: 16,
     borderRadius: 8,
-    alignItems: "center",
+    border: "none",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    cursor: "pointer",
+    width: "100%",
     marginTop: 20,
   },
   submitButtonDisabled: {
     backgroundColor: "#333",
+    cursor: "not-allowed",
   },
   loadingContainer: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
     justifyContent: "center",
   },
   submitContainer: {
-    flexDirection: "row",
+    display: "flex",
     alignItems: "center",
+    justifyContent: "center",
     gap: 8,
   },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
+  checkIcon: {
+    fontSize: 20,
   },
 })
 
