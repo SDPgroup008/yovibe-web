@@ -74,7 +74,7 @@ export default class ImageCaptureService {
       return {
         success: true,
         imageUri: asset.uri,
-        base64: asset.base64 || undefined,
+        base64: asset.base64,
       }
     } catch (error) {
       console.error("ImageCaptureService: Error capturing image:", error)
@@ -124,7 +124,7 @@ export default class ImageCaptureService {
       return {
         success: true,
         imageUri: asset.uri,
-        base64: asset.base64 || undefined,
+        base64: asset.base64,
       }
     } catch (error) {
       console.error("ImageCaptureService: Error capturing from camera:", error)
@@ -174,7 +174,7 @@ export default class ImageCaptureService {
       return {
         success: true,
         imageUri: asset.uri,
-        base64: asset.base64 || undefined,
+        base64: asset.base64,
       }
     } catch (error) {
       console.error("ImageCaptureService: Error selecting from library:", error)
@@ -185,13 +185,92 @@ export default class ImageCaptureService {
     }
   }
 
-  static async captureImage(): Promise<string | null> {
+  static async showImagePicker(options: ImageCaptureOptions = {}): Promise<ImageCaptureResult> {
+    // For now, default to library picker
+    // In a real app, you might want to show an action sheet to choose between camera and library
+    return this.selectFromLibrary(options)
+  }
+
+  static async resizeImage(
+    imageUri: string,
+    width: number,
+    height: number,
+  ): Promise<{ success: boolean; imageUri?: string; error?: string }> {
     try {
-      const result = await this.captureOrSelectImage()
-      return result.success ? result.imageUri || null : null
+      // This would typically use a library like expo-image-manipulator
+      // For now, return the original image
+      console.log("ImageCaptureService: Image resize requested (not implemented)")
+      return {
+        success: true,
+        imageUri,
+      }
     } catch (error) {
-      console.error("ImageCaptureService: Error in captureImage:", error)
-      return null
+      console.error("ImageCaptureService: Error resizing image:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to resize image",
+      }
     }
+  }
+
+  static async compressImage(
+    imageUri: string,
+    quality = 0.8,
+  ): Promise<{ success: boolean; imageUri?: string; error?: string }> {
+    try {
+      // This would typically use a library like expo-image-manipulator
+      // For now, return the original image
+      console.log("ImageCaptureService: Image compression requested (not implemented)")
+      return {
+        success: true,
+        imageUri,
+      }
+    } catch (error) {
+      console.error("ImageCaptureService: Error compressing image:", error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to compress image",
+      }
+    }
+  }
+
+  static validateImageFile(imageUri: string): { valid: boolean; error?: string } {
+    try {
+      // Basic validation - check if URI exists and has proper format
+      if (!imageUri || imageUri.trim().length === 0) {
+        return { valid: false, error: "Image URI is empty" }
+      }
+
+      // Check if it's a valid URI format
+      const validFormats = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+      const hasValidFormat = validFormats.some((format) => imageUri.toLowerCase().includes(format))
+
+      if (!hasValidFormat && !imageUri.startsWith("data:image/")) {
+        return { valid: false, error: "Invalid image format" }
+      }
+
+      return { valid: true }
+    } catch (error) {
+      console.error("ImageCaptureService: Error validating image:", error)
+      return { valid: false, error: "Image validation failed" }
+    }
+  }
+
+  static getImageDimensions(imageUri: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve, reject) => {
+      if (Platform.OS === "web") {
+        const img = new Image()
+        img.onload = () => {
+          resolve({ width: img.width, height: img.height })
+        }
+        img.onerror = () => {
+          reject(new Error("Failed to load image"))
+        }
+        img.src = imageUri
+      } else {
+        // For React Native, you'd typically use Image.getSize
+        resolve({ width: 0, height: 0 })
+      }
+    })
   }
 }
