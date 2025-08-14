@@ -2,7 +2,6 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { StyleSheet } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
@@ -250,16 +249,16 @@ const AddEventScreen: React.FC = () => {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.content}>
-        <h1 style={styles.title}>Create New Event</h1>
+    <div style={containerStyle}>
+      <div style={contentStyle}>
+        <h1 style={titleStyle}>Create New Event</h1>
 
         {/* Basic Event Information */}
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Event Details</h2>
+        <div style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Event Details</h2>
 
           <input
-            style={styles.input}
+            style={inputStyle}
             type="text"
             placeholder="Event Name"
             value={eventName}
@@ -267,7 +266,7 @@ const AddEventScreen: React.FC = () => {
           />
 
           <textarea
-            style={{ ...styles.input, ...styles.textArea }}
+            style={{ ...inputStyle, minHeight: "100px", fontFamily: "inherit" }}
             placeholder="Event Description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -275,19 +274,19 @@ const AddEventScreen: React.FC = () => {
           />
 
           <input
-            style={styles.input}
+            style={inputStyle}
             type="text"
             placeholder="Artists (comma separated)"
             value={artists}
             onChange={(e) => setArtists(e.target.value)}
           />
 
-          <div style={styles.row}>
-            <div style={styles.dateTimeContainer}>
-              <div style={styles.dateTimeInputContainer}>
-                <span style={styles.icon}>📅</span>
+          <div style={rowStyle}>
+            <div style={dateTimeContainerStyle}>
+              <div style={dateTimeInputContainerStyle}>
+                <span style={iconStyle}>📅</span>
                 <input
-                  style={styles.dateTimeInput}
+                  style={dateTimeInputStyle}
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
@@ -296,60 +295,55 @@ const AddEventScreen: React.FC = () => {
               </div>
             </div>
 
-            <div style={styles.dateTimeContainer}>
-              <div style={styles.dateTimeInputContainer}>
-                <span style={styles.icon}>🕐</span>
-                <input
-                  style={styles.dateTimeInput}
-                  type="time"
-                  value={time}
-                  onChange={(e) => setTime(e.target.value)}
-                />
+            <div style={dateTimeContainerStyle}>
+              <div style={dateTimeInputContainerStyle}>
+                <span style={iconStyle}>🕐</span>
+                <input style={dateTimeInputStyle} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
               </div>
             </div>
           </div>
 
           <input
-            style={styles.input}
+            style={inputStyle}
             type="number"
             placeholder="Base Ticket Price (UGX)"
             value={basePrice}
             onChange={(e) => setBasePrice(e.target.value)}
           />
 
-          <div style={styles.switchRow}>
-            <span style={styles.switchLabel}>Featured Event</span>
-            <label style={styles.switch}>
+          <div style={switchRowStyle}>
+            <span style={switchLabelStyle}>Featured Event</span>
+            <label style={switchStyle}>
               <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
-              <span style={styles.slider}></span>
+              <span style={sliderStyle}></span>
             </label>
           </div>
         </div>
 
         {/* Venue Selection */}
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Venue</h2>
-          <div style={styles.dropdownContainer}>
-            <button style={styles.dropdown} onClick={() => setShowVenueDropdown(!showVenueDropdown)}>
-              <span style={selectedVenue ? styles.dropdownText : styles.dropdownPlaceholder}>
+        <div style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Venue</h2>
+          <div style={dropdownContainerStyle}>
+            <button style={dropdownStyle} onClick={() => setShowVenueDropdown(!showVenueDropdown)}>
+              <span style={selectedVenue ? dropdownTextStyle : dropdownPlaceholderStyle}>
                 {selectedVenue ? selectedVenue.name : "Select Venue"}
               </span>
-              <span style={styles.dropdownArrow}>{showVenueDropdown ? "▲" : "▼"}</span>
+              <span style={dropdownArrowStyle}>{showVenueDropdown ? "▲" : "▼"}</span>
             </button>
 
             {showVenueDropdown && (
-              <div style={styles.dropdownList}>
+              <div style={dropdownListStyle}>
                 {venues.map((venue) => (
                   <div
                     key={venue.id}
-                    style={styles.dropdownItem}
+                    style={dropdownItemStyle}
                     onClick={() => {
                       setSelectedVenue(venue)
                       setShowVenueDropdown(false)
                     }}
                   >
-                    <div style={styles.dropdownItemText}>{venue.name}</div>
-                    <div style={styles.dropdownItemSubtext}>{venue.location}</div>
+                    <div style={dropdownItemTextStyle}>{venue.name}</div>
+                    <div style={dropdownItemSubtextStyle}>{venue.location}</div>
                   </div>
                 ))}
               </div>
@@ -358,80 +352,80 @@ const AddEventScreen: React.FC = () => {
         </div>
 
         {/* Poster Image */}
-        <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>Event Poster</h2>
-          <div style={styles.imageButton} onClick={handleImagePicker}>
+        <div style={sectionStyle}>
+          <h2 style={sectionTitleStyle}>Event Poster</h2>
+          <div style={imageButtonStyle} onClick={handleImagePicker}>
             {posterImage ? (
-              <div style={styles.imageContainer}>
-                <img src={posterImage || "/placeholder.svg"} style={styles.posterPreview} alt="Event poster" />
-                <div style={styles.imageOverlay}>
-                  <span style={styles.cameraIcon}>📷</span>
-                  <div style={styles.imageOverlayText}>Tap to change</div>
+              <div style={imageContainerStyle}>
+                <img src={posterImage || "/placeholder.svg"} style={posterPreviewStyle} alt="Event poster" />
+                <div style={imageOverlayStyle}>
+                  <span style={cameraIconStyle}>📷</span>
+                  <div style={imageOverlayTextStyle}>Tap to change</div>
                 </div>
               </div>
             ) : (
-              <div style={styles.imagePlaceholder}>
-                <span style={styles.imageIcon}>🖼️</span>
-                <div style={styles.imagePlaceholderText}>Tap to select poster image</div>
-                <div style={styles.imagePlaceholderSubtext}>Recommended: 16:9 aspect ratio</div>
+              <div style={imagePlaceholderStyle}>
+                <span style={imageIconStyle}>🖼️</span>
+                <div style={imagePlaceholderTextStyle}>Tap to select poster image</div>
+                <div style={imagePlaceholderSubtextStyle}>Recommended: 16:9 aspect ratio</div>
               </div>
             )}
           </div>
         </div>
 
         {/* Ticket Types */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Ticket Types</h2>
-            <button style={styles.addButton} onClick={addTicketType}>
-              <span style={styles.addIcon}>+</span>
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={sectionTitleStyle}>Ticket Types</h2>
+            <button style={addButtonStyle} onClick={addTicketType}>
+              <span style={addIconStyle}>+</span>
               Add Type
             </button>
           </div>
 
           {ticketTypes.map((ticket, index) => (
-            <div key={ticket.id} style={styles.ticketTypeCard}>
-              <div style={styles.ticketTypeHeader}>
+            <div key={ticket.id} style={ticketTypeCardStyle}>
+              <div style={ticketTypeHeaderStyle}>
                 <input
-                  style={styles.ticketNameInput}
+                  style={ticketNameInputStyle}
                   type="text"
                   placeholder="Ticket Name"
                   value={ticket.name}
                   onChange={(e) => updateTicketType(index, "name", e.target.value)}
                 />
                 {index > 1 && ( // Don't allow removing Regular and Secure tickets
-                  <button style={styles.removeButton} onClick={() => removeTicketType(index)}>
+                  <button style={removeButtonStyle} onClick={() => removeTicketType(index)}>
                     ×
                   </button>
                 )}
               </div>
 
               <input
-                style={styles.ticketDescInput}
+                style={ticketDescInputStyle}
                 type="text"
                 placeholder="Description"
                 value={ticket.description}
                 onChange={(e) => updateTicketType(index, "description", e.target.value)}
               />
 
-              <div style={styles.ticketRow}>
+              <div style={ticketRowStyle}>
                 <input
-                  style={styles.priceInput}
+                  style={priceInputStyle}
                   type="number"
                   placeholder="Price (UGX)"
                   value={ticket.price.toString()}
                   onChange={(e) => updateTicketType(index, "price", Number.parseFloat(e.target.value) || 0)}
                   disabled={ticket.id === "regular" || ticket.id === "secure"} // Base price controls these
                 />
-                <div style={styles.switchContainer}>
-                  <span style={styles.availableLabel}>Available</span>
-                  <label style={styles.switch}>
+                <div style={switchContainerStyle}>
+                  <span style={availableLabelStyle}>Available</span>
+                  <label style={switchStyle}>
                     <input
                       type="checkbox"
                       checked={ticket.isAvailable}
                       onChange={(e) => updateTicketType(index, "isAvailable", e.target.checked)}
                     />
-                    <span style={styles.slider}></span>
+                    <span style={sliderStyle}></span>
                   </label>
                 </div>
               </div>
@@ -440,56 +434,56 @@ const AddEventScreen: React.FC = () => {
         </div>
 
         {/* Payment Accounts */}
-        <div style={styles.section}>
-          <div style={styles.sectionHeader}>
-            <h2 style={styles.sectionTitle}>Payment Accounts</h2>
-            <button style={styles.addButton} onClick={() => setShowAddPaymentAccount(true)}>
-              <span style={styles.addIcon}>+</span>
+        <div style={sectionStyle}>
+          <div style={sectionHeaderStyle}>
+            <h2 style={sectionTitleStyle}>Payment Accounts</h2>
+            <button style={addButtonStyle} onClick={() => setShowAddPaymentAccount(true)}>
+              <span style={addIconStyle}>+</span>
               Add Account
             </button>
           </div>
 
           {paymentAccounts.map((account, index) => (
-            <div key={index} style={styles.paymentAccountCard}>
-              <div style={styles.paymentAccountHeader}>
-                <div style={styles.paymentAccountInfo}>
-                  <span style={styles.paymentIcon}>
+            <div key={index} style={paymentAccountCardStyle}>
+              <div style={paymentAccountHeaderStyle}>
+                <div style={paymentAccountInfoStyle}>
+                  <span style={paymentIconStyle}>
                     {account.type === "mtn" ? "📱" : account.type === "airtel" ? "📱" : "💳"}
                   </span>
-                  <span style={styles.paymentAccountType}>
+                  <span style={paymentAccountTypeStyle}>
                     {account.type.toUpperCase()} - {account.accountName}
                   </span>
                 </div>
-                <button style={styles.removeButton} onClick={() => removePaymentAccount(index)}>
+                <button style={removeButtonStyle} onClick={() => removePaymentAccount(index)}>
                   ×
                 </button>
               </div>
-              <div style={styles.paymentAccountNumber}>{account.accountNumber}</div>
+              <div style={paymentAccountNumberStyle}>{account.accountNumber}</div>
             </div>
           ))}
 
           {showAddPaymentAccount && (
-            <div style={styles.addPaymentForm}>
-              <h3 style={styles.formTitle}>Add Payment Account</h3>
+            <div style={addPaymentFormStyle}>
+              <h3 style={formTitleStyle}>Add Payment Account</h3>
 
-              <div style={styles.paymentTypeButtons}>
+              <div style={paymentTypeButtonsStyle}>
                 {(["mtn", "airtel", "card"] as PaymentMethod[]).map((type) => (
                   <button
                     key={type}
                     style={{
-                      ...styles.paymentTypeButton,
-                      ...(newPaymentAccount.type === type ? styles.paymentTypeButtonActive : {}),
+                      ...paymentTypeButtonStyle,
+                      ...(newPaymentAccount.type === type ? paymentTypeButtonActiveStyle : {}),
                     }}
                     onClick={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
                   >
-                    <span style={styles.paymentTypeIcon}>{type === "card" ? "💳" : "📱"}</span>
+                    <span style={paymentTypeIconStyle}>{type === "card" ? "💳" : "📱"}</span>
                     {type.toUpperCase()}
                   </button>
                 ))}
               </div>
 
               <input
-                style={styles.input}
+                style={inputStyle}
                 type={newPaymentAccount.type === "card" ? "text" : "tel"}
                 placeholder={newPaymentAccount.type === "card" ? "Account Number" : "Phone Number"}
                 value={newPaymentAccount.accountNumber}
@@ -497,18 +491,18 @@ const AddEventScreen: React.FC = () => {
               />
 
               <input
-                style={styles.input}
+                style={inputStyle}
                 type="text"
                 placeholder="Account Name"
                 value={newPaymentAccount.accountName}
                 onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountName: e.target.value })}
               />
 
-              <div style={styles.formButtons}>
-                <button style={styles.cancelButton} onClick={() => setShowAddPaymentAccount(false)}>
+              <div style={formButtonsStyle}>
+                <button style={cancelButtonStyle} onClick={() => setShowAddPaymentAccount(false)}>
                   Cancel
                 </button>
-                <button style={styles.saveButton} onClick={addPaymentAccount}>
+                <button style={saveButtonStyle} onClick={addPaymentAccount}>
                   Add Account
                 </button>
               </div>
@@ -519,19 +513,19 @@ const AddEventScreen: React.FC = () => {
         {/* Submit Button */}
         <button
           style={{
-            ...styles.submitButton,
-            ...(loading ? styles.submitButtonDisabled : {}),
+            ...submitButtonStyle,
+            ...(loading ? submitButtonDisabledStyle : {}),
           }}
           onClick={handleSubmit}
           disabled={loading}
         >
           {loading ? (
-            <div style={styles.loadingContainer}>
+            <div style={loadingContainerStyle}>
               <span>Creating Event...</span>
             </div>
           ) : (
-            <div style={styles.submitContainer}>
-              <span style={styles.checkIcon}>✓</span>
+            <div style={submitContainerStyle}>
+              <span style={checkIconStyle}>✓</span>
               Create Event
             </div>
           )}
@@ -541,438 +535,496 @@ const AddEventScreen: React.FC = () => {
   )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-    minHeight: "100vh",
-    overflow: "auto",
-  },
-  content: {
-    padding: 20,
-    maxWidth: 800,
-    margin: "0 auto",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 20,
-    margin: 0,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 12,
-    margin: "0 0 12px 0",
-  },
-  sectionHeader: {
-    display: "flex",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  input: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    color: "#fff",
-    marginBottom: 12,
-    border: "1px solid #333",
-    fontSize: 16,
-    width: "100%",
-    boxSizing: "border-box",
-  },
-  textArea: {
-    minHeight: 100,
-    resize: "vertical",
-    fontFamily: "inherit",
-  },
-  row: {
-    display: "flex",
-    flexDirection: "row",
-    gap: 12,
-  },
-  dateTimeContainer: {
-    flex: 1,
-  },
-  dateTimeInputContainer: {
-    display: "flex",
-    alignItems: "center",
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    border: "1px solid #333",
-    marginBottom: 12,
-    gap: 8,
-  },
-  dateTimeInput: {
-    backgroundColor: "transparent",
-    border: "none",
-    color: "#fff",
-    fontSize: 16,
-    flex: 1,
-    outline: "none",
-  },
-  icon: {
-    fontSize: 20,
-  },
-  switchRow: {
-    display: "flex",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  switchLabel: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  switch: {
-    position: "relative",
-    display: "inline-block",
-    width: 60,
-    height: 34,
-  },
-  slider: {
-    position: "absolute",
-    cursor: "pointer",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#767577",
-    transition: "0.4s",
-    borderRadius: 34,
-  },
-  dropdownContainer: {
-    position: "relative",
-  },
-  dropdown: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    border: "1px solid #333",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-    cursor: "pointer",
-    fontSize: 16,
-  },
-  dropdownText: {
-    color: "#fff",
-  },
-  dropdownPlaceholder: {
-    color: "#666",
-  },
-  dropdownArrow: {
-    color: "#666",
-  },
-  dropdownList: {
-    position: "absolute",
-    top: "100%",
-    left: 0,
-    right: 0,
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    marginTop: 4,
-    border: "1px solid #333",
-    zIndex: 1000,
-    maxHeight: 200,
-    overflow: "auto",
-  },
-  dropdownItem: {
-    padding: 12,
-    borderBottom: "1px solid #333",
-    cursor: "pointer",
-  },
-  dropdownItemText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  dropdownItemSubtext: {
-    color: "#666",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  imageButton: {
-    borderRadius: 8,
-    overflow: "hidden",
-    cursor: "pointer",
-  },
-  imageContainer: {
-    position: "relative",
-  },
-  posterPreview: {
-    width: "100%",
-    height: 200,
-    objectFit: "cover",
-  },
-  imageOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    opacity: 0.8,
-  },
-  cameraIcon: {
-    fontSize: 24,
-  },
-  imageOverlayText: {
-    color: "#fff",
-    fontSize: 14,
-    marginTop: 4,
-  },
-  imagePlaceholder: {
-    backgroundColor: "#1a1a1a",
-    height: 200,
-    display: "flex",
-    flexDirection: "column",
-    justifyContent: "center",
-    alignItems: "center",
-    border: "2px dashed #333",
-  },
-  imageIcon: {
-    fontSize: 48,
-  },
-  imagePlaceholderText: {
-    color: "#666",
-    fontSize: 16,
-    marginTop: 8,
-  },
-  imagePlaceholderSubtext: {
-    color: "#555",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  addButton: {
-    backgroundColor: "#6366f1",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    display: "flex",
-    alignItems: "center",
-    gap: 4,
-    border: "none",
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-    cursor: "pointer",
-  },
-  addIcon: {
-    fontSize: 16,
-  },
-  ticketTypeCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    border: "1px solid #333",
-  },
-  ticketTypeHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  ticketNameInput: {
-    flex: 1,
-    backgroundColor: "#000",
-    borderRadius: 6,
-    padding: 8,
-    color: "#fff",
-    border: "1px solid #444",
-    fontSize: 16,
-  },
-  ticketDescInput: {
-    backgroundColor: "#000",
-    borderRadius: 6,
-    padding: 8,
-    color: "#fff",
-    marginVertical: 8,
-    border: "1px solid #444",
-    width: "100%",
-    boxSizing: "border-box",
-    fontSize: 16,
-  },
-  ticketRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 12,
-  },
-  priceInput: {
-    flex: 1,
-    backgroundColor: "#000",
-    borderRadius: 6,
-    padding: 8,
-    color: "#fff",
-    border: "1px solid #444",
-    fontSize: 16,
-  },
-  switchContainer: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  availableLabel: {
-    color: "#fff",
-    fontSize: 14,
-  },
-  removeButton: {
-    backgroundColor: "#ef4444",
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    border: "none",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
-    cursor: "pointer",
-  },
-  paymentAccountCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    border: "1px solid #333",
-  },
-  paymentAccountHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  paymentAccountInfo: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-  },
-  paymentIcon: {
-    fontSize: 20,
-  },
-  paymentAccountType: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-  },
-  paymentAccountNumber: {
-    color: "#666",
-    fontSize: 14,
-    marginTop: 4,
-    marginLeft: 28,
-  },
-  addPaymentForm: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 16,
-    border: "1px solid #333",
-  },
-  formTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
-    marginBottom: 12,
-    margin: "0 0 12px 0",
-  },
-  paymentTypeButtons: {
-    display: "flex",
-    gap: 8,
-    marginBottom: 12,
-  },
-  paymentTypeButton: {
-    flex: 1,
-    backgroundColor: "#000",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    border: "1px solid #444",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    color: "#666",
-    fontSize: 14,
-    fontWeight: "500",
-    cursor: "pointer",
-  },
-  paymentTypeButtonActive: {
-    backgroundColor: "#6366f1",
-    borderColor: "#6366f1",
-    color: "#fff",
-  },
-  paymentTypeIcon: {
-    fontSize: 16,
-  },
-  formButtons: {
-    display: "flex",
-    gap: 12,
-    marginTop: 12,
-  },
-  cancelButton: {
-    flex: 1,
-    backgroundColor: "#333",
-    paddingVertical: 10,
-    borderRadius: 6,
-    border: "none",
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-    cursor: "pointer",
-  },
-  saveButton: {
-    flex: 1,
-    backgroundColor: "#6366f1",
-    paddingVertical: 10,
-    borderRadius: 6,
-    border: "none",
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "500",
-    cursor: "pointer",
-  },
-  submitButton: {
-    backgroundColor: "#6366f1",
-    paddingVertical: 16,
-    borderRadius: 8,
-    border: "none",
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-    cursor: "pointer",
-    width: "100%",
-    marginTop: 20,
-  },
-  submitButtonDisabled: {
-    backgroundColor: "#333",
-    cursor: "not-allowed",
-  },
-  loadingContainer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  submitContainer: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  checkIcon: {
-    fontSize: 20,
-  },
-})
+// CSS-in-JS styles (avoiding border and margin)
+const containerStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#000",
+  minHeight: "100vh",
+  overflow: "auto",
+}
+
+const contentStyle: React.CSSProperties = {
+  padding: "20px",
+  maxWidth: "800px",
+  marginLeft: "auto",
+  marginRight: "auto",
+}
+
+const titleStyle: React.CSSProperties = {
+  fontSize: "24px",
+  fontWeight: "bold",
+  color: "#fff",
+  marginBottom: "20px",
+}
+
+const sectionStyle: React.CSSProperties = {
+  marginBottom: "24px",
+}
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: "18px",
+  fontWeight: "600",
+  color: "#fff",
+  marginBottom: "12px",
+}
+
+const sectionHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: "12px",
+}
+
+const inputStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  color: "#fff",
+  marginBottom: "12px",
+  outline: "1px solid #333",
+  fontSize: "16px",
+  width: "100%",
+  boxSizing: "border-box",
+}
+
+const rowStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "row",
+  gap: "12px",
+}
+
+const dateTimeContainerStyle: React.CSSProperties = {
+  flex: 1,
+}
+
+const dateTimeInputContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  outline: "1px solid #333",
+  marginBottom: "12px",
+  gap: "8px",
+}
+
+const dateTimeInputStyle: React.CSSProperties = {
+  backgroundColor: "transparent",
+  color: "#fff",
+  fontSize: "16px",
+  flex: 1,
+  outline: "none",
+}
+
+const iconStyle: React.CSSProperties = {
+  fontSize: "20px",
+}
+
+const switchRowStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "row",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingTop: "8px",
+  paddingBottom: "8px",
+}
+
+const switchLabelStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "16px",
+}
+
+const switchStyle: React.CSSProperties = {
+  position: "relative",
+  display: "inline-block",
+  width: "60px",
+  height: "34px",
+}
+
+const sliderStyle: React.CSSProperties = {
+  position: "absolute",
+  cursor: "pointer",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "#767577",
+  transition: "0.4s",
+  borderRadius: "34px",
+}
+
+const dropdownContainerStyle: React.CSSProperties = {
+  position: "relative",
+}
+
+const dropdownStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  outline: "1px solid #333",
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  width: "100%",
+  cursor: "pointer",
+  fontSize: "16px",
+}
+
+const dropdownTextStyle: React.CSSProperties = {
+  color: "#fff",
+}
+
+const dropdownPlaceholderStyle: React.CSSProperties = {
+  color: "#666",
+}
+
+const dropdownArrowStyle: React.CSSProperties = {
+  color: "#666",
+}
+
+const dropdownListStyle: React.CSSProperties = {
+  position: "absolute",
+  top: "100%",
+  left: 0,
+  right: 0,
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  marginTop: "4px",
+  outline: "1px solid #333",
+  zIndex: 1000,
+  maxHeight: "200px",
+  overflow: "auto",
+}
+
+const dropdownItemStyle: React.CSSProperties = {
+  padding: "12px",
+  cursor: "pointer",
+}
+
+const dropdownItemTextStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "16px",
+}
+
+const dropdownItemSubtextStyle: React.CSSProperties = {
+  color: "#666",
+  fontSize: "14px",
+  marginTop: "2px",
+}
+
+const imageButtonStyle: React.CSSProperties = {
+  borderRadius: "8px",
+  overflow: "hidden",
+  cursor: "pointer",
+}
+
+const imageContainerStyle: React.CSSProperties = {
+  position: "relative",
+}
+
+const posterPreviewStyle: React.CSSProperties = {
+  width: "100%",
+  height: "200px",
+  objectFit: "cover",
+}
+
+const imageOverlayStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: "rgba(0,0,0,0.5)",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  alignItems: "center",
+  opacity: 0.8,
+}
+
+const cameraIconStyle: React.CSSProperties = {
+  fontSize: "24px",
+}
+
+const imageOverlayTextStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "14px",
+  marginTop: "4px",
+}
+
+const imagePlaceholderStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  height: "200px",
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "center",
+  alignItems: "center",
+  outline: "2px dashed #333",
+}
+
+const imageIconStyle: React.CSSProperties = {
+  fontSize: "48px",
+}
+
+const imagePlaceholderTextStyle: React.CSSProperties = {
+  color: "#666",
+  fontSize: "16px",
+  marginTop: "8px",
+}
+
+const imagePlaceholderSubtextStyle: React.CSSProperties = {
+  color: "#555",
+  fontSize: "12px",
+  marginTop: "4px",
+}
+
+const addButtonStyle: React.CSSProperties = {
+  backgroundColor: "#6366f1",
+  paddingLeft: "12px",
+  paddingRight: "12px",
+  paddingTop: "6px",
+  paddingBottom: "6px",
+  borderRadius: "6px",
+  display: "flex",
+  alignItems: "center",
+  gap: "4px",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+}
+
+const addIconStyle: React.CSSProperties = {
+  fontSize: "16px",
+}
+
+const ticketTypeCardStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  marginBottom: "12px",
+  outline: "1px solid #333",
+}
+
+const ticketTypeHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+}
+
+const ticketNameInputStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#000",
+  borderRadius: "6px",
+  padding: "8px",
+  color: "#fff",
+  outline: "1px solid #444",
+  fontSize: "16px",
+}
+
+const ticketDescInputStyle: React.CSSProperties = {
+  backgroundColor: "#000",
+  borderRadius: "6px",
+  padding: "8px",
+  color: "#fff",
+  marginTop: "8px",
+  marginBottom: "8px",
+  outline: "1px solid #444",
+  width: "100%",
+  boxSizing: "border-box",
+  fontSize: "16px",
+}
+
+const ticketRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+}
+
+const priceInputStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#000",
+  borderRadius: "6px",
+  padding: "8px",
+  color: "#fff",
+  outline: "1px solid #444",
+  fontSize: "16px",
+}
+
+const switchContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+}
+
+const availableLabelStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "14px",
+}
+
+const removeButtonStyle: React.CSSProperties = {
+  backgroundColor: "#ef4444",
+  width: "24px",
+  height: "24px",
+  borderRadius: "12px",
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  color: "#fff",
+  fontSize: "16px",
+  fontWeight: "bold",
+  cursor: "pointer",
+}
+
+const paymentAccountCardStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  marginBottom: "8px",
+  outline: "1px solid #333",
+}
+
+const paymentAccountHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+}
+
+const paymentAccountInfoStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+}
+
+const paymentIconStyle: React.CSSProperties = {
+  fontSize: "20px",
+}
+
+const paymentAccountTypeStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "16px",
+  fontWeight: "500",
+}
+
+const paymentAccountNumberStyle: React.CSSProperties = {
+  color: "#666",
+  fontSize: "14px",
+  marginTop: "4px",
+  marginLeft: "28px",
+}
+
+const addPaymentFormStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "16px",
+  outline: "1px solid #333",
+}
+
+const formTitleStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "16px",
+  fontWeight: "500",
+  marginBottom: "12px",
+}
+
+const paymentTypeButtonsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "8px",
+  marginBottom: "12px",
+}
+
+const paymentTypeButtonStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#000",
+  paddingTop: "8px",
+  paddingBottom: "8px",
+  paddingLeft: "12px",
+  paddingRight: "12px",
+  borderRadius: "6px",
+  outline: "1px solid #444",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "4px",
+  color: "#666",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+}
+
+const paymentTypeButtonActiveStyle: React.CSSProperties = {
+  backgroundColor: "#6366f1",
+  color: "#fff",
+}
+
+const paymentTypeIconStyle: React.CSSProperties = {
+  fontSize: "16px",
+}
+
+const formButtonsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: "12px",
+  marginTop: "12px",
+}
+
+const cancelButtonStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#333",
+  paddingTop: "10px",
+  paddingBottom: "10px",
+  borderRadius: "6px",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+}
+
+const saveButtonStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#6366f1",
+  paddingTop: "10px",
+  paddingBottom: "10px",
+  borderRadius: "6px",
+  color: "#fff",
+  fontSize: "14px",
+  fontWeight: "500",
+  cursor: "pointer",
+}
+
+const submitButtonStyle: React.CSSProperties = {
+  backgroundColor: "#6366f1",
+  paddingTop: "16px",
+  paddingBottom: "16px",
+  borderRadius: "8px",
+  color: "#fff",
+  fontSize: "16px",
+  fontWeight: "600",
+  cursor: "pointer",
+  width: "100%",
+  marginTop: "20px",
+}
+
+const submitButtonDisabledStyle: React.CSSProperties = {
+  backgroundColor: "#333",
+  cursor: "not-allowed",
+}
+
+const loadingContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+}
+
+const submitContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+}
+
+const checkIconStyle: React.CSSProperties = {
+  fontSize: "20px",
+}
 
 export default AddEventScreen
