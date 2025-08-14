@@ -157,7 +157,7 @@ const AddEventScreen: React.FC = () => {
         return /^(077|078|076)\d{7}$/.test(accountNumber)
       case "airtel":
         return /^(070|075)\d{7}$/.test(accountNumber)
-      case "bank":
+      case "card":
         return accountNumber.length >= 10 && accountNumber.length <= 20
       default:
         return false
@@ -473,7 +473,7 @@ const AddEventScreen: React.FC = () => {
               <h3 style={styles.formTitle}>Add Payment Account</h3>
 
               <div style={styles.paymentTypeButtons}>
-                {(["mtn", "airtel", "bank"] as PaymentMethod[]).map((type) => (
+                {(["mtn", "airtel", "card"] as PaymentMethod[]).map((type) => (
                   <button
                     key={type}
                     style={{
@@ -482,7 +482,7 @@ const AddEventScreen: React.FC = () => {
                     }}
                     onClick={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
                   >
-                    <span style={styles.paymentTypeIcon}>{type === "bank" ? "💳" : "📱"}</span>
+                    <span style={styles.paymentTypeIcon}>{type === "card" ? "💳" : "📱"}</span>
                     {type.toUpperCase()}
                   </button>
                 ))}
@@ -490,8 +490,8 @@ const AddEventScreen: React.FC = () => {
 
               <input
                 style={styles.input}
-                type={newPaymentAccount.type === "bank" ? "text" : "tel"}
-                placeholder={newPaymentAccount.type === "bank" ? "Account Number" : "Phone Number"}
+                type={newPaymentAccount.type === "card" ? "text" : "tel"}
+                placeholder={newPaymentAccount.type === "card" ? "Account Number" : "Phone Number"}
                 value={newPaymentAccount.accountNumber}
                 onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: e.target.value })}
               />
