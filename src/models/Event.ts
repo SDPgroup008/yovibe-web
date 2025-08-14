@@ -11,7 +11,7 @@ export interface TicketType {
 }
 
 export interface PaymentAccount {
-  type: "mtn" | "airtel" | "bank"
+  type: "mtn" | "airtel" | "card"
   accountNumber: string
   accountName: string
   isActive: boolean
