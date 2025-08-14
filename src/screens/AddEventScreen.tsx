@@ -467,7 +467,7 @@ const AddEventScreen: React.FC = () => {
               <h3 style={formTitleStyle}>Add Payment Account</h3>
 
               <div style={paymentTypeButtonsStyle}>
-                {(["mtn", "airtel", "card"] as PaymentMethod[]).map((type) => (
+                {(["mtn", "airtel", "card"] as const).map((type) => (
                   <button
                     key={type}
                     style={{
