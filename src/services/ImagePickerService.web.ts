@@ -1,170 +1,95 @@
-import * as ImagePicker from "expo-image-picker"
+// Web-specific implementation of ImagePickerService
+
+export interface ImagePickerResult {
+  canceled: boolean
+  assets?: Array<{
+    uri: string
+    type?: string
+    name?: string
+    file?: File // Web-specific, contains the actual File object
+  }>
+}
 
 export interface ImagePickerOptions {
   mediaTypes: "Images" | "Videos" | "All"
   allowsEditing?: boolean
   aspect?: [number, number]
   quality?: number
-  allowsMultipleSelection?: boolean
 }
 
-export interface ImagePickerAsset {
-  uri: string
-  width?: number
-  height?: number
-  base64?: string
-}
-
-export interface ImagePickerResult {
-  canceled: boolean
-  assets?: ImagePickerAsset[]
-}
-
+/**
+ * Web implementation of image picker using HTML file input
+ */
 class ImagePickerService {
-  async requestMediaLibraryPermissionsAsync(): Promise<ImagePicker.MediaLibraryPermissionResponse> {
-    return await ImagePicker.requestMediaLibraryPermissionsAsync()
+  /**
+   * Launch the device's image library and let the user select an image
+   */
+  async launchImageLibraryAsync(options: ImagePickerOptions): Promise<ImagePickerResult> {
+    return new Promise((resolve) => {
+      // Create a file input element
+      const input = document.createElement("input")
+      input.type = "file"
+      input.accept = "image/*"
+      input.style.display = "none"
+
+      // Handle file selection
+      input.onchange = (event) => {
+        const target = event.target as HTMLInputElement
+        const files = target.files
+
+        if (!files || files.length === 0) {
+          resolve({ canceled: true })
+          document.body.removeChild(input)
+          return
+        }
+
+        const file = files[0]
+        const reader = new FileReader()
+
+        reader.onload = (e) => {
+          const uri = e.target?.result as string
+          resolve({
+            canceled: false,
+            assets: [
+              {
+                uri,
+                type: file.type,
+                name: file.name,
+                file, // Store the actual File object for later upload
+              },
+            ],
+          })
+          document.body.removeChild(input)
+        }
+
+        reader.onerror = () => {
+          resolve({ canceled: true })
+          document.body.removeChild(input)
+        }
+
+        // Read the file as a data URL
+        reader.readAsDataURL(file)
+      }
+
+      // Add to DOM and trigger click
+      document.body.appendChild(input)
+      input.click()
+    })
   }
 
-  async requestCameraPermissionsAsync(): Promise<ImagePicker.CameraPermissionResponse> {
-    return await ImagePicker.requestCameraPermissionsAsync()
-  }
-
-  async pickImage(options: ImagePickerOptions = { mediaTypes: "Images" }): Promise<ImagePickerResult> {
-    try {
-      console.log("ImagePickerService: Requesting media library permissions...")
-
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync()
-
-      if (permissionResult.granted === false) {
-        console.log("ImagePickerService: Permission denied")
-        return { canceled: true }
-      }
-
-      console.log("ImagePickerService: Launching image library...")
-
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes:
-          options.mediaTypes === "Images"
-            ? ImagePicker.MediaTypeOptions.Images
-            : options.mediaTypes === "Videos"
-              ? ImagePicker.MediaTypeOptions.Videos
-              : ImagePicker.MediaTypeOptions.All,
-        allowsEditing: options.allowsEditing ?? true,
-        aspect: options.aspect,
-        quality: options.quality ?? 1,
-        allowsMultipleSelection: options.allowsMultipleSelection ?? false,
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync(pickerOptions)
-
-      console.log("ImagePickerService: Image picker result:", result)
-
-      if (result.canceled) {
-        return { canceled: true }
-      }
-
-      // Convert the result to our interface
-      const assets: ImagePickerAsset[] =
-        result.assets?.map((asset) => ({
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          base64: asset.base64 || undefined,
-        })) || []
-
-      return {
-        canceled: false,
-        assets,
-      }
-    } catch (error) {
-      console.error("ImagePickerService: Error picking image:", error)
-      return { canceled: true }
-    }
-  }
-
-  async launchImageLibraryAsync(options?: ImagePicker.ImagePickerOptions): Promise<ImagePickerResult> {
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync(options)
-
-      if (result.canceled) {
-        return { canceled: true }
-      }
-
-      // Convert the result to our interface
-      const assets: ImagePickerAsset[] =
-        result.assets?.map((asset) => ({
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          base64: asset.base64 || undefined,
-        })) || []
-
-      return {
-        canceled: false,
-        assets,
-      }
-    } catch (error) {
-      console.error("ImagePickerService: Error launching image library:", error)
-      return { canceled: true }
-    }
-  }
-
-  async takePhoto(options: ImagePickerOptions = { mediaTypes: "Images" }): Promise<ImagePickerResult> {
-    try {
-      console.log("ImagePickerService: Requesting camera permissions...")
-
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync()
-
-      if (permissionResult.granted === false) {
-        console.log("ImagePickerService: Camera permission denied")
-        return { canceled: true }
-      }
-
-      console.log("ImagePickerService: Launching camera...")
-
-      const pickerOptions: ImagePicker.ImagePickerOptions = {
-        mediaTypes:
-          options.mediaTypes === "Images"
-            ? ImagePicker.MediaTypeOptions.Images
-            : options.mediaTypes === "Videos"
-              ? ImagePicker.MediaTypeOptions.Videos
-              : ImagePicker.MediaTypeOptions.All,
-        allowsEditing: options.allowsEditing ?? true,
-        aspect: options.aspect,
-        quality: options.quality ?? 1,
-      }
-
-      const result = await ImagePicker.launchCameraAsync(pickerOptions)
-
-      console.log("ImagePickerService: Camera result:", result)
-
-      if (result.canceled) {
-        return { canceled: true }
-      }
-
-      // Convert the result to our interface
-      const assets: ImagePickerAsset[] =
-        result.assets?.map((asset) => ({
-          uri: asset.uri,
-          width: asset.width,
-          height: asset.height,
-          base64: asset.base64 || undefined,
-        })) || []
-
-      return {
-        canceled: false,
-        assets,
-      }
-    } catch (error) {
-      console.error("ImagePickerService: Error taking photo:", error)
-      return { canceled: true }
-    }
+  /**
+   * Request permissions - not needed for web
+   */
+  async requestMediaLibraryPermissionsAsync() {
+    return { status: "granted" }
   }
 }
 
-// Create and export a single instance
-const imagePickerService = new ImagePickerService()
-export default imagePickerService
+// Constants to match expo-image-picker API
+export const MediaTypeOptions = {
+  Images: "Images",
+  Videos: "Videos",
+  All: "All",
+}
 
-// Also export the class for named imports if needed
-export { ImagePickerService }
+export default new ImagePickerService()
