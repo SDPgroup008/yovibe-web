@@ -1,178 +1,170 @@
-// Web-specific implementation of ImagePickerService
+export interface ImagePickerOptions {
+  mediaTypes?: "Images" | "Videos" | "All"
+  allowsEditing?: boolean
+  aspect?: [number, number]
+  quality?: number
+  base64?: boolean
+}
 
 export interface ImagePickerResult {
   canceled: boolean
   assets?: Array<{
     uri: string
+    width: number
+    height: number
     type?: string
-    name?: string
-    file?: File // Web-specific, contains the actual File object
+    base64?: string
   }>
 }
 
-export interface ImagePickerOptions {
-  mediaTypes: "Images" | "Videos" | "All"
-  allowsEditing?: boolean
-  aspect?: [number, number]
-  quality?: number
-}
-
-/**
- * Web implementation of image picker using HTML file input
- */
-class ImagePickerService {
-  /**
-   * Launch the device's image library and let the user select an image
-   */
-  async launchImageLibraryAsync(options: ImagePickerOptions): Promise<ImagePickerResult> {
-    return new Promise((resolve) => {
-      // Create a file input element
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = "image/*"
-      input.style.display = "none"
-
-      // Handle file selection
-      input.onchange = (event) => {
-        const target = event.target as HTMLInputElement
-        const files = target.files
-
-        if (!files || files.length === 0) {
-          resolve({ canceled: true })
-          document.body.removeChild(input)
-          return
-        }
-
-        const file = files[0]
-        const reader = new FileReader()
-
-        reader.onload = (e) => {
-          const uri = e.target?.result as string
-          resolve({
-            canceled: false,
-            assets: [
-              {
-                uri,
-                type: file.type,
-                name: file.name,
-                file, // Store the actual File object for later upload
-              },
-            ],
-          })
-          document.body.removeChild(input)
-        }
-
-        reader.onerror = () => {
-          resolve({ canceled: true })
-          document.body.removeChild(input)
-        }
-
-        // Read the file as a data URL
-        reader.readAsDataURL(file)
-      },
-
-      // hhhhh
-      input.oncancel = () => {
-        resolve({ canceled: true })
-        document.body.removeChild(input)
-      }
-
-      // Add to DOM and trigger click
-      document.body.appendChild(input)
-      input.click()
-    })
+export default class ImagePickerService {
+  static async requestPermissions(): Promise<boolean> {
+    // Web doesn't need explicit permissions for file selection
+    return true
   }
 
-  /**
-   * Take a photo using the camera (web implementation uses file input with camera)
-   */
-  async takePhoto(options: ImagePickerOptions): Promise<ImagePickerResult> {
-    return new Promise((resolve) => {
-      // Create a file input element with camera capture
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = "image/*"
-      input.capture = "environment" // Use rear camera if available
-      input.style.display = "none"
+  static async launchImageLibraryAsync(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    try {
+      console.log("ImagePickerService.web: Starting image selection")
 
-      // Handle file selection
-      input.onchange = (event) => {
-        const target = event.target as HTMLInputElement
-        const files = target.files
+      return new Promise((resolve) => {
+        const input = document.createElement("input")
+        input.type = "file"
+        input.accept = "image/*"
+        input.multiple = false
 
-        if (!files || files.length === 0) {
+        input.onchange = async (event) => {
+          const target = event.target as HTMLInputElement
+          const file = target.files?.[0]
+
+          if (!file) {
+            resolve({ canceled: true })
+            return
+          }
+
+          try {
+            // Create object URL for the file
+            const uri = URL.createObjectURL(file)
+
+            // Get image dimensions
+            const img = new Image()
+            img.onload = () => {
+              const result: ImagePickerResult = {
+                canceled: false,
+                assets: [
+                  {
+                    uri,
+                    width: img.width,
+                    height: img.height,
+                    type: file.type,
+                  },
+                ],
+              }
+
+              console.log("ImagePickerService.web: Image selected successfully:", result)
+              resolve(result)
+            }
+
+            img.onerror = () => {
+              console.error("ImagePickerService.web: Failed to load image")
+              resolve({ canceled: true })
+            }
+
+            img.src = uri
+          } catch (error) {
+            console.error("ImagePickerService.web: Error processing file:", error)
+            resolve({ canceled: true })
+          }
+        }
+
+        input.oncancel = () => {
           resolve({ canceled: true })
-          document.body.removeChild(input)
-          return
         }
 
-        const file = files[0]
-        const reader = new FileReader()
-
-        reader.onload = (e) => {
-          const uri = e.target?.result as string
-          resolve({
-            canceled: false,
-            assets: [
-              {
-                uri,
-                type: file.type,
-                name: file.name,
-                file, // Store the actual File object for later upload
-              },
-            ],
-          })
-          document.body.removeChild(input)
-        }
-
-        reader.onerror = () => {
-          resolve({ canceled: true })
-          document.body.removeChild(input)
-        }
-
-        // Read the file as a data URL
-        reader.readAsDataURL(file)
-      }
-
-      // Handle cancellation
-      input.oncancel = () => {
-        resolve({ canceled: true })
-        document.body.removeChild(input)
-      }
-
-      // Add to DOM and trigger click
-      document.body.appendChild(input)
-      input.click()
-    })
+        // Trigger file selection
+        input.click()
+      })
+    } catch (error) {
+      console.error("ImagePickerService.web: Error launching image library:", error)
+      return { canceled: true }
+    }
   }
 
-  /**
-   * Pick an image from the gallery (alias for launchImageLibraryAsync)
-   */
-  async pickImage(options: ImagePickerOptions): Promise<ImagePickerResult> {
+  static async launchCameraAsync(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    try {
+      console.log("ImagePickerService.web: Starting camera capture")
+
+      return new Promise((resolve) => {
+        const input = document.createElement("input")
+        input.type = "file"
+        input.accept = "image/*"
+        input.capture = "environment" // Use rear camera if available
+
+        input.onchange = async (event) => {
+          const target = event.target as HTMLInputElement
+          const file = target.files?.[0]
+
+          if (!file) {
+            resolve({ canceled: true })
+            return
+          }
+
+          try {
+            const uri = URL.createObjectURL(file)
+
+            const img = new Image()
+            img.onload = () => {
+              const result: ImagePickerResult = {
+                canceled: false,
+                assets: [
+                  {
+                    uri,
+                    width: img.width,
+                    height: img.height,
+                    type: file.type,
+                  },
+                ],
+              }
+
+              console.log("ImagePickerService.web: Camera capture successful:", result)
+              resolve(result)
+            }
+
+            img.onerror = () => {
+              console.error("ImagePickerService.web: Failed to load captured image")
+              resolve({ canceled: true })
+            }
+
+            img.src = uri
+          } catch (error) {
+            console.error("ImagePickerService.web: Error processing captured file:", error)
+            resolve({ canceled: true })
+          }
+        }
+
+        input.oncancel = () => {
+          resolve({ canceled: true })
+        }
+
+        input.click()
+      })
+    } catch (error) {
+      console.error("ImagePickerService.web: Error launching camera:", error)
+      return { canceled: true }
+    }
+  }
+
+  static async pickImage(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
     return this.launchImageLibraryAsync(options)
   }
 
-  /**
-   * Request permissions - not needed for web
-   */
-  async requestMediaLibraryPermissionsAsync() {
-    return { status: "granted" }
+  static async takePhoto(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    return this.launchCameraAsync(options)
   }
 
-  /**
-   * Request camera permissions - not needed for web
-   */
-  async requestCameraPermissionsAsync() {
-    return { status: "granted" }
+  static async showImagePicker(options: ImagePickerOptions = {}): Promise<ImagePickerResult> {
+    // For web, we'll default to image library
+    // In a real implementation, you might show a modal to choose between camera and library
+    return this.launchImageLibraryAsync(options)
   }
 }
-
-// Constants to match expo-image-picker API
-export const MediaTypeOptions = {
-  Images: "Images",
-  Videos: "Videos",
-  All: "All",
-}
-
-export default new ImagePickerService()
