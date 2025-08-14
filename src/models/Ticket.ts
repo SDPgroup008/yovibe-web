@@ -1,6 +1,6 @@
 export type PaymentMethod = "mtn" | "airtel" | "card"
 export type TicketStatus = "active" | "used" | "cancelled" | "expired"
-export type TicketType = "regular" | "secure" | string // Allow custom ticket types
+export type TicketTypeId = "regular" | "secure" | string // Allow custom ticket types
 
 export interface PaymentAccount {
   type: PaymentMethod
@@ -31,7 +31,7 @@ export interface Ticket {
   buyerPhone?: string
   buyerImageUrl?: string
   quantity: number
-  ticketType: TicketType
+  ticketType: TicketTypeId
   ticketTypeName: string
   pricePerTicket: number
   totalAmount: number
@@ -49,6 +49,14 @@ export interface Ticket {
   isVerified: boolean
   createdAt: Date
   updatedAt: Date
+
+  // Legacy fields for backward compatibility
+  paymentStatus?: "pending" | "completed" | "failed" | "refunded"
+  transactionId?: string
+  qrCodeData?: string
+  isUsed?: boolean
+  usedAt?: Date | null
+  ticketId?: string
 }
 
 // Payment fee structure
