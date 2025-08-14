@@ -5,10 +5,11 @@ import { useState, useEffect } from "react"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import PaymentService from "../services/PaymentService"
-import QRCodeService from "../services/QRCodeService"
+import PaymentService from "../services/PaymentService.web"
+import QRCodeService from "../services/QRCodeService.web"
 import type { Event, TicketType } from "../models/Event"
 import type { Ticket, PaymentMethod } from "../models/Ticket"
+import { calculatePaymentFees, calculateAppCommission } from "../models/Ticket" // Importing the missing functions
 
 interface RouteParams {
   eventId: string
@@ -80,14 +81,20 @@ const TicketPurchaseScreen: React.FC = () => {
   const calculateTotal = () => {
     if (!selectedTicketType) return 0
     const subtotal = selectedTicketType.price * quantity
-    const commission = Math.round(subtotal * 0.05) // 5% commission
-    return subtotal + commission
+    const paymentFees = calculatePaymentFees(subtotal, paymentMethod)
+    return subtotal + paymentFees
   }
 
   const calculateCommission = () => {
     if (!selectedTicketType) return 0
+    const ticketPrice = selectedTicketType.price
+    return calculateAppCommission(ticketPrice) * quantity
+  }
+
+  const getPaymentFees = () => {
+    if (!selectedTicketType) return 0
     const subtotal = selectedTicketType.price * quantity
-    return Math.round(subtotal * 0.05) // 5% commission
+    return calculatePaymentFees(subtotal, paymentMethod)
   }
 
   const handlePurchase = async () => {
@@ -109,16 +116,22 @@ const TicketPurchaseScreen: React.FC = () => {
     setPurchasing(true)
 
     try {
-      const totalAmount = calculateTotal()
-      const commission = calculateCommission()
-      const eventOwnerAmount = selectedTicketType.price * quantity
+      const ticketPrice = selectedTicketType.price
+      const subtotal = ticketPrice * quantity
+      const paymentFees = getPaymentFees()
+      const totalAmount = subtotal + paymentFees
+      const appCommission = calculateCommission()
+      const sellerRevenue = subtotal - appCommission
 
       console.log("Starting ticket purchase process...")
+      console.log("Ticket price:", ticketPrice)
+      console.log("Subtotal:", subtotal)
+      console.log("Payment fees:", paymentFees)
       console.log("Total amount:", totalAmount)
-      console.log("Commission:", commission)
-      console.log("Event owner amount:", eventOwnerAmount)
+      console.log("App commission:", appCommission)
+      console.log("Seller revenue:", sellerRevenue)
 
-      // Simulate payment processing
+      // Process payment using the correct method
       const paymentResult = await PaymentService.processMTNPayment({
         amount: totalAmount,
         phoneNumber: phoneNumber.replace(/\s+/g, ""),
@@ -138,9 +151,7 @@ const TicketPurchaseScreen: React.FC = () => {
       console.log("Payment successful, transaction ID:", paymentResult.transactionId)
 
       // Generate unique ticket ID
-      const timestamp = Date.now()
-      const hash = await generateTicketHash(user.id, eventId, timestamp)
-      const ticketId = `YV_${timestamp}_${hash}`
+      const ticketId = QRCodeService.generateTicketId()
 
       console.log("Generated ticket ID:", ticketId)
 
@@ -154,7 +165,7 @@ const TicketPurchaseScreen: React.FC = () => {
         buyerPhone: phoneNumber,
         ticketType: selectedTicketType.name,
         quantity,
-        totalAmount: selectedTicketType.price * quantity,
+        totalAmount: subtotal,
         purchaseDate: new Date().toISOString(),
       })
 
@@ -172,18 +183,34 @@ const TicketPurchaseScreen: React.FC = () => {
         tickets.push({
           eventId,
           eventName: event.name,
+          eventPosterUrl: event.posterImageUrl,
           buyerId: user.id,
           buyerName: user.displayName || user.email || "Unknown",
+          buyerEmail: user.email || "",
           buyerPhone: phoneNumber,
-          ticketType: selectedTicketType.id as any,
-          ticketTypeName: selectedTicketType.name,
           quantity: 1, // Each ticket represents 1 entry
-          totalAmount: selectedTicketType.price,
-          commission,
+          ticketType: selectedTicketType.id,
+          ticketTypeName: selectedTicketType.name,
+          pricePerTicket: ticketPrice,
+          totalAmount: ticketPrice,
+          paymentFees: paymentFees / quantity, // Distribute fees across tickets
+          appCommission: calculateAppCommission(ticketPrice),
+          sellerRevenue: ticketPrice - calculateAppCommission(ticketPrice),
           paymentMethod,
-          paymentStatus: "completed",
-          qrCodeData: qrCodeResult.qrCodeData!,
+          paymentReference: paymentResult.transactionId,
+          qrCode: qrCodeResult.qrCodeImage!,
+          qrData: qrCodeResult.qrCodeData!,
+          status: "active",
           purchaseDate: new Date(),
+          validationHistory: [],
+          isVerified: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+
+          // Legacy fields for backward compatibility
+          paymentStatus: "completed",
+          transactionId: paymentResult.transactionId,
+          qrCodeData: qrCodeResult.qrCodeData!,
           isUsed: false,
           usedAt: null,
           ticketId: individualTicketId,
@@ -198,8 +225,8 @@ const TicketPurchaseScreen: React.FC = () => {
       console.log("Saved tickets to database")
 
       // Process admin commission immediately (simulate instant payment)
-      console.log("Processing admin commission:", commission)
-      await processAdminCommission(commission, paymentResult.transactionId!)
+      console.log("Processing admin commission:", appCommission)
+      await processAdminCommission(appCommission, paymentResult.transactionId!)
 
       console.log("Updated event revenue")
 
@@ -216,16 +243,6 @@ const TicketPurchaseScreen: React.FC = () => {
     } finally {
       setPurchasing(false)
     }
-  }
-
-  const generateTicketHash = async (userId: string, eventId: string, timestamp: number): Promise<string> => {
-    const data = `${userId}_${eventId}_${timestamp}`
-    const encoder = new TextEncoder()
-    const dataBuffer = encoder.encode(data)
-    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer)
-    const hashArray = Array.from(new Uint8Array(hashBuffer))
-    const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-    return hashHex.substring(0, 8).toUpperCase()
   }
 
   const processAdminCommission = async (commission: number, transactionId: string): Promise<void> => {
@@ -424,6 +441,10 @@ const TicketPurchaseScreen: React.FC = () => {
                 <span>UGX {(selectedTicketType.price * quantity).toLocaleString()}</span>
               </div>
               <div style={priceRowStyle}>
+                <span>Payment Fees</span>
+                <span>UGX {getPaymentFees().toLocaleString()}</span>
+              </div>
+              <div style={priceRowStyle}>
                 <span>App Commission (5%)</span>
                 <span>UGX {calculateCommission().toLocaleString()}</span>
               </div>
@@ -435,8 +456,9 @@ const TicketPurchaseScreen: React.FC = () => {
             <div style={commissionNoteStyle}>
               <span style={infoIconStyle}>ℹ️</span>
               <span style={commissionTextStyle}>
-                Commission is paid to admin instantly. Event owner receives UGX{" "}
-                {(selectedTicketType.price * quantity).toLocaleString()} when ticket is verified at entrance.
+                Payment fees are charged by the payment provider. App commission is paid instantly. Event owner receives
+                UGX {(selectedTicketType.price * quantity - calculateCommission()).toLocaleString()} when ticket is
+                verified at entrance.
               </span>
             </div>
           </div>
