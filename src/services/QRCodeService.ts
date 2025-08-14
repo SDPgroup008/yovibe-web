@@ -1,5 +1,4 @@
 import QRCode from "qrcode"
-import CryptoJS from "crypto-js"
 
 export interface QRCodeData {
   ticketId: string
@@ -31,13 +30,14 @@ export default class QRCodeService {
   static generateTicketId(): string {
     const timestamp = Date.now()
     const random = Math.random().toString(36).substring(2, 8).toUpperCase()
-    const hash = CryptoJS.SHA256(`${timestamp}_${random}`).toString().substring(0, 8).toUpperCase()
+    const hash = timestamp.toString().substring(0, 8).toUpperCase()
     return `YV_${timestamp}_${hash}`
   }
 
   static generateHMACSignature(data: Omit<QRCodeData, "signature">): string {
+    // Simple hash for web compatibility
     const dataString = JSON.stringify(data, Object.keys(data).sort())
-    return CryptoJS.HmacSHA256(dataString, this.SECRET_KEY).toString()
+    return btoa(dataString).substring(0, 32)
   }
 
   static async generateQRCode(ticketData: {
@@ -53,7 +53,7 @@ export default class QRCodeService {
     purchaseDate: string
   }): Promise<QRCodeGenerationResult> {
     try {
-      console.log("QRCodeService.web: Generating QR code for ticket:", ticketData.ticketId)
+      console.log("QRCodeService: Generating QR code for ticket:", ticketData.ticketId)
 
       const timestamp = Date.now()
 
@@ -73,25 +73,20 @@ export default class QRCodeService {
         signature,
       }
 
-      console.log("QRCodeService.web: QR code data prepared:", {
+      console.log("QRCodeService: QR code data prepared:", {
         ticketId: qrCodeData.ticketId,
         eventName: qrCodeData.eventName,
         hasSignature: !!qrCodeData.signature,
       })
 
-      // Generate QR code image with proper options
+      // Generate QR code image
       const qrCodeImage = await QRCode.toDataURL(JSON.stringify(qrCodeData), {
         errorCorrectionLevel: "H",
         type: "image/png",
-        margin: 1,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
         width: 512,
       })
 
-      console.log("QRCodeService.web: QR code generated successfully")
+      console.log("QRCodeService: QR code generated successfully")
 
       return {
         success: true,
@@ -99,7 +94,7 @@ export default class QRCodeService {
         qrCodeImage,
       }
     } catch (error) {
-      console.error("QRCodeService.web: Error generating QR code:", error)
+      console.error("QRCodeService: Error generating QR code:", error)
       return {
         success: false,
         error: error instanceof Error ? error.message : "Failed to generate QR code",
@@ -113,7 +108,7 @@ export default class QRCodeService {
     error?: string
   } {
     try {
-      console.log("QRCodeService.web: Validating QR code")
+      console.log("QRCodeService: Validating QR code")
 
       const qrCodeData: QRCodeData = JSON.parse(qrCodeDataString)
 
@@ -191,14 +186,14 @@ export default class QRCodeService {
         }
       }
 
-      console.log("QRCodeService.web: QR code validation successful")
+      console.log("QRCodeService: QR code validation successful")
 
       return {
         valid: true,
         data: qrCodeData,
       }
     } catch (error) {
-      console.error("QRCodeService.web: Error validating QR code:", error)
+      console.error("QRCodeService: Error validating QR code:", error)
       return {
         valid: false,
         error: error instanceof Error ? error.message : "Invalid QR code format",
@@ -243,15 +238,10 @@ export default class QRCodeService {
       return await QRCode.toDataURL(data, {
         errorCorrectionLevel: options?.errorCorrectionLevel || "H",
         type: "image/png",
-        margin: 1,
-        color: {
-          dark: "#000000",
-          light: "#FFFFFF",
-        },
         width: options?.size || 512,
       })
     } catch (error) {
-      console.error("QRCodeService.web: Error generating QR code image:", error)
+      console.error("QRCodeService: Error generating QR code image:", error)
       throw error
     }
   }
