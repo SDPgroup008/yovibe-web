@@ -2,12 +2,11 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { StyleSheet } from "react-native"
 import { useNavigation, useRoute } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import PaymentService from "../services/PaymentService.web"
-import QRCodeService from "../services/QRCodeService.web"
+import PaymentService from "../services/PaymentService"
+import QRCodeService from "../services/QRCodeService"
 import type { Event, TicketType } from "../models/Event"
 import type { Ticket, PaymentMethod } from "../models/Ticket"
 
@@ -119,20 +118,18 @@ const TicketPurchaseScreen: React.FC = () => {
       console.log("Commission:", commission)
       console.log("Event owner amount:", eventOwnerAmount)
 
-      // Create payment intent
-      const paymentIntent = await PaymentService.createPaymentIntent(totalAmount, eventId, user.id)
-
-      // Get available payment methods and find the selected one
-      const availablePaymentMethods = PaymentService.getAvailablePaymentMethods()
-      const selectedPaymentMethodObj = availablePaymentMethods.find((pm) => pm.id.includes(paymentMethod))
-
-      if (!selectedPaymentMethodObj) {
-        throw new Error("Selected payment method not available")
-      }
-
-      // Process payment
-      console.log("Processing payment with method:", selectedPaymentMethodObj.provider)
-      const paymentResult = await PaymentService.processPayment(paymentIntent.id, selectedPaymentMethodObj, totalAmount)
+      // Simulate payment processing
+      const paymentResult = await PaymentService.processMTNPayment({
+        amount: totalAmount,
+        phoneNumber: phoneNumber.replace(/\s+/g, ""),
+        eventId,
+        ticketType: selectedTicketType.name,
+        quantity,
+        buyerId: user.id,
+        buyerName: user.displayName || user.email || "Unknown User",
+        eventName: event.name,
+        paymentMethod,
+      })
 
       if (!paymentResult.success) {
         throw new Error(paymentResult.error || "Payment failed")
@@ -148,7 +145,22 @@ const TicketPurchaseScreen: React.FC = () => {
       console.log("Generated ticket ID:", ticketId)
 
       // Generate QR code data
-      const qrCodeData = await QRCodeService.generateQRCode(ticketId, eventId, user.id, selectedTicketType.id as any)
+      const qrCodeResult = await QRCodeService.generateQRCode({
+        ticketId,
+        eventId,
+        eventName: event.name,
+        buyerId: user.id,
+        buyerName: user.displayName || user.email || "Unknown User",
+        buyerPhone: phoneNumber,
+        ticketType: selectedTicketType.name,
+        quantity,
+        totalAmount: selectedTicketType.price * quantity,
+        purchaseDate: new Date().toISOString(),
+      })
+
+      if (!qrCodeResult.success) {
+        throw new Error("Failed to generate QR code")
+      }
 
       console.log("Generated QR code data")
 
@@ -156,26 +168,21 @@ const TicketPurchaseScreen: React.FC = () => {
       const tickets: Omit<Ticket, "id">[] = []
       for (let i = 0; i < quantity; i++) {
         const individualTicketId = quantity > 1 ? `${ticketId}_${i + 1}` : ticketId
-        const individualQRData =
-          quantity > 1
-            ? await QRCodeService.generateQRCode(individualTicketId, eventId, user.id, selectedTicketType.id as any)
-            : qrCodeData
 
         tickets.push({
           eventId,
           eventName: event.name,
           buyerId: user.id,
-          buyerName: user.name || user.email || "Unknown",
+          buyerName: user.displayName || user.email || "Unknown",
           buyerPhone: phoneNumber,
           ticketType: selectedTicketType.id as any,
           ticketTypeName: selectedTicketType.name,
-          price: selectedTicketType.price,
           quantity: 1, // Each ticket represents 1 entry
           totalAmount: selectedTicketType.price,
           commission,
           paymentMethod,
           paymentStatus: "completed",
-          qrCodeData: individualQRData,
+          qrCodeData: qrCodeResult.qrCodeData!,
           purchaseDate: new Date(),
           isUsed: false,
           usedAt: null,
@@ -193,13 +200,6 @@ const TicketPurchaseScreen: React.FC = () => {
       // Process admin commission immediately (simulate instant payment)
       console.log("Processing admin commission:", commission)
       await processAdminCommission(commission, paymentResult.transactionId!)
-
-      // Update event revenue
-      await firebaseService.updateEventRevenue(eventId, {
-        totalRevenue: eventOwnerAmount,
-        appCommission: commission,
-        netRevenue: eventOwnerAmount, // Event owner gets this when ticket is verified
-      })
 
       console.log("Updated event revenue")
 
@@ -233,21 +233,13 @@ const TicketPurchaseScreen: React.FC = () => {
     console.log(`💰 Admin Commission Processed: UGX ${commission.toLocaleString()}`)
     console.log(`Transaction ID: ${transactionId}`)
     console.log("✅ Commission deposited to admin account instantly")
-
-    // In production, this would call the actual MTN disbursement API
-    // await mtnDisbursementAPI.sendMoney({
-    //   amount: commission,
-    //   phoneNumber: ADMIN_PHONE_NUMBER,
-    //   reference: `COMM_${transactionId}`,
-    //   description: "YoVibe App Commission"
-    // })
   }
 
   if (loading) {
     return (
-      <div style={styles.container}>
-        <div style={styles.loadingContainer}>
-          <div style={styles.loadingText}>Loading event details...</div>
+      <div style={containerStyle}>
+        <div style={loadingContainerStyle}>
+          <div style={loadingTextStyle}>Loading event details...</div>
         </div>
       </div>
     )
@@ -255,9 +247,9 @@ const TicketPurchaseScreen: React.FC = () => {
 
   if (!event) {
     return (
-      <div style={styles.container}>
-        <div style={styles.errorContainer}>
-          <div style={styles.errorText}>Event not found</div>
+      <div style={containerStyle}>
+        <div style={errorContainerStyle}>
+          <div style={errorTextStyle}>Event not found</div>
         </div>
       </div>
     )
@@ -267,35 +259,35 @@ const TicketPurchaseScreen: React.FC = () => {
 
   if (availableTickets.length === 0) {
     return (
-      <div style={styles.container}>
-        <div style={styles.errorContainer}>
-          <div style={styles.errorText}>No tickets available for this event</div>
+      <div style={containerStyle}>
+        <div style={errorContainerStyle}>
+          <div style={errorTextStyle}>No tickets available for this event</div>
         </div>
       </div>
     )
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.content}>
-        <h1 style={styles.title}>Purchase Tickets</h1>
+    <div style={containerStyle}>
+      <div style={contentStyle}>
+        <h1 style={titleStyle}>Purchase Tickets</h1>
 
         {/* Event Info */}
-        <div style={styles.eventCard}>
-          <img src={event.posterImageUrl || "/placeholder.svg"} style={styles.eventImage} alt={event.name} />
-          <div style={styles.eventInfo}>
-            <h2 style={styles.eventName}>{event.name}</h2>
-            <div style={styles.eventDetails}>
-              <div style={styles.eventDetail}>
-                <span style={styles.icon}>📍</span>
+        <div style={eventCardStyle}>
+          <img src={event.posterImageUrl || "/placeholder.svg"} style={eventImageStyle} alt={event.name} />
+          <div style={eventInfoStyle}>
+            <h2 style={eventNameStyle}>{event.name}</h2>
+            <div style={eventDetailsStyle}>
+              <div style={eventDetailStyle}>
+                <span style={iconStyle}>📍</span>
                 <span>{event.location}</span>
               </div>
-              <div style={styles.eventDetail}>
-                <span style={styles.icon}>📅</span>
+              <div style={eventDetailStyle}>
+                <span style={iconStyle}>📅</span>
                 <span>{new Date(event.date).toLocaleDateString()}</span>
               </div>
-              <div style={styles.eventDetail}>
-                <span style={styles.icon}>🕐</span>
+              <div style={eventDetailStyle}>
+                <span style={iconStyle}>🕐</span>
                 <span>{new Date(event.date).toLocaleTimeString()}</span>
               </div>
             </div>
@@ -303,27 +295,27 @@ const TicketPurchaseScreen: React.FC = () => {
         </div>
 
         {/* Ticket Selection */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Select Ticket Type</h3>
-          <div style={styles.ticketTypes}>
+        <div style={sectionStyle}>
+          <h3 style={sectionTitleStyle}>Select Ticket Type</h3>
+          <div style={ticketTypesStyle}>
             {availableTickets.map((ticket) => (
               <div
                 key={ticket.id}
                 style={{
-                  ...styles.ticketTypeCard,
-                  ...(selectedTicketType?.id === ticket.id ? styles.ticketTypeCardSelected : {}),
+                  ...ticketTypeCardStyle,
+                  ...(selectedTicketType?.id === ticket.id ? ticketTypeCardSelectedStyle : {}),
                 }}
                 onClick={() => setSelectedTicketType(ticket)}
               >
-                <div style={styles.ticketTypeHeader}>
-                  <span style={styles.ticketTypeName}>{ticket.name}</span>
-                  <span style={styles.ticketTypePrice}>UGX {ticket.price.toLocaleString()}</span>
+                <div style={ticketTypeHeaderStyle}>
+                  <span style={ticketTypeNameStyle}>{ticket.name}</span>
+                  <span style={ticketTypePriceStyle}>UGX {ticket.price.toLocaleString()}</span>
                 </div>
-                <div style={styles.ticketTypeDescription}>{ticket.description}</div>
+                <div style={ticketTypeDescriptionStyle}>{ticket.description}</div>
                 {ticket.id === "secure" && (
-                  <div style={styles.secureNote}>
-                    <span style={styles.secureIcon}>🔒</span>
-                    <span style={styles.secureText}>Includes photo verification at entrance</span>
+                  <div style={secureNoteStyle}>
+                    <span style={secureIconStyle}>🔒</span>
+                    <span style={secureTextStyle}>Includes photo verification at entrance</span>
                   </div>
                 )}
               </div>
@@ -332,19 +324,19 @@ const TicketPurchaseScreen: React.FC = () => {
         </div>
 
         {/* Quantity Selection */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Quantity</h3>
-          <div style={styles.quantityContainer}>
+        <div style={sectionStyle}>
+          <h3 style={sectionTitleStyle}>Quantity</h3>
+          <div style={quantityContainerStyle}>
             <button
-              style={styles.quantityButton}
+              style={quantityButtonStyle}
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
               disabled={quantity <= 1}
             >
               -
             </button>
-            <span style={styles.quantityText}>{quantity}</span>
+            <span style={quantityTextStyle}>{quantity}</span>
             <button
-              style={styles.quantityButton}
+              style={quantityButtonStyle}
               onClick={() => setQuantity(Math.min(10, quantity + 1))}
               disabled={quantity >= 10}
             >
@@ -354,13 +346,13 @@ const TicketPurchaseScreen: React.FC = () => {
         </div>
 
         {/* Payment Method */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Payment Method</h3>
-          <div style={styles.paymentMethods}>
+        <div style={sectionStyle}>
+          <h3 style={sectionTitleStyle}>Payment Method</h3>
+          <div style={paymentMethodsStyle}>
             <div
               style={{
-                ...styles.paymentMethodCard,
-                ...(paymentMethod === "mtn" ? styles.paymentMethodCardSelected : {}),
+                ...paymentMethodCardStyle,
+                ...(paymentMethod === "mtn" ? paymentMethodCardSelectedStyle : {}),
               }}
               onClick={() => {
                 setPaymentMethod("mtn")
@@ -372,13 +364,13 @@ const TicketPurchaseScreen: React.FC = () => {
                 }
               }}
             >
-              <span style={styles.paymentIcon}>📱</span>
-              <span style={styles.paymentMethodName}>MTN Mobile Money</span>
+              <span style={paymentIconStyle}>📱</span>
+              <span style={paymentMethodNameStyle}>MTN Mobile Money</span>
             </div>
             <div
               style={{
-                ...styles.paymentMethodCard,
-                ...(paymentMethod === "airtel" ? styles.paymentMethodCardSelected : {}),
+                ...paymentMethodCardStyle,
+                ...(paymentMethod === "airtel" ? paymentMethodCardSelectedStyle : {}),
               }}
               onClick={() => {
                 setPaymentMethod("airtel")
@@ -390,17 +382,17 @@ const TicketPurchaseScreen: React.FC = () => {
                 }
               }}
             >
-              <span style={styles.paymentIcon}>📱</span>
-              <span style={styles.paymentMethodName}>Airtel Money</span>
+              <span style={paymentIconStyle}>📱</span>
+              <span style={paymentMethodNameStyle}>Airtel Money</span>
             </div>
           </div>
         </div>
 
         {/* Phone Number Input */}
-        <div style={styles.section}>
-          <h3 style={styles.sectionTitle}>Phone Number</h3>
+        <div style={sectionStyle}>
+          <h3 style={sectionTitleStyle}>Phone Number</h3>
           <input
-            style={styles.phoneInput}
+            style={phoneInputStyle}
             type="tel"
             placeholder={paymentMethod === "mtn" ? "077XXXXXXX or 078XXXXXXX" : "070XXXXXXX or 075XXXXXXX"}
             value={phoneNumber}
@@ -417,32 +409,32 @@ const TicketPurchaseScreen: React.FC = () => {
               }
             }}
           />
-          <div style={styles.phoneHint}>
+          <div style={phoneHintStyle}>
             {paymentMethod === "mtn" ? "MTN numbers: 077, 078, 076" : "Airtel numbers: 070, 075"}
           </div>
         </div>
 
         {/* Price Breakdown */}
         {selectedTicketType && (
-          <div style={styles.section}>
-            <h3 style={styles.sectionTitle}>Price Breakdown</h3>
-            <div style={styles.priceBreakdown}>
-              <div style={styles.priceRow}>
+          <div style={sectionStyle}>
+            <h3 style={sectionTitleStyle}>Price Breakdown</h3>
+            <div style={priceBreakdownStyle}>
+              <div style={priceRowStyle}>
                 <span>Ticket Price ({quantity}x)</span>
                 <span>UGX {(selectedTicketType.price * quantity).toLocaleString()}</span>
               </div>
-              <div style={styles.priceRow}>
+              <div style={priceRowStyle}>
                 <span>App Commission (5%)</span>
                 <span>UGX {calculateCommission().toLocaleString()}</span>
               </div>
-              <div style={styles.priceRowTotal}>
+              <div style={priceRowTotalStyle}>
                 <span>Total Amount</span>
                 <span>UGX {calculateTotal().toLocaleString()}</span>
               </div>
             </div>
-            <div style={styles.commissionNote}>
-              <span style={styles.infoIcon}>ℹ️</span>
-              <span style={styles.commissionText}>
+            <div style={commissionNoteStyle}>
+              <span style={infoIconStyle}>ℹ️</span>
+              <span style={commissionTextStyle}>
                 Commission is paid to admin instantly. Event owner receives UGX{" "}
                 {(selectedTicketType.price * quantity).toLocaleString()} when ticket is verified at entrance.
               </span>
@@ -453,19 +445,19 @@ const TicketPurchaseScreen: React.FC = () => {
         {/* Purchase Button */}
         <button
           style={{
-            ...styles.purchaseButton,
-            ...(purchasing || !selectedTicketType || !phoneNumber.trim() ? styles.purchaseButtonDisabled : {}),
+            ...purchaseButtonStyle,
+            ...(purchasing || !selectedTicketType || !phoneNumber.trim() ? purchaseButtonDisabledStyle : {}),
           }}
           onClick={handlePurchase}
           disabled={purchasing || !selectedTicketType || !phoneNumber.trim()}
         >
           {purchasing ? (
-            <div style={styles.purchaseButtonContent}>
+            <div style={purchaseButtonContentStyle}>
               <span>Processing Payment...</span>
             </div>
           ) : (
-            <div style={styles.purchaseButtonContent}>
-              <span style={styles.purchaseIcon}>🎫</span>
+            <div style={purchaseButtonContentStyle}>
+              <span style={purchaseIconStyle}>🎫</span>
               <span>
                 Purchase Ticket{quantity > 1 ? "s" : ""} - UGX {calculateTotal().toLocaleString()}
               </span>
@@ -477,259 +469,322 @@ const TicketPurchaseScreen: React.FC = () => {
   )
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#000",
-  },
-  content: {
-    padding: 20,
-    maxWidth: 600,
-    alignSelf: "center",
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    color: "#fff",
-    fontSize: 18,
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  errorText: {
-    color: "#ef4444",
-    fontSize: 18,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 20,
-  },
-  eventCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    overflow: "hidden",
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  eventImage: {
-    width: "100%",
-    height: 200,
-    resizeMode: "cover",
-  },
-  eventInfo: {
-    padding: 16,
-  },
-  eventName: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: 12,
-  },
-  eventDetails: {
-    gap: 8,
-  },
-  eventDetail: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    color: "#ccc",
-  },
-  icon: {
-    fontSize: 16,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#fff",
-    marginBottom: 12,
-  },
-  ticketTypes: {
-    gap: 12,
-  },
-  ticketTypeCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#333",
-  },
-  ticketTypeCardSelected: {
-    borderColor: "#6366f1",
-    backgroundColor: "#1e1b4b",
-  },
-  ticketTypeHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  ticketTypeName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  ticketTypePrice: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#6366f1",
-  },
-  ticketTypeDescription: {
-    color: "#ccc",
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  secureNote: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-    backgroundColor: "#065f46",
-    padding: 8,
-    borderRadius: 6,
-  },
-  secureIcon: {
-    fontSize: 14,
-  },
-  secureText: {
-    color: "#10b981",
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  quantityContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 16,
-    justifyContent: "center",
-  },
-  quantityButton: {
-    backgroundColor: "#6366f1",
-    borderRadius: 8,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  quantityText: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#fff",
-    minWidth: 40,
-    textAlign: "center",
-  },
-  paymentMethods: {
-    gap: 12,
-  },
-  paymentMethodCard: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 2,
-    borderColor: "#333",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  paymentMethodCardSelected: {
-    borderColor: "#6366f1",
-    backgroundColor: "#1e1b4b",
-  },
-  paymentIcon: {
-    fontSize: 24,
-  },
-  paymentMethodName: {
-    fontSize: 16,
-    fontWeight: "500",
-    color: "#fff",
-  },
-  phoneInput: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 12,
-    color: "#fff",
-    borderWidth: 1,
-    borderColor: "#333",
-    fontSize: 16,
-  },
-  phoneHint: {
-    color: "#666",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  priceBreakdown: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 8,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  priceRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    color: "#ccc",
-  },
-  priceRowTotal: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#333",
-    marginTop: 8,
-    paddingTop: 16,
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-  },
-  commissionNote: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "#1e3a8a",
-    padding: 12,
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  infoIcon: {
-    fontSize: 16,
-    marginTop: 2,
-  },
-  commissionText: {
-    color: "#93c5fd",
-    fontSize: 12,
-    lineHeight: 16.8,
-  },
-  purchaseButton: {
-    backgroundColor: "#6366f1",
-    borderRadius: 8,
-    padding: 16,
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  purchaseButtonDisabled: {
-    backgroundColor: "#333",
-  },
-  purchaseButtonContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-  },
-  purchaseIcon: {
-    fontSize: 20,
-  },
-})
+// CSS-in-JS styles (avoiding border and margin)
+const containerStyle: React.CSSProperties = {
+  flex: 1,
+  backgroundColor: "#000",
+  minHeight: "100vh",
+}
+
+const contentStyle: React.CSSProperties = {
+  padding: "20px",
+  maxWidth: "600px",
+  marginLeft: "auto",
+  marginRight: "auto",
+}
+
+const loadingContainerStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  height: "50vh",
+}
+
+const loadingTextStyle: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "18px",
+}
+
+const errorContainerStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "center",
+  alignItems: "center",
+  height: "50vh",
+}
+
+const errorTextStyle: React.CSSProperties = {
+  color: "#ef4444",
+  fontSize: "18px",
+}
+
+const titleStyle: React.CSSProperties = {
+  fontSize: "24px",
+  fontWeight: "bold",
+  color: "#fff",
+  marginBottom: "20px",
+}
+
+const eventCardStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "12px",
+  overflow: "hidden",
+  marginBottom: "24px",
+  outline: "1px solid #333",
+}
+
+const eventImageStyle: React.CSSProperties = {
+  width: "100%",
+  height: "200px",
+  objectFit: "cover",
+}
+
+const eventInfoStyle: React.CSSProperties = {
+  padding: "16px",
+}
+
+const eventNameStyle: React.CSSProperties = {
+  fontSize: "20px",
+  fontWeight: "bold",
+  color: "#fff",
+  marginBottom: "12px",
+}
+
+const eventDetailsStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "8px",
+}
+
+const eventDetailStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  color: "#ccc",
+}
+
+const iconStyle: React.CSSProperties = {
+  fontSize: "16px",
+}
+
+const sectionStyle: React.CSSProperties = {
+  marginBottom: "24px",
+}
+
+const sectionTitleStyle: React.CSSProperties = {
+  fontSize: "18px",
+  fontWeight: "600",
+  color: "#fff",
+  marginBottom: "12px",
+}
+
+const ticketTypesStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+}
+
+const ticketTypeCardStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "16px",
+  outline: "2px solid #333",
+  cursor: "pointer",
+  transition: "all 0.2s ease",
+}
+
+const ticketTypeCardSelectedStyle: React.CSSProperties = {
+  backgroundColor: "#1e1b4b",
+  outlineColor: "#6366f1",
+}
+
+const ticketTypeHeaderStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  marginBottom: "8px",
+}
+
+const ticketTypeNameStyle: React.CSSProperties = {
+  fontSize: "16px",
+  fontWeight: "600",
+  color: "#fff",
+}
+
+const ticketTypePriceStyle: React.CSSProperties = {
+  fontSize: "16px",
+  fontWeight: "bold",
+  color: "#6366f1",
+}
+
+const ticketTypeDescriptionStyle: React.CSSProperties = {
+  color: "#ccc",
+  fontSize: "14px",
+  marginBottom: "8px",
+}
+
+const secureNoteStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  backgroundColor: "#065f46",
+  padding: "8px",
+  borderRadius: "6px",
+}
+
+const secureIconStyle: React.CSSProperties = {
+  fontSize: "14px",
+}
+
+const secureTextStyle: React.CSSProperties = {
+  color: "#10b981",
+  fontSize: "12px",
+  fontWeight: "500",
+}
+
+const quantityContainerStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  gap: "16px",
+  justifyContent: "center",
+}
+
+const quantityButtonStyle: React.CSSProperties = {
+  backgroundColor: "#6366f1",
+  borderRadius: "8px",
+  width: "40px",
+  height: "40px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  color: "#fff",
+  fontSize: "18px",
+  fontWeight: "bold",
+  cursor: "pointer",
+}
+
+const quantityTextStyle: React.CSSProperties = {
+  fontSize: "20px",
+  fontWeight: "bold",
+  color: "#fff",
+  minWidth: "40px",
+  textAlign: "center",
+}
+
+const paymentMethodsStyle: React.CSSProperties = {
+  display: "flex",
+  flexDirection: "column",
+  gap: "12px",
+}
+
+const paymentMethodCardStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "16px",
+  outline: "2px solid #333",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  gap: "12px",
+  transition: "all 0.2s ease",
+}
+
+const paymentMethodCardSelectedStyle: React.CSSProperties = {
+  backgroundColor: "#1e1b4b",
+  outlineColor: "#6366f1",
+}
+
+const paymentIconStyle: React.CSSProperties = {
+  fontSize: "24px",
+}
+
+const paymentMethodNameStyle: React.CSSProperties = {
+  fontSize: "16px",
+  fontWeight: "500",
+  color: "#fff",
+}
+
+const phoneInputStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "12px",
+  color: "#fff",
+  outline: "1px solid #333",
+  fontSize: "16px",
+  width: "100%",
+  boxSizing: "border-box",
+}
+
+const phoneHintStyle: React.CSSProperties = {
+  color: "#666",
+  fontSize: "12px",
+  marginTop: "4px",
+}
+
+const priceBreakdownStyle: React.CSSProperties = {
+  backgroundColor: "#1a1a1a",
+  borderRadius: "8px",
+  padding: "16px",
+  outline: "1px solid #333",
+}
+
+const priceRowStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingTop: "8px",
+  paddingBottom: "8px",
+  color: "#ccc",
+}
+
+const priceRowTotalStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  alignItems: "center",
+  paddingTop: "16px",
+  paddingBottom: "8px",
+  marginTop: "8px",
+  fontSize: "18px",
+  fontWeight: "bold",
+  color: "#fff",
+  borderTop: "1px solid #333",
+}
+
+const commissionNoteStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: "8px",
+  backgroundColor: "#1e3a8a",
+  padding: "12px",
+  borderRadius: "8px",
+  marginTop: "12px",
+}
+
+const infoIconStyle: React.CSSProperties = {
+  fontSize: "16px",
+  marginTop: "2px",
+}
+
+const commissionTextStyle: React.CSSProperties = {
+  color: "#93c5fd",
+  fontSize: "12px",
+  lineHeight: "1.4",
+}
+
+const purchaseButtonStyle: React.CSSProperties = {
+  backgroundColor: "#6366f1",
+  borderRadius: "8px",
+  padding: "16px",
+  width: "100%",
+  cursor: "pointer",
+  fontSize: "16px",
+  fontWeight: "600",
+  color: "#fff",
+}
+
+const purchaseButtonDisabledStyle: React.CSSProperties = {
+  backgroundColor: "#333",
+  cursor: "not-allowed",
+}
+
+const purchaseButtonContentStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: "8px",
+}
+
+const purchaseIconStyle: React.CSSProperties = {
+  fontSize: "20px",
+}
 
 export default TicketPurchaseScreen
