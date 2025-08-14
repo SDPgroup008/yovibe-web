@@ -2,23 +2,11 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  ScrollView,
-  Alert,
-  Image,
-  StyleSheet,
-  Switch,
-  Platform,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
+import { View, Text, TextInput, TouchableOpacity, ScrollView, Alert, Image, StyleSheet, Switch } from "react-native"
 import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
-import imagePickerService from "../services/ImagePickerService"
+import { ImagePickerService } from "../services/ImagePickerService"
 import type { Event, TicketType, PaymentAccount } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import type { PaymentMethod } from "../models/Ticket"
@@ -96,51 +84,19 @@ const AddEventScreen: React.FC = () => {
 
   const handleImagePicker = async () => {
     try {
-      console.log("Opening image picker...")
-
-      // Use the service instance directly
-      const result = await imagePickerService.pickImage({
+      const result = await ImagePickerService.pickImage({
         mediaTypes: "Images",
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
       })
 
-      console.log("Image picker result:", result)
-
       if (result && !result.canceled && result.assets?.[0]) {
         setPosterImage(result.assets[0].uri)
-        console.log("Poster image set:", result.assets[0].uri)
       }
     } catch (error) {
       console.error("Error picking image:", error)
       Alert.alert("Error", "Failed to pick image")
-    }
-  }
-
-  const handleDatePress = () => {
-    // For web, we'll use a simple prompt. In a real app, you'd use a proper date picker
-    if (Platform.OS === "web") {
-      const dateInput = prompt("Enter date (YYYY-MM-DD):", date)
-      if (dateInput) {
-        setDate(dateInput)
-      }
-    } else {
-      // For mobile, you would integrate with a date picker library like @react-native-community/datetimepicker
-      Alert.alert("Date Picker", "Date picker integration needed for mobile")
-    }
-  }
-
-  const handleTimePress = () => {
-    // For web, we'll use a simple prompt. In a real app, you'd use a proper time picker
-    if (Platform.OS === "web") {
-      const timeInput = prompt("Enter time (HH:MM):", time)
-      if (timeInput) {
-        setTime(timeInput)
-      }
-    } else {
-      // For mobile, you would integrate with a time picker
-      Alert.alert("Time Picker", "Time picker integration needed for mobile")
     }
   }
 
@@ -193,10 +149,10 @@ const AddEventScreen: React.FC = () => {
   const validateAccountNumber = (type: PaymentMethod, accountNumber: string): boolean => {
     switch (type) {
       case "mtn":
-        return /^(256)?(76|77|78|79)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
+        return /^(077|078|076)\d{7}$/.test(accountNumber)
       case "airtel":
-        return /^(256)?(70|74|75)\d{7}$/.test(accountNumber.replace(/\s/g, ""))
-      case "card":
+        return /^(070|075)\d{7}$/.test(accountNumber)
+      case "bank":
         return accountNumber.length >= 10 && accountNumber.length <= 20
       default:
         return false
@@ -328,19 +284,20 @@ const AddEventScreen: React.FC = () => {
           />
 
           <View style={styles.row}>
-            <TouchableOpacity style={[styles.input, styles.halfInput, styles.dateTimeInput]} onPress={handleDatePress}>
-              <View style={styles.dateTimeContent}>
-                <Ionicons name="calendar-outline" size={20} color="#666" />
-                <Text style={[styles.dateTimeText, !date && styles.placeholderText]}>{date || "Select Date"}</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.input, styles.halfInput, styles.dateTimeInput]} onPress={handleTimePress}>
-              <View style={styles.dateTimeContent}>
-                <Ionicons name="time-outline" size={20} color="#666" />
-                <Text style={[styles.dateTimeText, !time && styles.placeholderText]}>{time || "Select Time"}</Text>
-              </View>
-            </TouchableOpacity>
+            <TextInput
+              style={[styles.input, styles.halfInput]}
+              placeholder="Date (YYYY-MM-DD)"
+              value={date}
+              onChangeText={setDate}
+              placeholderTextColor="#666"
+            />
+            <TextInput
+              style={[styles.input, styles.halfInput]}
+              placeholder="Time (HH:MM)"
+              value={time}
+              onChangeText={setTime}
+              placeholderTextColor="#666"
+            />
           </View>
 
           <TextInput
@@ -370,7 +327,6 @@ const AddEventScreen: React.FC = () => {
             <Text style={selectedVenue ? styles.dropdownText : styles.dropdownPlaceholder}>
               {selectedVenue ? selectedVenue.name : "Select Venue"}
             </Text>
-            <Ionicons name={showVenueDropdown ? "chevron-up" : "chevron-down"} size={20} color="#666" />
           </TouchableOpacity>
 
           {showVenueDropdown && (
@@ -397,10 +353,9 @@ const AddEventScreen: React.FC = () => {
           <Text style={styles.sectionTitle}>Event Poster</Text>
           <TouchableOpacity style={styles.imageButton} onPress={handleImagePicker}>
             {posterImage ? (
-              <Image source={{ uri: posterImage }} style={styles.posterPreview} resizeMode="cover" />
+              <Image source={{ uri: posterImage }} style={styles.posterPreview} />
             ) : (
               <View style={styles.imagePlaceholder}>
-                <Ionicons name="image-outline" size={48} color="#666" />
                 <Text style={styles.imagePlaceholderText}>Tap to select poster image</Text>
               </View>
             )}
@@ -412,8 +367,7 @@ const AddEventScreen: React.FC = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Ticket Types</Text>
             <TouchableOpacity style={styles.addButton} onPress={addTicketType}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.addButtonText}>Add Type</Text>
+              <Text style={styles.addButtonText}>+ Add Type</Text>
             </TouchableOpacity>
           </View>
 
@@ -429,7 +383,7 @@ const AddEventScreen: React.FC = () => {
                 />
                 {index > 1 && ( // Don't allow removing Regular and Secure tickets
                   <TouchableOpacity style={styles.removeButton} onPress={() => removeTicketType(index)}>
-                    <Ionicons name="close" size={16} color="#fff" />
+                    <Text style={styles.removeButtonText}>×</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -471,28 +425,18 @@ const AddEventScreen: React.FC = () => {
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Payment Accounts</Text>
             <TouchableOpacity style={styles.addButton} onPress={() => setShowAddPaymentAccount(true)}>
-              <Ionicons name="add" size={16} color="#fff" />
-              <Text style={styles.addButtonText}>Add Account</Text>
+              <Text style={styles.addButtonText}>+ Add Account</Text>
             </TouchableOpacity>
           </View>
 
           {paymentAccounts.map((account, index) => (
             <View key={index} style={styles.paymentAccountCard}>
               <View style={styles.paymentAccountHeader}>
-                <View style={styles.paymentAccountInfo}>
-                  <Ionicons
-                    name={
-                      account.type === "mtn" ? "phone-portrait" : account.type === "airtel" ? "phone-portrait" : "card"
-                    }
-                    size={20}
-                    color="#2196F3"
-                  />
-                  <Text style={styles.paymentAccountType}>
-                    {account.type.toUpperCase()} - {account.accountName}
-                  </Text>
-                </View>
+                <Text style={styles.paymentAccountType}>
+                  {account.type.toUpperCase()} - {account.accountName}
+                </Text>
                 <TouchableOpacity style={styles.removeButton} onPress={() => removePaymentAccount(index)}>
-                  <Ionicons name="close" size={16} color="#fff" />
+                  <Text style={styles.removeButtonText}>×</Text>
                 </TouchableOpacity>
               </View>
               <Text style={styles.paymentAccountNumber}>{account.accountNumber}</Text>
@@ -504,7 +448,7 @@ const AddEventScreen: React.FC = () => {
               <Text style={styles.formTitle}>Add Payment Account</Text>
 
               <View style={styles.paymentTypeButtons}>
-                {(["mtn", "airtel", "card"] as PaymentMethod[]).map((type) => (
+                {(["mtn", "airtel", "bank"] as PaymentMethod[]).map((type) => (
                   <TouchableOpacity
                     key={type}
                     style={[
@@ -527,10 +471,10 @@ const AddEventScreen: React.FC = () => {
 
               <TextInput
                 style={styles.input}
-                placeholder={newPaymentAccount.type === "card" ? "Card Number" : "Phone Number"}
+                placeholder={newPaymentAccount.type === "bank" ? "Account Number" : "Phone Number"}
                 value={newPaymentAccount.accountNumber}
                 onChangeText={(value) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: value })}
-                keyboardType={newPaymentAccount.type === "card" ? "default" : "phone-pad"}
+                keyboardType={newPaymentAccount.type === "bank" ? "default" : "phone-pad"}
                 placeholderTextColor="#666"
               />
 
@@ -616,21 +560,6 @@ const styles = StyleSheet.create({
   halfInput: {
     flex: 1,
   },
-  dateTimeInput: {
-    justifyContent: "center",
-  },
-  dateTimeContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  dateTimeText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  placeholderText: {
-    color: "#666",
-  },
   switchRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -647,9 +576,6 @@ const styles = StyleSheet.create({
     padding: 12,
     borderWidth: 1,
     borderColor: "#333",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
   },
   dropdownText: {
     color: "#fff",
@@ -663,7 +589,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
     borderWidth: 1,
     borderColor: "#333",
-    maxHeight: 200,
   },
   dropdownItem: {
     padding: 12,
@@ -686,6 +611,7 @@ const styles = StyleSheet.create({
   posterPreview: {
     width: "100%",
     height: 200,
+    resizeMode: "cover",
   },
   imagePlaceholder: {
     backgroundColor: "#1a1a1a",
@@ -695,21 +621,16 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: "#333",
     borderStyle: "dashed",
-    borderRadius: 8,
   },
   imagePlaceholderText: {
     color: "#666",
     fontSize: 16,
-    marginTop: 8,
   },
   addButton: {
     backgroundColor: "#6366f1",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
   },
   addButtonText: {
     color: "#fff",
@@ -778,6 +699,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
+  removeButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
   paymentAccountCard: {
     backgroundColor: "#1a1a1a",
     borderRadius: 8,
@@ -791,11 +717,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  paymentAccountInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
   paymentAccountType: {
     color: "#fff",
     fontSize: 16,
@@ -805,7 +726,6 @@ const styles = StyleSheet.create({
     color: "#666",
     fontSize: 14,
     marginTop: 4,
-    marginLeft: 28,
   },
   addPaymentForm: {
     backgroundColor: "#1a1a1a",
