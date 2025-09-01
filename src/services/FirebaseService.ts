@@ -1297,10 +1297,7 @@ class FirebaseService {
         createdBy: data.createdBy,
         createdByType: data.createdByType,
         
-        paymentAccounts: data.paymentAccounts || [],
-        totalRevenue: data.totalRevenue || 0,
-        appCommission: data.appCommission || 0,
-        netRevenue: data.netRevenue || 0,
+
       }
     } catch (error) {
       console.error("Error getting event by ID:", error)
