@@ -17,10 +17,8 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
-import TicketService from "../services/TicketService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
-import type { Ticket } from "../models/Ticket"
 import type { EventDetailScreenProps } from "../navigation/types"
 
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
@@ -31,8 +29,6 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [isGoing, setIsGoing] = useState(false)
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
-  const [eventTickets, setEventTickets] = useState<Ticket[]>([])
-  const [showTicketsList, setShowTicketsList] = useState(false)
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -60,17 +56,6 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
         // Set attendee count
         setAttendeeCount(eventData?.attendees?.length || 0)
-
-        // Load tickets if user is event owner
-        if (user && eventData && eventData.createdBy === user.id) {
-          try {
-            const tickets = await TicketService.getTicketsByEvent(eventId)
-            setEventTickets(tickets)
-          } catch (error) {
-            console.error("Error loading event tickets:", error)
-            // Don't show error to user, just log it
-          }
-        }
       } catch (error) {
         console.error("Error loading event details:", error)
         Alert.alert("Error", "Failed to load event details")
@@ -164,55 +149,6 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     return date.toLocaleDateString("en-US", options).toUpperCase()
   }
 
-  const renderTicketsList = () => {
-    const totalRevenue = eventTickets.reduce((sum, ticket) => sum + (ticket.sellerRevenue || 0), 0)
-    const totalTickets = eventTickets.reduce((sum, ticket) => sum + ticket.quantity, 0)
-
-    return (
-      <Modal visible={showTicketsList} animationType="slide" presentationStyle="pageSheet">
-        <View style={styles.ticketsModal}>
-          <View style={styles.ticketsHeader}>
-            <Text style={styles.ticketsTitle}>Ticket Sales</Text>
-            <TouchableOpacity onPress={() => setShowTicketsList(false)}>
-              <Ionicons name="close" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.ticketsStats}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{totalTickets}</Text>
-              <Text style={styles.statLabel}>Tickets Sold</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>UGX {totalRevenue.toLocaleString()}</Text>
-              <Text style={styles.statLabel}>Your Revenue</Text>
-            </View>
-          </View>
-
-          <ScrollView style={styles.ticketsList}>
-            {eventTickets.map((ticket) => (
-              <View key={ticket.id} style={styles.ticketItem}>
-                <View style={styles.ticketInfo}>
-                  <Text style={styles.ticketBuyer}>{ticket.buyerName}</Text>
-                  <Text style={styles.ticketEmail}>{ticket.buyerEmail}</Text>
-                  <Text style={styles.ticketDate}>Purchased: {ticket.purchaseDate.toLocaleDateString()}</Text>
-                  <Text style={styles.ticketPayment}>Payment: {ticket.paymentMethod}</Text>
-                </View>
-                <View style={styles.ticketDetails}>
-                  <Text style={styles.ticketQuantity}>{ticket.quantity}x</Text>
-                  <Text style={styles.ticketAmount}>UGX {(ticket.sellerRevenue || 0).toLocaleString()}</Text>
-                  <View style={[styles.ticketStatus, ticket.status === "used" && styles.ticketStatusUsed]}>
-                    <Text style={styles.ticketStatusText}>{ticket.status === "used" ? "Used" : "Active"}</Text>
-                  </View>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      </Modal>
-    )
-  }
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -294,24 +230,6 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           </TouchableOpacity>
         </View>
 
-        {/* Event Owner Controls */}
-        {isEventOwner && (
-          <View style={styles.ownerControls}>
-            <TouchableOpacity style={styles.ownerButton} onPress={() => setShowTicketsList(true)}>
-              <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.ownerButtonText}>View Ticket Sales ({eventTickets.length})</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.scannerButton}
-              onPress={() => navigation.navigate("TicketScanner", { eventId: event.id })}
-            >
-              <Ionicons name="scan" size={20} color="#FFFFFF" />
-              <Text style={styles.ownerButtonText}>Ticket Scanner</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
         {user?.userType === "admin" && (
           <TouchableOpacity
             style={styles.deleteButton}
@@ -343,11 +261,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         <TouchableOpacity
           style={styles.venueContainer}
           onPress={() => {
-            // Use the correct navigation approach for cross-stack navigation
-            navigation.navigate("Venues", {
-              screen: "VenueDetail",
-              params: { venueId: event.venueId },
-            })
+            navigation.navigate("VenueDetail", { venueId: event.venueId })
           }}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
@@ -376,8 +290,6 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           <Text style={styles.buttonText}>Contact for Tickets</Text>
         </TouchableOpacity>
       </View>
-
-      {renderTicketsList()}
     </ScrollView>
   )
 }
@@ -512,33 +424,6 @@ const styles = StyleSheet.create({
   goingButtonText: {
     color: "#FFFFFF",
   },
-  ownerControls: {
-    marginBottom: 20,
-  },
-  ownerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginBottom: 12,
-  },
-  scannerButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF9800",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  ownerButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    marginLeft: 8,
-  },
   venueContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -617,107 +502,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "bold",
     marginLeft: 8,
-  },
-  ticketsModal: {
-    flex: 1,
-    backgroundColor: "#121212",
-  },
-  ticketsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  ticketsTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  ticketsStats: {
-    flexDirection: "row",
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    borderRadius: 12,
-  },
-  statItem: {
-    flex: 1,
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#2196F3",
-  },
-  statLabel: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    marginTop: 4,
-  },
-  ticketsList: {
-    flex: 1,
-    padding: 16,
-  },
-  ticketItem: {
-    flexDirection: "row",
-    backgroundColor: "#1E1E1E",
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 12,
-  },
-  ticketInfo: {
-    flex: 1,
-  },
-  ticketBuyer: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  ticketEmail: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    marginBottom: 4,
-  },
-  ticketDate: {
-    fontSize: 12,
-    color: "#999999",
-    marginBottom: 2,
-  },
-  ticketPayment: {
-    fontSize: 12,
-    color: "#2196F3",
-  },
-  ticketDetails: {
-    alignItems: "flex-end",
-  },
-  ticketQuantity: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#2196F3",
-    marginBottom: 4,
-  },
-  ticketAmount: {
-    fontSize: 14,
-    color: "#4CAF50",
-    marginBottom: 8,
-  },
-  ticketStatus: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  ticketStatusUsed: {
-    backgroundColor: "#666666",
-  },
-  ticketStatusText: {
-    fontSize: 12,
-    color: "#FFFFFF",
-    fontWeight: "bold",
   },
 })
 
