@@ -815,6 +815,11 @@ class FirebaseService {
               createdAt: data.createdAt.toDate(),
               createdBy: data.createdBy,
               createdByType: data.createdByType,
+              ticketTypes: data.ticketTypes || getDefaultTicketTypes(parseEntryFee(data.entryFee)),
+              paymentAccounts: data.paymentAccounts || [],
+              totalRevenue: data.totalRevenue || 0,
+              appCommission: data.appCommission || 0,
+              netRevenue: data.netRevenue || 0,
             })
           }
         }
