@@ -117,17 +117,7 @@ export const EventsStackNavigator = () => {
       <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <EventsStack.Screen name="AddEvent" component={AddEventScreen as any} options={{ title: "Add Event" }} />
       <EventsStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
-      {/* ADD THESE SCREENS */}
-      <EventsStack.Screen 
-        name="TicketPurchase" 
-        component={TicketPurchaseScreen} 
-        options={{ title: "Purchase Ticket" }} 
-      />
-      <EventsStack.Screen 
-        name="TicketScanner" 
-        component={TicketScannerScreen} 
-        options={{ title: "Scan Tickets" }} 
-      />
+    
     </EventsStack.Navigator>
   )
 }
