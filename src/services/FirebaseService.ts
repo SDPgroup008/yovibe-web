@@ -118,7 +118,82 @@ class FirebaseService {
     }
   }
 
+  async getFeaturedEvents(): Promise<Event[]> {
+    try {
+      const eventsQuery = query(collection(this.db, "events"), where("featured", "==", true), orderBy("date", "desc"))
+      const querySnapshot = await getDocs(eventsQuery)
+
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        date: doc.data().date.toDate(),
+        createdAt: doc.data().createdAt.toDate(),
+      })) as Event[]
+    } catch (error) {
+      console.error("Error getting featured events:", error)
+      return []
+    }
+  }
+
+  async deletePastEvents(): Promise<void> {
+    try {
+      const now = new Date()
+      const eventsQuery = query(collection(this.db, "events"), where("date", "<", now))
+      const querySnapshot = await getDocs(eventsQuery)
+
+      const deletePromises = querySnapshot.docs.map((doc) => deleteDoc(doc.ref))
+      await Promise.all(deletePromises)
+    } catch (error) {
+      console.error("Error deleting past events:", error)
+      throw error
+    }
+  }
+
+  async deleteEventsByVenue(venueId: string): Promise<void> {
+    try {
+      const eventsQuery = query(collection(this.db, "events"), where("venueId", "==", venueId))
+      const querySnapshot = await getDocs(eventsQuery)
+
+      const deletePromises = querySnapshot.docs.map((doc) => deleteDoc(doc.ref))
+      await Promise.all(deletePromises)
+    } catch (error) {
+      console.error("Error deleting events by venue:", error)
+      throw error
+    }
+  }
+
   // Venue methods
+  async addVenue(venueData: Omit<Venue, "id">): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(this.db, "venues"), {
+        ...venueData,
+        createdAt: new Date(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error adding venue:", error)
+      throw error
+    }
+  }
+
+  async getVenueById(venueId: string): Promise<Venue | null> {
+    try {
+      const venueDoc = await getDoc(doc(this.db, "venues", venueId))
+      if (venueDoc.exists()) {
+        const data = venueDoc.data()
+        return {
+          id: venueDoc.id,
+          ...data,
+          createdAt: data.createdAt?.toDate(),
+        } as Venue
+      }
+      return null
+    } catch (error) {
+      console.error("Error getting venue:", error)
+      throw error
+    }
+  }
+
   async getVenues(): Promise<Venue[]> {
     try {
       const venuesQuery = query(collection(this.db, "venues"), orderBy("name"))
@@ -130,6 +205,40 @@ class FirebaseService {
       })) as Venue[]
     } catch (error) {
       console.error("Error getting venues:", error)
+      throw error
+    }
+  }
+
+  async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
+    try {
+      const venuesQuery = query(collection(this.db, "venues"), where("ownerId", "==", ownerId))
+      const querySnapshot = await getDocs(venuesQuery)
+
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt?.toDate(),
+      })) as Venue[]
+    } catch (error) {
+      console.error("Error getting venues by owner:", error)
+      throw error
+    }
+  }
+
+  async deleteVenue(venueId: string): Promise<void> {
+    try {
+      await deleteDoc(doc(this.db, "venues", venueId))
+    } catch (error) {
+      console.error("Error deleting venue:", error)
+      throw error
+    }
+  }
+
+  async updateVenuePrograms(venueId: string, programs: any[]): Promise<void> {
+    try {
+      await updateDoc(doc(this.db, "venues", venueId), { programs })
+    } catch (error) {
+      console.error("Error updating venue programs:", error)
       throw error
     }
   }
@@ -153,7 +262,124 @@ class FirebaseService {
     }
   }
 
-  // Other methods can be added here as needed
+  async uploadVenueImage(imageUri: string): Promise<string> {
+    try {
+      const response = await fetch(imageUri)
+      const blob = await response.blob()
+
+      const filename = `venues/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`
+      const storageRef = ref(this.storage, filename)
+
+      await uploadBytes(storageRef, blob)
+      const downloadURL = await getDownloadURL(storageRef)
+
+      return downloadURL
+    } catch (error) {
+      console.error("Error uploading venue image:", error)
+      throw error
+    }
+  }
+
+  async uploadVibeImage(imageUri: string): Promise<string> {
+    try {
+      const response = await fetch(imageUri)
+      const blob = await response.blob()
+
+      const filename = `vibes/${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`
+      const storageRef = ref(this.storage, filename)
+
+      await uploadBytes(storageRef, blob)
+      const downloadURL = await getDownloadURL(storageRef)
+
+      return downloadURL
+    } catch (error) {
+      console.error("Error uploading vibe image:", error)
+      throw error
+    }
+  }
+
+  // Vibe and rating methods
+  async addVibeImage(vibeData: any): Promise<string> {
+    try {
+      const docRef = await addDoc(collection(this.db, "vibes"), {
+        ...vibeData,
+        createdAt: new Date(),
+      })
+      return docRef.id
+    } catch (error) {
+      console.error("Error adding vibe image:", error)
+      throw error
+    }
+  }
+
+  async getLatestVibeRating(venueId: string): Promise<number> {
+    try {
+      const vibesQuery = query(
+        collection(this.db, "vibes"),
+        where("venueId", "==", venueId),
+        orderBy("createdAt", "desc"),
+      )
+      const querySnapshot = await getDocs(vibesQuery)
+
+      if (querySnapshot.empty) return 0
+
+      const ratings = querySnapshot.docs.map((doc) => doc.data().rating || 0)
+      return ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length
+    } catch (error) {
+      console.error("Error getting latest vibe rating:", error)
+      return 0
+    }
+  }
+
+  async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<any[]> {
+    try {
+      const startOfDay = new Date(date)
+      startOfDay.setHours(0, 0, 0, 0)
+      const endOfDay = new Date(date)
+      endOfDay.setHours(23, 59, 59, 999)
+
+      const vibesQuery = query(
+        collection(this.db, "vibes"),
+        where("venueId", "==", venueId),
+        where("createdAt", ">=", startOfDay),
+        where("createdAt", "<=", endOfDay),
+      )
+      const querySnapshot = await getDocs(vibesQuery)
+
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+      }))
+    } catch (error) {
+      console.error("Error getting vibe images by venue and date:", error)
+      return []
+    }
+  }
+
+  async getVibeImagesByVenueAndWeek(venueId: string, startDate: Date): Promise<any[]> {
+    try {
+      const endDate = new Date(startDate)
+      endDate.setDate(startDate.getDate() + 7)
+
+      const vibesQuery = query(
+        collection(this.db, "vibes"),
+        where("venueId", "==", venueId),
+        where("createdAt", ">=", startDate),
+        where("createdAt", "<=", endDate),
+      )
+      const querySnapshot = await getDocs(vibesQuery)
+
+      return querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+        createdAt: doc.data().createdAt.toDate(),
+      }))
+    } catch (error) {
+      console.error("Error getting vibe images by venue and week:", error)
+      return []
+    }
+  }
 }
 
 export default new FirebaseService()
