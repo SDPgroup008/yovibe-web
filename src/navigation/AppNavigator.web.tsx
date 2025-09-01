@@ -139,17 +139,7 @@ export const MapStackNavigator = () => {
       <MapStack.Screen name="MapView" component={MapScreen} options={{ title: "Map" }} />
       <MapStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <MapStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
-      {/* ADD THESE SCREENS */}
-      <MapStack.Screen 
-        name="TicketPurchase" 
-        component={TicketPurchaseScreen} 
-        options={{ title: "Purchase Ticket" }} 
-      />
-      <MapStack.Screen 
-        name="TicketScanner" 
-        component={TicketScannerScreen} 
-        options={{ title: "Scan Tickets" }} 
-      />
+      
     </MapStack.Navigator>
   )
 }
