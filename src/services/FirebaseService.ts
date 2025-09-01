@@ -1327,11 +1327,7 @@ class FirebaseService {
         createdAt: Timestamp.now(),
         createdBy: eventData.createdBy,
         createdByType: eventData.createdByType,
-        ticketTypes: eventData.ticketTypes || getDefaultTicketTypes(parseEntryFee(eventData.entryFee)),
-        paymentAccounts: eventData.paymentAccounts || [],
-        totalRevenue: eventData.totalRevenue || 0,
-        appCommission: eventData.appCommission || 0,
-        netRevenue: eventData.netRevenue || 0,
+
         isDeleted: false,
       }
 
