@@ -190,17 +190,7 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
       <ProfileStack.Screen name="AddVibe" component={AddVibeScreen as any} options={{ title: "Add Vibe" }} />
       <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
-      {/* ADD THESE SCREENS */}
-      <ProfileStack.Screen 
-        name="TicketPurchase" 
-        component={TicketPurchaseScreen} 
-        options={{ title: "Purchase Ticket" }} 
-      />
-      <ProfileStack.Screen 
-        name="TicketScanner" 
-        component={TicketScannerScreen} 
-        options={{ title: "Scan Tickets" }} 
-      />
+      
     </ProfileStack.Navigator>
   )
 }
