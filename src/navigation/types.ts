@@ -28,7 +28,7 @@ export type RootStackParamList = {
 
   // Vibe screens
   TodaysVibe: { venueId?: string; venueName?: string } // Added optional venue params
-  AddVibe: { venueId: string }
+  AddVibe: { venueId: string; venueName?: string } // Updated to include venueName
 
   // Map screens
   Map: undefined
@@ -56,8 +56,12 @@ export type EventsScreenProps = {
 }
 
 export type MapScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"Map">
+  navigation: NavigationProp & {
+    addListener: (event: string, callback: () => void) => () => void
+  }
+  route: RouteProp<"Map"> & {
+    params: { destinationVenueId?: string }
+  }
 }
 
 export type ProfileScreenProps = {
@@ -77,7 +81,9 @@ export type TicketContactScreenProps = {
 
 export type AddVibeScreenProps = {
   navigation: NavigationProp
-  route: RouteProp<"AddVibe">
+  route: RouteProp<"AddVibe"> & {
+    params: { venueId: string; venueName?: string }
+  }
 }
 
 export type ManageProgramsScreenProps = {
@@ -90,6 +96,11 @@ export type TodaysVibeScreenProps = {
   route: RouteProp<"TodaysVibe">
 }
 
+export type EventDetailScreenProps = {
+  navigation: NavigationProp
+  route: RouteProp<"EventDetail">
+}
+
 // Navigation prop types
 export type NavigationProp = {
   navigate: (screen: keyof RootStackParamList, params?: any) => void
@@ -97,6 +108,7 @@ export type NavigationProp = {
   push: (screen: keyof RootStackParamList, params?: any) => void
   replace: (screen: keyof RootStackParamList, params?: any) => void
   reset: (state: any) => void
+  addListener: (event: string, callback: () => void) => () => void
 }
 
 // Route prop types
