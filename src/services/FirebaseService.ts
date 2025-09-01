@@ -815,7 +815,6 @@ class FirebaseService {
               createdAt: data.createdAt.toDate(),
               createdBy: data.createdBy,
               createdByType: data.createdByType,
-
             })
           }
         }
