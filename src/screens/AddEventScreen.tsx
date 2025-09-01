@@ -2,22 +2,24 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useNavigation } from "@react-navigation/native"
+import { useNavigation, useRoute } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
 import ImagePickerService from "../services/ImagePickerService.web"
 import type { Event, ContactPhone } from "../models/Event"
 import type { Venue } from "../models/Venue"
 import { ScrollView, View, TouchableOpacity, Text } from "react-native"
-import Ionicons from "react-native-vector-icons/Ionicons"
 
 const AddEventScreen: React.FC = () => {
   const navigation = useNavigation()
+  const route = useRoute()
   const { user } = useAuth()
   const [loading, setLoading] = useState(false)
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [showVenueDropdown, setShowVenueDropdown] = useState(false)
+
+  const routeParams = route.params as { venueId?: string; venueName?: string } | undefined
 
   // Event form state
   const [eventName, setEventName] = useState("")
@@ -40,6 +42,10 @@ const AddEventScreen: React.FC = () => {
 
   useEffect(() => {
     loadVenues()
+    if (routeParams?.venueId && routeParams?.venueName) {
+      const preSelectedVenue = { id: routeParams.venueId, name: routeParams.venueName } as Venue
+      setSelectedVenue(preSelectedVenue)
+    }
   }, [])
 
   useEffect(() => {
@@ -170,6 +176,7 @@ const AddEventScreen: React.FC = () => {
         venueName: selectedVenue.name,
         description: description.trim(),
         date: eventDateTime,
+        createdAt: new Date(),
         posterImageUrl: posterUrl,
         artists: artists
           .split(",")
@@ -199,7 +206,7 @@ const AddEventScreen: React.FC = () => {
     <ScrollView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Text style={{ color: "#FFFFFF", fontSize: 18 }}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Add Event</Text>
         <TouchableOpacity onPress={handleSubmit} style={styles.submitButton} disabled={loading}>
@@ -438,48 +445,47 @@ const AddEventScreen: React.FC = () => {
   )
 }
 
-// CSS-in-JS styles (avoiding border and margin)
 const styles = {
   container: {
     flex: 1,
     backgroundColor: "#000",
-    minHeight: "100vh",
-    overflow: "auto",
+    minHeight: "100vh" as any,
+    overflow: "auto" as any,
   },
   header: {
-    padding: "20px",
-    maxWidth: "800px",
-    marginLeft: "auto",
-    marginRight: "auto",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    padding: 20,
+    maxWidth: 800,
+    marginLeft: "auto" as any,
+    marginRight: "auto" as any,
+    flexDirection: "row" as any,
+    justifyContent: "space-between" as any,
+    alignItems: "center" as any,
   },
   backButton: {
     backgroundColor: "#6366f1",
-    borderRadius: "6px",
-    padding: "6px",
+    borderRadius: 6,
+    padding: 6,
   },
   headerTitle: {
-    fontSize: "24px",
-    fontWeight: "bold",
+    fontSize: 24,
+    fontWeight: "bold" as any,
     color: "#fff",
   },
   submitButton: {
     backgroundColor: "#6366f1",
-    borderRadius: "6px",
-    padding: "6px",
+    borderRadius: 6,
+    padding: 6,
   },
   submitButtonText: {
     color: "#fff",
-    fontSize: "16px",
-    fontWeight: "600",
+    fontSize: 16,
+    fontWeight: "600" as any,
   },
   form: {
-    padding: "20px",
-    maxWidth: "800px",
-    marginLeft: "auto",
-    marginRight: "auto",
+    padding: 20,
+    maxWidth: 800,
+    marginLeft: "auto" as any,
+    marginRight: "auto" as any,
   },
 }
 
