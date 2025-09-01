@@ -1784,16 +1784,4 @@ class FirebaseService {
       const docRef = await addDoc(collection(db, "tickets"), {
         ...ticketData,
         createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      })
-      return docRef.id
-    } catch (error) {
-      console.error("Error adding ticket:", error)
-      throw error
-    }
-  }
-}
-
-// Export a singleton instance as default
-const firebaseService = FirebaseService.getInstance()
-export default firebaseService
+  
