@@ -10,11 +10,11 @@ export interface TicketType {
   isAvailable: boolean
 }
 
-export interface PaymentAccount {
-  type: "mtn" | "airtel" | "card"
-  accountNumber: string
-  accountName: string
-  isActive: boolean
+export interface ContactPhone {
+  number: string
+  name: string
+  isWhatsApp: boolean
+  isPrimary: boolean
 }
 
 export interface Event {
@@ -35,18 +35,15 @@ export interface Event {
   entryFee?: string
   attendees?: string[]
 
-  // New fields for enhanced ticket system
-  ticketTypes: TicketType[]
-  paymentAccounts: PaymentAccount[]
+  contactPhones: ContactPhone[]
 
-  // Event owner payment information
-  ownerPaymentPhone?: string
-  ownerPaymentName?: string
-
-  // Revenue tracking
-  totalRevenue?: number
-  appCommission?: number
-  netRevenue?: number
+  // ticketTypes: TicketType[]
+  // paymentAccounts: PaymentAccount[]
+  // ownerPaymentPhone?: string
+  // ownerPaymentName?: string
+  // totalRevenue?: number
+  // appCommission?: number
+  // netRevenue?: number
 }
 
 // Add a new interface for Firestore storage
@@ -66,32 +63,8 @@ export interface FirestoreEvent {
   priceIndicator?: number
   entryFee?: string
   attendees?: string[]
-  ticketTypes: TicketType[]
-  paymentAccounts: PaymentAccount[]
-  ownerPaymentPhone?: string
-  ownerPaymentName?: string
-  totalRevenue?: number
-  appCommission?: number
-  netRevenue?: number
+  contactPhones: ContactPhone[]
 }
-
-// Default ticket types
-export const getDefaultTicketTypes = (basePrice: number): TicketType[] => [
-  {
-    id: "regular",
-    name: "Regular",
-    price: basePrice,
-    description: "Standard entry ticket",
-    isAvailable: true,
-  },
-  {
-    id: "secure",
-    name: "Secure",
-    price: basePrice,
-    description: "Entry with photo verification",
-    isAvailable: true,
-  },
-]
 
 // Helper function to parse entry fee
 export const parseEntryFee = (entryFee: string | number | undefined): number => {

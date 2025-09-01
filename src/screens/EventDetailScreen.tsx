@@ -121,23 +121,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
   const handleBuyTicket = () => {
     if (!user) {
-      Alert.alert("Sign In Required", "Please sign in to purchase tickets.")
+      Alert.alert("Sign In Required", "Please sign in to view ticket contact information.")
       return
     }
 
     if (!event) return
 
-    // Parse entry fee to get numeric value
-    const entryFeeString = event.entryFee || "0"
-    const ticketPrice = Number.parseFloat(entryFeeString.replace(/[^0-9.]/g, "")) || 0
-
-    if (ticketPrice === 0) {
-      Alert.alert("Free Event", "This is a free event. No tickets required!")
-      return
-    }
-
-    // Navigate with eventId instead of event object
-    navigation.navigate("TicketPurchase", { eventId: event.id })
+    navigation.navigate("TicketContact", { eventId: event.id })
   }
 
   const handleShare = async () => {
@@ -353,8 +343,11 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         <TouchableOpacity
           style={styles.venueContainer}
           onPress={() => {
-            // Navigate to venue detail screen
-            navigation.navigate("VenueDetail", { venueId: event.venueId })
+            // Use the correct navigation approach for cross-stack navigation
+            navigation.navigate("Venues", {
+              screen: "VenueDetail",
+              params: { venueId: event.venueId },
+            })
           }}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
@@ -379,8 +372,8 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         </View>
 
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
-          <Ionicons name="card" size={20} color="#FFFFFF" />
-          <Text style={styles.buttonText}>{ticketPrice > 0 ? `Buy Ticket - ${event.entryFee}` : "Get Free Entry"}</Text>
+          <Ionicons name="call" size={20} color="#FFFFFF" />
+          <Text style={styles.buttonText}>Contact for Tickets</Text>
         </TouchableOpacity>
       </View>
 

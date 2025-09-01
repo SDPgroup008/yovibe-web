@@ -6,9 +6,10 @@ import { useNavigation } from "@react-navigation/native"
 import { useAuth } from "../contexts/AuthContext"
 import firebaseService from "../services/FirebaseService"
 import ImagePickerService from "../services/ImagePickerService.web"
-import type { Event, TicketType, PaymentAccount } from "../models/Event"
+import type { Event, ContactPhone } from "../models/Event"
 import type { Venue } from "../models/Venue"
-import type { PaymentMethod } from "../models/Ticket"
+import { ScrollView, View, TouchableOpacity, Text } from "react-native"
+import Ionicons from "react-native-vector-icons/Ionicons"
 
 const AddEventScreen: React.FC = () => {
   const navigation = useNavigation()
@@ -28,32 +29,13 @@ const AddEventScreen: React.FC = () => {
   const [isFeatured, setIsFeatured] = useState(false)
   const [basePrice, setBasePrice] = useState("")
 
-  // Ticket types state
-  const [ticketTypes, setTicketTypes] = useState<TicketType[]>([
-    {
-      id: "regular",
-      name: "Regular",
-      price: 0,
-      description: "Standard entry ticket",
-      isAvailable: true,
-    },
-    {
-      id: "secure",
-      name: "Secure",
-      price: 0,
-      description: "Entry with photo verification",
-      isAvailable: true,
-    },
-  ])
-
-  // Payment accounts state
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([])
-  const [showAddPaymentAccount, setShowAddPaymentAccount] = useState(false)
-  const [newPaymentAccount, setNewPaymentAccount] = useState<PaymentAccount>({
-    type: "mtn",
-    accountNumber: "",
-    accountName: "",
-    isActive: true,
+  const [contactPhones, setContactPhones] = useState<ContactPhone[]>([])
+  const [showAddContact, setShowAddContact] = useState(false)
+  const [newContact, setNewContact] = useState<ContactPhone>({
+    number: "",
+    name: "",
+    isWhatsApp: false,
+    isPrimary: false,
   })
 
   useEffect(() => {
@@ -63,12 +45,7 @@ const AddEventScreen: React.FC = () => {
   useEffect(() => {
     // Update ticket prices when base price changes
     const price = Number.parseFloat(basePrice) || 0
-    setTicketTypes((prev) =>
-      prev.map((ticket) => ({
-        ...ticket,
-        price: ticket.id === "regular" || ticket.id === "secure" ? price : ticket.price,
-      })),
-    )
+    // Placeholder for ticket types update logic
   }, [basePrice])
 
   const loadVenues = async () => {
@@ -104,67 +81,52 @@ const AddEventScreen: React.FC = () => {
     }
   }
 
-  const addTicketType = () => {
-    const newTicketType: TicketType = {
-      id: `custom_${Date.now()}`,
+  const addContactPhone = () => {
+    if (!newContact.number || !newContact.name) {
+      alert("Please fill in all contact details")
+      return
+    }
+
+    // Validate phone number format (basic validation)
+    if (!/^[0-9+\-\s()]+$/.test(newContact.number)) {
+      alert("Invalid phone number format")
+      return
+    }
+
+    // If this is the first contact or marked as primary, make it primary
+    const updatedContact = { ...newContact }
+    if (contactPhones.length === 0 || newContact.isPrimary) {
+      // Remove primary from other contacts if this one is primary
+      const updatedContacts = contactPhones.map((contact) => ({ ...contact, isPrimary: false }))
+      setContactPhones([...updatedContacts, { ...updatedContact, isPrimary: true }])
+    } else {
+      setContactPhones([...contactPhones, updatedContact])
+    }
+
+    setNewContact({
+      number: "",
       name: "",
-      price: 0,
-      description: "",
-      isAvailable: true,
-    }
-    setTicketTypes([...ticketTypes, newTicketType])
-  }
-
-  const updateTicketType = (index: number, field: keyof TicketType, value: any) => {
-    const updated = [...ticketTypes]
-    updated[index] = { ...updated[index], [field]: value }
-    setTicketTypes(updated)
-  }
-
-  const removeTicketType = (index: number) => {
-    if (ticketTypes.length > 2) {
-      // Keep at least Regular and Secure
-      setTicketTypes(ticketTypes.filter((_, i) => i !== index))
-    }
-  }
-
-  const addPaymentAccount = () => {
-    if (!newPaymentAccount.accountNumber || !newPaymentAccount.accountName) {
-      alert("Please fill in all payment account details")
-      return
-    }
-
-    // Validate account number format
-    if (!validateAccountNumber(newPaymentAccount.type, newPaymentAccount.accountNumber)) {
-      alert("Invalid account number format")
-      return
-    }
-
-    setPaymentAccounts([...paymentAccounts, { ...newPaymentAccount }])
-    setNewPaymentAccount({
-      type: "mtn",
-      accountNumber: "",
-      accountName: "",
-      isActive: true,
+      isWhatsApp: false,
+      isPrimary: false,
     })
-    setShowAddPaymentAccount(false)
+    setShowAddContact(false)
   }
 
-  const validateAccountNumber = (type: PaymentMethod, accountNumber: string): boolean => {
-    switch (type) {
-      case "mtn":
-        return /^(077|078|076)\d{7}$/.test(accountNumber)
-      case "airtel":
-        return /^(070|075)\d{7}$/.test(accountNumber)
-      case "card":
-        return accountNumber.length >= 10 && accountNumber.length <= 20
-      default:
-        return false
+  const removeContactPhone = (index: number) => {
+    const updatedContacts = contactPhones.filter((_, i) => i !== index)
+    // If we removed the primary contact, make the first one primary
+    if (contactPhones[index].isPrimary && updatedContacts.length > 0) {
+      updatedContacts[0].isPrimary = true
     }
+    setContactPhones(updatedContacts)
   }
 
-  const removePaymentAccount = (index: number) => {
-    setPaymentAccounts(paymentAccounts.filter((_, i) => i !== index))
+  const togglePrimary = (index: number) => {
+    const updatedContacts = contactPhones.map((contact, i) => ({
+      ...contact,
+      isPrimary: i === index,
+    }))
+    setContactPhones(updatedContacts)
   }
 
   const handleSubmit = async () => {
@@ -188,16 +150,8 @@ const AddEventScreen: React.FC = () => {
       return
     }
 
-    if (paymentAccounts.length === 0) {
-      alert("Please add at least one payment account")
-      return
-    }
-
-    // Validate ticket types
-    const validTicketTypes = ticketTypes.filter((ticket) => ticket.name.trim() && ticket.price > 0)
-
-    if (validTicketTypes.length === 0) {
-      alert("Please configure at least one ticket type")
+    if (contactPhones.length === 0) {
+      alert("Please add at least one contact phone number for ticket inquiries")
       return
     }
 
@@ -226,14 +180,7 @@ const AddEventScreen: React.FC = () => {
         priceIndicator: Math.ceil((Number.parseFloat(basePrice) || 0) / 10000), // 1-3 based on price
         entryFee: `UGX ${Number.parseFloat(basePrice) || 0}`,
         attendees: [],
-        ticketTypes: validTicketTypes,
-        paymentAccounts: paymentAccounts.filter((account) => account.isActive),
-        totalRevenue: 0,
-        appCommission: 0,
-        netRevenue: 0,
-        createdAt: new Date(),
-        createdBy: user?.id,
-        createdByType: user?.userType,
+        contactPhones,
       }
 
       await firebaseService.addEvent(eventData)
@@ -249,10 +196,18 @@ const AddEventScreen: React.FC = () => {
   }
 
   return (
-    <div style={containerStyle}>
-      <div style={contentStyle}>
-        <h1 style={titleStyle}>Create New Event</h1>
+    <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Add Event</Text>
+        <TouchableOpacity onPress={handleSubmit} style={styles.submitButton} disabled={loading}>
+          <Text style={styles.submitButtonText}>{loading ? "Creating..." : "Create"}</Text>
+        </TouchableOpacity>
+      </View>
 
+      <View style={styles.form}>
         {/* Basic Event Information */}
         <div style={sectionStyle}>
           <h2 style={sectionTitleStyle}>Event Details</h2>
@@ -373,188 +328,159 @@ const AddEventScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Ticket Types */}
+        {/* Contact Numbers for Ticket Inquiries */}
         <div style={sectionStyle}>
           <div style={sectionHeaderStyle}>
-            <h2 style={sectionTitleStyle}>Ticket Types</h2>
-            <button style={addButtonStyle} onClick={addTicketType}>
+            <h2 style={sectionTitleStyle}>Contact Numbers for Ticket Inquiries</h2>
+            <button style={addButtonStyle} onClick={() => setShowAddContact(true)}>
               <span style={addIconStyle}>+</span>
-              Add Type
+              Add Contact
             </button>
           </div>
 
-          {ticketTypes.map((ticket, index) => (
-            <div key={ticket.id} style={ticketTypeCardStyle}>
-              <div style={ticketTypeHeaderStyle}>
-                <input
-                  style={ticketNameInputStyle}
-                  type="text"
-                  placeholder="Ticket Name"
-                  value={ticket.name}
-                  onChange={(e) => updateTicketType(index, "name", e.target.value)}
-                />
-                {index > 1 && ( // Don't allow removing Regular and Secure tickets
-                  <button style={removeButtonStyle} onClick={() => removeTicketType(index)}>
-                    ×
-                  </button>
-                )}
-              </div>
-
-              <input
-                style={ticketDescInputStyle}
-                type="text"
-                placeholder="Description"
-                value={ticket.description}
-                onChange={(e) => updateTicketType(index, "description", e.target.value)}
-              />
-
-              <div style={ticketRowStyle}>
-                <input
-                  style={priceInputStyle}
-                  type="number"
-                  placeholder="Price (UGX)"
-                  value={ticket.price.toString()}
-                  onChange={(e) => updateTicketType(index, "price", Number.parseFloat(e.target.value) || 0)}
-                  disabled={ticket.id === "regular" || ticket.id === "secure"} // Base price controls these
-                />
-                <div style={switchContainerStyle}>
-                  <span style={availableLabelStyle}>Available</span>
-                  <label style={switchStyle}>
-                    <input
-                      type="checkbox"
-                      checked={ticket.isAvailable}
-                      onChange={(e) => updateTicketType(index, "isAvailable", e.target.checked)}
-                    />
-                    <span style={sliderStyle}></span>
-                  </label>
+          {contactPhones.map((contact, index) => (
+            <div key={index} style={contactCardStyle}>
+              <div style={contactHeaderStyle}>
+                <div style={contactInfoStyle}>
+                  <span style={contactIconStyle}>{contact.isWhatsApp ? "💬" : "📞"}</span>
+                  <div>
+                    <span style={contactNameStyle}>{contact.name}</span>
+                    {contact.isPrimary && <span style={primaryBadgeStyle}>PRIMARY</span>}
+                  </div>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Payment Accounts */}
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={sectionTitleStyle}>Payment Accounts</h2>
-            <button style={addButtonStyle} onClick={() => setShowAddPaymentAccount(true)}>
-              <span style={addIconStyle}>+</span>
-              Add Account
-            </button>
-          </div>
-
-          {paymentAccounts.map((account, index) => (
-            <div key={index} style={paymentAccountCardStyle}>
-              <div style={paymentAccountHeaderStyle}>
-                <div style={paymentAccountInfoStyle}>
-                  <span style={paymentIconStyle}>
-                    {account.type === "mtn" ? "📱" : account.type === "airtel" ? "📱" : "💳"}
-                  </span>
-                  <span style={paymentAccountTypeStyle}>
-                    {account.type.toUpperCase()} - {account.accountName}
-                  </span>
-                </div>
-                <button style={removeButtonStyle} onClick={() => removePaymentAccount(index)}>
+                <button
+                  style={{ backgroundColor: "#6366f1", borderRadius: "6px", padding: "6px" }}
+                  onClick={() => removeContactPhone(index)}
+                >
                   ×
                 </button>
               </div>
-              <div style={paymentAccountNumberStyle}>{account.accountNumber}</div>
+              <div style={contactNumberStyle}>{contact.number}</div>
+              <div style={contactActionsStyle}>
+                <button
+                  style={contact.isPrimary ? primaryButtonActiveStyle : primaryButtonStyle}
+                  onClick={() => togglePrimary(index)}
+                >
+                  {contact.isPrimary ? "Primary Contact" : "Make Primary"}
+                </button>
+              </div>
             </div>
           ))}
 
-          {showAddPaymentAccount && (
-            <div style={addPaymentFormStyle}>
-              <h3 style={formTitleStyle}>Add Payment Account</h3>
-
-              <div style={paymentTypeButtonsStyle}>
-                {(["mtn", "airtel", "card"] as const).map((type) => (
-                  <button
-                    key={type}
-                    style={{
-                      ...paymentTypeButtonStyle,
-                      ...(newPaymentAccount.type === type ? paymentTypeButtonActiveStyle : {}),
-                    }}
-                    onClick={() => setNewPaymentAccount({ ...newPaymentAccount, type })}
-                  >
-                    <span style={paymentTypeIconStyle}>{type === "card" ? "💳" : "📱"}</span>
-                    {type.toUpperCase()}
-                  </button>
-                ))}
-              </div>
+          {showAddContact && (
+            <div style={addContactFormStyle}>
+              <h3 style={formTitleStyle}>Add Contact Number</h3>
 
               <input
                 style={inputStyle}
-                type={newPaymentAccount.type === "card" ? "text" : "tel"}
-                placeholder={newPaymentAccount.type === "card" ? "Account Number" : "Phone Number"}
-                value={newPaymentAccount.accountNumber}
-                onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountNumber: e.target.value })}
+                type="tel"
+                placeholder="Phone Number (e.g., +256 777 123456)"
+                value={newContact.number}
+                onChange={(e) => setNewContact({ ...newContact, number: e.target.value })}
               />
 
               <input
                 style={inputStyle}
                 type="text"
-                placeholder="Account Name"
-                value={newPaymentAccount.accountName}
-                onChange={(e) => setNewPaymentAccount({ ...newPaymentAccount, accountName: e.target.value })}
+                placeholder="Contact Name"
+                value={newContact.name}
+                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
               />
 
-              <div style={formButtonsStyle}>
-                <button style={cancelButtonStyle} onClick={() => setShowAddPaymentAccount(false)}>
+              <div style={switchRowStyle}>
+                <span style={switchLabelStyle}>WhatsApp Available</span>
+                <label style={switchStyle}>
+                  <input
+                    type="checkbox"
+                    checked={newContact.isWhatsApp}
+                    onChange={(e) => setNewContact({ ...newContact, isWhatsApp: e.target.checked })}
+                  />
+                  <span style={sliderStyle}></span>
+                </label>
+              </div>
+
+              <div style={switchRowStyle}>
+                <span style={switchLabelStyle}>Primary Contact</span>
+                <label style={switchStyle}>
+                  <input
+                    type="checkbox"
+                    checked={newContact.isPrimary}
+                    onChange={(e) => setNewContact({ ...newContact, isPrimary: e.target.checked })}
+                  />
+                  <span style={sliderStyle}></span>
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  style={{
+                    backgroundColor: "#6366f1",
+                    borderRadius: "6px",
+                    padding: "6px",
+                    color: "#fff",
+                    fontSize: "14px",
+                    fontWeight: "500",
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setShowAddContact(false)}
+                >
                   Cancel
                 </button>
-                <button style={saveButtonStyle} onClick={addPaymentAccount}>
-                  Add Account
+                <button style={addButtonStyle} onClick={addContactPhone}>
+                  Add Contact
                 </button>
               </div>
             </div>
           )}
         </div>
-
-        {/* Submit Button */}
-        <button
-          style={{
-            ...submitButtonStyle,
-            ...(loading ? submitButtonDisabledStyle : {}),
-          }}
-          onClick={handleSubmit}
-          disabled={loading}
-        >
-          {loading ? (
-            <div style={loadingContainerStyle}>
-              <span>Creating Event...</span>
-            </div>
-          ) : (
-            <div style={submitContainerStyle}>
-              <span style={checkIconStyle}>✓</span>
-              Create Event
-            </div>
-          )}
-        </button>
-      </div>
-    </div>
+      </View>
+    </ScrollView>
   )
 }
 
 // CSS-in-JS styles (avoiding border and margin)
-const containerStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#000",
-  minHeight: "100vh",
-  overflow: "auto",
-}
-
-const contentStyle: React.CSSProperties = {
-  padding: "20px",
-  maxWidth: "800px",
-  marginLeft: "auto",
-  marginRight: "auto",
-}
-
-const titleStyle: React.CSSProperties = {
-  fontSize: "24px",
-  fontWeight: "bold",
-  color: "#fff",
-  marginBottom: "20px",
+const styles = {
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+    minHeight: "100vh",
+    overflow: "auto",
+  },
+  header: {
+    padding: "20px",
+    maxWidth: "800px",
+    marginLeft: "auto",
+    marginRight: "auto",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  backButton: {
+    backgroundColor: "#6366f1",
+    borderRadius: "6px",
+    padding: "6px",
+  },
+  headerTitle: {
+    fontSize: "24px",
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  submitButton: {
+    backgroundColor: "#6366f1",
+    borderRadius: "6px",
+    padding: "6px",
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontSize: "16px",
+    fontWeight: "600",
+  },
+  form: {
+    padding: "20px",
+    maxWidth: "800px",
+    marginLeft: "auto",
+    marginRight: "auto",
+  },
 }
 
 const sectionStyle: React.CSSProperties = {
@@ -799,126 +725,79 @@ const addIconStyle: React.CSSProperties = {
   fontSize: "16px",
 }
 
-const ticketTypeCardStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "12px",
+const contactCardStyle = {
+  backgroundColor: "#1E1E1E",
+  borderRadius: "12px",
+  padding: "16px",
   marginBottom: "12px",
-  outline: "1px solid #333",
+  border: "1px solid #333333",
 }
 
-const ticketTypeHeaderStyle: React.CSSProperties = {
+const contactHeaderStyle = {
   display: "flex",
+  justifyContent: "space-between",
   alignItems: "center",
-  gap: "8px",
-}
-
-const ticketNameInputStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#000",
-  borderRadius: "6px",
-  padding: "8px",
-  color: "#fff",
-  outline: "1px solid #444",
-  fontSize: "16px",
-}
-
-const ticketDescInputStyle: React.CSSProperties = {
-  backgroundColor: "#000",
-  borderRadius: "6px",
-  padding: "8px",
-  color: "#fff",
-  marginTop: "8px",
   marginBottom: "8px",
-  outline: "1px solid #444",
-  width: "100%",
-  boxSizing: "border-box",
-  fontSize: "16px",
 }
 
-const ticketRowStyle: React.CSSProperties = {
+const contactInfoStyle = {
   display: "flex",
   alignItems: "center",
   gap: "12px",
 }
 
-const priceInputStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#000",
-  borderRadius: "6px",
-  padding: "8px",
-  color: "#fff",
-  outline: "1px solid #444",
-  fontSize: "16px",
-}
-
-const switchContainerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-}
-
-const availableLabelStyle: React.CSSProperties = {
-  color: "#fff",
-  fontSize: "14px",
-}
-
-const removeButtonStyle: React.CSSProperties = {
-  backgroundColor: "#ef4444",
-  width: "24px",
-  height: "24px",
-  borderRadius: "12px",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  color: "#fff",
-  fontSize: "16px",
-  fontWeight: "bold",
-  cursor: "pointer",
-}
-
-const paymentAccountCardStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "12px",
-  marginBottom: "8px",
-  outline: "1px solid #333",
-}
-
-const paymentAccountHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-}
-
-const paymentAccountInfoStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "8px",
-}
-
-const paymentIconStyle: React.CSSProperties = {
+const contactIconStyle = {
   fontSize: "20px",
 }
 
-const paymentAccountTypeStyle: React.CSSProperties = {
-  color: "#fff",
+const contactNameStyle = {
+  color: "#FFFFFF",
+  fontWeight: "600",
   fontSize: "16px",
-  fontWeight: "500",
+  marginRight: "8px",
 }
 
-const paymentAccountNumberStyle: React.CSSProperties = {
-  color: "#666",
+const primaryBadgeStyle = {
+  backgroundColor: "#2196F3",
+  color: "#FFFFFF",
+  fontSize: "10px",
+  padding: "2px 6px",
+  borderRadius: "4px",
+  fontWeight: "bold",
+}
+
+const contactNumberStyle = {
+  color: "#BBBBBB",
   fontSize: "14px",
-  marginTop: "4px",
-  marginLeft: "28px",
+  marginBottom: "8px",
 }
 
-const addPaymentFormStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "16px",
-  outline: "1px solid #333",
+const contactActionsStyle = {
+  display: "flex",
+  gap: "8px",
+}
+
+const primaryButtonStyle = {
+  backgroundColor: "transparent",
+  border: "1px solid #2196F3",
+  color: "#2196F3",
+  padding: "4px 8px",
+  borderRadius: "4px",
+  fontSize: "12px",
+  cursor: "pointer",
+}
+
+const primaryButtonActiveStyle = {
+  ...primaryButtonStyle,
+  backgroundColor: "#2196F3",
+  color: "#FFFFFF",
+}
+
+const addContactFormStyle = {
+  backgroundColor: "#2A2A2A",
+  borderRadius: "12px",
+  padding: "20px",
+  marginTop: "16px",
 }
 
 const formTitleStyle: React.CSSProperties = {
@@ -926,105 +805,6 @@ const formTitleStyle: React.CSSProperties = {
   fontSize: "16px",
   fontWeight: "500",
   marginBottom: "12px",
-}
-
-const paymentTypeButtonsStyle: React.CSSProperties = {
-  display: "flex",
-  gap: "8px",
-  marginBottom: "12px",
-}
-
-const paymentTypeButtonStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#000",
-  paddingTop: "8px",
-  paddingBottom: "8px",
-  paddingLeft: "12px",
-  paddingRight: "12px",
-  borderRadius: "6px",
-  outline: "1px solid #444",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "4px",
-  color: "#666",
-  fontSize: "14px",
-  fontWeight: "500",
-  cursor: "pointer",
-}
-
-const paymentTypeButtonActiveStyle: React.CSSProperties = {
-  backgroundColor: "#6366f1",
-  color: "#fff",
-}
-
-const paymentTypeIconStyle: React.CSSProperties = {
-  fontSize: "16px",
-}
-
-const formButtonsStyle: React.CSSProperties = {
-  display: "flex",
-  gap: "12px",
-  marginTop: "12px",
-}
-
-const cancelButtonStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#333",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  borderRadius: "6px",
-  color: "#fff",
-  fontSize: "14px",
-  fontWeight: "500",
-  cursor: "pointer",
-}
-
-const saveButtonStyle: React.CSSProperties = {
-  flex: 1,
-  backgroundColor: "#6366f1",
-  paddingTop: "10px",
-  paddingBottom: "10px",
-  borderRadius: "6px",
-  color: "#fff",
-  fontSize: "14px",
-  fontWeight: "500",
-  cursor: "pointer",
-}
-
-const submitButtonStyle: React.CSSProperties = {
-  backgroundColor: "#6366f1",
-  paddingTop: "16px",
-  paddingBottom: "16px",
-  borderRadius: "8px",
-  color: "#fff",
-  fontSize: "16px",
-  fontWeight: "600",
-  cursor: "pointer",
-  width: "100%",
-  marginTop: "20px",
-}
-
-const submitButtonDisabledStyle: React.CSSProperties = {
-  backgroundColor: "#333",
-  cursor: "not-allowed",
-}
-
-const loadingContainerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-}
-
-const submitContainerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  gap: "8px",
-}
-
-const checkIconStyle: React.CSSProperties = {
-  fontSize: "20px",
 }
 
 export default AddEventScreen
