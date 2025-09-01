@@ -21,9 +21,7 @@ import ManageProgramsScreen from "../screens/ManageProgramsScreen"
 import AddVibeScreen from "../screens/AddVibeScreen"
 import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 
-// Ticket Screens - ADD THESE IMPORTS
-import TicketPurchaseScreen from "../screens/TicketPurchaseScreen"
-import TicketScannerScreen from "../screens/TicketScannerScreen"
+
 
 // Admin Screens
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
