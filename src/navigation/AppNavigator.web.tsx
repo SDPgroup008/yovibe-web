@@ -161,17 +161,7 @@ export const CalendarStackNavigator = () => {
       <CalendarStack.Screen name="CalendarView" component={EventCalendarScreen} options={{ title: "Calendar" }} />
       <CalendarStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <CalendarStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
-      {/* ADD THESE SCREENS */}
-      <CalendarStack.Screen 
-        name="TicketPurchase" 
-        component={TicketPurchaseScreen} 
-        options={{ title: "Purchase Ticket" }} 
-      />
-      <CalendarStack.Screen 
-        name="TicketScanner" 
-        component={TicketScannerScreen} 
-        options={{ title: "Scan Tickets" }} 
-      />
+     
     </CalendarStack.Navigator>
   )
 }
