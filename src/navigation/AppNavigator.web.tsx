@@ -94,17 +94,7 @@ export const VenuesStackNavigator = () => {
         options={{ title: "Weekly Programs" }}
       />
       <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
-      {/* ADD THESE SCREENS */}
-      <VenuesStack.Screen 
-        name="TicketPurchase" 
-        component={TicketPurchaseScreen} 
-        options={{ title: "Purchase Ticket" }} 
-      />
-      <VenuesStack.Screen 
-        name="TicketScanner" 
-        component={TicketScannerScreen} 
-        options={{ title: "Scan Tickets" }} 
-      />
+      
     </VenuesStack.Navigator>
   )
 }
