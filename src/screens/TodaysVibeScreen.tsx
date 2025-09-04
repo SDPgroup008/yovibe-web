@@ -2,21 +2,28 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, ActivityIndicator, Dimensions } from "react-native"
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  Image,
+  TouchableOpacity,
+  ActivityIndicator,
+  Dimensions,
+  Modal,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { VibeImage } from "../models/VibeImage"
+import { VenuesStackParamList, ProfileStackParamList } from "../navigation/types"
 
-interface TodaysVibeScreenProps {
-  navigation: any
-  route: {
-    params: {
-      venueId: string
-      venueName: string
-    }
-  }
-}
+type TodaysVibeScreenProps = NativeStackScreenProps<
+  VenuesStackParamList | ProfileStackParamList,
+  "TodaysVibe"
+>
 
 const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }) => {
   const { venueId, venueName } = route.params
@@ -25,6 +32,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const [weekVibes, setWeekVibes] = useState<Record<string, VibeImage[]>>({})
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<VibeImage | null>(null)
 
   const screenWidth = Dimensions.get("window").width
   const imageSize = (screenWidth - 48) / 2 // 2 columns with padding
@@ -40,7 +48,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
     })
 
     return unsubscribe
-  }, [navigation])
+  }, [navigation, venueId])
 
   const loadVibeData = async () => {
     try {
@@ -50,14 +58,25 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
       const today = new Date()
       console.log("Loading vibes for today:", today.toDateString())
       const todayVibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
-      console.log("Today's vibes loaded:", todayVibeImages.length)
-      setTodayVibes(todayVibeImages)
+      // Sort by uploadedAt in descending order (most recent first)
+      const sortedTodayVibes = todayVibeImages.sort(
+        (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()
+      )
+      console.log("Today's vibes loaded:", sortedTodayVibes.length)
+      setTodayVibes(sortedTodayVibes)
 
       // Load week's vibes
       console.log("Loading week's vibes...")
       const weekData = await FirebaseService.getVibeImagesByVenueAndWeek(venueId)
-      console.log("Week's vibes loaded:", Object.keys(weekData).length, "days")
-      setWeekVibes(weekData)
+      // Sort vibes within each day by uploadedAt in descending order
+      const sortedWeekData = Object.fromEntries(
+        Object.entries(weekData).map(([day, vibes]) => [
+          day,
+          vibes.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()),
+        ])
+      )
+      console.log("Week's vibes loaded:", Object.keys(sortedWeekData).length, "days")
+      setWeekVibes(sortedWeekData)
     } catch (error) {
       console.error("Error loading vibe data:", error)
     } finally {
@@ -85,7 +104,10 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   }
 
   const renderVibeImage = ({ item }: { item: VibeImage }) => (
-    <View style={styles.vibeImageCard}>
+    <TouchableOpacity
+      style={styles.vibeImageCard}
+      onPress={() => setSelectedImage(item)}
+    >
       <Image source={{ uri: item.imageUrl }} style={[styles.vibeImage, { width: imageSize, height: imageSize }]} />
       <View style={styles.vibeOverlay}>
         <View style={styles.vibeRatingBadge}>
@@ -95,7 +117,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
         </View>
         <Text style={styles.vibeTime}>{formatTime(item.uploadedAt)}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   )
 
   const renderWeekDay = ({ item: [day, vibes] }: { item: [string, VibeImage[]] }) => (
@@ -115,7 +137,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
 
       {selectedDay === day && (
         <FlatList
-          key={`week-vibes-${day}`} // Unique key for each day's vibe list
+          key={`week-vibes-${day}`}
           data={vibes}
           renderItem={renderVibeImage}
           keyExtractor={(item) => item.id}
@@ -169,7 +191,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
             </View>
           ) : (
             <FlatList
-              key="today-vibes" // Unique key for today's vibe list
+              key="today-vibes"
               data={todayVibes}
               renderItem={renderVibeImage}
               keyExtractor={(item) => item.id}
@@ -189,16 +211,49 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
             </View>
           ) : (
             <FlatList
-              key="week-days" // Unique key for week days list
+              key="week-days"
               data={Object.entries(weekVibes).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())}
               renderItem={renderWeekDay}
               keyExtractor={([day]) => day}
               contentContainerStyle={styles.weekList}
-              numColumns={1} // Explicitly set to 1 for the week view
+              numColumns={1}
             />
           )}
         </View>
       )}
+
+      <Modal
+        visible={selectedImage !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setSelectedImage(null)}
+      >
+        <View style={styles.modalContainer}>
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={() => setSelectedImage(null)}
+          >
+            <Ionicons name="close" size={30} color="#FFFFFF" />
+          </TouchableOpacity>
+          {selectedImage && (
+            <View style={styles.modalContent}>
+              <Image
+                source={{ uri: selectedImage.imageUrl }}
+                style={[styles.fullSizeImage, { width: screenWidth - 40, height: (screenWidth - 40) * 1.5 }]}
+                resizeMode="contain"
+              />
+              <View style={styles.modalOverlay}>
+                <View style={styles.vibeRatingBadge}>
+                  <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(selectedImage.vibeRating) }]}>
+                    {selectedImage.vibeRating.toFixed(1)}
+                  </Text>
+                </View>
+                <Text style={styles.vibeTime}>{formatTime(selectedImage.uploadedAt)}</Text>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -354,6 +409,36 @@ const styles = StyleSheet.create({
   weekDayVibes: {
     padding: 16,
     paddingTop: 0,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    position: "relative",
+    alignItems: "center",
+  },
+  fullSizeImage: {
+    borderRadius: 12,
+  },
+  modalCloseButton: {
+    position: "absolute",
+    top: 40,
+    right: 20,
+    zIndex: 1,
+  },
+  modalOverlay: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
 })
 

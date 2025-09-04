@@ -1,119 +1,117 @@
-export type RootStackParamList = {
-  // Auth screens
+import type { NativeStackScreenProps } from "@react-navigation/native-stack"
+import type { NavigatorScreenParams } from "@react-navigation/native"
+import type { Event } from "../models/Event"
+
+// Auth Stack
+export type AuthStackParamList = {
   Login: undefined
   SignUp: undefined
+}
 
-  // Main app screens
-  Home: undefined
-  Events: undefined
-  EventDetail: { eventId: string }
-  AddEvent: { venueId?: string; venueName?: string } // Added optional venue params
-  EventCalendar: undefined
-
-  // Venue screens
-  Venues: undefined
+// Venues Stack
+export type VenuesStackParamList = {
+  VenuesList: undefined
   VenueDetail: { venueId: string }
-  AddVenue: undefined
+  AddEvent: { venueId: string; venueName: string }
+  EventDetail: { eventId: string }
+  ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
+  TodaysVibe: { venueId: string; venueName: string }
+  TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+}
+
+// Events Stack
+export type EventsStackParamList = {
+  EventsList: undefined
+  EventDetail: { eventId: string }
+  AddEvent: { venueId?: string; venueName?: string }
+  VenueDetail: { venueId: string }
+  TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+}
+
+// Map Stack
+export type MapStackParamList = {
+  MapView: { destinationVenueId?: string }
+  VenueDetail: { venueId: string }
+  EventDetail: { eventId: string }
+  TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+}
+
+// Calendar Stack
+export type CalendarStackParamList = {
+  CalendarView: undefined
+  EventDetail: { eventId: string }
+  VenueDetail: { venueId: string }
+  TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+}
+
+// Profile Stack
+export type ProfileStackParamList = {
+  ProfileMain: undefined
   MyVenues: undefined
-
-  TicketContact: { eventId: string }
-
-  // Profile screens
-  Profile: undefined
-
-  // Admin screens
+  AddVenue: undefined
+  VenueDetail: { venueId: string }
+  EventDetail: { eventId: string }
   AdminUsers: undefined
   AdminVenues: undefined
   AdminEvents: undefined
-
-  // Vibe screens
-  TodaysVibe: { venueId?: string; venueName?: string } // Added optional venue params
-  AddVibe: { venueId: string; venueName?: string } // Updated to include venueName
-
-  // Map screens
-  Map: undefined
-
-  // Program screens
-  ManagePrograms: { venueId: string }
+  AddVibe: { venueId: string; venueName: string }
+  TodaysVibe: { venueId: string; venueName: string }
+  TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
 }
 
-export type TabParamList = {
-  Home: undefined
-  Events: undefined
-  Venues: undefined
-  Map: undefined
-  Profile: undefined
+// Main Tab
+export type MainTabParamList = {
+  Venues: NavigatorScreenParams<VenuesStackParamList>
+  Events: NavigatorScreenParams<EventsStackParamList>
+  Map: NavigatorScreenParams<MapStackParamList>
+  Calendar: NavigatorScreenParams<CalendarStackParamList>
+  Profile: NavigatorScreenParams<ProfileStackParamList>
 }
 
-export type AddEventScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"AddEvent">
-}
+// Screen Props using proper React Navigation types
+export type ProfileScreenProps = NativeStackScreenProps<ProfileStackParamList, "ProfileMain">
 
-export type EventsScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"Events">
-}
+export type EventDetailScreenProps = NativeStackScreenProps<
+  | EventsStackParamList
+  | VenuesStackParamList
+  | MapStackParamList
+  | CalendarStackParamList
+  | ProfileStackParamList,
+  "EventDetail"
+>
 
-export type MapScreenProps = {
-  navigation: NavigationProp & {
-    addListener: (event: string, callback: () => void) => () => void
-  }
-  route: RouteProp<"Map"> & {
-    params: { destinationVenueId?: string }
-  }
-}
+export type EventsScreenProps = NativeStackScreenProps<EventsStackParamList, "EventsList">
 
-export type ProfileScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"Profile">
-}
+export type MapScreenProps = NativeStackScreenProps<MapStackParamList, "MapView">
 
-export type VenueDetailScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"VenueDetail">
-}
+export type VenueDetailScreenProps = NativeStackScreenProps<
+  | VenuesStackParamList
+  | EventsStackParamList
+  | MapStackParamList
+  | CalendarStackParamList
+  | ProfileStackParamList,
+  "VenueDetail"
+>
 
-export type TicketContactScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"TicketContact">
-}
+export type TicketContactScreenProps = NativeStackScreenProps<
+  | VenuesStackParamList
+  | EventsStackParamList
+  | MapStackParamList
+  | CalendarStackParamList
+  | ProfileStackParamList,
+  "TicketContactScreen"
+>
 
-export type AddVibeScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"AddVibe"> & {
-    params: { venueId: string; venueName?: string }
-  }
-}
+export type AddEventScreenProps = NativeStackScreenProps<
+  VenuesStackParamList | EventsStackParamList,
+  "AddEvent"
+>
 
-export type ManageProgramsScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"ManagePrograms">
-}
+export type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamList, "ManagePrograms">
 
-export type TodaysVibeScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"TodaysVibe">
-}
+export type TodaysVibeScreenProps = NativeStackScreenProps<
+  VenuesStackParamList | ProfileStackParamList,
+  "TodaysVibe"
+>
 
-export type EventDetailScreenProps = {
-  navigation: NavigationProp
-  route: RouteProp<"EventDetail">
-}
-
-// Navigation prop types
-export type NavigationProp = {
-  navigate: (screen: keyof RootStackParamList, params?: any) => void
-  goBack: () => void
-  push: (screen: keyof RootStackParamList, params?: any) => void
-  replace: (screen: keyof RootStackParamList, params?: any) => void
-  reset: (state: any) => void
-  addListener: (event: string, callback: () => void) => () => void
-}
-
-// Route prop types
-export type RouteProp<T extends keyof RootStackParamList> = {
-  params: RootStackParamList[T]
-  key: string
-  name: T
-}
+export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe">

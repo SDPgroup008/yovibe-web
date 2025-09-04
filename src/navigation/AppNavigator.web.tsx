@@ -11,22 +11,21 @@ import VenuesScreen from "../screens/VenuesScreen"
 import VenueDetailScreen from "../screens/VenueDetailScreen"
 import EventsScreen from "../screens/EventsScreen"
 import EventDetailScreen from "../screens/EventDetailScreen"
-import MapScreen from "../screens/MapScreen" // Web-only MapScreen
+import MapScreen from "../screens/MapScreen.web" // Use web-specific MapScreen
 import EventCalendarScreen from "../screens/EventCalendarScreen"
 import ProfileScreen from "../screens/ProfileScreen"
 import AddVenueScreen from "../screens/AddVenueScreen"
 import AddEventScreen from "../screens/AddEventScreen"
 import MyVenuesScreen from "../screens/MyVenuesScreen"
 import ManageProgramsScreen from "../screens/ManageProgramsScreen"
+import AddVibeScreen from "../screens/AddVibeScreen"
+import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 import TicketContactScreen from "../screens/TicketContactScreen"
 
 // Admin Screens
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
 import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen"
 import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
-
-import AddVibeScreen from "../screens/AddVibeScreen"
-import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 
 // Types
 import type {
@@ -47,6 +46,13 @@ const EventsStack = createNativeStackNavigator<EventsStackParamList>()
 const MapStack = createNativeStackNavigator<MapStackParamList>()
 const CalendarStack = createNativeStackNavigator<CalendarStackParamList>()
 const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
+
+const ManageProgramsScreenWrapper = (props: any) => <ManageProgramsScreen {...props} />
+const TodaysVibeScreenWrapper = (props: any) => <TodaysVibeScreen {...props} />
+const TicketContactScreenWrapper = (props: any) => <TicketContactScreen {...props} />
+const EventsScreenWrapper = (props: any) => <EventsScreen {...props} />
+const MapScreenWrapper = (props: any) => <MapScreen {...props} />
+const ProfileScreenWrapper = (props: any) => <ProfileScreen {...props} />
 
 // Auth Navigator
 export const AuthNavigator = () => {
@@ -86,17 +92,17 @@ export const VenuesStackNavigator = () => {
     >
       <VenuesStack.Screen name="VenuesList" component={VenuesScreen} options={{ title: "Venues" }} />
       <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
-      <VenuesStack.Screen name="AddEvent" component={AddEventScreen as any} options={{ title: "Add Event" }} />
+      <VenuesStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
       <VenuesStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <VenuesStack.Screen
         name="ManagePrograms"
-        component={ManageProgramsScreen as any}
+        component={ManageProgramsScreenWrapper}
         options={{ title: "Weekly Programs" }}
       />
-      <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
+      <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreenWrapper} options={{ title: "Today's Vibe" }} />
       <VenuesStack.Screen
-        name="TicketContact"
-        component={TicketContactScreen}
+        name="TicketContactScreen"
+        component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
     </VenuesStack.Navigator>
@@ -117,13 +123,13 @@ export const EventsStackNavigator = () => {
         },
       }}
     >
-      <EventsStack.Screen name="EventsList" component={EventsScreen} options={{ title: "Events" }} />
+      <EventsStack.Screen name="EventsList" component={EventsScreenWrapper} options={{ title: "Events" }} />
       <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
-      <EventsStack.Screen name="AddEvent" component={AddEventScreen as any} options={{ title: "Add Event" }} />
-      <EventsStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <EventsStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <EventsStack.Screen
-        name="TicketContact"
-        component={TicketContactScreen}
+        name="TicketContactScreen"
+        component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
     </EventsStack.Navigator>
@@ -144,12 +150,12 @@ export const MapStackNavigator = () => {
         },
       }}
     >
-      <MapStack.Screen name="MapView" component={MapScreen} options={{ title: "Map" }} />
+      <MapStack.Screen name="MapView" component={MapScreenWrapper} options={{ title: "Map" }} />
       <MapStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <MapStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <MapStack.Screen
-        name="TicketContact"
-        component={TicketContactScreen}
+        name="TicketContactScreen"
+        component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
     </MapStack.Navigator>
@@ -174,8 +180,8 @@ export const CalendarStackNavigator = () => {
       <CalendarStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <CalendarStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <CalendarStack.Screen
-        name="TicketContact"
-        component={TicketContactScreen}
+        name="TicketContactScreen"
+        component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
     </CalendarStack.Navigator>
@@ -196,7 +202,7 @@ export const ProfileStackNavigator = () => {
         },
       }}
     >
-      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} options={{ title: "Profile" }} />
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreenWrapper} options={{ title: "Profile" }} />
       <ProfileStack.Screen name="MyVenues" component={MyVenuesScreen} options={{ title: "My Venues" }} />
       <ProfileStack.Screen name="AddVenue" component={AddVenueScreen} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
@@ -204,11 +210,11 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
-      <ProfileStack.Screen name="AddVibe" component={AddVibeScreen as any} options={{ title: "Add Vibe" }} />
-      <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreen as any} options={{ title: "Today's Vibe" }} />
+      <ProfileStack.Screen name="AddVibe" component={AddVibeScreen} options={{ title: "Add Vibe" }} />
+      <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreenWrapper} options={{ title: "Today's Vibe" }} />
       <ProfileStack.Screen
-        name="TicketContact"
-        component={TicketContactScreen}
+        name="TicketContactScreen"
+        component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
     </ProfileStack.Navigator>
@@ -221,7 +227,7 @@ export const MainTabNavigator = () => {
     <MainTab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName = ""
+          let iconName: keyof typeof Ionicons.glyphMap = "business"
 
           if (route.name === "Venues") {
             iconName = focused ? "business" : "business-outline"
@@ -235,7 +241,7 @@ export const MainTabNavigator = () => {
             iconName = focused ? "person" : "person-outline"
           }
 
-          return <Ionicons name={iconName as any} size={size} color={color} />
+          return <Ionicons name={iconName} size={size} color={color} />
         },
         tabBarActiveTintColor: "#2196F3",
         tabBarInactiveTintColor: "gray",
@@ -259,4 +265,4 @@ export const MainTabNavigator = () => {
       <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />
     </MainTab.Navigator>
   )
-}
+}  

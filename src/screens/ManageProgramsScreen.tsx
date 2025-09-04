@@ -4,23 +4,17 @@ import type React from "react"
 import { useState } from "react"
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { NativeStackScreenProps } from "@react-navigation/native-stack"
 import FirebaseService from "../services/FirebaseService"
+import { VenuesStackParamList } from "../navigation/types"
 
-interface ManageProgramsScreenProps {
-  navigation: any
-  route: {
-    params: {
-      venueId: string
-      weeklyPrograms: Record<string, string>
-    }
-  }
-}
+type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamList, "ManagePrograms">
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 const ManageProgramsScreen: React.FC<ManageProgramsScreenProps> = ({ navigation, route }) => {
   const { venueId, weeklyPrograms } = route.params
-  const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms || {})
+  const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms)
   const [loading, setLoading] = useState(false)
 
   const handleProgramChange = (day: string, program: string) => {

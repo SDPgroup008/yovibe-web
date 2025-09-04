@@ -19,7 +19,7 @@ import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
-import type { EventDetailScreenProps } from "../navigation/types"
+import type { EventDetailScreenProps } from "../navigation/types"  
 
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
   const { eventId } = route.params
@@ -33,20 +33,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        if (!eventId) {
-          console.error("EventDetailScreen: No eventId provided")
-          Alert.alert("Error", "Event ID is missing")
-          navigation.goBack()
-          return
-        }
-
         const eventData = await FirebaseService.getEventById(eventId)
-        if (!eventData) {
-          Alert.alert("Error", "Event not found")
-          navigation.goBack()
-          return
-        }
-
         setEvent(eventData)
 
         // Check if current user is attending
@@ -58,15 +45,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         setAttendeeCount(eventData?.attendees?.length || 0)
       } catch (error) {
         console.error("Error loading event details:", error)
-        Alert.alert("Error", "Failed to load event details")
-        navigation.goBack()
       } finally {
         setLoading(false)
       }
     }
 
     loadEvent()
-  }, [eventId, user, navigation])
+  }, [eventId, user])
 
   const handleToggleGoing = async () => {
     if (!user) {
@@ -106,13 +91,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
 
   const handleBuyTicket = () => {
     if (!user) {
-      Alert.alert("Sign In Required", "Please sign in to view ticket contact information.")
+      Alert.alert("Sign In Required", "Please sign in to view ticket contact details.")
       return
     }
 
     if (!event) return
 
-    navigation.navigate("TicketContact", { eventId: event.id })
+    navigation.navigate("TicketContactScreen", { ticketContacts: event.ticketContacts })
   }
 
   const handleShare = async () => {
@@ -161,16 +146,10 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     return (
       <View style={styles.loadingContainer}>
         <Text style={styles.loadingText}>Event not found</Text>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>Go Back</Text>
-        </TouchableOpacity>
       </View>
     )
   }
 
-  // Parse entry fee to get numeric value
-  const entryFeeString = event.entryFee || "0"
-  const ticketPrice = Number.parseFloat(entryFeeString.replace(/[^0-9.]/g, "")) || 0
   const isEventOwner = user && event.createdBy === user.id
 
   return (
@@ -187,6 +166,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
               <Text style={styles.eventLocation}>
                 {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
               </Text>
+
               <View style={styles.eventMeta}>
                 {attendeeCount > 0 && (
                   <View style={styles.attendeeCount}>
@@ -194,7 +174,9 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
                     <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
                   </View>
                 )}
-                <Text style={styles.entryFee}>{event.entryFee || "Free"}</Text>
+                <Text style={styles.entryFee}>
+                  {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
+                </Text>
               </View>
             </View>
           </View>
@@ -230,6 +212,16 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           </TouchableOpacity>
         </View>
 
+        {/* Event Owner Controls */}
+        {isEventOwner && (
+          <View style={styles.ownerControls}>
+            <TouchableOpacity style={styles.ownerButton} onPress={handleBuyTicket}>
+              <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.ownerButtonText}>View Ticket Contacts</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {user?.userType === "admin" && (
           <TouchableOpacity
             style={styles.deleteButton}
@@ -261,7 +253,11 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         <TouchableOpacity
           style={styles.venueContainer}
           onPress={() => {
-            navigation.navigate("VenueDetail", { venueId: event.venueId })
+            // Use the correct navigation approach for cross-stack navigation
+            navigation.navigate("Venues", {
+              screen: "VenueDetail",
+              params: { venueId: event.venueId },
+            })
           }}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
@@ -286,7 +282,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         </View>
 
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
-          <Ionicons name="call" size={20} color="#FFFFFF" />
+          <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
           <Text style={styles.buttonText}>Contact for Tickets</Text>
         </TouchableOpacity>
       </View>
@@ -309,19 +305,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
   },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  backButtonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
   headerImage: {
     width: "100%",
     height: 300,
@@ -332,6 +315,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     paddingTop: Platform.OS === "ios" ? 50 : 16,
+  },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   eventHeaderInfo: {
     marginBottom: 16,
@@ -423,6 +414,24 @@ const styles = StyleSheet.create({
   },
   goingButtonText: {
     color: "#FFFFFF",
+  },
+  ownerControls: {
+    marginBottom: 20,
+  },
+  ownerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  ownerButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    marginLeft: 8,
   },
   venueContainer: {
     flexDirection: "row",

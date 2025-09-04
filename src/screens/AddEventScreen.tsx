@@ -2,201 +2,342 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { useNavigation, useRoute } from "@react-navigation/native"
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Image,
+  Alert,
+  ActivityIndicator,
+} from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import ImagePickerService from "../services/ImagePickerService"
+import FirebaseService from "../services/FirebaseService"
+import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
-import firebaseService from "../services/FirebaseService"
-import ImagePickerService from "../services/ImagePickerService.web"
-import type { Event, ContactPhone } from "../models/Event"
-import type { Venue } from "../models/Venue"
-import { ScrollView, View, TouchableOpacity, Text } from "react-native"
+import { VenuesStackParamList, EventsStackParamList } from "../navigation/types"
 
-const AddEventScreen: React.FC = () => {
-  const navigation = useNavigation()
-  const route = useRoute()
+type AddEventScreenProps =
+  | NativeStackScreenProps<VenuesStackParamList, "AddEvent">
+  | NativeStackScreenProps<EventsStackParamList, "AddEvent">
+
+const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) => {
   const { user } = useAuth()
-  const [loading, setLoading] = useState(false)
-  const [venues, setVenues] = useState<Venue[]>([])
-  const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
-  const [showVenueDropdown, setShowVenueDropdown] = useState(false)
-
-  const routeParams = route.params as { venueId?: string; venueName?: string } | undefined
-
-  // Event form state
-  const [eventName, setEventName] = useState("")
+  const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [date, setDate] = useState("")
-  const [time, setTime] = useState("")
+  const [date, setDate] = useState(new Date())
+  const [dateString, setDateString] = useState(new Date().toISOString().split("T")[0])
   const [artists, setArtists] = useState("")
-  const [posterImage, setPosterImage] = useState<string | null>(null)
+  const [image, setImage] = useState<string | null>(null)
+  const [imageFile, setImageFile] = useState<any>(null)
   const [isFeatured, setIsFeatured] = useState(false)
-  const [basePrice, setBasePrice] = useState("")
-
-  const [contactPhones, setContactPhones] = useState<ContactPhone[]>([])
-  const [showAddContact, setShowAddContact] = useState(false)
-  const [newContact, setNewContact] = useState<ContactPhone>({
-    number: "",
-    name: "",
-    isWhatsApp: false,
-    isPrimary: false,
-  })
+  const [loading, setLoading] = useState(false)
+  const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([])
+  const [selectedVenueId, setSelectedVenueId] = useState(route.params?.venueId ?? "")
+  const [selectedVenueName, setSelectedVenueName] = useState(route.params?.venueName ?? "")
+  const [showVenueSelector, setShowVenueSelector] = useState(false)
+  const [useCustomVenue, setUseCustomVenue] = useState(false)
+  const [customVenueName, setCustomVenueName] = useState("")
+  const [customVenueAddress, setCustomVenueAddress] = useState("")
+  const [latitude, setLatitude] = useState("0")
+  const [longitude, setLongitude] = useState("0")
+  const [location, setLocation] = useState("")
+  const [isFreeEntry, setIsFreeEntry] = useState(false)
+  const [showFeeForm, setShowFeeForm] = useState(false)
+  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string }>>([])
+  const [newFeeName, setNewFeeName] = useState("")
+  const [newFeeAmount, setNewFeeAmount] = useState("")
+  const [showContactForm, setShowContactForm] = useState(false)
+  const [ticketContacts, setTicketContacts] = useState<Array<{ number: string; type: "call" | "whatsapp" }>>([])
+  const [newContactNumber, setNewContactNumber] = useState("")
+  const [newContactType, setNewContactType] = useState<"call" | "whatsapp">("call")
+  const [locationPermission, setLocationPermission] = useState(false)
 
   useEffect(() => {
-    loadVenues()
-    if (routeParams?.venueId && routeParams?.venueName) {
-      const preSelectedVenue = { id: routeParams.venueId, name: routeParams.venueName } as Venue
-      setSelectedVenue(preSelectedVenue)
+    if (user && user.userType !== "club_owner") {
+      loadVenues()
+    } else if (user && user.userType === "club_owner") {
+      // Fetch venue name for club owner
+      const fetchVenueName = async () => {
+        try {
+          const venue = await FirebaseService.getVenueById(route.params?.venueId ?? "")
+          if (venue) {
+            setSelectedVenueName(venue.name)
+          }
+        } catch (error) {
+          console.error("Error fetching venue name:", error)
+        }
+      }
+      fetchVenueName()
     }
-  }, [])
+  }, [user, route.params?.venueId])
 
   useEffect(() => {
-    // Update ticket prices when base price changes
-    const price = Number.parseFloat(basePrice) || 0
-    // Placeholder for ticket types update logic
-  }, [basePrice])
+    if (useCustomVenue) {
+      ;(async () => {
+        const hasPermission = await LocationService.requestPermissions()
+        setLocationPermission(hasPermission)
+        if (hasPermission) {
+          const location = await LocationService.getCurrentPosition()
+          setLatitude(location.latitude.toString())
+          setLongitude(location.longitude.toString())
+        }
+      })()
+    }
+  }, [useCustomVenue])
 
   const loadVenues = async () => {
     try {
-      const venuesList = await firebaseService.getVenues()
-      setVenues(venuesList)
+      const venuesList = await FirebaseService.getVenues()
+      setVenues(venuesList.map((venue) => ({ id: venue.id, name: venue.name })))
+      // Set default venue if provided in route params
+      if (route.params?.venueId) {
+        const selectedVenue = venuesList.find((venue) => venue.id === route.params.venueId)
+        if (selectedVenue) {
+          setSelectedVenueName(selectedVenue.name)
+        }
+      }
     } catch (error) {
       console.error("Error loading venues:", error)
-      alert("Failed to load venues")
     }
   }
 
-  const handleImagePicker = async () => {
-    try {
-      console.log("AddEventScreen: Starting image picker")
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(e.target.value)
+    setDate(newDate)
+    setDateString(e.target.value)
+  }
 
+  const handleVenueSelect = (venueId: string, venueName: string) => {
+    setSelectedVenueId(venueId)
+    setSelectedVenueName(venueName)
+    setShowVenueSelector(false)
+    setUseCustomVenue(false)
+  }
+
+  const toggleCustomVenue = () => {
+    setUseCustomVenue(!useCustomVenue)
+    if (!useCustomVenue) {
+      setSelectedVenueId("")
+      setSelectedVenueName("")
+    } else {
+      setCustomVenueName("")
+      setCustomVenueAddress("")
+      setLatitude("0")
+      setLongitude("0")
+    }
+  }
+
+  const toggleFreeEntry = () => {
+    setIsFreeEntry(!isFreeEntry)
+    if (!isFreeEntry) {
+      setEntryFees([])
+      setShowFeeForm(false)
+    }
+  }
+
+  const toggleFeeForm = () => {
+    setShowFeeForm(!showFeeForm)
+    setNewFeeName("")
+    setNewFeeAmount("")
+  }
+
+  const addFee = () => {
+    if (!newFeeName.trim() || !newFeeAmount.trim()) {
+      Alert.alert("Error", "Please enter both a fee name and amount")
+      return
+    }
+    setEntryFees([...entryFees, { name: newFeeName, amount: newFeeAmount }])
+    setNewFeeName("")
+    setNewFeeAmount("")
+    setShowFeeForm(false)
+  }
+
+  const removeFee = (index: number) => {
+    setEntryFees(entryFees.filter((_, i) => i !== index))
+  }
+
+  const toggleContactForm = () => {
+    setShowContactForm(!showContactForm)
+    setNewContactNumber("")
+    setNewContactType("call")
+  }
+
+  const addContact = () => {
+    if (!newContactNumber.trim()) {
+      Alert.alert("Error", "Please enter a valid phone number")
+      return
+    }
+    if (!/^\+?\d+$/.test(newContactNumber)) {
+      Alert.alert("Error", "Phone number must contain only digits and an optional country code (+)")
+      return
+    }
+    setTicketContacts([...ticketContacts, { number: newContactNumber, type: newContactType }])
+    setNewContactNumber("")
+    setNewContactType("call")
+    setShowContactForm(false)
+  }
+
+  const removeContact = (index: number) => {
+    setTicketContacts(ticketContacts.filter((_, i) => i !== index))
+  }
+
+  const pickImage = async () => {
+    try {
       const result = await ImagePickerService.launchImageLibraryAsync({
         mediaTypes: "Images",
         allowsEditing: true,
-        aspect: [16, 9],
+        aspect: [3, 4],
         quality: 0.8,
       })
 
-      console.log("AddEventScreen: Image picker result:", result)
-
-      if (result && !result.canceled && result.assets?.[0]) {
-        setPosterImage(result.assets[0].uri)
-        console.log("AddEventScreen: Poster image set:", result.assets[0].uri)
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0]
+        console.log("Image selected:", selectedImage.uri.substring(0, 50) + "...")
+        setImage(selectedImage.uri)
+        setImageFile(selectedImage)
       }
     } catch (error) {
-      console.error("AddEventScreen: Error picking image:", error)
-      alert("Failed to pick image. Please try again.")
+      console.error("Error picking image:", error)
+      Alert.alert("Error", "Failed to pick image")
     }
   }
 
-  const addContactPhone = () => {
-    if (!newContact.number || !newContact.name) {
-      alert("Please fill in all contact details")
-      return
-    }
-
-    // Validate phone number format (basic validation)
-    if (!/^[0-9+\-\s()]+$/.test(newContact.number)) {
-      alert("Invalid phone number format")
-      return
-    }
-
-    // If this is the first contact or marked as primary, make it primary
-    const updatedContact = { ...newContact }
-    if (contactPhones.length === 0 || newContact.isPrimary) {
-      // Remove primary from other contacts if this one is primary
-      const updatedContacts = contactPhones.map((contact) => ({ ...contact, isPrimary: false }))
-      setContactPhones([...updatedContacts, { ...updatedContact, isPrimary: true }])
-    } else {
-      setContactPhones([...contactPhones, updatedContact])
-    }
-
-    setNewContact({
-      number: "",
-      name: "",
-      isWhatsApp: false,
-      isPrimary: false,
-    })
-    setShowAddContact(false)
-  }
-
-  const removeContactPhone = (index: number) => {
-    const updatedContacts = contactPhones.filter((_, i) => i !== index)
-    // If we removed the primary contact, make the first one primary
-    if (contactPhones[index].isPrimary && updatedContacts.length > 0) {
-      updatedContacts[0].isPrimary = true
-    }
-    setContactPhones(updatedContacts)
-  }
-
-  const togglePrimary = (index: number) => {
-    const updatedContacts = contactPhones.map((contact, i) => ({
-      ...contact,
-      isPrimary: i === index,
-    }))
-    setContactPhones(updatedContacts)
+  const handleImageUrlInput = () => {
+    Alert.alert(
+      "Image URL",
+      "Please enter the URL of the image:",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "OK",
+          onPress: (url) => {
+            if (url) {
+              setImage(url)
+            }
+          },
+        },
+      ],
+      {
+        userInterfaceStyle: "dark",
+        onDismiss: () => {},
+      }
+    )
   }
 
   const handleSubmit = async () => {
-    if (!eventName.trim()) {
-      alert("Please enter event name")
+    if (!name || !description || !artists) {
+      Alert.alert("Error", "Please fill in all required fields")
       return
     }
 
-    if (!selectedVenue) {
-      alert("Please select a venue")
+    if (!image) {
+      Alert.alert("Error", "Please select an image for the event")
       return
     }
 
-    if (!date || !time) {
-      alert("Please select date and time")
+    if (!user) {
+      Alert.alert("Error", "You must be logged in to add an event")
       return
     }
 
-    if (!posterImage) {
-      alert("Please select a poster image")
+    if (!useCustomVenue && !selectedVenueId) {
+      Alert.alert("Error", "Please select a venue for this event")
       return
     }
 
-    if (contactPhones.length === 0) {
-      alert("Please add at least one contact phone number for ticket inquiries")
+    if (useCustomVenue && (!customVenueName || !customVenueAddress)) {
+      Alert.alert("Error", "Please enter both name and address for the custom venue")
+      return
+    }
+
+    if (!location) {
+      Alert.alert("Error", "Please enter the location of the event")
+      return
+    }
+
+    if (ticketContacts.length === 0) {
+      Alert.alert("Error", "Please add at least one ticket contact number")
+      return
+    }
+
+    if (!isFreeEntry && entryFees.length === 0) {
+      Alert.alert("Error", "Please add at least one entry fee or select Free Entry")
       return
     }
 
     setLoading(true)
 
     try {
-      // Upload poster image
-      const posterUrl = await firebaseService.uploadEventImage(posterImage)
+      let venueId = selectedVenueId
+      let venueName = selectedVenueName
 
-      // Create event date
-      const eventDateTime = new Date(`${date}T${time}`)
+      if (useCustomVenue) {
+        const customVenue = {
+          name: customVenueName,
+          location: customVenueAddress,
+          description: `Custom venue for event: ${name}`,
+          categories: ["Other"],
+          vibeRating: 4.0,
+          backgroundImageUrl: image,
+          latitude: Number.parseFloat(latitude) || 0,
+          longitude: Number.parseFloat(longitude) || 0,
+          ownerId: user.id,
+          createdAt: new Date(),
+          venueType: "nightlife",
+          todayImages: [],
+          weeklyPrograms: {},
+        }
 
-      const eventData: Omit<Event, "id"> = {
-        name: eventName.trim(),
-        venueId: selectedVenue.id,
-        venueName: selectedVenue.name,
-        description: description.trim(),
-        date: eventDateTime,
-        createdAt: new Date(),
-        posterImageUrl: posterUrl,
-        artists: artists
-          .split(",")
-          .map((artist) => artist.trim())
-          .filter(Boolean),
-        isFeatured,
-        location: selectedVenue.location,
-        priceIndicator: Math.ceil((Number.parseFloat(basePrice) || 0) / 10000), // 1-3 based on price
-        entryFee: `UGX ${Number.parseFloat(basePrice) || 0}`,
-        attendees: [],
-        contactPhones,
+        venueId = await FirebaseService.addVenue(customVenue)
+        venueName = customVenueName
       }
 
-      await firebaseService.addEvent(eventData)
+      let imageUrl = image
+      if (imageFile) {
+        try {
+          console.log("Uploading event poster image...")
+          imageUrl = await FirebaseService.uploadEventImage(image)
+          console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...")
+        } catch (error) {
+          console.error("Error uploading image:", error)
+          Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.")
+        }
+      }
 
-      alert("Event created successfully!")
+      const eventData = {
+        name,
+        description,
+        date,
+        artists: artists.split(",").map((artist) => artist.trim()),
+        venueId,
+        venueName,
+        posterImageUrl: imageUrl || "",
+        isFeatured,
+        location: location.toUpperCase(),
+        ticketContacts,
+        entryFees: isFreeEntry ? [] : entryFees,
+        attendees: [],
+        createdBy: user.id,
+        createdByType: user.userType,
+        priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map(fee => parseFloat(fee.amount))) : 0,
+        isFreeEntry,
+      }
+
+      await FirebaseService.addEvent(eventData)
+
+      Alert.alert("Success", "Event created successfully")
       navigation.goBack()
     } catch (error) {
-      console.error("Error creating event:", error)
-      alert("Failed to create event. Please try again.")
+      Alert.alert("Error", "Failed to create event")
+      console.error(error)
     } finally {
       setLoading(false)
     }
@@ -204,613 +345,564 @@ const AddEventScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={{ color: "#FFFFFF", fontSize: 18 }}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Add Event</Text>
-        <TouchableOpacity onPress={handleSubmit} style={styles.submitButton} disabled={loading}>
-          <Text style={styles.submitButtonText}>{loading ? "Creating..." : "Create"}</Text>
-        </TouchableOpacity>
-      </View>
-
       <View style={styles.form}>
-        {/* Basic Event Information */}
-        <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Event Details</h2>
+        <Text style={styles.label}>Event Name *</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="Enter event name"
+          placeholderTextColor="#999"
+        />
 
+        <Text style={styles.label}>Description *</Text>
+        <TextInput
+          style={[styles.input, styles.textArea]}
+          value={description}
+          onChangeText={setDescription}
+          placeholder="Enter event description"
+          placeholderTextColor="#999"
+          multiline
+          numberOfLines={4}
+        />
+
+        <Text style={styles.label}>Event Date *</Text>
+        <View style={styles.datePickerContainer}>
           <input
-            style={inputStyle}
-            type="text"
-            placeholder="Event Name"
-            value={eventName}
-            onChange={(e) => setEventName(e.target.value)}
+            type="date"
+            value={dateString}
+            onChange={handleDateChange}
+            min={new Date().toISOString().split("T")[0]}
+            style={{
+              backgroundColor: "#1E1E1E",
+              color: "#FFFFFF",
+              padding: "12px",
+              borderRadius: "8px",
+              border: "1px solid #333",
+              width: "100%",
+              marginBottom: "16px",
+            }}
           />
+        </View>
 
-          <textarea
-            style={{ ...inputStyle, minHeight: "100px", fontFamily: "inherit" }}
-            placeholder="Event Description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={4}
-          />
+        <Text style={styles.label}>Artists *</Text>
+        <TextInput
+          style={styles.input}
+          value={artists}
+          onChangeText={setArtists}
+          placeholder="Enter artists (comma separated)"
+          placeholderTextColor="#999"
+        />
 
-          <input
-            style={inputStyle}
-            type="text"
-            placeholder="Artists (comma separated)"
-            value={artists}
-            onChange={(e) => setArtists(e.target.value)}
-          />
+        {(!user?.userType || user?.userType !== "club_owner") && (
+          <>
+            <View style={styles.venueToggleContainer}>
+              <TouchableOpacity
+                style={[styles.venueToggleButton, !useCustomVenue && styles.venueToggleButtonActive]}
+                onPress={() => setUseCustomVenue(false)}
+              >
+                <Text style={styles.venueToggleText}>Select Existing Venue</Text>
+              </TouchableOpacity>
 
-          <div style={rowStyle}>
-            <div style={dateTimeContainerStyle}>
-              <div style={dateTimeInputContainerStyle}>
-                <span style={iconStyle}>📅</span>
-                <input
-                  style={dateTimeInputStyle}
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  min={new Date().toISOString().split("T")[0]}
-                />
-              </div>
-            </div>
+              <TouchableOpacity
+                style={[styles.venueToggleButton, useCustomVenue && styles.venueToggleButtonActive]}
+                onPress={() => setUseCustomVenue(true)}
+              >
+                <Text style={styles.venueToggleText}>Add Custom Venue</Text>
+              </TouchableOpacity>
+            </View>
 
-            <div style={dateTimeContainerStyle}>
-              <div style={dateTimeInputContainerStyle}>
-                <span style={iconStyle}>🕐</span>
-                <input style={dateTimeInputStyle} type="time" value={time} onChange={(e) => setTime(e.target.value)} />
-              </div>
-            </div>
-          </div>
+            {!useCustomVenue ? (
+              <>
+                <Text style={styles.label}>Venue *</Text>
+                <TouchableOpacity style={styles.venueSelector} onPress={() => setShowVenueSelector(!showVenueSelector)}>
+                  <Text style={styles.venueSelectorText}>{selectedVenueName || "Select a venue"}</Text>
+                  <Ionicons name={showVenueSelector ? "chevron-up" : "chevron-down"} size={24} color="#FFFFFF" />
+                </TouchableOpacity>
 
-          <input
-            style={inputStyle}
-            type="number"
-            placeholder="Base Ticket Price (UGX)"
-            value={basePrice}
-            onChange={(e) => setBasePrice(e.target.value)}
-          />
-
-          <div style={switchRowStyle}>
-            <span style={switchLabelStyle}>Featured Event</span>
-            <label style={switchStyle}>
-              <input type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} />
-              <span style={sliderStyle}></span>
-            </label>
-          </div>
-        </div>
-
-        {/* Venue Selection */}
-        <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Venue</h2>
-          <div style={dropdownContainerStyle}>
-            <button style={dropdownStyle} onClick={() => setShowVenueDropdown(!showVenueDropdown)}>
-              <span style={selectedVenue ? dropdownTextStyle : dropdownPlaceholderStyle}>
-                {selectedVenue ? selectedVenue.name : "Select Venue"}
-              </span>
-              <span style={dropdownArrowStyle}>{showVenueDropdown ? "▲" : "▼"}</span>
-            </button>
-
-            {showVenueDropdown && (
-              <div style={dropdownListStyle}>
-                {venues.map((venue) => (
-                  <div
-                    key={venue.id}
-                    style={dropdownItemStyle}
-                    onClick={() => {
-                      setSelectedVenue(venue)
-                      setShowVenueDropdown(false)
-                    }}
-                  >
-                    <div style={dropdownItemTextStyle}>{venue.name}</div>
-                    <div style={dropdownItemSubtextStyle}>{venue.location}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Poster Image */}
-        <div style={sectionStyle}>
-          <h2 style={sectionTitleStyle}>Event Poster</h2>
-          <div style={imageButtonStyle} onClick={handleImagePicker}>
-            {posterImage ? (
-              <div style={imageContainerStyle}>
-                <img src={posterImage || "/placeholder.svg"} style={posterPreviewStyle} alt="Event poster" />
-                <div style={imageOverlayStyle}>
-                  <span style={cameraIconStyle}>📷</span>
-                  <div style={imageOverlayTextStyle}>Tap to change</div>
-                </div>
-              </div>
+                {showVenueSelector && (
+                  <View style={styles.venueDropdown}>
+                    <ScrollView style={styles.venueList} nestedScrollEnabled>
+                      {venues.map((venue) => (
+                        <TouchableOpacity
+                          key={venue.id}
+                          style={styles.venueItem}
+                          onPress={() => handleVenueSelect(venue.id, venue.name)}
+                        >
+                          <Text style={styles.venueItemText}>{venue.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </>
             ) : (
-              <div style={imagePlaceholderStyle}>
-                <span style={imageIconStyle}>🖼️</span>
-                <div style={imagePlaceholderTextStyle}>Tap to select poster image</div>
-                <div style={imagePlaceholderSubtextStyle}>Recommended: 16:9 aspect ratio</div>
-              </div>
+              <>
+                <Text style={styles.label}>Custom Venue Name *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={customVenueName}
+                  onChangeText={setCustomVenueName}
+                  placeholder="Enter venue name"
+                  placeholderTextColor="#999"
+                />
+
+                <Text style={styles.label}>Custom Venue Address *</Text>
+                <TextInput
+                  style={styles.input}
+                  value={customVenueAddress}
+                  onChangeText={setCustomVenueAddress}
+                  placeholder="Enter venue address"
+                  placeholderTextColor="#999"
+                />
+
+                <View style={styles.locationContainer}>
+                  <View style={styles.locationField}>
+                    <Text style={styles.label}>Latitude</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={latitude}
+                      onChangeText={setLatitude}
+                      placeholder="Latitude"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <View style={styles.locationField}>
+                    <Text style={styles.label}>Longitude</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={longitude}
+                      onChangeText={setLongitude}
+                      placeholder="Longitude"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                    />
+                  </View>
+                </View>
+              </>
             )}
-          </div>
-        </div>
+          </>
+        )}
 
-        {/* Contact Numbers for Ticket Inquiries */}
-        <div style={sectionStyle}>
-          <div style={sectionHeaderStyle}>
-            <h2 style={sectionTitleStyle}>Contact Numbers for Ticket Inquiries</h2>
-            <button style={addButtonStyle} onClick={() => setShowAddContact(true)}>
-              <span style={addIconStyle}>+</span>
-              Add Contact
-            </button>
-          </div>
+        {user?.userType === "club_owner" && (
+          <>
+            <Text style={styles.label}>Venue</Text>
+            <View style={styles.venueInfo}>
+              <Text style={styles.venueText}>{selectedVenueName || "No venue selected"}</Text>
+            </View>
+          </>
+        )}
 
-          {contactPhones.map((contact, index) => (
-            <div key={index} style={contactCardStyle}>
-              <div style={contactHeaderStyle}>
-                <div style={contactInfoStyle}>
-                  <span style={contactIconStyle}>{contact.isWhatsApp ? "💬" : "📞"}</span>
-                  <div>
-                    <span style={contactNameStyle}>{contact.name}</span>
-                    {contact.isPrimary && <span style={primaryBadgeStyle}>PRIMARY</span>}
-                  </div>
-                </div>
-                <button
-                  style={{ backgroundColor: "#6366f1", borderRadius: "6px", padding: "6px" }}
-                  onClick={() => removeContactPhone(index)}
-                >
-                  ×
-                </button>
-              </div>
-              <div style={contactNumberStyle}>{contact.number}</div>
-              <div style={contactActionsStyle}>
-                <button
-                  style={contact.isPrimary ? primaryButtonActiveStyle : primaryButtonStyle}
-                  onClick={() => togglePrimary(index)}
-                >
-                  {contact.isPrimary ? "Primary Contact" : "Make Primary"}
-                </button>
-              </div>
-            </div>
-          ))}
+        {user?.userType === "admin" && (
+          <View style={styles.checkboxContainer}>
+            <TouchableOpacity style={styles.checkbox} onPress={() => setIsFeatured(!isFeatured)}>
+              {isFeatured ? (
+                <Ionicons name="checkbox" size={24} color="#2196F3" />
+              ) : (
+                <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+              )}
+            </TouchableOpacity>
+            <Text style={styles.checkboxLabel}>Feature this event</Text>
+          </View>
+        )}
 
-          {showAddContact && (
-            <div style={addContactFormStyle}>
-              <h3 style={formTitleStyle}>Add Contact Number</h3>
+        <Text style={styles.label}>Location (City) *</Text>
+        <TextInput
+          style={styles.input}
+          value={location}
+          onChangeText={setLocation}
+          placeholder="Enter event location (e.g. KAMPALA)"
+          placeholderTextColor="#999"
+        />
 
-              <input
-                style={inputStyle}
-                type="tel"
-                placeholder="Phone Number (e.g., +256 777 123456)"
-                value={newContact.number}
-                onChange={(e) => setNewContact({ ...newContact, number: e.target.value })}
-              />
+        <Text style={styles.label}>Entry Fees *</Text>
+        <View style={styles.checkboxContainer}>
+          <TouchableOpacity style={styles.checkbox} onPress={toggleFreeEntry}>
+            {isFreeEntry ? (
+              <Ionicons name="checkbox" size={24} color="#2196F3" />
+            ) : (
+              <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.checkboxLabel}>Free Entry</Text>
+        </View>
+        {!isFreeEntry && (
+          <>
+            <TouchableOpacity style={styles.addButton} onPress={toggleFeeForm}>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Add Fee</Text>
+            </TouchableOpacity>
+            {showFeeForm && (
+              <View style={styles.feeContainer}>
+                <TextInput
+                  style={[styles.input, styles.feeNameInput]}
+                  value={newFeeName}
+                  onChangeText={setNewFeeName}
+                  placeholder="Fee name (e.g. VIP, Regular)"
+                  placeholderTextColor="#999"
+                />
+                <TextInput
+                  style={[styles.input, styles.feeAmountInput]}
+                  value={newFeeAmount}
+                  onChangeText={setNewFeeAmount}
+                  placeholder="Amount (e.g. 20,000 UGX)"
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity style={styles.addButton} onPress={addFee}>
+                  <Ionicons name="add" size={20} color="#FFFFFF" />
+                  <Text style={styles.addButtonText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            {entryFees.map((fee, index) => (
+              <View key={index} style={styles.feeItem}>
+                <Text style={styles.feeText}>
+                  {fee.name}: {fee.amount}
+                </Text>
+                <TouchableOpacity onPress={() => removeFee(index)}>
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
+        )}
 
-              <input
-                style={inputStyle}
-                type="text"
-                placeholder="Contact Name"
-                value={newContact.name}
-                onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-              />
+        <Text style={styles.label}>Ticket Contact Numbers *</Text>
+        <TouchableOpacity style={styles.addButton} onPress={toggleContactForm}>
+          <Ionicons name="add" size={20} color="#FFFFFF" />
+          <Text style={styles.addButtonText}>Add Contact</Text>
+        </TouchableOpacity>
+        {showContactForm && (
+          <View style={styles.contactContainer}>
+            <TextInput
+              style={[styles.input, styles.contactInput]}
+              value={newContactNumber}
+              onChangeText={setNewContactNumber}
+              placeholder="Enter phone number (e.g. +256123456789)"
+              placeholderTextColor="#999"
+              keyboardType="phone-pad"
+            />
+            <View style={styles.contactTypeContainer}>
+              <TouchableOpacity
+                style={[styles.contactTypeButton, newContactType === "call" && styles.selectedContactTypeButton]}
+                onPress={() => setNewContactType("call")}
+              >
+                <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.contactTypeButton, newContactType === "whatsapp" && styles.selectedContactTypeButton]}
+                onPress={() => setNewContactType("whatsapp")}
+              >
+                <Ionicons name="logo-whatsapp" size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.addButton} onPress={addContact}>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {ticketContacts.map((contact, index) => (
+          <View key={index} style={styles.contactItem}>
+            <Text style={styles.contactText}>
+              {contact.number} ({contact.type === "call" ? "Call" : "WhatsApp"})
+            </Text>
+            <TouchableOpacity onPress={() => removeContact(index)}>
+              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+            </TouchableOpacity>
+          </View>
+        ))}
 
-              <div style={switchRowStyle}>
-                <span style={switchLabelStyle}>WhatsApp Available</span>
-                <label style={switchStyle}>
-                  <input
-                    type="checkbox"
-                    checked={newContact.isWhatsApp}
-                    onChange={(e) => setNewContact({ ...newContact, isWhatsApp: e.target.checked })}
-                  />
-                  <span style={sliderStyle}></span>
-                </label>
-              </div>
+        <Text style={styles.label}>Event Poster *</Text>
+        <View style={styles.imageOptions}>
+          <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+            <Ionicons name="image" size={20} color="#FFFFFF" />
+            <Text style={styles.imageButtonText}>Pick from Device</Text>
+          </TouchableOpacity>
 
-              <div style={switchRowStyle}>
-                <span style={switchLabelStyle}>Primary Contact</span>
-                <label style={switchStyle}>
-                  <input
-                    type="checkbox"
-                    checked={newContact.isPrimary}
-                    onChange={(e) => setNewContact({ ...newContact, isPrimary: e.target.checked })}
-                  />
-                  <span style={sliderStyle}></span>
-                </label>
-              </div>
+          <TouchableOpacity style={styles.imageButton} onPress={handleImageUrlInput}>
+            <Ionicons name="link" size={20} color="#FFFFFF" />
+            <Text style={styles.imageButtonText}>Enter URL</Text>
+          </TouchableOpacity>
+        </View>
 
-              <div style={{ display: "flex", gap: "8px" }}>
-                <button
-                  style={{
-                    backgroundColor: "#6366f1",
-                    borderRadius: "6px",
-                    padding: "6px",
-                    color: "#fff",
-                    fontSize: "14px",
-                    fontWeight: "500",
-                    cursor: "pointer",
-                  }}
-                  onClick={() => setShowAddContact(false)}
-                >
-                  Cancel
-                </button>
-                <button style={addButtonStyle} onClick={addContactPhone}>
-                  Add Contact
-                </button>
-              </div>
-            </div>
+        {image && (
+          <View style={styles.imagePreview}>
+            <Image source={{ uri: image }} style={styles.previewImage} />
+            <TouchableOpacity
+              style={styles.removeImageButton}
+              onPress={() => {
+                setImage(null)
+                setImageFile(null)
+              }}
+            >
+              <Ionicons name="close-circle" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[styles.submitButton, loading && styles.disabledButton]}
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <>
+              <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.submitButtonText}>Create Event</Text>
+            </>
           )}
-        </div>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   )
 }
 
-const styles = {
+const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#000",
-    minHeight: "100vh" as any,
-    overflow: "auto" as any,
-  },
-  header: {
-    padding: 20,
-    maxWidth: 800,
-    marginLeft: "auto" as any,
-    marginRight: "auto" as any,
-    flexDirection: "row" as any,
-    justifyContent: "space-between" as any,
-    alignItems: "center" as any,
-  },
-  backButton: {
-    backgroundColor: "#6366f1",
-    borderRadius: 6,
-    padding: 6,
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold" as any,
-    color: "#fff",
-  },
-  submitButton: {
-    backgroundColor: "#6366f1",
-    borderRadius: 6,
-    padding: 6,
-  },
-  submitButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600" as any,
+    backgroundColor: "#121212",
   },
   form: {
-    padding: 20,
-    maxWidth: 800,
-    marginLeft: "auto" as any,
-    marginRight: "auto" as any,
+    padding: 16,
   },
-}
-
-const sectionStyle: React.CSSProperties = {
-  marginBottom: "24px",
-}
-
-const sectionTitleStyle: React.CSSProperties = {
-  fontSize: "18px",
-  fontWeight: "600",
-  color: "#fff",
-  marginBottom: "12px",
-}
-
-const sectionHeaderStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: "12px",
-}
-
-const inputStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "12px",
-  color: "#fff",
-  marginBottom: "12px",
-  outline: "1px solid #333",
-  fontSize: "16px",
-  width: "100%",
-  boxSizing: "border-box",
-}
-
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "row",
-  gap: "12px",
-}
-
-const dateTimeContainerStyle: React.CSSProperties = {
-  flex: 1,
-}
-
-const dateTimeInputContainerStyle: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "12px",
-  outline: "1px solid #333",
-  marginBottom: "12px",
-  gap: "8px",
-}
-
-const dateTimeInputStyle: React.CSSProperties = {
-  backgroundColor: "transparent",
-  color: "#fff",
-  fontSize: "16px",
-  flex: 1,
-  outline: "none",
-}
-
-const iconStyle: React.CSSProperties = {
-  fontSize: "20px",
-}
-
-const switchRowStyle: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "row",
-  justifyContent: "space-between",
-  alignItems: "center",
-  paddingTop: "8px",
-  paddingBottom: "8px",
-}
-
-const switchLabelStyle: React.CSSProperties = {
-  color: "#fff",
-  fontSize: "16px",
-}
-
-const switchStyle: React.CSSProperties = {
-  position: "relative",
-  display: "inline-block",
-  width: "60px",
-  height: "34px",
-}
-
-const sliderStyle: React.CSSProperties = {
-  position: "absolute",
-  cursor: "pointer",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: "#767577",
-  transition: "0.4s",
-  borderRadius: "34px",
-}
-
-const dropdownContainerStyle: React.CSSProperties = {
-  position: "relative",
-}
-
-const dropdownStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  padding: "12px",
-  outline: "1px solid #333",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  width: "100%",
-  cursor: "pointer",
-  fontSize: "16px",
-}
-
-const dropdownTextStyle: React.CSSProperties = {
-  color: "#fff",
-}
-
-const dropdownPlaceholderStyle: React.CSSProperties = {
-  color: "#666",
-}
-
-const dropdownArrowStyle: React.CSSProperties = {
-  color: "#666",
-}
-
-const dropdownListStyle: React.CSSProperties = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  right: 0,
-  backgroundColor: "#1a1a1a",
-  borderRadius: "8px",
-  marginTop: "4px",
-  outline: "1px solid #333",
-  zIndex: 1000,
-  maxHeight: "200px",
-  overflow: "auto",
-}
-
-const dropdownItemStyle: React.CSSProperties = {
-  padding: "12px",
-  cursor: "pointer",
-}
-
-const dropdownItemTextStyle: React.CSSProperties = {
-  color: "#fff",
-  fontSize: "16px",
-}
-
-const dropdownItemSubtextStyle: React.CSSProperties = {
-  color: "#666",
-  fontSize: "14px",
-  marginTop: "2px",
-}
-
-const imageButtonStyle: React.CSSProperties = {
-  borderRadius: "8px",
-  overflow: "hidden",
-  cursor: "pointer",
-}
-
-const imageContainerStyle: React.CSSProperties = {
-  position: "relative",
-}
-
-const posterPreviewStyle: React.CSSProperties = {
-  width: "100%",
-  height: "200px",
-  objectFit: "cover",
-}
-
-const imageOverlayStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  backgroundColor: "rgba(0,0,0,0.5)",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  alignItems: "center",
-  opacity: 0.8,
-}
-
-const cameraIconStyle: React.CSSProperties = {
-  fontSize: "24px",
-}
-
-const imageOverlayTextStyle: React.CSSProperties = {
-  color: "#fff",
-  fontSize: "14px",
-  marginTop: "4px",
-}
-
-const imagePlaceholderStyle: React.CSSProperties = {
-  backgroundColor: "#1a1a1a",
-  height: "200px",
-  display: "flex",
-  flexDirection: "column",
-  justifyContent: "center",
-  alignItems: "center",
-  outline: "2px dashed #333",
-}
-
-const imageIconStyle: React.CSSProperties = {
-  fontSize: "48px",
-}
-
-const imagePlaceholderTextStyle: React.CSSProperties = {
-  color: "#666",
-  fontSize: "16px",
-  marginTop: "8px",
-}
-
-const imagePlaceholderSubtextStyle: React.CSSProperties = {
-  color: "#555",
-  fontSize: "12px",
-  marginTop: "4px",
-}
-
-const addButtonStyle: React.CSSProperties = {
-  backgroundColor: "#6366f1",
-  paddingLeft: "12px",
-  paddingRight: "12px",
-  paddingTop: "6px",
-  paddingBottom: "6px",
-  borderRadius: "6px",
-  display: "flex",
-  alignItems: "center",
-  gap: "4px",
-  color: "#fff",
-  fontSize: "14px",
-  fontWeight: "500",
-  cursor: "pointer",
-}
-
-const addIconStyle: React.CSSProperties = {
-  fontSize: "16px",
-}
-
-const contactCardStyle = {
-  backgroundColor: "#1E1E1E",
-  borderRadius: "12px",
-  padding: "16px",
-  marginBottom: "12px",
-  border: "1px solid #333333",
-}
-
-const contactHeaderStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  marginBottom: "8px",
-}
-
-const contactInfoStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: "12px",
-}
-
-const contactIconStyle = {
-  fontSize: "20px",
-}
-
-const contactNameStyle = {
-  color: "#FFFFFF",
-  fontWeight: "600",
-  fontSize: "16px",
-  marginRight: "8px",
-}
-
-const primaryBadgeStyle = {
-  backgroundColor: "#2196F3",
-  color: "#FFFFFF",
-  fontSize: "10px",
-  padding: "2px 6px",
-  borderRadius: "4px",
-  fontWeight: "bold",
-}
-
-const contactNumberStyle = {
-  color: "#BBBBBB",
-  fontSize: "14px",
-  marginBottom: "8px",
-}
-
-const contactActionsStyle = {
-  display: "flex",
-  gap: "8px",
-}
-
-const primaryButtonStyle = {
-  backgroundColor: "transparent",
-  border: "1px solid #2196F3",
-  color: "#2196F3",
-  padding: "4px 8px",
-  borderRadius: "4px",
-  fontSize: "12px",
-  cursor: "pointer",
-}
-
-const primaryButtonActiveStyle = {
-  ...primaryButtonStyle,
-  backgroundColor: "#2196F3",
-  color: "#FFFFFF",
-}
-
-const addContactFormStyle = {
-  backgroundColor: "#2A2A2A",
-  borderRadius: "12px",
-  padding: "20px",
-  marginTop: "16px",
-}
-
-const formTitleStyle: React.CSSProperties = {
-  color: "#fff",
-  fontSize: "16px",
-  fontWeight: "500",
-  marginBottom: "12px",
-}
+  label: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    color: "#FFFFFF",
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  textArea: {
+    height: 100,
+    textAlignVertical: "top",
+  },
+  datePickerContainer: {
+    marginBottom: 16,
+  },
+  venueToggleContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  venueToggleButton: {
+    flex: 1,
+    padding: 10,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#333",
+    backgroundColor: "#1E1E1E",
+  },
+  venueToggleButtonActive: {
+    backgroundColor: "#2196F3",
+  },
+  venueToggleText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  venueSelector: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  venueSelectorText: {
+    color: "#FFFFFF",
+  },
+  venueDropdown: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+    maxHeight: 150,
+  },
+  venueList: {
+    padding: 8,
+  },
+  venueItem: {
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  venueItemText: {
+    color: "#FFFFFF",
+  },
+  venueInfo: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  venueText: {
+    color: "#FFFFFF",
+  },
+  checkboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  checkbox: {
+    marginRight: 8,
+  },
+  checkboxLabel: {
+    color: "#FFFFFF",
+  },
+  imageOptions: {
+    flexDirection: "row",
+    marginBottom: 16,
+  },
+  imageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 12,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+  },
+  imageButtonText: {
+    color: "#FFFFFF",
+    marginLeft: 8,
+  },
+  imagePreview: {
+    height: 200,
+    marginBottom: 16,
+    borderRadius: 8,
+    overflow: "hidden",
+    position: "relative",
+  },
+  previewImage: {
+    width: "100%",
+    height: "100%",
+  },
+  removeImageButton: {
+    position: "absolute",
+    top: 8,
+    right: 8,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    borderRadius: 15,
+    padding: 2,
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    padding: 16,
+    marginTop: 8,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  addButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  addButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    marginLeft: 8,
+  },
+  feeContainer: {
+    marginBottom: 16,
+  },
+  feeNameInput: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  feeAmountInput: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  feeItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  feeText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  contactContainer: {
+    marginBottom: 16,
+  },
+  contactInput: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  contactTypeContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  contactTypeButton: {
+    flex: 1,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    marginRight: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+  },
+  selectedContactTypeButton: {
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
+  },
+  contactItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  contactText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  locationContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  locationField: {
+    width: "48%",
+  },
+})
 
 export default AddEventScreen

@@ -6,6 +6,8 @@ import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert } fr
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
+import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
+import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VenueDetailScreenProps } from "../navigation/types"
@@ -19,61 +21,98 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [loading, setLoading] = useState(true)
   const [isOwner, setIsOwner] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [latestVibeRating, setLatestVibeRating] = useState<number | null>(null)
+  const [isCustomVenue, setIsCustomVenue] = useState(false)
+  const [vibeRating, setVibeRating] = useState<number>(0.0)
 
   useEffect(() => {
     const loadVenueAndEvents = async () => {
       try {
+        setLoading(true)
         const venueData = await FirebaseService.getVenueById(venueId)
         setVenue(venueData)
 
         // Check if current user is the owner or an admin
-        if (user) {
-          setIsOwner(venueData?.ownerId === user.id)
+        if (user && venueData) {
+          setIsOwner(venueData.ownerId === user.id)
           setIsAdmin(user.userType === "admin")
-        }
 
-        if (venueData) {
+          // Check if venue is a custom venue (tied to one event and owned by event creator)
           const venueEvents = await FirebaseService.getEventsByVenue(venueId)
           setEvents(venueEvents)
-          // Get latest vibe rating
-          const vibeRating = await FirebaseService.getLatestVibeRating(venueId)
-          setLatestVibeRating(vibeRating)
+          if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
+            setIsCustomVenue(true)
+          } else {
+            setIsCustomVenue(false)
+          }
+
+          // Load initial vibe rating for today
+          const today = new Date()
+          const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+          if (vibeImages.length > 0) {
+            const latestVibe = vibeImages.reduce((latest, image) => {
+              return image.uploadedAt > latest.uploadedAt ? image : latest
+            })
+            setVibeRating(latestVibe.vibeRating || 0.0)
+          } else {
+            setVibeRating(0.0)
+          }
         }
       } catch (error) {
         console.error("Error loading venue details:", error)
+        setVibeRating(0.0) // Default to 0.0 on error
       } finally {
         setLoading(false)
       }
     }
 
     loadVenueAndEvents()
-  }, [venueId, user])
 
-  // Add focus listener to refresh data when returning from other screens
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      // Refresh venue data when screen comes into focus
-      const refreshVenueData = async () => {
-        try {
-          const venueData = await FirebaseService.getVenueById(venueId)
-          setVenue(venueData)
+    // Set up real-time listener for vibe ratings
+    const vibeRatingsRef = collection(db, "vibeRatings")
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
 
-          if (venueData) {
-            // Get latest vibe rating
-            const vibeRating = await FirebaseService.getLatestVibeRating(venueId)
-            setLatestVibeRating(vibeRating)
+    const q = query(
+      vibeRatingsRef,
+      where("venueId", "==", venueId),
+      where("createdAt", ">=", today),
+      where("createdAt", "<", tomorrow),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    )
+
+    const unsubscribeVibe = onSnapshot(
+      q,
+      (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added" || change.type === "modified") {
+            const data = change.doc.data()
+            const rating = data.rating || 0.0
+            setVibeRating(rating)
+          } else if (change.type === "removed") {
+            setVibeRating(0.0) // Default to 0.0 if rating is removed
           }
-        } catch (error) {
-          console.error("Error refreshing venue data:", error)
-        }
+        })
+      },
+      (error) => {
+        console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
+        setVibeRating(0.0) // Default to 0.0 on error
       }
+    )
 
-      refreshVenueData()
+    // Handle navigation focus to refresh data
+    const unsubscribeNavigation = navigation.addListener("focus", () => {
+      loadVenueAndEvents()
     })
 
-    return unsubscribe
-  }, [navigation, venueId])
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeVibe()
+      unsubscribeNavigation()
+    }
+  }, [venueId, user, navigation])
 
   const handleManagePrograms = () => {
     navigation.navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
@@ -92,9 +131,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         onPress: async () => {
           try {
             setLoading(true)
-            // Delete all events associated with this venue
             await FirebaseService.deleteEventsByVenue(venueId)
-            // Then delete the venue itself
             await FirebaseService.deleteVenue(venueId)
             Alert.alert("Success", "Venue and associated events deleted successfully")
             navigation.goBack()
@@ -144,10 +181,9 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           ))}
         </View>
 
-        {/* Owner/Admin Actions */}
         {(isOwner || isAdmin) && (
           <View style={styles.actionButtonsContainer}>
-            {isOwner && (
+            {isOwner && !isCustomVenue && (
               <>
                 <TouchableOpacity style={styles.actionButton} onPress={handleManagePrograms}>
                   <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
@@ -168,23 +204,18 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           </View>
         )}
 
-        {/* Today's Vibe Section */}
         <View style={styles.vibeSection}>
           <View style={styles.vibeSectionHeader}>
-            <Text style={styles.vibeSectionTitle}>Current Vibe</Text>
-            {latestVibeRating && (
-              <View style={styles.currentVibeRating}>
-                <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(latestVibeRating) }]}>
-                  {latestVibeRating.toFixed(1)}
-                </Text>
-                <Text style={styles.vibeRatingLabel}>/5.0</Text>
-              </View>
-            )}
+            <Text style={styles.vibeSectionTitle}>Current Vibe: </Text>
+            <View style={styles.currentVibeRating}>
+              <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(vibeRating) }]}>
+                {vibeRating.toFixed(1)}
+              </Text>
+              <Text style={styles.vibeRatingLabel}>/5.0</Text>
+            </View>
           </View>
 
-          {latestVibeRating && (
-            <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(latestVibeRating)}</Text>
-          )}
+          <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
 
           <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
             <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
@@ -234,7 +265,11 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
                 <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
                 <View style={styles.eventInfo}>
                   <Text style={styles.eventName}>{event.name}</Text>
-                  <Text style={styles.eventDate}>{event.date.toDateString()}</Text>
+                  <Text style={styles.eventDate}>
+                    {event.date && typeof event.date.toDate === "function"
+                      ? event.date.toDate().toDateString()
+                      : new Date(event.date).toDateString()}
+                  </Text>
                   <Text style={styles.eventArtists}>{event.artists.join(", ")}</Text>
                 </View>
               </TouchableOpacity>
@@ -242,12 +277,10 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           </>
         )}
 
-        {/* Show directions button */}
         <TouchableOpacity
           style={styles.directionsButton}
           onPress={() => {
-            // Use type assertion to work around the navigation type limitations
-            ;(navigation as any).navigate("Map", {
+            (navigation as any).navigate("Map", {
               screen: "MapView",
               params: { destinationVenueId: venueId },
             })

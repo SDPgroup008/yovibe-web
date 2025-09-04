@@ -129,7 +129,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
               <Text style={styles.dateChipText}>{formatDateRange(item.date)}</Text>
             </View>
             <View style={styles.feeChip}>
-              <Text style={styles.feeChipText}>{item.entryFee ? `UGX ${item.entryFee}` : "Free"}</Text>
+              <Text style={styles.feeChipText}>
+                {item.isFreeEntry ? "Free" : item.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
+              </Text>
             </View>
           </View>
 
