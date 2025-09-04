@@ -54,6 +54,7 @@ export type ProfileStackParamList = {
   AdminUsers: undefined
   AdminVenues: undefined
   AdminEvents: undefined
+  Login: undefined
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
