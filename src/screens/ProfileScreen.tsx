@@ -53,7 +53,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             console.log("ProfileScreen: Starting sign out process")
             await signOut()
             console.log("ProfileScreen: Sign out completed")
-            navigation.replace("Loginscreen")
+            navigation.replace("Login")
           } catch (error) {
             console.error("ProfileScreen: Sign out error:", error)
             Alert.alert("Error", "Failed to sign out. Please try again.")
