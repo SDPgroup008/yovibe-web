@@ -503,4 +503,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default ProfileScree
+export default ProfileScreen
