@@ -53,7 +53,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             console.log("ProfileScreen: Starting sign out process")
             await signOut()
             console.log("ProfileScreen: Sign out completed")
-            navigation.replace("Login")
+            navigation.reset({ index: 0, routes: [{ name: "Auth", params: { screen: "Login" } }] })
           } catch (error) {
             console.error("ProfileScreen: Sign out error:", error)
             Alert.alert("Error", "Failed to sign out. Please try again.")
@@ -134,7 +134,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           setEditProfileLoading(true)
           try {
             // Upload image and get URL
-            const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri)
+            const uploadedUrl = await FirebaseService.uploadEventImage(imageUri)
             await updateProfile({ photoURL: uploadedUrl })
             Alert.alert("Success", "Profile image updated successfully")
           } catch (error) {
@@ -221,7 +221,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               <Text style={styles.menuText}>Manage Events</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
-          </>
         )}
 
         <TouchableOpacity style={styles.menuItem} onPress={openNotifications}>
