@@ -36,6 +36,13 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(false)
   const [locationPermission, setLocationPermission] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
+  const [errors, setErrors] = useState<{
+    name?: string
+    location?: string
+    description?: string
+    categories?: string
+    image?: string
+  }>({})
 
   useEffect(() => {
     ;(async () => {
@@ -77,21 +84,46 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   }
 
   const handleSubmit = async () => {
-    if (!name || !location || !description || !categories) {
-      Alert.alert("Error", "Please fill in all required fields")
-      return
-    }
+    // Reset errors
+    const newErrors: {
+      name?: string
+      location?: string
+      description?: string
+      categories?: string
+      image?: string
+    } = {}
 
+    // Validate fields
+    if (!name.trim()) {
+      newErrors.name = "Please enter a venue name"
+    }
+    if (!location.trim()) {
+      newErrors.location = "Please enter the venue address"
+    }
+    if (!description.trim()) {
+      newErrors.description = "Please enter a venue description"
+    }
+    if (!categories.trim()) {
+      newErrors.categories = "Please enter at least one category"
+    }
     if (!image) {
-      Alert.alert("Error", "Please select an image for the venue")
-      return
+      newErrors.image = "Please select an image for the venue"
     }
-
     if (!user) {
       Alert.alert("Error", "You must be logged in to add a venue")
       return
     }
 
+    // If there are errors, display them and highlight fields
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      const errorMessages = Object.values(newErrors).join("\n")
+      Alert.alert("Form Errors", errorMessages)
+      return
+    }
+
+    // Clear errors if validation passes
+    setErrors({})
     setLoading(true)
 
     try {
@@ -152,27 +184,38 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.form}>
-        <Text style={styles.label}>Venue Name *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Venue Name *</Text>
+          {errors.name && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.name && styles.errorInput]}
           value={name}
           onChangeText={setName}
           placeholder="Enter venue name"
           placeholderTextColor="#999"
         />
+        {errors.name && <Text style={styles.errorText}>Please enter a venue name</Text>}
 
-        <Text style={styles.label}>Address *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Address *</Text>
+          {errors.location && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.location && styles.errorInput]}
           value={location}
           onChangeText={setLocation}
           placeholder="Enter venue address"
           placeholderTextColor="#999"
         />
+        {errors.location && <Text style={styles.errorText}>Please enter the venue address</Text>}
 
-        <Text style={styles.label}>Description *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Description *</Text>
+          {errors.description && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, errors.description && styles.errorInput]}
           value={description}
           onChangeText={setDescription}
           placeholder="Enter venue description"
@@ -180,6 +223,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           multiline
           numberOfLines={4}
         />
+        {errors.description && <Text style={styles.errorText}>Please enter a venue description</Text>}
 
         <Text style={styles.label}>Venue Type *</Text>
         <View style={styles.venueTypeContainer}>
@@ -204,9 +248,12 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Categories *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Categories *</Text>
+          {errors.categories && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.categories && styles.errorInput]}
           value={categories}
           onChangeText={setCategories}
           placeholder={
@@ -214,6 +261,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           }
           placeholderTextColor="#999"
         />
+        {errors.categories && <Text style={styles.errorText}>Please enter at least one category</Text>}
 
         <View style={styles.locationContainer}>
           <View style={styles.locationField}>
@@ -241,11 +289,18 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
           </View>
         </View>
 
-        <Text style={styles.label}>Venue Image *</Text>
-        <TouchableOpacity style={styles.imagePickerButton} onPress={pickImage}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Venue Image *</Text>
+          {errors.image && <Text style={styles.errorStar}>*</Text>}
+        </View>
+        <TouchableOpacity
+          style={[styles.imagePickerButton, errors.image && styles.errorInput]}
+          onPress={pickImage}
+        >
           <Ionicons name="camera-outline" size={24} color="#FFFFFF" />
           <Text style={styles.imagePickerText}>{image ? "Change Image" : "Select Image"}</Text>
         </TouchableOpacity>
+        {errors.image && <Text style={styles.errorText}>Please select an image for the venue</Text>}
 
         {image && (
           <View style={styles.imagePreview}>
@@ -273,10 +328,24 @@ const styles = StyleSheet.create({
   form: {
     padding: 16,
   },
+  labelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   label: {
     fontSize: 16,
     color: "#FFFFFF",
-    marginBottom: 8,
+  },
+  errorStar: {
+    fontSize: 16,
+    color: "#FF3B30",
+    marginLeft: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#FF3B30",
+    marginBottom: 16,
   },
   input: {
     backgroundColor: "#1E1E1E",
@@ -286,6 +355,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#333",
+  },
+  errorInput: {
+    borderColor: "#FF3B30",
   },
   textArea: {
     height: 100,

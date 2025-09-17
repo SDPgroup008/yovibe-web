@@ -13,6 +13,7 @@ import {
   Image,
   Modal,
   ScrollView,
+  Platform,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
@@ -39,31 +40,43 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   }, [user])
 
   const handleSignOut = async () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Sign Out",
-        style: "destructive",
-        onPress: async () => {
-          setLoading(true)
-          try {
-            console.log("ProfileScreen: Starting sign out process")
-            await signOut()
-            console.log("ProfileScreen: Sign out completed")
-            navigation.reset({ index: 0, routes: [{ name: "Auth", params: { screen: "Login" } }] })
-          } catch (error) {
-            console.error("ProfileScreen: Sign out error:", error)
-            Alert.alert("Error", "Failed to sign out. Please try again.")
-          } finally {
-            setLoading(false)
-          }
-        },
-      },
-    ])
-  }
+    console.log("ProfileScreen: Sign Out button clicked");
+    const isWeb = Platform.OS === "web";
+    const confirmed = isWeb
+      ? window.confirm("Are you sure you want to sign out?")
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+            {
+              text: "Cancel",
+              style: "cancel",
+              onPress: () => resolve(false),
+            },
+            {
+              text: "Sign Out",
+              style: "destructive",
+              onPress: () => resolve(true),
+            },
+          ]);
+        });
+
+    if (confirmed) {
+      console.log("ProfileScreen: Starting sign out process");
+      setLoading(true);
+      try {
+        await signOut();
+        console.log("ProfileScreen: Sign out completed");
+        navigation.reset({ index: 0, routes: [{ name: "Auth", params: { screen: "Login" } }] });
+      } catch (error: any) {
+        console.error("ProfileScreen: Sign out error:", error.message);
+        Alert.alert("Error", `Failed to sign out: ${error.message}`);
+      } finally {
+        setLoading(false);
+        console.log("ProfileScreen: Loading reset to false");
+      }
+    } else {
+      console.log("ProfileScreen: Sign out cancelled");
+    }
+  };
 
   const navigateToMyVenues = () => {
     if (user?.userType === "club_owner") {
@@ -134,7 +147,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           setEditProfileLoading(true)
           try {
             // Upload image and get URL
-            const uploadedUrl = await FirebaseService.uploadEventImage(imageUri)
+            const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri)
             await updateProfile({ photoURL: uploadedUrl })
             Alert.alert("Success", "Profile image updated successfully")
           } catch (error) {
@@ -221,6 +234,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
               <Text style={styles.menuText}>Manage Events</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
+          </>
         )}
 
         <TouchableOpacity style={styles.menuItem} onPress={openNotifications}>
@@ -243,7 +257,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       </ScrollView>
 
       <TouchableOpacity
-        style={[styles.signOutButton, loading && styles.disabledButton]}
+        style={[styles.signOutButton, loading && styles.disabledButton, { zIndex: 100 }]}
         onPress={handleSignOut}
         disabled={loading}
       >
@@ -394,6 +408,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#FF3B30",
     borderRadius: 8,
     alignItems: "center",
+    zIndex: 100, // Added to prevent overlap
   },
   signOutText: {
     fontSize: 16,

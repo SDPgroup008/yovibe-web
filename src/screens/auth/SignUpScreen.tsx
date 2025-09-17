@@ -131,7 +131,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
               >
                 <Ionicons name="business" size={20} color={userType === "club_owner" ? "#FFFFFF" : "#BBBBBB"} />
                 <Text style={[styles.typeButtonText, userType === "club_owner" && styles.selectedButtonText]}>
-                  Club Owner
+                  Venue Owner
                 </Text>
               </TouchableOpacity>
             </View>

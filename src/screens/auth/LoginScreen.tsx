@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   ImageBackground,
+  Platform,
 } from "react-native"
 import { useAuth } from "../../contexts/AuthContext"
 import { Ionicons } from "@expo/vector-icons"
@@ -24,13 +25,40 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+  const [errors, setErrors] = useState<{
+    email?: string
+    password?: string
+  }>({})
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password")
+    // Reset errors
+    const newErrors: {
+      email?: string
+      password?: string
+    } = {}
+
+    // Validate fields
+    if (!email.trim()) {
+      newErrors.email = "Please enter your email"
+    }
+    if (!password.trim()) {
+      newErrors.password = "Please enter your password"
+    }
+
+    // If there are errors, display them and highlight fields
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      const errorMessages = Object.values(newErrors).join("\n")
+      if (Platform.OS === "web") {
+        alert(`Form Errors\n${errorMessages}`)
+      } else {
+        Alert.alert("Form Errors", errorMessages)
+      }
       return
     }
 
+    // Clear errors if validation passes
+    setErrors({})
     setLoading(true)
     try {
       console.log("Login attempt with:", email)
@@ -44,7 +72,40 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       // The AuthContext will handle navigation
     } catch (error) {
       console.error("Login failed:", error)
-      Alert.alert("Login Failed", error instanceof Error ? error.message : "Failed to login")
+      // Log the full error object to debug
+      console.log("Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        code: (error as any).code,
+        error: error,
+      })
+      // Check for invalid credential errors (Firebase or generic)
+      const errorCode = (error as any).code
+      if (
+        errorCode === "auth/invalid-credential" ||
+        errorCode === "auth/invalid-email" ||
+        errorCode === "auth/wrong-password" ||
+        errorCode === "auth/user-not-found" ||
+        (typeof error === "object" &&
+          error !== null &&
+          "message" in error &&
+          typeof (error as any).message === "string" &&
+          ((error as any).message.toLowerCase().includes("invalid email") ||
+            (error as any).message.toLowerCase().includes("invalid password") ||
+            (error as any).message.toLowerCase().includes("incorrect")))
+      ) {
+        if (Platform.OS === "web") {
+          alert("Login Failed\nIncorrect email or password")
+        } else {
+          Alert.alert("Login Failed", "Incorrect email or password")
+        }
+      } else {
+        const errorMessage = error instanceof Error ? error.message : "Failed to login"
+        if (Platform.OS === "web") {
+          alert(`Login Failed\n${errorMessage}`)
+        } else {
+          Alert.alert("Login Failed", errorMessage)
+        }
+      }
     } finally {
       setLoading(false)
     }
@@ -62,11 +123,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
           <Text style={styles.title}>
             <Text style={styles.titleRed}>Yo</Text>Vibe
           </Text>
-          <Text style={styles.tagline}>Find Your Perfect Night Out</Text>
+          <Text style={styles.tagline}>Find Your Next Vibe Plot Now</Text>
         </View>
 
         <View style={styles.formContainer}>
-          <View style={styles.inputContainer}>
+          <View style={styles.labelContainer}>
+            <Text style={styles.label}>Email *</Text>
+            {errors.email && <Text style={styles.errorStar}>*</Text>}
+          </View>
+          <View style={[styles.inputContainer, errors.email && styles.errorInput]}>
             <Ionicons name="mail-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
@@ -78,8 +143,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               keyboardType="email-address"
             />
           </View>
+          {errors.email && <Text style={styles.errorText}>Please enter your email</Text>}
 
-          <View style={styles.inputContainer}>
+          <View style={styles.labelContainer}>
+            <Text style={styles.label}>Password *</Text>
+            {errors.password && <Text style={styles.errorStar}>*</Text>}
+          </View>
+          <View style={[styles.inputContainer, errors.password && styles.errorInput]}>
             <Ionicons name="lock-closed-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
             <TextInput
               style={styles.input}
@@ -90,6 +160,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               secureTextEntry
             />
           </View>
+          {errors.password && <Text style={styles.errorText}>Please enter your password</Text>}
 
           <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
             {loading ? (
@@ -154,6 +225,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 10,
   },
+  labelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  label: {
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
+  errorStar: {
+    fontSize: 16,
+    color: "#FF3B30",
+    marginLeft: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#FF3B30",
+    marginBottom: 16,
+  },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -162,6 +252,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  errorInput: {
+    borderColor: "#FF3B30",
   },
   inputIcon: {
     padding: 15,
@@ -203,4 +296,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default LoginScreen
+export default LoginScreen  

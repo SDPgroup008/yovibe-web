@@ -96,20 +96,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.log("AuthContext: Starting sign out process")
       setLoading(true)
 
-      // Clear user state immediately
-      setUser(null)
+      // Add timeout to prevent hanging
+      const signOutPromise = FirebaseService.signOut()
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error("Sign out timed out after 5 seconds")), 5000)
+      })
+      await Promise.race([signOutPromise, timeoutPromise])
 
-      // Call Firebase sign out
-      await FirebaseService.signOut()
+      // Clear user state after successful sign out
+      setUser(null)
 
       console.log("AuthContext: Sign out process completed")
-    } catch (error) {
-      console.error("AuthContext: Sign out error:", error)
-      // Even if there's an error, we still want to clear the local state
-      setUser(null)
-      throw error
+    } catch (error: any) {
+      console.error("AuthContext: Sign out error:", error.message)
+      setUser(null) // Ensure user is cleared even on error
+      throw new Error(`Sign out failed: ${error.message}`)
     } finally {
       setLoading(false)
+      console.log("AuthContext: Loading reset to false")
     }
   }
 

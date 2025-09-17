@@ -388,6 +388,22 @@ class FirebaseService {
     }
   }
 
+  async uploadVenueImage(imageUri: string, venueId: string = `venue-${Date.now()}`): Promise<string> {
+    try {
+      console.log("FirebaseService: Uploading venue background image for venue", venueId)
+      const storage = getStorage()
+      const storageRef = ref(storage, `venues/${venueId}/background.jpg`)
+
+      await uploadString(storageRef, imageUri, "data_url")
+      const downloadURL = await getDownloadURL(storageRef)
+      console.log("FirebaseService: Venue image uploaded, URL:", downloadURL)
+      return downloadURL
+    } catch (error) {
+      console.error("FirebaseService: Error uploading venue image:", error)
+      throw error
+    }
+  }
+
   async updateVenue(venueId: string, data: Partial<Venue>): Promise<void> {
     try {
       const venueRef = doc(db, "venues", venueId)
@@ -540,7 +556,7 @@ class FirebaseService {
               isFeatured: data.isFeatured,
               location: data.location,
               priceIndicator: data.priceIndicator || 1,
-              entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toString() }] : []),
+              entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toDateString() }] : []),
               ticketContacts: data.ticketContacts || [],
               attendees: data.attendees || [],
               createdAt: data.createdAt?.toDate?.() || new Date(),

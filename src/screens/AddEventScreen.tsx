@@ -56,6 +56,18 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
   const [newContactNumber, setNewContactNumber] = useState("")
   const [newContactType, setNewContactType] = useState<"call" | "whatsapp">("call")
   const [locationPermission, setLocationPermission] = useState(false)
+  const [errors, setErrors] = useState<{
+    name?: string
+    description?: string
+    artists?: string
+    image?: string
+    venue?: string
+    customVenueName?: string
+    customVenueAddress?: string
+    location?: string
+    ticketContacts?: string
+    entryFees?: string
+  }>({})
 
   useEffect(() => {
     if (user && user.userType !== "club_owner") {
@@ -233,46 +245,66 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
   }
 
   const handleSubmit = async () => {
-    if (!name || !description || !artists) {
-      Alert.alert("Error", "Please fill in all required fields")
-      return
-    }
+    // Reset errors
+    const newErrors: {
+      name?: string
+      description?: string
+      artists?: string
+      image?: string
+      venue?: string
+      customVenueName?: string
+      customVenueAddress?: string
+      location?: string
+      ticketContacts?: string
+      entryFees?: string
+    } = {}
 
+    // Validate fields
+    if (!name.trim()) {
+      newErrors.name = "Event Name is required"
+    }
+    if (!description.trim()) {
+      newErrors.description = "Description is required"
+    }
+    if (!artists.trim()) {
+      newErrors.artists = "Artists is required"
+    }
     if (!image) {
-      Alert.alert("Error", "Please select an image for the event")
-      return
+      newErrors.image = "Event Poster image is required"
     }
-
     if (!user) {
       Alert.alert("Error", "You must be logged in to add an event")
       return
     }
-
     if (!useCustomVenue && !selectedVenueId) {
-      Alert.alert("Error", "Please select a venue for this event")
-      return
+      newErrors.venue = "Please select a venue for this event"
     }
-
-    if (useCustomVenue && (!customVenueName || !customVenueAddress)) {
-      Alert.alert("Error", "Please enter both name and address for the custom venue")
-      return
+    if (useCustomVenue && !customVenueName.trim()) {
+      newErrors.customVenueName = "Custom Venue Name is required"
     }
-
-    if (!location) {
-      Alert.alert("Error", "Please enter the location of the event")
-      return
+    if (useCustomVenue && !customVenueAddress.trim()) {
+      newErrors.customVenueAddress = "Custom Venue Address is required"
     }
-
+    if (!location.trim()) {
+      newErrors.location = "Location (City) is required"
+    }
     if (ticketContacts.length === 0) {
-      Alert.alert("Error", "Please add at least one ticket contact number")
-      return
+      newErrors.ticketContacts = "At least one ticket contact number is required"
     }
-
     if (!isFreeEntry && entryFees.length === 0) {
-      Alert.alert("Error", "Please add at least one entry fee or select Free Entry")
+      newErrors.entryFees = "At least one entry fee is required or select Free Entry"
+    }
+
+    // If there are errors, display them and highlight fields
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
+      const errorMessages = Object.values(newErrors).join("\n")
+      Alert.alert("Form Errors", errorMessages)
       return
     }
 
+    // Clear errors if validation passes
+    setErrors({})
     setLoading(true)
 
     try {
@@ -327,7 +359,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         attendees: [],
         createdBy: user.id,
         createdByType: user.userType,
-        priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map(fee => parseFloat(fee.amount))) : 0,
+        priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
       }
 
@@ -346,18 +378,25 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
   return (
     <ScrollView style={styles.container}>
       <View style={styles.form}>
-        <Text style={styles.label}>Event Name *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Event Name *</Text>
+          {errors.name && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.name && styles.errorInput]}
           value={name}
           onChangeText={setName}
           placeholder="Enter event name"
           placeholderTextColor="#999"
         />
+        {errors.name && <Text style={styles.errorText}>Please enter an event name</Text>}
 
-        <Text style={styles.label}>Description *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Description *</Text>
+          {errors.description && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={[styles.input, styles.textArea]}
+          style={[styles.input, styles.textArea, errors.description && styles.errorInput]}
           value={description}
           onChangeText={setDescription}
           placeholder="Enter event description"
@@ -365,6 +404,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           multiline
           numberOfLines={4}
         />
+        {errors.description && <Text style={styles.errorText}>Please enter an event description</Text>}
 
         <Text style={styles.label}>Event Date *</Text>
         <View style={styles.datePickerContainer}>
@@ -385,14 +425,18 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           />
         </View>
 
-        <Text style={styles.label}>Artists *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Artists *</Text>
+          {errors.artists && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.artists && styles.errorInput]}
           value={artists}
           onChangeText={setArtists}
           placeholder="Enter artists (comma separated)"
           placeholderTextColor="#999"
         />
+        {errors.artists && <Text style={styles.errorText}>Please enter at least one artist</Text>}
 
         {(!user?.userType || user?.userType !== "club_owner") && (
           <>
@@ -414,11 +458,18 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
 
             {!useCustomVenue ? (
               <>
-                <Text style={styles.label}>Venue *</Text>
-                <TouchableOpacity style={styles.venueSelector} onPress={() => setShowVenueSelector(!showVenueSelector)}>
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>Venue *</Text>
+                  {errors.venue && <Text style={styles.errorStar}>*</Text>}
+                </View>
+                <TouchableOpacity
+                  style={[styles.venueSelector, errors.venue && styles.errorInput]}
+                  onPress={() => setShowVenueSelector(!showVenueSelector)}
+                >
                   <Text style={styles.venueSelectorText}>{selectedVenueName || "Select a venue"}</Text>
                   <Ionicons name={showVenueSelector ? "chevron-up" : "chevron-down"} size={24} color="#FFFFFF" />
                 </TouchableOpacity>
+                {errors.venue && <Text style={styles.errorText}>Please select a venue</Text>}
 
                 {showVenueSelector && (
                   <View style={styles.venueDropdown}>
@@ -438,23 +489,31 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
               </>
             ) : (
               <>
-                <Text style={styles.label}>Custom Venue Name *</Text>
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>Custom Venue Name *</Text>
+                  {errors.customVenueName && <Text style={styles.errorStar}>*</Text>}
+                </View>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, errors.customVenueName && styles.errorInput]}
                   value={customVenueName}
                   onChangeText={setCustomVenueName}
                   placeholder="Enter venue name"
                   placeholderTextColor="#999"
                 />
+                {errors.customVenueName && <Text style={styles.errorText}>Please enter a custom venue name</Text>}
 
-                <Text style={styles.label}>Custom Venue Address *</Text>
+                <View style={styles.labelContainer}>
+                  <Text style={styles.label}>Custom Venue Address *</Text>
+                  {errors.customVenueAddress && <Text style={styles.errorStar}>*</Text>}
+                </View>
                 <TextInput
-                  style={styles.input}
+                  style={[styles.input, errors.customVenueAddress && styles.errorInput]}
                   value={customVenueAddress}
                   onChangeText={setCustomVenueAddress}
                   placeholder="Enter venue address"
                   placeholderTextColor="#999"
                 />
+                {errors.customVenueAddress && <Text style={styles.errorText}>Please enter a custom venue address</Text>}
 
                 <View style={styles.locationContainer}>
                   <View style={styles.locationField}>
@@ -507,16 +566,23 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           </View>
         )}
 
-        <Text style={styles.label}>Location (City) *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Location (City) *</Text>
+          {errors.location && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <TextInput
-          style={styles.input}
+          style={[styles.input, errors.location && styles.errorInput]}
           value={location}
           onChangeText={setLocation}
           placeholder="Enter event location (e.g. KAMPALA)"
           placeholderTextColor="#999"
         />
+        {errors.location && <Text style={styles.errorText}>Please enter the city location</Text>}
 
-        <Text style={styles.label}>Entry Fees *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Entry Fees *</Text>
+          {errors.entryFees && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <View style={styles.checkboxContainer}>
           <TouchableOpacity style={styles.checkbox} onPress={toggleFreeEntry}>
             {isFreeEntry ? (
@@ -529,10 +595,16 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         </View>
         {!isFreeEntry && (
           <>
-            <TouchableOpacity style={styles.addButton} onPress={toggleFeeForm}>
+            <TouchableOpacity
+              style={[styles.addButton, errors.entryFees && styles.errorInput]}
+              onPress={toggleFeeForm}
+            >
               <Ionicons name="add" size={20} color="#FFFFFF" />
               <Text style={styles.addButtonText}>Add Fee</Text>
             </TouchableOpacity>
+            {errors.entryFees && (
+              <Text style={styles.errorText}>Please add at least one entry fee or select Free Entry</Text>
+            )}
             {showFeeForm && (
               <View style={styles.feeContainer}>
                 <TextInput
@@ -568,11 +640,20 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           </>
         )}
 
-        <Text style={styles.label}>Ticket Contact Numbers *</Text>
-        <TouchableOpacity style={styles.addButton} onPress={toggleContactForm}>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Ticket Contact Numbers *</Text>
+          {errors.ticketContacts && <Text style={styles.errorStar}>*</Text>}
+        </View>
+        <TouchableOpacity
+          style={[styles.addButton, errors.ticketContacts && styles.errorInput]}
+          onPress={toggleContactForm}
+        >
           <Ionicons name="add" size={20} color="#FFFFFF" />
           <Text style={styles.addButtonText}>Add Contact</Text>
         </TouchableOpacity>
+        {errors.ticketContacts && (
+          <Text style={styles.errorText}>Please add at least one ticket contact number</Text>
+        )}
         {showContactForm && (
           <View style={styles.contactContainer}>
             <TextInput
@@ -614,18 +695,28 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           </View>
         ))}
 
-        <Text style={styles.label}>Event Poster *</Text>
+        <View style={styles.labelContainer}>
+          <Text style={styles.label}>Event Poster *</Text>
+          {errors.image && <Text style={styles.errorStar}>*</Text>}
+        </View>
         <View style={styles.imageOptions}>
-          <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
+          <TouchableOpacity
+            style={[styles.imageButton, errors.image && styles.errorInput]}
+            onPress={pickImage}
+          >
             <Ionicons name="image" size={20} color="#FFFFFF" />
             <Text style={styles.imageButtonText}>Pick from Device</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.imageButton} onPress={handleImageUrlInput}>
+          <TouchableOpacity
+            style={[styles.imageButton, errors.image && styles.errorInput]}
+            onPress={handleImageUrlInput}
+          >
             <Ionicons name="link" size={20} color="#FFFFFF" />
             <Text style={styles.imageButtonText}>Enter URL</Text>
           </TouchableOpacity>
         </View>
+        {errors.image && <Text style={styles.errorText}>Please select an image for the event poster</Text>}
 
         {image && (
           <View style={styles.imagePreview}>
@@ -669,10 +760,24 @@ const styles = StyleSheet.create({
   form: {
     padding: 16,
   },
+  labelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
   label: {
     fontSize: 16,
     color: "#FFFFFF",
-    marginBottom: 8,
+  },
+  errorStar: {
+    fontSize: 16,
+    color: "#FF3B30",
+    marginLeft: 4,
+  },
+  errorText: {
+    fontSize: 12,
+    color: "#FF3B30",
+    marginBottom: 16,
   },
   input: {
     backgroundColor: "#1E1E1E",
@@ -682,6 +787,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: "#333",
+  },
+  errorInput: {
+    borderColor: "#FF3B30",
   },
   textArea: {
     height: 100,
