@@ -296,4 +296,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default LoginScreen  git push origin main
+export default LoginScreen  
