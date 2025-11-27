@@ -14,7 +14,8 @@ import {
   limit,
   deleteDoc,
 } from "firebase/firestore"
-import { getStorage, ref, uploadString, getDownloadURL } from "firebase/storage"
+import { v4 as uuidv4 } from "uuid";
+import { getStorage, ref, ref as storageRef, uploadString, getDownloadURL, uploadBytes } from "firebase/storage"
 import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
@@ -923,19 +924,45 @@ class FirebaseService {
     }
   }
 
-  async uploadVibeImage(imageUri: string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
+  async uploadVibeImage(fileOrUrl: Blob | string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
     try {
-      console.log("FirebaseService: Uploading vibe image for venue", venueId)
-      const storage = getStorage()
-      const storageRef = ref(storage, `vibeImages/${venueId}/${Date.now()}.jpg`)
+      console.log("FirebaseService: Uploading vibe image for venue", venueId);
 
-      await uploadString(storageRef, imageUri, "data_url")
-      const downloadURL = await getDownloadURL(storageRef)
-      console.log("FirebaseService: Vibe image uploaded, URL:", downloadURL)
-      return downloadURL
+      // If it's already a remote http(s) URL, return it directly
+      if (typeof fileOrUrl === "string" && (fileOrUrl.startsWith("http://") || fileOrUrl.startsWith("https://"))) {
+        return fileOrUrl;
+      }
+
+      const storage = getStorage();
+      const filename = `vibeImages/${venueId}/${Date.now()}.jpg`;
+      const ref = storageRef(storage, filename);
+
+      // data: URL string -> use uploadString with 'data_url'
+      if (typeof fileOrUrl === "string" && fileOrUrl.startsWith("data:")) {
+        const snapshot = await uploadString(ref, fileOrUrl, "data_url");
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        console.log("FirebaseService: Vibe image uploaded (data_url), URL:", downloadURL);
+        return downloadURL;
+      }
+
+      // blob: object URL string -> fetch to Blob
+      if (typeof fileOrUrl === "string" && fileOrUrl.startsWith("blob:")) {
+        const resp = await fetch(fileOrUrl);
+        fileOrUrl = await resp.blob();
+      }
+
+      // At this point we expect a Blob
+      if (fileOrUrl instanceof Blob) {
+        const snapshot = await uploadBytes(ref, fileOrUrl);
+        const downloadURL = await getDownloadURL(snapshot.ref);
+        console.log("FirebaseService: Vibe image uploaded (blob), URL:", downloadURL);
+        return downloadURL;
+      }
+
+      throw new Error("uploadVibeImage: unsupported file type");
     } catch (error) {
-      console.error("FirebaseService: Error uploading vibe image:", error)
-      throw error
+      console.error("FirebaseService: Error uploading vibe image:", error);
+      throw error;
     }
   }
 
