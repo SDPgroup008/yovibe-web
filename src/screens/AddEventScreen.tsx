@@ -56,6 +56,8 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
   const [newContactNumber, setNewContactNumber] = useState("")
   const [newContactType, setNewContactType] = useState<"call" | "whatsapp">("call")
   const [locationPermission, setLocationPermission] = useState(false)
+  const [startTime, setStartTime] = useState("21:00")  // Default: 9:00 PM
+  const [endTime, setEndTime] = useState("05:00")      // Default: 5:00 AM (next day)
   const [errors, setErrors] = useState<{
     name?: string
     description?: string
@@ -318,7 +320,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           description: `Custom venue for event: ${name}`,
           categories: ["Other"],
           vibeRating: 4.0,
-          backgroundImageUrl: image,
+          backgroundImageUrl: image || "",
           latitude: Number.parseFloat(latitude) || 0,
           longitude: Number.parseFloat(longitude) || 0,
           ownerId: user.id,
@@ -332,7 +334,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         venueName = customVenueName
       }
 
-      let imageUrl = image
+      let imageUrl = image || ""
       if (imageFile) {
         try {
           console.log("Uploading event poster image...")
@@ -348,6 +350,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         name,
         description,
         date,
+        time: `${new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(`2000-01-01T${endTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
         artists: artists.split(",").map((artist) => artist.trim()),
         venueId,
         venueName,
@@ -361,6 +364,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         createdByType: user.userType,
         priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
+        createdAt: new Date(),
       }
 
       await FirebaseService.addEvent(eventData)
@@ -406,6 +410,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         />
         {errors.description && <Text style={styles.errorText}>Please enter an event description</Text>}
 
+                {/* Date Picker */}
         <Text style={styles.label}>Event Date *</Text>
         <View style={styles.datePickerContainer}>
           <input
@@ -420,9 +425,56 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
               borderRadius: "8px",
               border: "1px solid #333",
               width: "100%",
-              marginBottom: "16px",
+              fontSize: 16,
             }}
           />
+        </View>
+
+        {/* Start & End Time Pickers */}
+        <Text style={styles.label}>Event Time *</Text>
+        <View style={{ flexDirection: "row", gap: 16, marginBottom: 16 }}>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#999", fontSize: 14, marginBottom: 8 }}>Start Time</Text>
+            <input
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              style={{
+                backgroundColor: "#1E1E1E",
+                color: "#FFFFFF",
+                padding: "12px",
+                borderRadius: "8px",
+                border: "1px solid #333",
+                width: "100%",
+                fontSize: 16,
+              }}
+            />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: "#999", fontSize: 14, marginBottom: 8 }}>End Time</Text>
+            <input
+              type="time"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              style={{
+                backgroundColor: "#1E1E1E",
+                color: "#FFFFFF",
+                padding: "12px",
+                borderRadius: "8px",
+                border: "1px solid #333",
+                width: "100%",
+                fontSize: 16,
+              }}
+            />
+          </View>
+        </View>
+
+        {/* Optional: Show formatted time string (e.g. "09:00 PM - 05:00 AM") */}
+        <View style={{ marginBottom: 16, padding: 12, backgroundColor: "#1E1E1E", borderRadius: 8 }}>
+          <Text style={{ color: "#00D4FF", fontWeight: "600" }}>
+            Time: {new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -{" "}
+            {new Date(`2000-01-01T${endTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
         </View>
 
         <View style={styles.labelContainer}>
@@ -623,7 +675,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
                 />
                 <TouchableOpacity style={styles.addButton} onPress={addFee}>
                   <Ionicons name="add" size={20} color="#FFFFFF" />
-                  <Text style={styles.addButtonText}>Add</Text>
+                  <Text style={styles.addButtonText}>Submit</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -680,7 +732,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
             </View>
             <TouchableOpacity style={styles.addButton} onPress={addContact}>
               <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add</Text>
+              <Text style={styles.addButtonText}>Submit</Text>
             </TouchableOpacity>
           </View>
         )}

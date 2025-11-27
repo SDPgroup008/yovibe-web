@@ -7,9 +7,8 @@ import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import type { Event } from "../models/Event"
-import type { EventCalendarScreenProps } from "../navigation/types"
+import type { CalendarScreenProps } from "../navigation/types"
 
-// Define the CalendarTheme type manually since it's not exported
 type CalendarTheme = {
   backgroundColor?: string
   calendarBackground?: string
@@ -24,10 +23,9 @@ type CalendarTheme = {
   arrowColor?: string
   monthTextColor?: string
   indicatorColor?: string
-  // Add any other properties you need
 }
 
-const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation }) => {
+const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   const [events, setEvents] = useState<Event[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
@@ -47,10 +45,9 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
       const allEvents = await FirebaseService.getEvents()
       setEvents(allEvents)
 
-      // Mark dates with events
       const marked: Record<string, any> = {}
       allEvents.forEach((event) => {
-        const dateStr = event.date.toISOString().split("T")[0]
+        const dateStr = new Date(event.date).toISOString().split("T")[0]
         marked[dateStr] = {
           marked: true,
           dotColor: "#2196F3",
@@ -59,7 +56,6 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
         }
       })
 
-      // Mark selected date if it doesn't have events
       if (!marked[selectedDate]) {
         marked[selectedDate] = {
           selected: true,
@@ -79,10 +75,8 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
     const newSelectedDate = day.dateString
     setSelectedDate(newSelectedDate)
 
-    // Update marked dates
     const newMarkedDates = { ...markedDates }
 
-    // Remove selection from previous date
     if (markedDates[selectedDate]) {
       newMarkedDates[selectedDate] = {
         ...markedDates[selectedDate],
@@ -90,7 +84,6 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
       }
     }
 
-    // Add selection to new date
     newMarkedDates[newSelectedDate] = {
       ...(markedDates[newSelectedDate] || {}),
       selected: true,
@@ -101,12 +94,13 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
   }
 
   const filteredEvents = events.filter((event) => {
-    const eventDate = event.date.toISOString().split("T")[0]
+    const eventDate = new Date(event.date).toISOString().split("T")[0]
     return eventDate === selectedDate
   })
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  // Use the actual time string from Firebase (e.g. "09:00 PM - 05:00 AM")
+  const getEventTime = (event: Event): string => {
+    return event.time || "Time TBD"
   }
 
   return (
@@ -135,7 +129,9 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
       />
 
       <View style={styles.eventsContainer}>
-        <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+        <Text style={styles.dateTitle}>
+          Events on {new Date(selectedDate).toDateString()}
+        </Text>
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -155,14 +151,11 @@ const EventCalendarScreen: React.FC<EventCalendarScreenProps> = ({ navigation })
               <TouchableOpacity
                 style={styles.eventCard}
                 onPress={() => {
-                  navigation.navigate("Events", {
-                    screen: "EventDetail",
-                    params: { eventId: item.id },
-                  })
+                  navigation.navigate("EventDetail", { eventId: item.id })
                 }}
               >
                 <View style={styles.eventTimeContainer}>
-                  <Text style={styles.eventTime}>{formatTime(item.date)}</Text>
+                  <Text style={styles.eventTime}>{getEventTime(item)}</Text>
                 </View>
                 <View style={styles.eventDetails}>
                   <Text style={styles.eventName}>{item.name}</Text>

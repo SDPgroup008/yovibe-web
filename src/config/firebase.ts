@@ -20,6 +20,9 @@ const auth = getAuth(app)
 const db = getFirestore(app)
 const storage = getStorage(app)
 
+import { setPersistence, browserSessionPersistence } from "firebase/auth"
+setPersistence(auth, browserSessionPersistence)
+
 // Export the Firebase services
 export { auth, db, storage }
 export const hasFirebaseConfig = true

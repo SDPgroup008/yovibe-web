@@ -1,10 +1,19 @@
 "use client"
 
-import type React from "react"
-import { useState } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Image, Alert, ActivityIndicator, ScrollView } from "react-native"
+import React, { useEffect, useRef, useState } from "react"
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  Platform,
+} from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import ImagePickerService from "../services/ImagePickerService"
+import * as ImagePicker from "expo-image-picker"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
@@ -31,29 +40,171 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
     analysisData: any
   } | null>(null)
 
-  const pickImage = async () => {
+  // Web camera modal state
+  const [webCameraOpen, setWebCameraOpen] = useState(false)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  // Start camera capture (web or native)
+  const captureImage = async () => {
     try {
-      const result = await ImagePickerService.launchImageLibraryAsync({
-        mediaTypes: "Images",
+      if (Platform.OS === "web") {
+        // Try getUserMedia first
+        if (navigator.mediaDevices ) {
+          await startWebCamera()
+          return
+        }
+
+        // Fallback to file input (desktop file picker)
+        openFilePickerFallback()
+        return
+      }
+
+      // Native (expo) flow
+      const permissionResult = await ImagePicker.requestCameraPermissionsAsync()
+      if (permissionResult.status !== "granted") {
+        Alert.alert("Permission required", "Camera permission is required to capture a vibe image.")
+        return
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [16, 9],
         quality: 0.8,
       })
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const selectedImage = result.assets[0]
-        setImage(selectedImage.uri)
+      if ("canceled" in result) {
+        if (!result.canceled && result.assets && result.assets.length > 0) {
+          setImage(result.assets[0].uri)
+          setAnalysisResult(null)
+        }
+      } else if ((result as any).uri) {
+        // legacy shape
+        // @ts-ignore
+        setImage((result as any).uri)
         setAnalysisResult(null)
       }
     } catch (error) {
-      console.error("Error picking image:", error)
-      Alert.alert("Error", "Failed to pick image")
+      console.error("captureImage error:", error)
+      Alert.alert("Error", "Failed to start camera. Check permissions.")
     }
   }
 
+  // Web: start camera and open modal
+  const startWebCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+      streamRef.current = stream
+      setWebCameraOpen(true)
+      // attach stream to video element when modal renders (useEffect below)
+    } catch (err) {
+      console.error("getUserMedia error:", err)
+      Alert.alert("Camera error", "Unable to access the camera on this device or permission denied.")
+    }
+  }
+
+  // Web: stop camera and close modal
+  const stopWebCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      try {
+        // @ts-ignore
+        videoRef.current.srcObject = null
+      } catch (e) {
+        // ignore
+      }
+      videoRef.current = null
+    }
+    setWebCameraOpen(false)
+  }
+
+  // Web: capture current frame from video to data URL
+  const captureFrameFromVideo = () => {
+    try {
+      const video = videoRef.current
+      if (!video) throw new Error("Video element not ready")
+      const w = video.videoWidth || 1280
+      const h = video.videoHeight || 720
+      const canvas = document.createElement("canvas")
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext("2d")
+      if (!ctx) throw new Error("Canvas context not available")
+      ctx.drawImage(video, 0, 0, w, h)
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.9)
+      setImage(dataUrl)
+      setAnalysisResult(null)
+    } catch (err) {
+      console.error("captureFrameFromVideo error:", err)
+      Alert.alert("Capture error", "Failed to capture image from camera.")
+    } finally {
+      stopWebCamera()
+    }
+  }
+
+  // Web fallback: open hidden file input
+  const openFilePickerFallback = () => {
+    if (!fileInputRef.current) {
+      const input = document.createElement("input")
+      input.type = "file"
+      input.accept = "image/*"
+      input.setAttribute("capture", "environment")
+      input.style.display = "none"
+      input.onchange = (ev: Event) => {
+        const target = ev.target as HTMLInputElement
+        const file = target.files && target.files[0]
+        if (file) {
+          const url = URL.createObjectURL(file)
+          setImage(url)
+          setAnalysisResult(null)
+        }
+        // cleanup
+        if (input.parentNode) input.parentNode.removeChild(input)
+        fileInputRef.current = null
+      }
+      document.body.appendChild(input)
+      fileInputRef.current = input
+    }
+    fileInputRef.current.click()
+  }
+
+  // Attach stream to video element when webCameraOpen becomes true
+  useEffect(() => {
+    if (Platform.OS !== "web") return
+    if (webCameraOpen && videoRef.current && streamRef.current) {
+      // @ts-ignore
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {
+        // autoplay might be blocked until user interacts; that's okay
+      })
+    }
+    // cleanup when modal closes
+    return () => {
+      // nothing here; stopWebCamera handles cleanup
+    }
+  }, [webCameraOpen])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
+      const overlayInput = fileInputRef.current
+      if (overlayInput && overlayInput.parentNode) overlayInput.parentNode.removeChild(overlayInput)
+      fileInputRef.current = null
+    }
+  }, [])
+
   const analyzeVibe = async () => {
     if (!image) {
-      Alert.alert("Error", "Please select an image first")
+      Alert.alert("Error", "Please capture an image first")
       return
     }
 
@@ -97,7 +248,6 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         {
           text: "OK",
           onPress: () => {
-            // Navigate back to the venue detail screen
             navigation.goBack()
           },
         },
@@ -111,123 +261,125 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
   }
 
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Add Today's Vibe</Text>
-        <Text style={styles.headerSubtitle}>{venueName}</Text>
-        <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
-      </View>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Add Today's Vibe</Text>
+          <Text style={styles.headerSubtitle}>{venueName}</Text>
+          <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
+        </View>
 
-      <View style={styles.imageSection}>
-        {image ? (
-          <View style={styles.imageContainer}>
-            <Image source={{ uri: image }} style={styles.selectedImage} />
-            <TouchableOpacity
-              style={styles.removeImageButton}
-              onPress={() => {
-                setImage(null)
-                setAnalysisResult(null)
-              }}
-            >
-              <Ionicons name="close-circle" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-            <Ionicons name="camera" size={48} color="#666666" />
-            <Text style={styles.imagePickerText}>Tap to capture or select image</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {image && !analysisResult && (
-        <TouchableOpacity
-          style={[styles.analyzeButton, analyzing && styles.disabledButton]}
-          onPress={analyzeVibe}
-          disabled={analyzing}
-        >
-          {analyzing ? (
-            <>
-              <ActivityIndicator color="#FFFFFF" />
-              <Text style={styles.analyzeButtonText}>Analyzing Vibe...</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="analytics" size={20} color="#FFFFFF" />
-              <Text style={styles.analyzeButtonText}>Analyze Vibe</Text>
-            </>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {analysisResult && (
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>Vibe Analysis Results</Text>
-
-          <View style={styles.overallRating}>
-            <Text style={styles.ratingLabel}>Overall Vibe Rating</Text>
-            <View style={styles.ratingContainer}>
-              <Text
-                style={[styles.ratingValue, { color: VibeAnalysisService.getVibeColor(analysisResult.vibeRating) }]}
+        <View style={styles.imageSection}>
+          {image ? (
+            <View style={styles.imageContainer}>
+              <Image source={{ uri: image }} style={styles.selectedImage} />
+              <TouchableOpacity
+                style={styles.removeImageButton}
+                onPress={() => {
+                  setImage(null)
+                  setAnalysisResult(null)
+                }}
               >
-                {analysisResult.vibeRating.toFixed(1)}
-              </Text>
-              <Text style={styles.ratingMax}>/5.0</Text>
+                <Ionicons name="close-circle" size={28} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.vibeDescription}>
-              {VibeAnalysisService.getVibeDescription(analysisResult.vibeRating)}
-            </Text>
-          </View>
+          ) : (
+            <TouchableOpacity style={styles.imagePicker} onPress={captureImage}>
+              <Ionicons name="camera" size={56} color="#666666" />
+              <Text style={styles.imagePickerText}>Tap to capture image (camera only)</Text>
+            </TouchableOpacity>
+          )}
+        </View>
 
-          <View style={styles.detailedAnalysis}>
-            <Text style={styles.detailedTitle}>Detailed Analysis</Text>
-
-            <View style={styles.analysisItem}>
-              <Text style={styles.analysisLabel}>Crowd Density</Text>
-              <Text style={styles.analysisValue}>{analysisResult.analysisData.crowdDensity.toFixed(1)}/5.0</Text>
-            </View>
-
-            <View style={styles.analysisItem}>
-              <Text style={styles.analysisLabel}>Lighting Quality</Text>
-              <Text style={styles.analysisValue}>{analysisResult.analysisData.lightingQuality.toFixed(1)}/5.0</Text>
-            </View>
-
-            <View style={styles.analysisItem}>
-              <Text style={styles.analysisLabel}>Energy Level</Text>
-              <Text style={styles.analysisValue}>{analysisResult.analysisData.energyLevel.toFixed(1)}/5.0</Text>
-            </View>
-
-            <View style={styles.analysisItem}>
-              <Text style={styles.analysisLabel}>Music Vibes</Text>
-              <Text style={styles.analysisValue}>{analysisResult.analysisData.musicVibes.toFixed(1)}/5.0</Text>
-            </View>
-
-            <View style={styles.analysisItem}>
-              <Text style={styles.analysisLabel}>Overall Atmosphere</Text>
-              <Text style={styles.analysisValue}>{analysisResult.analysisData.overallAtmosphere.toFixed(1)}/5.0</Text>
-            </View>
-          </View>
-
+        {image && !analysisResult && (
           <TouchableOpacity
-            style={[styles.uploadButton, uploading && styles.disabledButton]}
-            onPress={uploadVibe}
-            disabled={uploading}
+            style={[styles.analyzeButton, analyzing && styles.disabledButton]}
+            onPress={analyzeVibe}
+            disabled={analyzing}
           >
-            {uploading ? (
+            {analyzing ? (
               <>
-                <ActivityIndicator color="#FFFFFF" />
-                <Text style={styles.uploadButtonText}>Uploading...</Text>
+                <ActivityIndicator color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.analyzeButtonText}>Analyzing Vibe...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="cloud-upload" size={20} color="#FFFFFF" />
-                <Text style={styles.uploadButtonText}>Upload Vibe</Text>
+                <Ionicons name="analytics" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                <Text style={styles.analyzeButtonText}>Analyze Vibe</Text>
               </>
             )}
           </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
+        )}
+
+        {analysisResult && (
+          <View style={styles.resultsSection}>
+            <Text style={styles.resultsTitle}>Vibe Analysis Results</Text>
+
+            <View style={styles.overallRating}>
+              <Text style={styles.ratingLabel}>Overall Vibe Rating</Text>
+              <View style={styles.ratingContainer}>
+                <Text
+                  style={[styles.ratingValue, { color: VibeAnalysisService.getVibeColor(analysisResult.vibeRating) }]}
+                >
+                  {analysisResult.vibeRating.toFixed(1)}
+                </Text>
+                <Text style={styles.ratingMax}>/5.0</Text>
+              </View>
+              <Text style={styles.vibeDescription}>
+                {VibeAnalysisService.getVibeDescription(analysisResult.vibeRating)}
+              </Text>
+            </View>
+
+            <View style={styles.detailedAnalysis}>
+              <Text style={styles.detailedTitle}>Detailed Analysis</Text>
+
+              <View style={styles.analysisItem}>
+                <Text style={styles.analysisLabel}>Crowd Density</Text>
+                <Text style={styles.analysisValue}>{analysisResult.analysisData.crowdDensity.toFixed(1)}/5.0</Text>
+              </View>
+
+              <View style={styles.analysisItem}>
+                <Text style={styles.analysisLabel}>Lighting Quality</Text>
+                <Text style={styles.analysisValue}>{analysisResult.analysisData.lightingQuality.toFixed(1)}/5.0</Text>
+              </View>
+
+              <View style={styles.analysisItem}>
+                <Text style={styles.analysisLabel}>Energy Level</Text>
+                <Text style={styles.analysisValue}>{analysisResult.analysisData.energyLevel.toFixed(1)}/5.0</Text>
+              </View>
+
+              <View style={styles.analysisItem}>
+                <Text style={styles.analysisLabel}>Music Vibes</Text>
+                <Text style={styles.analysisValue}>{analysisResult.analysisData.musicVibes.toFixed(1)}/5.0</Text>
+              </View>
+
+              <View style={styles.analysisItem}>
+                <Text style={styles.analysisLabel}>Overall Atmosphere</Text>
+                <Text style={styles.analysisValue}>{analysisResult.analysisData.overallAtmosphere.toFixed(1)}/5.0</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.uploadButton, uploading && styles.disabledButton]}
+              onPress={uploadVibe}
+              disabled={uploading}
+            >
+              {uploading ? (
+                <>
+                  <ActivityIndicator color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.uploadButtonText}>Uploading...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+                  <Text style={styles.uploadButtonText}>Upload Vibe</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </>
   )
 }
 

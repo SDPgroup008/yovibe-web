@@ -1,40 +1,46 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native"
-import FirebaseService from "../services/FirebaseService"
-import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
-import { db } from "../config/firebase"
-import type { Venue } from "../models/Venue"
-import VibeAnalysisService from "../services/VibeAnalysisService"
+import type React from "react";
+import { useState, useEffect } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native";
+import FirebaseService from "../services/FirebaseService";
+import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore";
+import { db } from "../config/firebase";
+import type { Venue } from "../models/Venue";
+import VibeAnalysisService from "../services/VibeAnalysisService";
+import { Ionicons } from "@expo/vector-icons";
+
+// Auth helper for soft-auth redirect intent
+import { useAuth } from "../contexts/AuthContext";
 
 interface VenuesScreenProps {
-  navigation: any
+  navigation: any;
 }
 
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
-  const [venues, setVenues] = useState<Venue[]>([])
-  const [loading, setLoading] = useState(true)
-  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
-  const [activeTab, setActiveTab] = useState<"nightlife" | "recreation">("nightlife")
+  const { user, setRedirectIntent } = useAuth();
+
+  const [venues, setVenues] = useState<Venue[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
+  const [activeTab, setActiveTab] = useState<"nightlife" | "recreation">("nightlife");
 
   useEffect(() => {
     // Load venues and initial vibe ratings
-    loadVenues()
+    loadVenues();
 
     // Set up real-time listeners for vibe ratings
-    const unsubscribeVibeListeners: (() => void)[] = []
+    const unsubscribeVibeListeners: (() => void)[] = [];
 
     const setupVibeListeners = async () => {
       try {
-        const venuesList = await FirebaseService.getVenues()
+        const venuesList = await FirebaseService.getVenues();
         for (const venue of venuesList) {
-          const vibeRatingsRef = collection(db, "vibeRatings")
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const tomorrow = new Date(today)
-          tomorrow.setDate(tomorrow.getDate() + 1)
+          const vibeRatingsRef = collection(db, "vibeRatings");
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          const tomorrow = new Date(today);
+          tomorrow.setDate(tomorrow.getDate() + 1);
 
           const q = query(
             vibeRatingsRef,
@@ -43,112 +49,112 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
             where("createdAt", "<", tomorrow),
             orderBy("createdAt", "desc"),
             limit(1)
-          )
+          );
 
           const unsubscribe = onSnapshot(
             q,
             (snapshot) => {
               snapshot.docChanges().forEach((change) => {
                 if (change.type === "added" || change.type === "modified") {
-                  const data = change.doc.data()
-                  const rating = data.rating || 0.0
+                  const data = change.doc.data();
+                  const rating = data.rating || 0.0;
                   setVenueVibeRatings((prev) => ({
                     ...prev,
                     [venue.id]: rating,
-                  }))
+                  }));
                 } else if (change.type === "removed") {
                   // If the latest vibe rating is removed, check for today's vibe images
                   setVenueVibeRatings((prev) => ({
                     ...prev,
                     [venue.id]: 0.0,
-                  }))
+                  }));
                 }
-              })
+              });
             },
             (error) => {
-              console.error(`FirebaseService: Error listening to vibe ratings for venue ${venue.id}:`, error)
+              console.error(`FirebaseService: Error listening to vibe ratings for venue ${venue.id}:`, error);
               // Default to 0.0 on error
               setVenueVibeRatings((prev) => ({
                 ...prev,
                 [venue.id]: 0.0,
-              }))
+              }));
             }
-          )
-          unsubscribeVibeListeners.push(unsubscribe)
+          );
+          unsubscribeVibeListeners.push(unsubscribe);
         }
       } catch (error) {
-        console.error("Error setting up vibe listeners:", error)
+        console.error("Error setting up vibe listeners:", error);
       }
-    }
+    };
 
-    setupVibeListeners()
+    setupVibeListeners();
 
     // Handle navigation focus to refresh venues
     const unsubscribeNavigation = navigation.addListener("focus", () => {
-      loadVenues()
-    })
+      loadVenues();
+    });
 
     // Cleanup listeners on unmount
     return () => {
-      unsubscribeNavigation()
-      unsubscribeVibeListeners.forEach((unsubscribe) => unsubscribe())
-    }
-  }, [navigation])
+      unsubscribeNavigation();
+      unsubscribeVibeListeners.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [navigation]);
 
   const loadVenues = async () => {
     try {
-      setLoading(true)
-      const venuesList = await FirebaseService.getVenues()
-      setVenues(venuesList)
+      setLoading(true);
+      const venuesList = await FirebaseService.getVenues();
+      setVenues(venuesList);
 
       // Load initial vibe ratings for today
-      const vibeRatings: Record<string, number> = {}
-      const today = new Date()
+      const vibeRatings: Record<string, number> = {};
+      const today = new Date();
       for (const venue of venuesList) {
-        const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today)
+        const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
         if (vibeImages.length > 0) {
           // Use the latest vibe rating for today
           const latestVibe = vibeImages.reduce((latest, image) => {
-            return image.uploadedAt > latest.uploadedAt ? image : latest
-          })
-          vibeRatings[venue.id] = latestVibe.vibeRating || 0.0
+            return image.uploadedAt > latest.uploadedAt ? image : latest;
+          });
+          vibeRatings[venue.id] = latestVibe.vibeRating || 0.0;
         } else {
-          vibeRatings[venue.id] = 0.0 // Default to 0.0 if no vibe images for today
+          vibeRatings[venue.id] = 0.0; // Default to 0.0 if no vibe images for today
         }
       }
-      setVenueVibeRatings(vibeRatings)
+      setVenueVibeRatings(vibeRatings);
     } catch (error) {
-      console.error("Error loading venues:", error)
+      console.error("Error loading venues:", error);
       // Set all ratings to 0.0 on error
-      const errorRatings: Record<string, number> = {}
+      const errorRatings: Record<string, number> = {};
       venues.forEach((venue) => {
-        errorRatings[venue.id] = 0.0
-      })
-      setVenueVibeRatings(errorRatings)
+        errorRatings[venue.id] = 0.0;
+      });
+      setVenueVibeRatings(errorRatings);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleVenueSelect = (venueId: string) => {
-    navigation.navigate("VenueDetail", { venueId })
-  }
+    navigation.navigate("VenueDetail", { venueId });
+  };
 
   const getFilteredVenues = () => {
     const filtered = venues.filter((venue) => {
       const isNightlife = venue.categories.some((cat) =>
         ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase())
-      )
-      return activeTab === "nightlife" ? isNightlife : !isNightlife
-    })
+      );
+      return activeTab === "nightlife" ? isNightlife : !isNightlife;
+    });
 
     // Sort by current vibe rating (highest first)
     return filtered.sort((a, b) => {
-      const aVibe = venueVibeRatings[a.id] || 0.0
-      const bVibe = venueVibeRatings[b.id] || 0.0
-      return bVibe - aVibe
-    })
-  }
+      const aVibe = venueVibeRatings[a.id] || 0.0;
+      const bVibe = venueVibeRatings[b.id] || 0.0;
+      return bVibe - aVibe;
+    });
+  };
 
   const renderVenueCard = ({ item }: { item: Venue }) => (
     <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
@@ -171,9 +177,42 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         </View>
       </ImageBackground>
     </TouchableOpacity>
-  )
+  );
 
-  const filteredVenues = getFilteredVenues()
+  const filteredVenues = getFilteredVenues();
+
+  /**
+   * handleAddVenue
+   *
+   * Soft-auth behavior:
+   * - If user is not authenticated: save redirect intent and open Login (Auth stack).
+   * - If user is authenticated and NOT a 'user' (i.e., club_owner or admin): navigate to AddVenue.
+   * - If user is authenticated and a 'user': do nothing (button is hidden for 'user').
+   */
+  const handleAddVenue = () => {
+    if (!user) {
+      try {
+        setRedirectIntent({
+          routeName: "AddVenue",
+          params: {},
+        });
+      } catch (err) {
+        console.warn("Failed to set redirect intent:", err);
+      }
+
+      // Navigate to Auth -> Login
+      ;(navigation as any).navigate("Auth", { screen: "Login" });
+      return;
+    }
+
+    // If logged in as a regular 'user', do nothing (button should be hidden)
+    if (user.userType === "user") {
+      return;
+    }
+
+    // Authenticated and allowed (club_owner or admin) -> open AddVenue
+    ;(navigation as any).navigate("AddVenue");
+  };
 
   return (
     <View style={[styles.container, activeTab === "recreation" && styles.recreationContainer]}>
@@ -218,9 +257,21 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           contentContainerStyle={styles.venuesList}
         />
       )}
+
+      {/* Floating Add Venue Button
+          Soft-auth rules:
+          - Visible to unauthenticated users (so they can tap and be prompted to login)
+          - Visible to authenticated 'club_owner' and 'admin'
+          - Hidden for authenticated 'user' type
+      */}
+      {(!user || user.userType === "club_owner" || user.userType === "admin") && (
+        <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddVenue}>
+          <Ionicons name="add" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+      )}
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -333,6 +384,31 @@ const styles = StyleSheet.create({
   vibeRatingDescription: {
     fontSize: 12,
     color: "rgba(255,255,255,0.7)",
+  },
+  floatingAddButton: {
+    position: "absolute",
+    bottom: 30, // Moved closer to profile icon
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "#000000", // Changed to black
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#00D4FF", // Glowing effect color
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 12,
+    elevation: 12,
+    // Add glowing border effect
+    borderWidth: 2,
+    borderColor: "rgba(0, 212, 255, 0.6)",
+  },
+  floatingPlus: {
+    color: "#FFFFFF",
+    fontSize: 28,
+    lineHeight: 28,
+    fontWeight: "700",
   },
 })
 

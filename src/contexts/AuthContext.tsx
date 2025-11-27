@@ -1,152 +1,202 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react"
-import { onAuthStateChanged } from "firebase/auth"
-import { auth } from "../config/firebase"
-import FirebaseService from "../services/FirebaseService"
-import type { User } from "../models/User"
+import type React from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../config/firebase";
+import FirebaseService from "../services/FirebaseService";
+import type { User } from "../models/User";
+
+export type RedirectIntent = {
+  routeName: string;
+  params?: Record<string, unknown>;
+};
 
 interface AuthContextType {
-  user: User | null
-  loading: boolean
-  signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string, userType: "user" | "club_owner" | "admin") => Promise<void>
-  signOut: () => Promise<void>
-  updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>
+  user: User | null;
+  isLoading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    userType: "user" | "club_owner" | "admin"
+  ) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
+  setRedirectIntent: (intent: RedirectIntent) => void;
+  consumeRedirectIntent: () => RedirectIntent | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined)
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
-  const context = useContext(AuthContext)
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useAuth must be used within an AuthProvider")
+    throw new Error("useAuth must be used within an AuthProvider");
   }
-  return context
-}
+  return context;
+};
 
 interface AuthProviderProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
+const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Track whether we've completed the initial auth resolution
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    console.log("AuthContext: Setting up auth state listener")
+    console.log("AuthContext: Setting up auth state listener");
+
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      console.log("AuthContext: Auth state changed", firebaseUser?.email || "null")
-
-      if (firebaseUser) {
-        try {
-          console.log("AuthContext: Loading user profile for", firebaseUser.email)
-          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid)
-          console.log("AuthContext: User profile loaded", userProfile.email)
-          setUser(userProfile)
-        } catch (error) {
-          console.error("AuthContext: Error loading user profile:", error)
-          setUser(null)
+      try {
+        if (firebaseUser) {
+          // Authenticated: load profile and set user
+          console.log("AuthContext: Firebase user detected, loading profile...");
+          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
+          console.log("AuthContext: User profile loaded:", userProfile?.email);
+          setUser(userProfile);
+        } else {
+          // No firebase user
+          if (!initializedRef.current) {
+            // First time: don't clear user state yet, just mark initialized.
+            // This avoids briefly showing signed-out UI while we resolve initial state.
+            console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
+          } else {
+            // After initial load, a null firebaseUser means the user is signed out.
+            console.log("AuthContext: Firebase user is null after initialization — clearing user.");
+            setUser(null);
+          }
         }
-      } else {
-        console.log("AuthContext: No user, clearing state")
-        setUser(null)
+      } catch (error) {
+        console.error("AuthContext: Error while handling auth state change:", error);
+        // On error, be conservative: clear user so UI doesn't assume stale data
+        setUser(null);
+      } finally {
+        // Mark that initial resolution has completed at least once
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+        }
+        setIsLoading(false);
+        console.log("AuthContext: Auth state resolved. isLoading = false");
       }
-
-      setLoading(false)
-    })
+    });
 
     return () => {
-      console.log("AuthContext: Cleaning up auth listener")
-      unsubscribe()
-    }
-  }, [])
+      console.log("AuthContext: Cleaning up auth listener");
+      unsubscribe();
+    };
+  }, []);
 
   const signIn = async (email: string, password: string) => {
+    setIsLoading(true);
     try {
-      console.log("AuthContext: Starting sign in for", email)
-      setLoading(true)
-      await FirebaseService.signIn(email, password)
-      console.log("AuthContext: Sign in completed")
+      await FirebaseService.signIn(email, password);
+      console.log("AuthContext: Sign in successful");
+      // onAuthStateChanged will populate user
     } catch (error) {
-      console.error("AuthContext: Sign in error:", error)
-      throw error
+      console.error("AuthContext: Sign in failed:", error);
+      throw error;
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const signUp = async (email: string, password: string, userType: "user" | "club_owner" | "admin") => {
+  const signUp = async (
+    email: string,
+    password: string,
+    userType: "user" | "club_owner" | "admin"
+  ) => {
+    setIsLoading(true);
     try {
-      console.log("AuthContext: Starting sign up for", email, "as", userType)
-      setLoading(true)
-      await FirebaseService.signUp(email, password, userType)
-      console.log("AuthContext: Sign up completed")
+      await FirebaseService.signUp(email, password, userType);
+      console.log("AuthContext: Sign up successful");
+      // onAuthStateChanged will populate user
     } catch (error) {
-      console.error("AuthContext: Sign up error:", error)
-      throw error
+      console.error("AuthContext: Sign up failed:", error);
+      throw error;
     } finally {
-      setLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
+  /**
+   * signOut
+   *
+   * - Performs sign out via FirebaseService.
+   * - Clears local user state here so the app can render the unauthenticated main screen.
+   * - Does NOT perform any navigation; navigation decisions should be handled by the caller.
+   */
   const signOut = async () => {
+    setIsLoading(true);
     try {
-      console.log("AuthContext: Starting sign out process")
-      setLoading(true)
-
-      // Add timeout to prevent hanging
-      const signOutPromise = FirebaseService.signOut()
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error("Sign out timed out after 5 seconds")), 5000)
-      })
-      await Promise.race([signOutPromise, timeoutPromise])
-
-      // Clear user state after successful sign out
-      setUser(null)
-
-      console.log("AuthContext: Sign out process completed")
-    } catch (error: any) {
-      console.error("AuthContext: Sign out error:", error.message)
-      setUser(null) // Ensure user is cleared even on error
-      throw new Error(`Sign out failed: ${error.message}`)
+      console.log("AuthContext: Signing out...");
+      await FirebaseService.signOut();
+      // Clear local user state explicitly so UI can immediately reflect unauthenticated state.
+      setUser(null);
+      console.log("AuthContext: Signed out successfully and local user cleared");
+    } catch (error) {
+      console.error("AuthContext: Sign out error:", error);
+      // Ensure local state is cleared even if signOut failed at the service level
+      setUser(null);
+      throw error;
     } finally {
-      setLoading(false)
-      console.log("AuthContext: Loading reset to false")
+      setIsLoading(false);
     }
-  }
+  };
 
   const updateProfile = async (data: { displayName?: string; photoURL?: string }) => {
-    if (!user) {
-      throw new Error("No user logged in")
-    }
+    if (!user) throw new Error("No user logged in");
+    await FirebaseService.updateUserProfile(user.id, data);
+    setUser({ ...user, ...data });
+  };
 
+  // --- Soft-auth redirect intent helpers ---
+  const setRedirectIntent = (intent: RedirectIntent) => {
     try {
-      console.log("AuthContext: Updating user profile")
-      await FirebaseService.updateUserProfile(user.id, data)
-
-      // Update local user state
-      setUser({
-        ...user,
-        ...data,
-      })
-
-      console.log("AuthContext: Profile updated successfully")
-    } catch (error) {
-      console.error("AuthContext: Error updating profile:", error)
-      throw error
+      sessionStorage.setItem(REDIRECT_INTENT_KEY, JSON.stringify(intent));
+      console.log("AuthContext: Redirect intent saved", intent);
+    } catch (err) {
+      console.warn("AuthContext: Failed to save redirect intent", err);
     }
-  }
+  };
+
+  const consumeRedirectIntent = (): RedirectIntent | null => {
+    try {
+      const raw = sessionStorage.getItem(REDIRECT_INTENT_KEY);
+      if (!raw) return null;
+      sessionStorage.removeItem(REDIRECT_INTENT_KEY);
+      const parsed = JSON.parse(raw) as RedirectIntent;
+      console.log("AuthContext: Redirect intent consumed", parsed);
+      return parsed;
+    } catch (err) {
+      console.warn("AuthContext: Failed to consume redirect intent", err);
+      return null;
+    }
+  };
 
   const value: AuthContextType = {
     user,
-    loading,
+    isLoading,
     signIn,
     signUp,
     signOut,
     updateProfile,
-  }
+    setRedirectIntent,
+    consumeRedirectIntent,
+  };
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
-}
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

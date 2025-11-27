@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
+import type React from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -12,113 +12,158 @@ import {
   ImageBackground,
   Platform,
   TextInput,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
-import { useAuth } from "../contexts/AuthContext"
-import type { Event } from "../models/Event"
-import type { EventsScreenProps } from "../navigation/types"
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import FirebaseService from "../services/FirebaseService";
+import { useAuth } from "../contexts/AuthContext";
+import type { Event } from "../models/Event";
+import type { EventsScreenProps } from "../navigation/types";
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
-  const { user } = useAuth()
-  const [events, setEvents] = useState<Event[]>([])
-  const [filteredEvents, setFilteredEvents] = useState<Event[]>([])
-  const [featuredEvents, setFeaturedEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [showSearch, setShowSearch] = useState(false)
+  const { user, setRedirectIntent } = useAuth();
+  const [events, setEvents] = useState<Event[]>([]);
+  const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
+  const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
-      loadEvents()
-    })
+      loadEvents();
+    });
 
-    return unsubscribe
-  }, [navigation])
+    return unsubscribe;
+  }, [navigation]);
 
   useEffect(() => {
-    // Filter events based on search query
     if (searchQuery.trim() === "") {
       setFilteredEvents(events)
-    } else {
-      const filtered = events.filter(
-        (event) =>
-          event.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          event.venueName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          event.artists.some((artist) => artist.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          event.description.toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-      setFilteredEvents(filtered)
+      return
     }
+
+    const query = searchQuery.toLowerCase().trim()
+
+    const filtered = events.filter((event) => {
+      // Safely handle possibly undefined/null fields
+      const title = event.name?.toLowerCase() || ""
+      const venue = event.venueName?.toLowerCase() || ""
+      const description = event.description?.toLowerCase() || ""
+      const location = event.location?.toLowerCase() || ""
+
+      // Safely handle artists (most common crash source)
+      const artistsMatch =
+        Array.isArray(event.artists) &&
+        event.artists.some((artist) => typeof artist === "string" && artist.toLowerCase().includes(query))
+
+      return (
+        title.includes(query) ||
+        venue.includes(query) ||
+        description.includes(query) ||
+        location.includes(query) ||
+        artistsMatch
+      )
+    })
+
+    setFilteredEvents(filtered)
   }, [searchQuery, events])
 
   const loadEvents = async () => {
     try {
-      setLoading(true)
+      setLoading(true);
 
       // Automatically delete past events
-      await FirebaseService.deletePastEvents()
+      await FirebaseService.deletePastEvents();
 
       // Get all events
-      const allEvents = await FirebaseService.getEvents()
+      const allEvents = await FirebaseService.getEvents();
 
       // Sort events by date (closest to today first)
       const sortedEvents = [...allEvents].sort((a, b) => {
-        const today = new Date()
-        const diffA = Math.abs(a.date.getTime() - today.getTime())
-        const diffB = Math.abs(b.date.getTime() - today.getTime())
-        return diffA - diffB
-      })
+        const today = new Date();
+        const diffA = Math.abs(a.date.getTime() - today.getTime());
+        const diffB = Math.abs(b.date.getTime() - today.getTime());
+        return diffA - diffB;
+      });
 
-      setEvents(sortedEvents)
-      setFilteredEvents(sortedEvents)
+      setEvents(sortedEvents);
+      setFilteredEvents(sortedEvents);
 
       // Get featured events and sort them as well
-      const featured = await FirebaseService.getFeaturedEvents()
+      const featured = await FirebaseService.getFeaturedEvents();
       const sortedFeatured = [...featured].sort((a, b) => {
-        const today = new Date()
-        const diffA = Math.abs(a.date.getTime() - today.getTime())
-        const diffB = Math.abs(b.date.getTime() - today.getTime())
-        return diffA - diffB
-      })
+        const today = new Date();
+        const diffA = Math.abs(a.date.getTime() - today.getTime());
+        const diffB = Math.abs(b.date.getTime() - today.getTime());
+        return diffA - diffB;
+      });
 
-      setFeaturedEvents(sortedFeatured)
+      setFeaturedEvents(sortedFeatured);
     } catch (error) {
-      console.error("Error loading events:", error)
+      console.error("Error loading events:", error);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   const handleEventSelect = (eventId: string) => {
-    navigation.navigate("EventDetail", { eventId })
-  }
+    navigation.navigate("EventDetail", { eventId });
+  };
 
+  /**
+   * handleAddEvent
+   *
+   * Soft-auth behavior:
+   * - If user is not authenticated: save redirect intent and open Login (Auth stack).
+   * - If user is authenticated and NOT a club_owner: navigate to AddEvent.
+   * - If user is authenticated and a club_owner: do nothing (button will be hidden).
+   */
   const handleAddEvent = () => {
-    // Use type assertion to work around the navigation type limitations
-    ;(navigation as any).navigate("AddEvent")
-  }
+    // If no user, save redirect intent and navigate to the Auth -> Login screen
+    if (!user) {
+      try {
+        setRedirectIntent({
+          routeName: "AddEvent",
+          params: {},
+        });
+      } catch (err) {
+        console.warn("Failed to set redirect intent:", err);
+      }
+
+      // Navigate to the Auth stack's Login screen (use any cast to avoid type issues)
+      ;(navigation as any).navigate("Auth", { screen: "Login" });
+      return;
+    }
+
+    // If user exists but is a club_owner, do nothing (button should be hidden anyway)
+    if (user.userType === "club_owner") {
+      return;
+    }
+
+    // Authenticated and allowed (user or admin) -> open AddEvent
+    ;(navigation as any).navigate("AddEvent");
+  };
 
   const toggleSearch = () => {
-    setShowSearch(!showSearch)
+    setShowSearch(!showSearch);
     if (showSearch) {
-      setSearchQuery("")
+      setSearchQuery("");
     }
-  }
+  };
 
   const formatDateRange = (date: Date) => {
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" }
-    const formattedDate = date.toLocaleDateString("en-US", options).toUpperCase()
+    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
+    const formattedDate = date.toLocaleDateString("en-US", options).toUpperCase();
 
     // Get day of week
-    const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase()
+    const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
 
-    return `${dayOfWeek} ${formattedDate}`
-  }
+    return `${dayOfWeek} ${formattedDate}`;
+  };
 
   const getAttendeeCount = (event: Event) => {
-    return event.attendees ? event.attendees.length : 0
-  }
+    return event.attendees ? event.attendees.length : 0;
+  };
 
   const renderEventItem = ({ item }: { item: Event }) => (
     <TouchableOpacity style={styles.eventCard} onPress={() => handleEventSelect(item.id)}>
@@ -164,7 +209,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         </View>
       </ImageBackground>
     </TouchableOpacity>
-  )
+  );
 
   return (
     <View style={styles.container}>
@@ -212,15 +257,20 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         />
       )}
 
-      {/* Floating Add Event Button */}
-      {user && (user.userType === "user" || user.userType === "admin") && (
+      {/* Floating Add Event Button
+          Soft-auth rules:
+          - Visible to unauthenticated users (so they can tap and be prompted to login)
+          - Visible to authenticated users of type 'user' or 'admin'
+          - Hidden for authenticated 'club_owner' users
+      */}
+      {(!user || user.userType === "user" || user.userType === "admin") && (
         <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddEvent}>
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       )}
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {

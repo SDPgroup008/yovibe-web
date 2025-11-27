@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useState, useEffect } from "react"
+import type React from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,30 +14,58 @@ import {
   Modal,
   ScrollView,
   Platform,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useAuth } from "../contexts/AuthContext"
-import FirebaseService from "../services/FirebaseService"
-import ImagePickerService from "../services/ImagePickerService"
-import type { ProfileScreenProps } from "../navigation/types"
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../contexts/AuthContext";
+import FirebaseService from "../services/FirebaseService";
+import ImagePickerService from "../services/ImagePickerService";
+import type { ProfileScreenProps } from "../navigation/types";
+
+/**
+ * ProfileScreen (fixed)
+ *
+ * - Uses a valid public route name from your MainTabNavigator ("Venues") as the
+ *   target after sign out so TypeScript accepts the reset call.
+ * - When resetting a parent navigator, the route name is cast to `any` at the
+ *   call site to satisfy the navigation typing constraints while keeping the
+ *   runtime behavior correct.
+ */
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
-  const { user, signOut, updateProfile } = useAuth()
-  const [loading, setLoading] = useState(false)
+  const { user, signOut, updateProfile } = useAuth();
+  const [loading, setLoading] = useState(false);
 
   // Edit profile states
-  const [showEditProfile, setShowEditProfile] = useState(false)
-  const [displayName, setDisplayName] = useState(user?.displayName || "")
-  const [photoURL, setPhotoURL] = useState(user?.photoURL || "")
-  const [editProfileLoading, setEditProfileLoading] = useState(false)
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [displayName, setDisplayName] = useState(user?.displayName || "");
+  const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
+  const [editProfileLoading, setEditProfileLoading] = useState(false);
 
   // Load user data on mount
   useEffect(() => {
     if (user && (user.displayName || user.photoURL)) {
-      setDisplayName(user.displayName || "")
-      setPhotoURL(user.photoURL || "")
+      setDisplayName(user.displayName || "");
+      setPhotoURL(user.photoURL || "");
+    } else {
+      // Clear local fields when user becomes unauthenticated
+      setDisplayName("");
+      setPhotoURL("");
     }
-  }, [user])
+  }, [user]);
+
+  /**
+   * determinePublicRoute
+   *
+   * Return a sensible public route name that exists in your MainTabNavigator.
+   * Based on your navigator, valid top-level tab names are:
+   *   "Venues", "Events", "Map", "Calendar", "Profile"
+   *
+   * We'll prefer "Venues" as the app's public main entry.
+   */
+  const determinePublicRoute = (): string => {
+    // Prefer Venues as the public main tab
+    return "Venues";
+  };
 
   const handleSignOut = async () => {
     console.log("ProfileScreen: Sign Out button clicked");
@@ -59,124 +87,142 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           ]);
         });
 
-    if (confirmed) {
-      console.log("ProfileScreen: Starting sign out process");
-      setLoading(true);
-      try {
-        await signOut();
-        console.log("ProfileScreen: Sign out completed");
-        navigation.reset({ index: 0, routes: [{ name: "Auth", params: { screen: "Login" } }] });
-      } catch (error: any) {
-        console.error("ProfileScreen: Sign out error:", error.message);
-        Alert.alert("Error", `Failed to sign out: ${error.message}`);
-      } finally {
-        setLoading(false);
-        console.log("ProfileScreen: Loading reset to false");
-      }
-    } else {
+    if (!confirmed) {
       console.log("ProfileScreen: Sign out cancelled");
+      return;
+    }
+
+    console.log("ProfileScreen: Starting sign out process");
+    setLoading(true);
+    try {
+      await signOut();
+      console.log("ProfileScreen: Sign out completed");
+
+      // Determine a safe public route name and reset navigation to it.
+      const targetRoute = determinePublicRoute();
+
+      // Use parent reset if available (safer to reset the root navigator)
+      const parent = navigation.getParent?.();
+      if (parent && parent.reset) {
+        // Cast the route name to any at the call site to satisfy TS typing constraints
+        parent.reset({
+          index: 0,
+          routes: [{ name: targetRoute as any }],
+        });
+      } else {
+        // Fallback to resetting the current navigator
+        navigation.reset({
+          index: 0,
+          routes: [{ name: targetRoute as any }],
+        });
+      }
+
+      console.log("ProfileScreen: Redirected to public route:", targetRoute);
+    } catch (error: any) {
+      console.error("ProfileScreen: Sign out error:", error?.message ?? error);
+      Alert.alert("Error", `Failed to sign out: ${error?.message ?? "Unknown error"}`);
+    } finally {
+      setLoading(false);
+      console.log("ProfileScreen: Loading reset to false");
     }
   };
 
   const navigateToMyVenues = () => {
     if (user?.userType === "club_owner") {
-      navigation.navigate("MyVenues")
+      navigation.navigate("MyVenues");
     }
-  }
+  };
 
   const navigateToAdminUsers = () => {
     if (user?.userType === "admin") {
-      navigation.navigate("AdminUsers")
+      navigation.navigate("AdminUsers");
     }
-  }
+  };
 
   const navigateToAdminVenues = () => {
     if (user?.userType === "admin") {
-      navigation.navigate("AdminVenues")
+      navigation.navigate("AdminVenues");
     }
-  }
+  };
 
   const navigateToAdminEvents = () => {
     if (user?.userType === "admin") {
-      navigation.navigate("AdminEvents")
+      navigation.navigate("AdminEvents");
     }
-  }
+  };
 
   const handleToggleEditProfile = () => {
-    setShowEditProfile(!showEditProfile)
-  }
+    setShowEditProfile(!showEditProfile);
+  };
 
   const handleUpdateProfile = async () => {
-    if (!user) return
+    if (!user) return;
 
-    setEditProfileLoading(true)
+    setEditProfileLoading(true);
     try {
       await updateProfile({
         displayName,
         photoURL,
-      })
+      });
 
-      setShowEditProfile(false)
-      Alert.alert("Success", "Profile updated successfully")
+      setShowEditProfile(false);
+      Alert.alert("Success", "Profile updated successfully");
     } catch (error) {
-      Alert.alert("Error", "Failed to update profile")
+      Alert.alert("Error", "Failed to update profile");
     } finally {
-      setEditProfileLoading(false)
+      setEditProfileLoading(false);
     }
-  }
+  };
 
   const handlePickProfileImage = async () => {
     try {
       // Request permissions first (no-op on web)
-      await ImagePickerService.requestMediaLibraryPermissionsAsync()
+      await ImagePickerService.requestMediaLibraryPermissionsAsync();
 
-      // Launch image picker
+      // Launch image picker (kept for profile editing; not used for vibe capture)
       const result = await ImagePickerService.launchImageLibraryAsync({
         mediaTypes: "Images",
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
-      })
+      });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
-        const imageUri = result.assets[0].uri
-        setPhotoURL(imageUri)
+        const imageUri = result.assets[0].uri;
+        setPhotoURL(imageUri);
 
         // If we're not in edit mode, auto-save the profile image
         if (!showEditProfile) {
-          setEditProfileLoading(true)
+          setEditProfileLoading(true);
           try {
             // Upload image and get URL
-            const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri)
-            await updateProfile({ photoURL: uploadedUrl })
-            Alert.alert("Success", "Profile image updated successfully")
+            const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri);
+            await updateProfile({ photoURL: uploadedUrl });
+            Alert.alert("Success", "Profile image updated successfully");
           } catch (error) {
-            Alert.alert("Error", "Failed to update profile image")
+            Alert.alert("Error", "Failed to update profile image");
           } finally {
-            setEditProfileLoading(false)
+            setEditProfileLoading(false);
           }
         }
       }
     } catch (error) {
-      console.error("Error picking image:", error)
-      Alert.alert("Error", "Failed to pick image")
+      console.error("Error picking image:", error);
+      Alert.alert("Error", "Failed to pick image");
     }
-  }
+  };
 
   const openNotifications = () => {
-    // This would navigate to a notifications screen in a real app
-    Alert.alert("Notifications", "You have no new notifications")
-  }
+    Alert.alert("Notifications", "You have no new notifications");
+  };
 
   const openSettings = () => {
-    // This would navigate to a settings screen in a real app
-    Alert.alert("Settings", "Settings functionality coming soon")
-  }
+    Alert.alert("Settings", "Settings functionality coming soon");
+  };
 
   const openHelpSupport = () => {
-    // This would navigate to a help/support screen in a real app
-    Alert.alert("Help & Support", "For help or support, please contact support@yovibe.com")
-  }
+    Alert.alert("Help & Support", "For help or support, please contact support@yovibe.com");
+  };
 
   return (
     <View style={styles.container}>
@@ -185,7 +231,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           {photoURL ? (
             <Image source={{ uri: photoURL }} style={styles.avatar} />
           ) : (
-            <Text style={styles.avatarText}>{user?.email.charAt(0).toUpperCase() || "U"}</Text>
+            <Text style={styles.avatarText}>{user?.email?.charAt(0).toUpperCase() || "U"}</Text>
           )}
           <View style={styles.avatarEditBadge}>
             <Ionicons name="camera" size={16} color="#FFFFFF" />
@@ -195,7 +241,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <Text style={styles.emailText}>{user?.email}</Text>
         {displayName && <Text style={styles.displayNameText}>{displayName}</Text>}
         <Text style={styles.userTypeText}>
-          {user?.userType === "user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : "Admin"}
+          {user?.userType === "user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : user?.userType === "admin" ? "Admin" : "Vibe Master"}
         </Text>
       </View>
 
@@ -214,7 +260,6 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           </TouchableOpacity>
         )}
 
-        {/* Admin Options */}
         {user?.userType === "admin" && (
           <>
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminUsers}>
@@ -256,13 +301,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.signOutButton, loading && styles.disabledButton, { zIndex: 100 }]}
-        onPress={handleSignOut}
-        disabled={loading}
-      >
-        {loading ? <ActivityIndicator color="#FF3B30" /> : <Text style={styles.signOutText}>Sign Out</Text>}
-      </TouchableOpacity>
+      {user ? (
+        <TouchableOpacity
+          style={[styles.signOutButton, loading && styles.disabledButton, { zIndex: 100 }]}
+          onPress={handleSignOut}
+          disabled={loading}
+        >
+          {loading ? <ActivityIndicator color="#FF3B30" /> : <Text style={styles.signOutText}>Sign Out</Text>}
+        </TouchableOpacity>
+      ) : null}
 
       {/* Edit Profile Modal */}
       <Modal
@@ -322,8 +369,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         </View>
       </Modal>
     </View>
-  )
-}
+  );
+};
+
 
 const styles = StyleSheet.create({
   container: {

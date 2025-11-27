@@ -1,6 +1,9 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
+import { useEffect } from "react"
+import { useNavigation } from "@react-navigation/native"
+import { View, ActivityIndicator } from "react-native"
 
 // Auth Screens
 import LoginScreen from "../screens/auth/LoginScreen"
@@ -11,7 +14,7 @@ import VenuesScreen from "../screens/VenuesScreen"
 import VenueDetailScreen from "../screens/VenueDetailScreen"
 import EventsScreen from "../screens/EventsScreen"
 import EventDetailScreen from "../screens/EventDetailScreen"
-import MapScreen from "../screens/MapScreen.web" // Use web-specific MapScreen
+import MapScreen from "../screens/MapScreen.web"
 import EventCalendarScreen from "../screens/EventCalendarScreen"
 import ProfileScreen from "../screens/ProfileScreen"
 import AddVenueScreen from "../screens/AddVenueScreen"
@@ -38,7 +41,12 @@ import type {
   MainTabParamList,
 } from "./types"
 
+// Auth helper (soft-auth)
+import { useAuth } from "../contexts/AuthContext"
+
+//
 // Create the navigators
+//
 const AuthStack = createNativeStackNavigator<AuthStackParamList>()
 const MainTab = createBottomTabNavigator<MainTabParamList>()
 const VenuesStack = createNativeStackNavigator<VenuesStackParamList>()
@@ -54,7 +62,70 @@ const EventsScreenWrapper = (props: any) => <EventsScreen {...props} />
 const MapScreenWrapper = (props: any) => <MapScreen {...props} />
 const ProfileScreenWrapper = (props: any) => <ProfileScreen {...props} />
 
+/**
+ * withAuth HOC – Fixed & Production-Ready
+ *
+ * Now properly waits for auth state to resolve (isLoading)
+ * Prevents flash of protected screen
+ * Prevents infinite redirect loop after login
+ * Uses navigation.reset() for clean auth flow
+ */
+function withAuth<P extends Record<string, any>>(WrappedComponent: React.ComponentType<P>) {
+  return function ProtectedScreen(props: P) {
+    const { user, isLoading, setRedirectIntent } = useAuth()
+    const navigation = useNavigation<any>()
+
+    useEffect(() => {
+      // Don't do anything while auth is still loading
+      if (isLoading) return
+
+      // Only redirect if truly not authenticated
+      if (!user) {
+        try {
+          const routeName = (props as any).route?.name || "EventsList"
+          const params = (props as any).route?.params || undefined
+
+          setRedirectIntent({
+            routeName,
+            params,
+          })
+        } catch (err) {
+          console.warn("withAuth: failed to save redirect intent", err)
+          setRedirectIntent({ routeName: "EventsList" })
+        }
+
+        // Clean reset to Login (prevents back-button issues)
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "Login" }],
+        })
+      }
+    }, [user, isLoading, navigation, props, setRedirectIntent])
+
+    // Show loading spinner while checking auth state
+    if (isLoading) {
+      return (
+        <View style={{ flex: 1, backgroundColor: "#121212", justifyContent: "center", alignItems: "center" }}>
+          <ActivityIndicator size="large" color="#2196F3" />
+        </View>
+      )
+    }
+
+    // Show nothing while redirecting (safe)
+    if (!user) return null
+
+    // User is authenticated → render the real screen
+    return <WrappedComponent {...props} />
+  }
+}
+
+// Create protected wrappers for screens that require authentication
+const AddEventScreenProtected = withAuth(AddEventScreen)
+const AddVenueScreenProtected = withAuth(AddVenueScreen)
+
+//
 // Auth Navigator
+//
 export const AuthNavigator = () => {
   return (
     <AuthStack.Navigator
@@ -66,7 +137,6 @@ export const AuthNavigator = () => {
         headerTitleStyle: {
           fontWeight: "bold",
         },
-        // Add this to prevent going back to auth screens after login
         gestureEnabled: false,
       }}
     >
@@ -76,7 +146,9 @@ export const AuthNavigator = () => {
   )
 }
 
+//
 // Venues Stack Navigator
+//
 export const VenuesStackNavigator = () => {
   return (
     <VenuesStack.Navigator
@@ -92,7 +164,7 @@ export const VenuesStackNavigator = () => {
     >
       <VenuesStack.Screen name="VenuesList" component={VenuesScreen} options={{ title: "Venues" }} />
       <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
-      <VenuesStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <VenuesStack.Screen name="AddEvent" component={AddEventScreenProtected} options={{ title: "Add Event" }} />
       <VenuesStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <VenuesStack.Screen
         name="ManagePrograms"
@@ -109,7 +181,9 @@ export const VenuesStackNavigator = () => {
   )
 }
 
+//
 // Events Stack Navigator
+//
 export const EventsStackNavigator = () => {
   return (
     <EventsStack.Navigator
@@ -125,7 +199,7 @@ export const EventsStackNavigator = () => {
     >
       <EventsStack.Screen name="EventsList" component={EventsScreenWrapper} options={{ title: "Events" }} />
       <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
-      <EventsStack.Screen name="AddEvent" component={AddEventScreen} options={{ title: "Add Event" }} />
+      <EventsStack.Screen name="AddEvent" component={AddEventScreenProtected} options={{ title: "Add Event" }} />
       <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <EventsStack.Screen
         name="TicketContactScreen"
@@ -136,7 +210,9 @@ export const EventsStackNavigator = () => {
   )
 }
 
+//
 // Map Stack Navigator
+//
 export const MapStackNavigator = () => {
   return (
     <MapStack.Navigator
@@ -162,7 +238,9 @@ export const MapStackNavigator = () => {
   )
 }
 
+//
 // Calendar Stack Navigator
+//
 export const CalendarStackNavigator = () => {
   return (
     <CalendarStack.Navigator
@@ -188,7 +266,9 @@ export const CalendarStackNavigator = () => {
   )
 }
 
+//
 // Profile Stack Navigator
+//
 export const ProfileStackNavigator = () => {
   return (
     <ProfileStack.Navigator
@@ -204,7 +284,7 @@ export const ProfileStackNavigator = () => {
     >
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreenWrapper} options={{ title: "Profile" }} />
       <ProfileStack.Screen name="MyVenues" component={MyVenuesScreen} options={{ title: "My Venues" }} />
-      <ProfileStack.Screen name="AddVenue" component={AddVenueScreen} options={{ title: "Add Venue" }} />
+      <ProfileStack.Screen name="AddVenue" component={AddVenueScreenProtected} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <ProfileStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
@@ -221,7 +301,9 @@ export const ProfileStackNavigator = () => {
   )
 }
 
+//
 // Main Tab Navigator
+//
 export const MainTabNavigator = () => {
   return (
     <MainTab.Navigator
@@ -265,4 +347,4 @@ export const MainTabNavigator = () => {
       <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />
     </MainTab.Navigator>
   )
-}  
+}

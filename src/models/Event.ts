@@ -8,6 +8,7 @@ export interface Event {
   venueName: string
   description: string
   date: Date
+  time: string
   posterImageUrl: string
   artists: string[]
   isFeatured: boolean
@@ -29,10 +30,11 @@ export interface FirestoreEvent {
   venueName: string
   description: string
   date: Timestamp
+  time: string
   posterImageUrl: string
   artists: string[]
   isFeatured: boolean
-  createdAt: Timestamp
+  createdAt: Date
   createdBy?: string
   createdByType?: UserType
   location?: string

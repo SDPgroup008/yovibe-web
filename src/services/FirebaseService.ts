@@ -551,6 +551,7 @@ class FirebaseService {
               venueName: data.venueName,
               description: data.description,
               date: eventDate,
+              time: doc.time || "Time TBD",
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
@@ -600,6 +601,7 @@ class FirebaseService {
               venueName: data.venueName,
               description: data.description,
               date: eventDate,
+              time: doc.time || "Time TBD",
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
@@ -648,6 +650,7 @@ class FirebaseService {
               venueName: data.venueName,
               description: data.description,
               date: eventDate,
+              time: doc.time || "Time TBD",
               posterImageUrl: data.posterImageUrl,
               artists: data.artists,
               isFeatured: data.isFeatured,
@@ -698,6 +701,7 @@ class FirebaseService {
         venueName: data.venueName,
         description: data.description,
         date: data.date.toDate(),
+        time: data.time || "Time TBD",
         posterImageUrl: data.posterImageUrl,
         artists: data.artists,
         isFeatured: data.isFeatured,
@@ -729,6 +733,7 @@ class FirebaseService {
         venueName: eventData.venueName,
         description: eventData.description,
         date: Timestamp.fromDate(eventData.date),
+        time: eventData.time,
         posterImageUrl: eventData.posterImageUrl,
         artists: eventData.artists,
         isFeatured: eventData.isFeatured,
@@ -934,11 +939,15 @@ class FirebaseService {
     }
   }
 
+
+
   async uploadEventImage(imageUri: string, eventId: string = `event-${Date.now()}`): Promise<string> {
     try {
       console.log("FirebaseService: Uploading event poster image for event", eventId)
       const storage = getStorage()
       const storageRef = ref(storage, `events/${eventId}/poster.jpg`)
+      console.log("Current user UID:", auth.currentUser?.uid)
+      console.log("Auth token exists:", !!await auth.currentUser?.getIdToken())
 
       await uploadString(storageRef, imageUri, "data_url")
       const downloadURL = await getDownloadURL(storageRef)

@@ -2,10 +2,19 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import type { NavigatorScreenParams } from "@react-navigation/native"
 import type { Event } from "../models/Event"
 
+// --- Redirect intent type used for soft-auth flows ---
+// Represents the route the user attempted to access before being redirected to auth.
+// Keep this minimal and flexible so it can represent stack/screen + params.
+export type RedirectIntent = {
+  routeName: string
+  params?: Record<string, unknown>
+}
+
 // Auth Stack
 export type AuthStackParamList = {
-  Login: undefined
-  SignUp: undefined
+  // Login and SignUp accept an optional redirect intent so the auth flow can restore navigation
+  Login: { redirect?: RedirectIntent } | undefined
+  SignUp: { redirect?: RedirectIntent } | undefined
 }
 
 // Venues Stack
@@ -57,7 +66,7 @@ export type ProfileStackParamList = {
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
-  Auth: { screen: 'Login' | 'SignUp' } // Added for sign-out navigation
+  Auth: { screen: "Login" | "SignUp" } // Added for sign-out navigation
 }
 
 // Main Tab
@@ -116,3 +125,6 @@ export type TodaysVibeScreenProps = NativeStackScreenProps<
 >
 
 export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe">
+
+
+export type CalendarScreenProps = NativeStackScreenProps<CalendarStackParamList, "CalendarView">
