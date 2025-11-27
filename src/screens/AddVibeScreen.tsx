@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Platform,
+  Modal,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import * as ImagePicker from "expo-image-picker"
@@ -40,198 +41,119 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
     analysisData: any
   } | null>(null)
 
-  // Web camera modal state
+  // Web Camera Modal State
   const [webCameraOpen, setWebCameraOpen] = useState(false)
-  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  // Start camera capture (web or native)
+  // Start camera — web first, then native fallback
   const captureImage = async () => {
-    try {
-      if (Platform.OS === "web") {
-        // Try getUserMedia first
-        if (navigator.mediaDevices ) {
-          await startWebCamera()
-          return
-        }
-
-        // Fallback to file input (desktop file picker)
-        openFilePickerFallback()
-        return
-      }
-
-      // Native (expo) flow
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync()
-      if (permissionResult.status !== "granted") {
-        Alert.alert("Permission required", "Camera permission is required to capture a vibe image.")
-        return
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [16, 9],
-        quality: 0.8,
-      })
-
-      if ("canceled" in result) {
-        if (!result.canceled && result.assets && result.assets.length > 0) {
-          setImage(result.assets[0].uri)
-          setAnalysisResult(null)
-        }
-      } else if ((result as any).uri) {
-        // legacy shape
-        // @ts-ignore
-        setImage((result as any).uri)
-        setAnalysisResult(null)
-      }
-    } catch (error) {
-      console.error("captureImage error:", error)
-      Alert.alert("Error", "Failed to start camera. Check permissions.")
-    }
-  }
-
-  // Web: start camera and open modal
-  const startWebCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-      streamRef.current = stream
-      setWebCameraOpen(true)
-      // attach stream to video element when modal renders (useEffect below)
-    } catch (err) {
-      console.error("getUserMedia error:", err)
-      Alert.alert("Camera error", "Unable to access the camera on this device or permission denied.")
-    }
-  }
-
-  // Web: stop camera and close modal
-  const stopWebCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) {
+    if (Platform.OS === "web") {
       try {
-        // @ts-ignore
-        videoRef.current.srcObject = null
-      } catch (e) {
-        // ignore
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }, // back camera on mobile
+          audio: false,
+        })
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+        setWebCameraOpen(true)
+      } catch (err) {
+        console.warn("Web camera not available, falling back to file picker", err)
+        // Fallback: open file picker with camera intent
+        const input = document.createElement("input")
+        input.type = "file"
+        input.accept = "image/*"
+        input.capture = "environment" // tries to open camera on mobile browsers
+        input.onchange = (e) => {
+          const file = (e.target as HTMLInputElement).files?.[0]
+          if (file) {
+            const url = URL.createObjectURL(file)
+            setImage(url)
+            setAnalysisResult(null)
+          }
+        }
+        input.click()
       }
-      videoRef.current = null
+      return
+    }
+
+    // Native (Expo) camera
+    const permission = await ImagePicker.requestCameraPermissionsAsync()
+    if (permission.status !== "granted") {
+      Alert.alert("Permission Needed", "Camera access is required to capture vibe images.")
+      return
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [16, 9],
+      quality: 0.8,
+    })
+
+    if (!result.canceled && result.assets?.[0]?.uri) {
+      setImage(result.assets[0].uri)
+      setAnalysisResult(null)
+    }
+  }
+
+  // Capture photo from live video stream
+  const takePhoto = () => {
+    if (!videoRef.current) return
+
+    const video = videoRef.current
+    const canvas = document.createElement("canvas")
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    ctx.drawImage(video, 0, 0)
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9)
+
+    setImage(dataUrl)
+    setAnalysisResult(null)
+    closeCamera()
+  }
+
+  // Close camera and clean up
+  const closeCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
     }
     setWebCameraOpen(false)
   }
 
-  // Web: capture current frame from video to data URL
-  const captureFrameFromVideo = () => {
-    try {
-      const video = videoRef.current
-      if (!video) throw new Error("Video element not ready")
-      const w = video.videoWidth || 1280
-      const h = video.videoHeight || 720
-      const canvas = document.createElement("canvas")
-      canvas.width = w
-      canvas.height = h
-      const ctx = canvas.getContext("2d")
-      if (!ctx) throw new Error("Canvas context not available")
-      ctx.drawImage(video, 0, 0, w, h)
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.9)
-      setImage(dataUrl)
-      setAnalysisResult(null)
-    } catch (err) {
-      console.error("captureFrameFromVideo error:", err)
-      Alert.alert("Capture error", "Failed to capture image from camera.")
-    } finally {
-      stopWebCamera()
-    }
-  }
-
-  // Web fallback: open hidden file input
-  const openFilePickerFallback = () => {
-    if (!fileInputRef.current) {
-      const input = document.createElement("input")
-      input.type = "file"
-      input.accept = "image/*"
-      input.setAttribute("capture", "environment")
-      input.style.display = "none"
-      input.onchange = (ev: Event) => {
-        const target = ev.target as HTMLInputElement
-        const file = target.files && target.files[0]
-        if (file) {
-          const url = URL.createObjectURL(file)
-          setImage(url)
-          setAnalysisResult(null)
-        }
-        // cleanup
-        if (input.parentNode) input.parentNode.removeChild(input)
-        fileInputRef.current = null
-      }
-      document.body.appendChild(input)
-      fileInputRef.current = input
-    }
-    fileInputRef.current.click()
-  }
-
-  // Attach stream to video element when webCameraOpen becomes true
-  useEffect(() => {
-    if (Platform.OS !== "web") return
-    if (webCameraOpen && videoRef.current && streamRef.current) {
-      // @ts-ignore
-      videoRef.current.srcObject = streamRef.current
-      videoRef.current.play().catch(() => {
-        // autoplay might be blocked until user interacts; that's okay
-      })
-    }
-    // cleanup when modal closes
-    return () => {
-      // nothing here; stopWebCamera handles cleanup
-    }
-  }, [webCameraOpen])
-
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop())
-        streamRef.current = null
-      }
-      const overlayInput = fileInputRef.current
-      if (overlayInput && overlayInput.parentNode) overlayInput.parentNode.removeChild(overlayInput)
-      fileInputRef.current = null
+      closeCamera()
     }
   }, [])
 
   const analyzeVibe = async () => {
-    if (!image) {
-      Alert.alert("Error", "Please capture an image first")
-      return
-    }
-
+    if (!image) return
     setAnalyzing(true)
     try {
       const result = await VibeAnalysisService.analyzeVibeImage(image)
       setAnalysisResult(result)
-    } catch (error) {
-      console.error("Error analyzing vibe:", error)
-      Alert.alert("Error", "Failed to analyze vibe")
+    } catch (err) {
+      Alert.alert("Analysis Failed", "Could not analyze the vibe. Try another photo.")
     } finally {
       setAnalyzing(false)
     }
   }
 
   const uploadVibe = async () => {
-    if (!image || !analysisResult || !user) {
-      Alert.alert("Error", "Please analyze the image first")
-      return
-    }
+    if (!image || !analysisResult || !user) return
 
     setUploading(true)
     try {
-      // Upload image to Firebase Storage
       const imageUrl = await FirebaseService.uploadVibeImage(image)
 
-      // Create vibe image object
       const vibeImageData: Omit<VibeImage, "id"> = {
         venueId,
         imageUrl,
@@ -241,20 +163,14 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         analysisData: analysisResult.analysisData,
       }
 
-      // Save to Firestore (this will also update the venue's vibe rating)
       await FirebaseService.addVibeImage(vibeImageData)
 
-      Alert.alert("Success", "Vibe image uploaded successfully!", [
-        {
-          text: "OK",
-          onPress: () => {
-            navigation.goBack()
-          },
-        },
+      Alert.alert("Success!", "Vibe uploaded and venue rating updated!", [
+        { text: "Done", onPress: () => navigation.goBack() },
       ])
-    } catch (error) {
-      console.error("Error uploading vibe:", error)
-      Alert.alert("Error", "Failed to upload vibe image")
+    } catch (err) {
+      console.error(err)
+      Alert.alert("Upload Failed", "Could not save vibe image.")
     } finally {
       setUploading(false)
     }
@@ -266,13 +182,15 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Add Today's Vibe</Text>
           <Text style={styles.headerSubtitle}>{venueName}</Text>
-          <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
+          <Text style={styles.headerDescription}>
+            Capture the current atmosphere and let our AI analyze the vibe!
+          </Text>
         </View>
 
         <View style={styles.imageSection}>
           {image ? (
             <View style={styles.imageContainer}>
-              <Image source={{ uri: image }} style={styles.selectedImage} />
+              <Image source={{ uri: image }} style={styles.selectedImage} resizeMode="cover" />
               <TouchableOpacity
                 style={styles.removeImageButton}
                 onPress={() => {
@@ -280,13 +198,13 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
                   setAnalysisResult(null)
                 }}
               >
-                <Ionicons name="close-circle" size={28} color="#FFFFFF" />
+                <Ionicons name="close-circle" size={32} color="#FF3B30" />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.imagePicker} onPress={captureImage}>
-              <Ionicons name="camera" size={56} color="#666666" />
-              <Text style={styles.imagePickerText}>Tap to capture image (camera only)</Text>
+              <Ionicons name="camera" size={64} color="#666" />
+              <Text style={styles.imagePickerText}>Tap to open camera</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -299,13 +217,13 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
           >
             {analyzing ? (
               <>
-                <ActivityIndicator color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.analyzeButtonText}>Analyzing Vibe...</Text>
+                <ActivityIndicator color="#fff" />
+                <Text style={styles.buttonText}>Analyzing...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="analytics" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                <Text style={styles.analyzeButtonText}>Analyze Vibe</Text>
+                <Ionicons name="sparkles" size={20} color="#fff" />
+                <Text style={styles.buttonText}>Analyze Vibe</Text>
               </>
             )}
           </TouchableOpacity>
@@ -316,47 +234,31 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
             <Text style={styles.resultsTitle}>Vibe Analysis Results</Text>
 
             <View style={styles.overallRating}>
-              <Text style={styles.ratingLabel}>Overall Vibe Rating</Text>
-              <View style={styles.ratingContainer}>
-                <Text
-                  style={[styles.ratingValue, { color: VibeAnalysisService.getVibeColor(analysisResult.vibeRating) }]}
-                >
-                  {analysisResult.vibeRating.toFixed(1)}
-                </Text>
-                <Text style={styles.ratingMax}>/5.0</Text>
-              </View>
+              <Text style={styles.ratingLabel}>Overall Vibe</Text>
+              <Text
+                style={[
+                  styles.ratingValue,
+                  { color: VibeAnalysisService.getVibeColor(analysisResult.vibeRating) },
+                ]}
+              >
+                {analysisResult.vibeRating.toFixed(1)}
+              </Text>
+              <Text style={styles.ratingMax}>/5.0</Text>
               <Text style={styles.vibeDescription}>
                 {VibeAnalysisService.getVibeDescription(analysisResult.vibeRating)}
               </Text>
             </View>
 
+            {/* Detailed metrics */}
             <View style={styles.detailedAnalysis}>
-              <Text style={styles.detailedTitle}>Detailed Analysis</Text>
-
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Crowd Density</Text>
-                <Text style={styles.analysisValue}>{analysisResult.analysisData.crowdDensity.toFixed(1)}/5.0</Text>
-              </View>
-
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Lighting Quality</Text>
-                <Text style={styles.analysisValue}>{analysisResult.analysisData.lightingQuality.toFixed(1)}/5.0</Text>
-              </View>
-
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Energy Level</Text>
-                <Text style={styles.analysisValue}>{analysisResult.analysisData.energyLevel.toFixed(1)}/5.0</Text>
-              </View>
-
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Music Vibes</Text>
-                <Text style={styles.analysisValue}>{analysisResult.analysisData.musicVibes.toFixed(1)}/5.0</Text>
-              </View>
-
-              <View style={styles.analysisItem}>
-                <Text style={styles.analysisLabel}>Overall Atmosphere</Text>
-                <Text style={styles.analysisValue}>{analysisResult.analysisData.overallAtmosphere.toFixed(1)}/5.0</Text>
-              </View>
+              {Object.entries(analysisResult.analysisData).map(([key, value]) => (
+                <View key={key} style={styles.analysisItem}>
+                  <Text style={styles.analysisLabel}>
+                    {key.replace(/([A-Z])/g, " $1").trim()}
+                  </Text>
+                  <Text style={styles.analysisValue}>{(value as number).toFixed(1)}/5.0</Text>
+                </View>
+              ))}
             </View>
 
             <TouchableOpacity
@@ -366,19 +268,41 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
             >
               {uploading ? (
                 <>
-                  <ActivityIndicator color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.uploadButtonText}>Uploading...</Text>
+                  <ActivityIndicator color="#fff" />
+                  <Text style={styles.buttonText}>Uploading...</Text>
                 </>
               ) : (
                 <>
-                  <Ionicons name="cloud-upload" size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-                  <Text style={styles.uploadButtonText}>Upload Vibe</Text>
+                  <Ionicons name="cloud-upload" size={20} color="#fff" />
+                  <Text style={styles.buttonText}>Upload Vibe</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
         )}
       </ScrollView>
+
+      {/* WEB CAMERA MODAL */}
+      <Modal visible={webCameraOpen} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.cameraContainer}>
+            <TouchableOpacity style={styles.closeButton} onPress={closeCamera}>
+              <Ionicons name="close" size={32} color="#fff" />
+            </TouchableOpacity>
+
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              style={{ width: "100%", height: "100%", borderRadius: 16 }}
+            />
+
+            <TouchableOpacity style={styles.captureButton} onPress={takePhoto}>
+              <View style={styles.captureInner} />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </>
   )
 }
@@ -547,6 +471,49 @@ const styles = StyleSheet.create({
   disabledButton: {
     opacity: 0.6,
   },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraContainer: {
+    width: "90%",
+    height: "80%",
+    backgroundColor: "#000",
+    borderRadius: 20,
+    overflow: "hidden",
+    position: "relative",
+  },
+  closeButton: {
+    position: "absolute",
+    top: 20,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 20,
+    padding: 8,
+  },
+  captureButton: {
+    position: "absolute",
+    bottom: 40,
+    alignSelf: "center",
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: "rgba(255,255,255,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 6,
+    borderColor: "#FFF",
+  },
+  captureInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FFF",
+  },
+  buttonText: { color: "#FFF", fontSize: 18, fontWeight: "600", marginLeft: 8 },
 })
 
 export default AddVibeScreen
