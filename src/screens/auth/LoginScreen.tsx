@@ -30,6 +30,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
     password?: string
   }>({})
 
+  // Toggle to show/hide password
+  const [showPassword, setShowPassword] = useState(false)
+
   const handleLogin = async () => {
     // Reset errors
     const newErrors: {
@@ -157,8 +160,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
               placeholderTextColor="#999"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry
+              secureTextEntry={!showPassword}
             />
+            <TouchableOpacity
+              onPress={() => setShowPassword((s) => !s)}
+              accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+              style={styles.visibilityToggle}
+            >
+              <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
           {errors.password && <Text style={styles.errorText}>Please enter your password</Text>}
 
@@ -265,6 +275,11 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
   },
+  visibilityToggle: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   button: {
     flexDirection: "row",
     backgroundColor: "#FF3B30",
@@ -296,4 +311,4 @@ const styles = StyleSheet.create({
   },
 })
 
-export default LoginScreen  
+export default LoginScreen

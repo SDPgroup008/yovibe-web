@@ -25,18 +25,28 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
   const { signUp } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [userType, setUserType] = useState<UserType>("user")
   const [loading, setLoading] = useState(false)
   const [adminDotsPressed, setAdminDotsPressed] = useState(0)
 
+  // visibility toggles for password fields
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+
   const handleSignUp = async () => {
-    if (!email || !password) {
-      Alert.alert("Error", "Please enter both email and password")
+    if (!email || !password || !confirmPassword) {
+      Alert.alert("Error", "Please enter email, password and confirm password")
       return
     }
 
     if (password.length < 6) {
       Alert.alert("Error", "Password must be at least 6 characters")
+      return
+    }
+
+    if (password !== confirmPassword) {
+      Alert.alert("Error", "Passwords do not match")
       return
     }
 
@@ -109,8 +119,36 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
                 placeholderTextColor="#999"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
+                autoCapitalize="none"
               />
+              <TouchableOpacity
+                onPress={() => setShowPassword((s) => !s)}
+                accessibilityLabel={showPassword ? "Hide password" : "Show password"}
+                style={styles.visibilityToggle}
+              >
+                <Ionicons name={showPassword ? "eye-off" : "eye"} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Ionicons name="lock-closed-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Confirm Password"
+                placeholderTextColor="#999"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry={!showConfirmPassword}
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword((s) => !s)}
+                accessibilityLabel={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+                style={styles.visibilityToggle}
+              >
+                <Ionicons name={showConfirmPassword ? "eye-off" : "eye"} size={20} color="#FFFFFF" />
+              </TouchableOpacity>
             </View>
 
             <Text style={styles.accountTypeLabel}>Account Type:</Text>
@@ -230,6 +268,11 @@ const styles = StyleSheet.create({
     height: 55,
     color: "#FFFFFF",
     fontSize: 16,
+  },
+  visibilityToggle: {
+    paddingHorizontal: 12,
+    justifyContent: "center",
+    alignItems: "center",
   },
   accountTypeLabel: {
     color: "#FFFFFF",
