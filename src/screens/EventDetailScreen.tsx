@@ -253,16 +253,28 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         <TouchableOpacity
           style={styles.venueContainer}
           onPress={() => {
-            // Use the correct navigation approach for cross-stack navigation
-            navigation.navigate("Venues", {
+            const venueId = event.venueId
+
+            // Preferred: navigate directly to VenueDetail if it's registered in the same navigator
+            try {
+              navigation.navigate("VenueDetail", { venueId })
+              return
+            } catch (e) {
+              // ignore and try nested navigation below
+            }
+
+            // Fallback for cross-stack navigation: cast to any to satisfy TypeScript
+            // (keeps runtime behavior of navigating to Venues -> VenueDetail)
+            ;(navigation as any).navigate("Venues", {
               screen: "VenueDetail",
-              params: { venueId: event.venueId },
+              params: { venueId },
             })
           }}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
           <Text style={styles.venueName}>{event.venueName}</Text>
         </TouchableOpacity>
+
 
         <View style={styles.dateContainer}>
           <Ionicons name="calendar" size={20} color="#FFFFFF" />

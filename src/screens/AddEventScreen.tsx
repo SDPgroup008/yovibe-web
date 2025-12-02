@@ -97,6 +97,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         setLocationPermission(hasPermission)
         if (hasPermission) {
           const location = await LocationService.getCurrentPosition()
+          // Preserve full precision (no rounding)
           setLatitude(location.latitude.toString())
           setLongitude(location.longitude.toString())
         }
@@ -321,13 +322,15 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           categories: ["Other"],
           vibeRating: 4.0,
           backgroundImageUrl: image || "",
+          // Full precision preserved
           latitude: Number.parseFloat(latitude) || 0,
           longitude: Number.parseFloat(longitude) || 0,
           ownerId: user.id,
           createdAt: new Date(),
-          venueType: "nightlife",
-          todayImages: [],
-          weeklyPrograms: {},
+          // Narrow the literal so it matches the Venue type ("nightlife" | "recreation")
+          venueType: "nightlife" as "nightlife",
+          todayImages: [] as any[],
+          weeklyPrograms: {} as Record<string, any>,
         }
 
         venueId = await FirebaseService.addVenue(customVenue)
@@ -338,8 +341,13 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
       if (imageFile) {
         try {
           console.log("Uploading event poster image...")
-          imageUrl = await FirebaseService.uploadEventImage(image)
-          console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...")
+          // Ensure image is non-null before calling uploadEventImage
+          if (image) {
+            imageUrl = await FirebaseService.uploadEventImage(image)
+            console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...")
+          } else {
+            console.warn("imageFile is true but image URI is null; skipping upload")
+          }
         } catch (error) {
           console.error("Error uploading image:", error)
           Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.")

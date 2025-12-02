@@ -18,18 +18,12 @@ import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
+import type { NativeStackScreenProps } from "@react-navigation/native-stack"
+import type { ProfileStackParamList } from "../navigation/types"
 
-interface AddVibeScreenProps {
-  navigation: any
-  route: {
-    params: {
-      venueId: string
-      venueName: string
-    }
-  }
-}
+type Props = NativeStackScreenProps<ProfileStackParamList, "AddVibe">
 
-const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
+const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
   const { venueId, venueName } = route.params
   const { user } = useAuth()
 
@@ -110,7 +104,6 @@ const AddVibeScreen: React.FC<AddVibeScreenProps> = ({ navigation, route }) => {
       img.src = url
     })
   }
-
 
   /**
    * Open a hidden file input. On mobile browsers this will open the camera UI

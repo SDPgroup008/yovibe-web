@@ -21,7 +21,10 @@ export type RedirectIntent = {
 
 interface AuthContextType {
   user: User | null;
+  /** legacy name kept for existing consumers */
   isLoading: boolean;
+  /** new/alternate name some consumers expect */
+  loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (
     email: string,
@@ -190,6 +193,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const value: AuthContextType = {
     user,
     isLoading,
+    // Provide the alternate property name expected elsewhere
+    loading: isLoading,
     signIn,
     signUp,
     signOut,

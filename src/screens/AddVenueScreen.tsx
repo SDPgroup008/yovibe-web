@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
 import {
   View,
   Text,
@@ -30,8 +30,11 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
   const [description, setDescription] = useState("")
   const [categories, setCategories] = useState("")
   const [venueType, setVenueType] = useState<"nightlife" | "recreation">("nightlife")
-  const [latitude, setLatitude] = useState("0")
-  const [longitude, setLongitude] = useState("0")
+
+  // Store latitude and longitude as numbers to preserve full precision
+  const [latitude, setLatitude] = useState<number>(0)
+  const [longitude, setLongitude] = useState<number>(0)
+
   const [image, setImage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [locationPermission, setLocationPermission] = useState(false)
@@ -51,11 +54,13 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
       setLocationPermission(hasPermission)
 
       if (hasPermission) {
-        const location = await LocationService.getCurrentPosition()
-        const { latitude, longitude } = location
-        setUserLocation({ latitude, longitude })
-        setLatitude(latitude.toString())
-        setLongitude(longitude.toString())
+        const loc = await LocationService.getCurrentPosition()
+        const { latitude: lat, longitude: lon } = loc
+
+        // Save as numbers (no rounding) to preserve full precision
+        setUserLocation({ latitude: lat, longitude: lon })
+        setLatitude(lat)
+        setLongitude(lon)
       }
     })()
   }, [])
@@ -127,7 +132,14 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
     setLoading(true)
 
     try {
-      // Upload image first
+      // Ensure an image is selected and narrow the type for TypeScript
+      if (!image) {
+        Alert.alert("Error", "Please select an image for the venue")
+        setLoading(false)
+        return
+      }
+
+      // Upload image first (image is now a string)
       const imageUrl = await FirebaseService.uploadVenueImage(image)
 
       // Create venue object with venue type consideration
@@ -152,6 +164,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
         }
       }
 
+      // Use numeric latitude/longitude directly (preserves full precision)
       const venueData = {
         name,
         location,
@@ -159,8 +172,8 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
         categories: venueCategories,
         vibeRating: 4.0, // Default vibe rating
         backgroundImageUrl: imageUrl,
-        latitude: Number.parseFloat(latitude) || 0,
-        longitude: Number.parseFloat(longitude) || 0,
+        latitude: latitude, // number with full precision
+        longitude: longitude, // number with full precision
         ownerId: user.id,
         weeklyPrograms: {},
         todayImages: [],
@@ -179,6 +192,7 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
     } finally {
       setLoading(false)
     }
+
   }
 
   return (
@@ -268,8 +282,12 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
             <Text style={styles.label}>Latitude</Text>
             <TextInput
               style={styles.input}
-              value={latitude}
-              onChangeText={setLatitude}
+              value={String(latitude)}
+              onChangeText={(t) => {
+                // allow user to input numeric values; preserve full precision
+                const parsed = parseFloat(t)
+                setLatitude(Number.isFinite(parsed) ? parsed : 0)
+              }}
               placeholder="Latitude"
               placeholderTextColor="#999"
               keyboardType="numeric"
@@ -280,8 +298,11 @@ const AddVenueScreen: React.FC<AddVenueScreenProps> = ({ navigation }) => {
             <Text style={styles.label}>Longitude</Text>
             <TextInput
               style={styles.input}
-              value={longitude}
-              onChangeText={setLongitude}
+              value={String(longitude)}
+              onChangeText={(t) => {
+                const parsed = parseFloat(t)
+                setLongitude(Number.isFinite(parsed) ? parsed : 0)
+              }}
               placeholder="Longitude"
               placeholderTextColor="#999"
               keyboardType="numeric"
