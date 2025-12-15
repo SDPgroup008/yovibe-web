@@ -307,6 +307,7 @@ export const ProfileStackNavigator = () => {
 export const MainTabNavigator = () => {
   return (
     <MainTab.Navigator
+      initialRouteName="Events"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = "business"
@@ -340,8 +341,8 @@ export const MainTabNavigator = () => {
         },
       })}
     >
-      <MainTab.Screen name="Venues" component={VenuesStackNavigator} options={{ headerShown: false }} />
       <MainTab.Screen name="Events" component={EventsStackNavigator} options={{ headerShown: false }} />
+      <MainTab.Screen name="Venues" component={VenuesStackNavigator} options={{ headerShown: false }} />  
       <MainTab.Screen name="Map" component={MapStackNavigator} options={{ headerShown: false }} />
       <MainTab.Screen name="Calendar" component={CalendarStackNavigator} options={{ headerShown: false }} />
       <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />

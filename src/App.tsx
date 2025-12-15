@@ -8,7 +8,9 @@ import { AuthNavigator, MainTabNavigator } from "./navigation/AppNavigator.web";
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { navigationRef } from "./utils/navigationRef";
 
-// Create the stack navigator
+// 🔔 Import Firebase helpers for notifications
+import { requestNotificationPermission, getWebFcmToken, saveWebToken } from "./config/firebase";
+
 const Stack = createStackNavigator();
 
 // Main app component with auth state handling
@@ -17,21 +19,16 @@ function AppContent() {
   const [initializing, setInitializing] = useState(true);
 
   useEffect(() => {
-    // After auth state is determined, set initializing to false
     if (!loading) {
       setInitializing(false);
     }
   }, [loading]);
 
-  // Post-login: consume any saved redirect intent and navigate there
   useEffect(() => {
-    // Only attempt redirect when auth has settled and we have a user
     if (!loading && user) {
       try {
         const intent = consumeRedirectIntent?.();
         if (intent && intent.routeName) {
-          // Reset to Main stack first so nested navigation works predictably,
-          // then navigate to the intended route. Small timeout ensures reset completes.
           navigationRef.current?.reset({
             index: 0,
             routes: [{ name: "Main" }],
@@ -39,7 +36,6 @@ function AppContent() {
 
           setTimeout(() => {
             try {
-              // If params exist, pass them; otherwise navigate by route name only
               if (intent.params) {
                 navigationRef.current?.navigate(intent.routeName as any, intent.params);
               } else {
@@ -56,6 +52,20 @@ function AppContent() {
     }
   }, [user, loading, consumeRedirectIntent]);
 
+  // 🔔 Subscribe to notifications for all users (soft-auth)
+  useEffect(() => {
+    (async () => {
+      const granted = await requestNotificationPermission();
+      if (granted) {
+        const token = await getWebFcmToken();
+        if (token) {
+          await saveWebToken(token); // ✅ save directly to Firestore
+          console.log("Web FCM token saved:", token);
+        }
+      }
+    })();
+  }, []);
+
   if (initializing) {
     return (
       <View style={styles.loadingContainer}>
@@ -65,8 +75,6 @@ function AppContent() {
     );
   }
 
-  // NOTE: Soft-auth behavior — always render Main so users can browse without signing in.
-  // Auth stack remains available and can be navigated to when needed (e.g., AddEvent/AddVenue).
   return (
     <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Main">
       <Stack.Screen name="Main" component={MainTabNavigator} />
@@ -75,7 +83,6 @@ function AppContent() {
   );
 }
 
-// Root component with providers
 export default function App() {
   return (
     <AuthProvider>

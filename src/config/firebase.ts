@@ -1,10 +1,9 @@
 import { initializeApp } from "firebase/app"
-import { getAuth } from "firebase/auth"
-import { getFirestore } from "firebase/firestore"
+import { getAuth, setPersistence, browserSessionPersistence } from "firebase/auth"
+import { getFirestore, doc, setDoc } from "firebase/firestore"
 import { getStorage } from "firebase/storage"
+import { getMessaging, getToken, onMessage } from "firebase/messaging"
 
-// Your web app's Firebase configuration
-// Replace these with your actual Firebase project credentials
 const firebaseConfig = {
   apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
   authDomain: "eco-guardian-bd74f.firebaseapp.com",
@@ -14,16 +13,47 @@ const firebaseConfig = {
   appId: "1:917905910857:android:5886ab1db46cec56912398",
 }
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig)
 const auth = getAuth(app)
 const db = getFirestore(app)
 const storage = getStorage(app)
+const messaging = getMessaging(app)
 
-import { setPersistence, browserSessionPersistence } from "firebase/auth"
 setPersistence(auth, browserSessionPersistence)
 
-// Export the Firebase services
-export { auth, db, storage }
+// --- Notification helpers ---
+export async function requestNotificationPermission(): Promise<boolean> {
+  const result = await Notification.requestPermission()
+  return result === "granted"
+}
+
+export async function getWebFcmToken(): Promise<string | null> {
+  try {
+    const token = await getToken(messaging, {
+      vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY || "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s"
+    })
+    return token || null
+  } catch (err) {
+    console.error("Error getting web FCM token:", err)
+    return null
+  }
+}
+
+onMessage(messaging, (payload) => {
+  console.log("Foreground message received:", payload)
+})
+
+// --- Save web token in Firestore ---
+export async function saveWebToken(token: string) {
+  const tokenId = token.slice(0, 10) // shorten for doc ID
+  await setDoc(doc(db, "webTokens", tokenId), {
+    token,
+    createdAt: Date.now(),
+  })
+}
+
+// Export Firebase services
+export { app, auth, db, storage, messaging }
+
 export const hasFirebaseConfig = true
   
