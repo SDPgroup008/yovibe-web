@@ -821,8 +821,14 @@ class FirebaseService {
       querySnapshot.forEach((doc) => {
         const data = doc.data()
         if (data.date && typeof data.date.toDate === "function") {
-          const eventDate = data.date.toDate()
-          if (eventDate < now && !data.isDeleted) {
+          const eventDate: Date = data.date.toDate()
+
+          // Compute the "expiry" date = eventDate + 1 day
+          const expiryDate = new Date(eventDate)
+          expiryDate.setDate(expiryDate.getDate() + 1)
+
+          // Only delete if we are past the expiry date
+          if (expiryDate <= now && !data.isDeleted) {
             deletePromises.push(
               updateDoc(doc.ref, {
                 isDeleted: true,
@@ -839,6 +845,7 @@ class FirebaseService {
       console.error("Error deleting past events:", error)
     }
   }
+
 
   async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
     try {
