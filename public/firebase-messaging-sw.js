@@ -20,19 +20,21 @@ const messaging = firebase.messaging();
 messaging.onBackgroundMessage((payload) => {
   console.log("Background message received:", payload);
 
-  const title = payload.notification?.title || "Notification";
-  const options = {
-    body: payload.notification?.body || "",
-    icon: "/icon.png", // replace with your app icon
+  const notificationTitle = payload.notification?.title || "YoVibe Notification";
+  const notificationOptions = {
+    body: payload.notification?.body || "You have a new update.",
+    icon: "/icon.png", // replace with your app icon path
     data: payload.data || {},
   };
 
-  self.registration.showNotification(title, options);
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Handle notification clicks
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+
+  // Navigate to deep link if provided, otherwise root
   const targetUrl = event.notification?.data?.deepLink || "/";
   event.waitUntil(clients.openWindow(targetUrl));
 });

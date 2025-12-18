@@ -25,12 +25,20 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # 🔔 Subscribe all tokens in tokens.json to the all-users topic
+      - name: Subscribe tokens to all-users
+        run: node subscribeTokens.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # 🔔 Send today summary notifications
       - name: Send today summary
         if: github.event.schedule == '0 8 * * *' || github.event.schedule == '0 18 * * *'
         run: node sendNotifications.js today
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
 
+      # 🔔 Send week summary notifications
       - name: Send week summary
         if: github.event.schedule == '0 12 * * *' || github.event.schedule == '0 22 * * *'
         run: node sendNotifications.js week

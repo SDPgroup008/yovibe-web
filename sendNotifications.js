@@ -88,7 +88,7 @@ function computeRangeForWeek(now = new Date()) {
 }
 
 /**
- * Send a notification to all mobile users via topic.
+ * Send a notification to all users via topic.
  */
 async function sendToAllUsers(notification, data = {}) {
   try {
@@ -102,40 +102,6 @@ async function sendToAllUsers(notification, data = {}) {
     return { success: 1, failed: 0 };
   } catch (err) {
     console.error("Error sending to all-users:", err);
-    return { success: 0, failed: 1 };
-  }
-}
-
-/**
- * Send to all web tokens stored in Firestore.
- */
-async function sendToWebTokens(notification, data = {}) {
-  try {
-    const snap = await db.collection("webTokens").get();
-    const tokens = snap.docs.map((doc) => doc.data().token);
-
-    if (tokens.length === 0) {
-      console.log("No web tokens found.");
-      return { success: 0, failed: 0 };
-    }
-
-    const message = {
-      tokens,
-      notification,
-      data,
-    };
-
-    const response = await messaging.sendMulticast(message);
-    console.log(
-      "Notification sent to web tokens:",
-      response.successCount,
-      "success,",
-      response.failureCount,
-      "failed"
-    );
-    return { success: response.successCount, failed: response.failureCount };
-  } catch (err) {
-    console.error("Error sending to web tokens:", err);
     return { success: 0, failed: 1 };
   }
 }
@@ -155,7 +121,6 @@ async function main() {
     const data = { type: mode, id: payloadArg?.id || "" };
 
     await sendToAllUsers({ title, body }, data);
-    await sendToWebTokens({ title, body }, data);
     process.exit(0);
   }
 
@@ -168,7 +133,6 @@ async function main() {
   data.rangeEnd = range.end.toDate().toISOString();
 
   await sendToAllUsers(notification, data);
-  await sendToWebTokens(notification, data);
 
   console.log(`${mode} summary sent. eventsCount:`, events.length);
   process.exit(0);
