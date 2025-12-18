@@ -1,0 +1,44 @@
+name: Append Token
+
+on:
+  repository_dispatch:
+    types: [append_token]
+
+jobs:
+  append:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Append token to tokens.json
+        run: |
+          node -e "
+          const fs = require('fs');
+          const path = 'tokens.json';
+          const payload = JSON.parse(process.env.CLIENT_PAYLOAD);
+          const token = payload.token;
+          let tokens = [];
+          if (fs.existsSync(path)) {
+            tokens = JSON.parse(fs.readFileSync(path, 'utf-8'));
+          }
+          if (!tokens.includes(token)) {
+            tokens.push(token);
+            fs.writeFileSync(path, JSON.stringify(tokens, null, 2));
+            console.log('Appended token:', token);
+          } else {
+            console.log('Token already exists, skipping.');
+          }
+          "
+        env:
+          CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tokens.json
+          git commit -m "Append new FCM token"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}

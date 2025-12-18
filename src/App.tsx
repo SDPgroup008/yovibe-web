@@ -26,14 +26,12 @@ function NotificationBanner({ title, body, onClose }) {
   const slideAnim = useRef(new Animated.Value(-100)).current;
 
   useEffect(() => {
-    // Slide in
     Animated.timing(slideAnim, {
       toValue: 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
 
-    // Auto-dismiss after 3 seconds
     const timer = setTimeout(() => {
       handleClose();
     }, 3000);
@@ -64,57 +62,29 @@ function NotificationBanner({ title, body, onClose }) {
   );
 }
 
-// 🔔 Helper: Save token to GitHub repo (tokens.json) safely
+// 🔔 Helper: Trigger GitHub Action via repository_dispatch
 async function saveTokenToRepo(token: string) {
   try {
-    const fileUrl = "https://api.github.com/repos/SDPgroup008/yovibe-web/contents/tokens.json";
-
-    // Step 1: Fetch existing tokens.json (if it exists)
-    let tokens: string[] = [];
-    let sha: string | undefined;
-
-    const res = await fetch(fileUrl, {
+    const res = await fetch("https://api.github.com/repos/SDPgroup008/yovibe-web/dispatches", {
+      method: "POST",
       headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_GITHUB_PAT}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      sha = data.sha;
-      const existingContent = JSON.parse(
-        Buffer.from(data.content, "base64").toString("utf-8")
-      );
-      tokens = existingContent;
-    }
-
-    // Step 2: Append new token if not already present
-    if (!tokens.includes(token)) {
-      tokens.push(token);
-    }
-
-    // Step 3: PUT updated file back to GitHub
-    const updateRes = await fetch(fileUrl, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bearer ${process.env.NEXT_PUBLIC_GITHUB_PAT}`,
+        "Accept": "application/vnd.github.v3+json",
         "Content-Type": "application/json",
+        // ⚠️ No PAT here — GitHub Action will use secrets internally
       },
       body: JSON.stringify({
-        message: "Append new FCM token",
-        content: Buffer.from(JSON.stringify(tokens)).toString("base64"),
-        sha, // include SHA if file already existed
+        event_type: "append_token",
+        client_payload: { token },
       }),
     });
 
-    if (!updateRes.ok) {
-      console.error("Failed to update tokens.json:", await updateRes.text());
+    if (!res.ok) {
+      console.error("Failed to trigger repository_dispatch:", await res.text());
     } else {
-      console.log("Token appended successfully");
+      console.log("Triggered repository_dispatch to append token");
     }
   } catch (err) {
-    console.error("Error saving token:", err);
+    console.error("Error triggering repository_dispatch:", err);
   }
 }
 
@@ -163,10 +133,14 @@ function AppContent() {
     (async () => {
       if ("serviceWorker" in navigator) {
         try {
-          await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-          console.log("Service worker registered");
+          const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+          console.log("Service worker registered:", registration);
+
+          await navigator.serviceWorker.ready;
+          console.log("Service worker is active and ready");
         } catch (err) {
           console.error("Service worker registration failed:", err);
+          return;
         }
       }
 
@@ -175,13 +149,12 @@ function AppContent() {
         const token = await getWebFcmToken();
         if (token) {
           console.log("Web FCM token retrieved:", token);
-          // Save token to GitHub repo so Action can subscribe it
+          // Trigger GitHub Action to append token
           await saveTokenToRepo(token);
         }
       }
     })();
 
-    // Foreground notifications → show banner
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log("Foreground notification:", payload);
       setBanner({
@@ -229,6 +202,7 @@ export default function App() {
     </AuthProvider>
   );
 }
+
 
 const styles = StyleSheet.create({
   loadingContainer: {
