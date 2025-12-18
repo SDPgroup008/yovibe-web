@@ -11,7 +11,16 @@ if (!admin.apps.length) {
 
 (async () => {
   try {
-    const tokens = JSON.parse(fs.readFileSync("tokens.json", "utf-8"));
+    let tokens = [];
+    if (fs.existsSync("tokens.json")) {
+      tokens = JSON.parse(fs.readFileSync("tokens.json", "utf-8"));
+    }
+    // Ensure tokens is an array of non-empty strings
+    tokens = tokens.filter(t => typeof t === "string" && t.trim().length > 0);
+    if (tokens.length === 0) {
+      console.log("No valid tokens found in tokens.json, skipping subscription.");
+      return;
+    }
     const response = await admin.messaging().subscribeToTopic(tokens, "all-users");
     console.log("Subscribed tokens:", response);
   } catch (err) {
