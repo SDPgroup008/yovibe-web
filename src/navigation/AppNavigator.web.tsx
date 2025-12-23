@@ -307,7 +307,6 @@ export const ProfileStackNavigator = () => {
 export const MainTabNavigator = () => {
   return (
     <MainTab.Navigator
-      initialRouteName="Events"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: keyof typeof Ionicons.glyphMap = "business"

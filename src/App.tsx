@@ -65,28 +65,22 @@ function NotificationBanner({ title, body, onClose }) {
 // 🔔 Helper: Trigger GitHub Action via repository_dispatch
 async function saveTokenToRepo(token: string) {
   try {
-    const res = await fetch("https://api.github.com/repos/SDPgroup008/yovibe-web/dispatches", {
+    const res = await fetch("/.netlify/functions/append-token", {
       method: "POST",
-      headers: {
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-        // ⚠️ No PAT here — GitHub Action will use secrets internally
-      },
-      body: JSON.stringify({
-        event_type: "append_token",
-        client_payload: { token },
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
     });
 
     if (!res.ok) {
-      console.error("Failed to trigger repository_dispatch:", await res.text());
+      console.error("Failed to trigger Netlify function:", await res.text());
     } else {
-      console.log("Triggered repository_dispatch to append token");
+      console.log("Netlify function triggered successfully");
     }
   } catch (err) {
-    console.error("Error triggering repository_dispatch:", err);
+    console.error("Error calling Netlify function:", err);
   }
 }
+
 
 // Main app component with auth state handling
 function AppContent() {
