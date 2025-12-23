@@ -41,4 +41,4 @@ jobs:
           git commit -m "Append new FCM token"
           git push
         env:
-          GITHUB_TOKEN: ${{ secrets.ACTIONS_PAT }}
+          GITHUB_TOKEN: ${{ github.token }}
