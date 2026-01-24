@@ -68,7 +68,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
     loadVenueAndEvents()
 
     // Set up real-time listener for vibe ratings
-    const vibeRatingsRef = collection(db, "vibeRatings")
+    const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
     const today = new Date()
     today.setHours(0, 0, 0, 0)
     const tomorrow = new Date(today)

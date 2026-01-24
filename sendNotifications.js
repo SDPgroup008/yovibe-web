@@ -19,7 +19,7 @@ const messaging = admin.messaging();
  */
 async function buildSummaryPayload(startDate, endDate, mode = "week") {
   const snap = await db
-    .collection("events")
+    .collection("YoVibe/data/events")
     .where("date", ">=", startDate)
     .where("date", "<=", endDate)
     .where("isDeleted", "==", false)

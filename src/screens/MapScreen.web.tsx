@@ -31,7 +31,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       try {
         const venuesList = await FirebaseService.getVenues()
         for (const venue of venuesList) {
-          const vibeRatingsRef = collection(db, "vibeRatings")
+          const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
           const today = new Date()
           today.setHours(0, 0, 0, 0)
           const tomorrow = new Date(today)

@@ -45,7 +45,7 @@ class FirebaseService {
       console.log("FirebaseService: User created with UID", uid)
 
       // Create user profile in Firestore
-      const userRef = await addDoc(collection(db, "users"), {
+      const userRef = await addDoc(collection(db, "YoVibe/data/users"), {
         uid,
         email,
         userType,
@@ -111,7 +111,7 @@ class FirebaseService {
   async getUserProfile(uid: string): Promise<User> {
     try {
       console.log("FirebaseService: Getting user profile for UID", uid)
-      const usersRef = collection(db, "users")
+      const usersRef = collection(db, "YoVibe/data/users")
       const q = query(usersRef, where("uid", "==", uid))
       const querySnapshot = await getDocs(q)
 
@@ -161,7 +161,7 @@ class FirebaseService {
   async updateUserProfile(userId: string, data: Partial<User>): Promise<void> {
     try {
       console.log("FirebaseService: Updating user profile", userId)
-      const userRef = doc(db, "users", userId)
+      const userRef = doc(db, "YoVibe/data/users", userId)
       await updateDoc(userRef, {
         ...data,
         lastLoginAt: Timestamp.now(),
@@ -178,7 +178,7 @@ class FirebaseService {
   async getVenues(): Promise<Venue[]> {
     try {
       console.log("FirebaseService: Getting venues")
-      const venuesRef = collection(db, "venues")
+      const venuesRef = collection(db, "YoVibe/data/venues")
       const querySnapshot = await getDocs(venuesRef)
       console.log("FirebaseService: Total venues in database:", querySnapshot.size)
 
@@ -304,7 +304,7 @@ class FirebaseService {
 
   async getVenuesByOwner(ownerId: string): Promise<Venue[]> {
     try {
-      const venuesRef = collection(db, "venues")
+      const venuesRef = collection(db, "YoVibe/data/venues")
       const q = query(venuesRef, where("ownerId", "==", ownerId))
       const querySnapshot = await getDocs(q)
       const venues: Venue[] = []
@@ -340,7 +340,7 @@ class FirebaseService {
 
   async getVenueById(venueId: string): Promise<Venue | null> {
     try {
-      const venueRef = doc(db, "venues", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       const venueDoc = await getDoc(venueRef)
 
       if (!venueDoc.exists()) {
@@ -376,7 +376,7 @@ class FirebaseService {
 
   async addVenue(venueData: Omit<Venue, "id">): Promise<string> {
     try {
-      const venueRef = await addDoc(collection(db, "venues"), {
+      const venueRef = await addDoc(collection(db, "YoVibe/data/venues"), {
         ...venueData,
         createdAt: Timestamp.fromDate(venueData.createdAt),
         isDeleted: false,
@@ -407,7 +407,7 @@ class FirebaseService {
 
   async updateVenue(venueId: string, data: Partial<Venue>): Promise<void> {
     try {
-      const venueRef = doc(db, "venues", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, data)
       return
     } catch (error) {
@@ -418,7 +418,7 @@ class FirebaseService {
 
   async updateVenuePrograms(venueId: string, programs: Record<string, string>): Promise<void> {
     try {
-      const venueRef = doc(db, "venues", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, { weeklyPrograms: programs })
       return
     } catch (error) {
@@ -430,7 +430,7 @@ class FirebaseService {
   async deleteVenue(venueId: string): Promise<void> {
     try {
       console.log("FirebaseService: Soft deleting venue", venueId)
-      const venueRef = doc(db, "venues", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
@@ -446,7 +446,7 @@ class FirebaseService {
   async restoreVenue(venueId: string): Promise<void> {
     try {
       console.log("FirebaseService: Restoring venue", venueId)
-      const venueRef = doc(db, "venues", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, {
         isDeleted: false,
         deletedAt: null,
@@ -462,7 +462,7 @@ class FirebaseService {
   async getDeletedVenues(): Promise<Venue[]> {
     try {
       console.log("FirebaseService: Getting deleted venues")
-      const venuesRef = collection(db, "venues")
+      const venuesRef = collection(db, "YoVibe/data/venues")
       const q = query(venuesRef, where("isDeleted", "==", true))
       const querySnapshot = await getDocs(q)
       const venues: Venue[] = []
@@ -499,7 +499,7 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Deleting expired custom venues")
       const now = new Date()
-      const eventsRef = collection(db, "events")
+      const eventsRef = collection(db, "YoVibe/data/events")
       const q = query(
         eventsRef,
         where("createdByType", "!=", "club_owner"),
@@ -514,7 +514,7 @@ class FirebaseService {
         const venueId = data.venueId
         if (venueId) {
           console.log(`FirebaseService: Deleting custom venue ${venueId} for expired event ${doc.id}`)
-          const venueRef = doc(db, "venues", venueId)
+          const venueRef = doc(db, "YoVibe/data/venues", venueId)
           deletePromises.push(deleteDoc(venueRef))
         }
       }
@@ -531,7 +531,7 @@ class FirebaseService {
   async getEvents(): Promise<Event[]> {
     try {
       console.log("FirebaseService: Getting events")
-      const eventsRef = collection(db, "events")
+      const eventsRef = collection(db, "YoVibe/data/events")
       const querySnapshot = await getDocs(eventsRef)
       const events: Event[] = []
 
@@ -580,7 +580,7 @@ class FirebaseService {
 
   async getFeaturedEvents(): Promise<Event[]> {
     try {
-      const eventsRef = collection(db, "events")
+      const eventsRef = collection(db, "YoVibe/data/events")
       const q = query(eventsRef, where("isFeatured", "==", true))
       const querySnapshot = await getDocs(q)
       const events: Event[] = []
@@ -629,7 +629,7 @@ class FirebaseService {
 
   async getEventsByVenue(venueId: string): Promise<Event[]> {
     try {
-      const eventsRef = collection(db, "events")
+      const eventsRef = collection(db, "YoVibe/data/events")
       const q = query(eventsRef, where("venueId", "==", venueId))
       const querySnapshot = await getDocs(q)
       const events: Event[] = []
@@ -678,7 +678,7 @@ class FirebaseService {
 
   async getEventById(eventId: string): Promise<Event | null> {
     try {
-      const eventRef = doc(db, "events", eventId)
+      const eventRef = doc(db, "YoVibe/data/events", eventId)
       const eventDoc = await getDoc(eventRef)
 
       if (!eventDoc.exists()) {
@@ -750,7 +750,7 @@ class FirebaseService {
         isDeleted: false,
       }
 
-      const eventRef = await addDoc(collection(db, "events"), firestoreEventData)
+      const eventRef = await addDoc(collection(db, "YoVibe/data/events"), firestoreEventData)
       return eventRef.id
     } catch (error) {
       console.error("Error adding event:", error)
@@ -761,7 +761,7 @@ class FirebaseService {
   async updateEvent(eventId: string, data: Partial<Event>): Promise<void> {
     try {
       console.log("FirebaseService: Updating event", eventId)
-      const eventRef = doc(db, "events", eventId)
+      const eventRef = doc(db, "YoVibe/data/events", eventId)
       const updateData: any = { ...data }
       if (data.date) {
         updateData.date = Timestamp.fromDate(data.date)
@@ -777,7 +777,7 @@ class FirebaseService {
   async deleteEvent(eventId: string): Promise<void> {
     try {
       console.log("FirebaseService: Soft deleting event", eventId)
-      const eventRef = doc(db, "events", eventId)
+      const eventRef = doc(db, "YoVibe/data/events", eventId)
       await updateDoc(eventRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
@@ -792,7 +792,7 @@ class FirebaseService {
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
       console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
-      const vibeRatingsRef = collection(db, "vibeRatings")
+      const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
       const q = query(vibeRatingsRef, where("venueId", "==", venueId), orderBy("createdAt", "desc"), limit(1))
       const querySnapshot = await getDocs(q)
 
@@ -813,7 +813,7 @@ class FirebaseService {
   async deletePastEvents(): Promise<void> {
     try {
       console.log("FirebaseService: Deleting past events")
-      const eventsRef = collection(db, "events")
+      const eventsRef = collection(db, "YoVibe/data/events")
       const querySnapshot = await getDocs(eventsRef)
       const now = new Date()
 
@@ -855,7 +855,7 @@ class FirebaseService {
       const endOfDay = new Date(date)
       endOfDay.setHours(23, 59, 59, 999)
 
-      const vibeImagesRef = collection(db, "vibeImages")
+      const vibeImagesRef = collection(db, "YoVibe/data/vibeImages")
       const q = query(
         vibeImagesRef,
         where("venueId", "==", venueId),
@@ -893,7 +893,7 @@ class FirebaseService {
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - 7)
 
-      const vibeImagesRef = collection(db, "vibeImages")
+      const vibeImagesRef = collection(db, "YoVibe/data/vibeImages")
       const q = query(
         vibeImagesRef,
         where("venueId", "==", venueId),
@@ -996,7 +996,7 @@ class FirebaseService {
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
     try {
       console.log("FirebaseService: Adding vibe image for venue", vibeImageData.venueId)
-      const vibeImageRef = await addDoc(collection(db, "vibeImages"), {
+      const vibeImageRef = await addDoc(collection(db, "YoVibe/data/vibeImages"), {
         ...vibeImageData,
         uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
       })
