@@ -146,7 +146,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   }
 
   const openGoogleMaps = (venue: Venue) => {
-    const url = `https://www.google.com/maps/dir/?api=1&destination=${venue.latitude},${venue.longitude}&destination_place_id=${venue.name}`
+    let url: string
+    
+    // Check if venue has latitude and longitude coordinates
+    if (venue.latitude && venue.longitude) {
+      // Use coordinates for precise navigation
+      url = `https://www.google.com/maps/dir/?api=1&destination=${venue.latitude},${venue.longitude}&destination_place_id=${venue.name}`
+    } else {
+      // Fallback to searching by venue name and location
+      const searchQuery = encodeURIComponent(`${venue.name} ${venue.location}`)
+      url = `https://www.google.com/maps/search/?api=1&query=${searchQuery}`
+    }
+    
     Linking.openURL(url)
   }
 
@@ -181,7 +192,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
               <View style={styles.venueInfo}>
                 <Text style={styles.venueName}>{venue.name}</Text>
                 <Text style={styles.venueAddress}>{venue.location}</Text>
-                <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
+                <Text style={styles.venueCategories}>
+                  {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
+                </Text>
                 <View style={styles.vibeRatingContainer}>
                   <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
                   <Text

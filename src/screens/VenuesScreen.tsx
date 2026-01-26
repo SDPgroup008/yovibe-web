@@ -142,6 +142,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
   const getFilteredVenues = () => {
     const filtered = venues.filter((venue) => {
+      // Safety check: ensure categories exists and is an array, fallback to "Other"
+      if (!venue.categories || !Array.isArray(venue.categories) || venue.categories.length === 0) {
+        // Venues without categories fall under "Other" in recreation tab
+        return activeTab === "recreation";
+      }
       const isNightlife = venue.categories.some((cat) =>
         ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase())
       );
@@ -161,7 +166,9 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
         <View style={styles.venueGradient}>
           <Text style={styles.venueName}>{item.name}</Text>
-          <Text style={styles.venueInfo}>{item.categories.join(", ")}</Text>
+          <Text style={styles.venueInfo}>
+            {item.categories && item.categories.length > 0 ? item.categories.join(", ") : "Other"}
+          </Text>
           <View style={styles.vibeRatingContainer}>
             <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
             <Text
