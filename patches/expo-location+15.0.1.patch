@@ -1,0 +1,13 @@
+diff --git a/node_modules/expo-location/build/Location.js b/node_modules/expo-location/build/Location.js
+index 123456..789012 100644
+--- a/node_modules/expo-location/build/Location.js
++++ b/node_modules/expo-location/build/Location.js
+@@ -1,6 +1,7 @@
+ import { EventEmitter, Platform, UnavailabilityError } from 'expo-modules-core';
+-import { isRunningInExpoGo } from 'expo';
+ import ExpoLocation from './ExpoLocation';
++// Polyfill for isRunningInExpoGo
++const isRunningInExpoGo = () => false;
+ 
+ // The native module is null in the web browser
+ if (!ExpoLocation) {
