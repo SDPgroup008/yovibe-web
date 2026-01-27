@@ -17,9 +17,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Prepare privacy policy for deployment
+        run: |
+          mkdir -p deploy
+          cp privacy-policy.html deploy/index.html
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: '.'
+          publish_dir: ./deploy
