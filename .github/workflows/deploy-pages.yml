@@ -19,6 +19,7 @@ jobs:
         run: |
           mkdir -p deploy
           cp privacy-policy.html deploy/index.html
+          cp delete-account-request.html deploy/delete-account-request.html
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
