@@ -12,7 +12,9 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "../config/firebase";
 import FirebaseService from "../services/FirebaseService";
+import AnalyticsService from "../services/AnalyticsService";
 import type { User } from "../models/User";
+import { Platform } from "react-native";
 
 export type RedirectIntent = {
   routeName: string;
@@ -59,6 +61,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Track whether we've completed the initial auth resolution
   const initializedRef = useRef(false);
+  
+  // Track analytics session
+  const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     console.log("AuthContext: Setting up auth state listener");
@@ -102,6 +107,44 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       unsubscribe();
     };
   }, []);
+
+  // Track analytics session
+  useEffect(() => {
+    // Only track sessions on web platform
+    if (Platform.OS !== 'web') return;
+
+    const startSession = async () => {
+      try {
+        const sessionId = await AnalyticsService.startSession(
+          user?.id || null,
+          'web'
+        );
+        sessionIdRef.current = sessionId;
+        console.log('Analytics: Session started for', user ? 'authenticated user' : 'guest');
+      } catch (error) {
+        console.error('Analytics: Failed to start session', error);
+      }
+    };
+
+    const endSession = async () => {
+      if (sessionIdRef.current) {
+        try {
+          await AnalyticsService.endSession(sessionIdRef.current);
+          console.log('Analytics: Session ended');
+        } catch (error) {
+          console.error('Analytics: Failed to end session', error);
+        }
+      }
+    };
+
+    // Start session when component mounts or user changes
+    startSession();
+
+    // End session on unmount or before starting a new one
+    return () => {
+      endSession();
+    };
+  }, [user?.id]);
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);

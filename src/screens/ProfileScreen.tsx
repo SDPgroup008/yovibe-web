@@ -151,6 +151,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   };
 
+  const navigateToAdminDashboard = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminDashboard");
+    }
+  };
+
   const handleToggleEditProfile = () => {
     setShowEditProfile(!showEditProfile);
   };
@@ -262,6 +268,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
 
         {user?.userType === "admin" && (
           <>
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminDashboard}>
+              <Ionicons name="analytics-outline" size={24} color="#FFFFFF" />
+              <Text style={styles.menuText}>Analytics Dashboard</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminUsers}>
               <Ionicons name="people-outline" size={24} color="#FFFFFF" />
               <Text style={styles.menuText}>Manage Users</Text>

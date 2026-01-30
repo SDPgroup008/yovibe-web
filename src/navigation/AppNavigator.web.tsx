@@ -29,6 +29,7 @@ import TicketContactScreen from "../screens/TicketContactScreen"
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
 import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen"
 import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
+import AdminDashboardScreen from "../screens/admin/AdminDashboardScreen"
 
 // Types
 import type {
@@ -287,6 +288,7 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AddVenue" component={AddVenueScreenProtected} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <ProfileStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <ProfileStack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ title: "Analytics Dashboard" }} />
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
