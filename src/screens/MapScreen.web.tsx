@@ -108,36 +108,93 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   const loadVenues = async () => {
     try {
-      setLoading(true)
-      const venuesList = await FirebaseService.getVenues()
-      setVenues(venuesList)
-
-      // Load initial vibe ratings for today
-      const vibeRatings: Record<string, number> = {}
-      const today = new Date()
-      for (const venue of venuesList) {
-        const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today)
-        if (vibeImages.length > 0) {
-          // Use the latest vibe rating for today
-          const latestVibe = vibeImages.reduce((latest, image) => {
-            return image.uploadedAt > latest.uploadedAt ? image : latest
-          })
-          vibeRatings[venue.id] = latestVibe.vibeRating || 0.0
-        } else {
-          vibeRatings[venue.id] = 0.0 // Default to 0.0 if no vibe images for today
+      setLoading(true);
+      
+      // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
+      console.log("\n🚀 MAP WEB AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
+      
+      let allVenues: any[] = [];
+      let currentLastDoc = null;
+      let fetchCount = 0;
+      const BATCH_SIZE = 5;
+      const DELAY_MS = 3000;
+      
+      while (true) {
+        fetchCount++;
+        console.log(`\n${'='.repeat(60)}`);
+        console.log(`🗺️ MAP WEB BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
+        console.log(`${'='.repeat(60)}`);
+        
+        const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
+        
+        console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
+        console.log(`   • Received: ${paginatedVenues.length} venues`);
+        console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+        
+        if (paginatedVenues.length === 0) {
+          console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
+          break;
         }
+        
+        allVenues = [...allVenues, ...paginatedVenues];
+        currentLastDoc = newLastDoc;
+        
+        // 🚀 IMMEDIATELY DISPLAY the batch to users
+        setVenues(allVenues);
+        console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
+        
+        // 🎵 Load vibe ratings for this batch BEFORE moving to next batch
+        console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
+        const today = new Date();
+        for (const venue of paginatedVenues) {
+          const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
+          if (vibeImages.length > 0) {
+            const latestVibe = vibeImages.reduce((latest, image) => {
+              return image.uploadedAt > latest.uploadedAt ? image : latest;
+            });
+            setVenueVibeRatings(prev => ({ ...prev, [venue.id]: latestVibe.vibeRating || 0.0 }));
+          } else {
+            setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
+          }
+        }
+        console.log(`✅ Vibe ratings loaded for batch #${fetchCount}`);
+        
+        // Hide loading spinner after first batch is displayed
+        if (fetchCount === 1) {
+          console.log("🎬 First batch complete - hiding loading spinner");
+          setLoading(false);
+        }
+        
+        console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
+        console.log(`   • Total venues loaded: ${allVenues.length}`);
+        
+        if (!newLastDoc) {
+          console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
+          break;
+        }
+        
+        console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
-      setVenueVibeRatings(vibeRatings)
+      
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`🎉 MAP WEB AUTO-LOAD COMPLETE!`);
+      console.log(`${'='.repeat(60)}`);
+      console.log(`   • Total batches: ${fetchCount}`);
+      console.log(`   • Total venues: ${allVenues.length}`);
+      console.log(`${'='.repeat(60)}\n`);
+      
+      setVenues(allVenues);
+      console.log("✅ All vibe ratings already loaded per batch");
     } catch (error) {
-      console.error("Error loading venues for map:", error)
-      // Set all ratings to 0.0 on error
-      const errorRatings: Record<string, number> = {}
+      console.error("Error loading venues for map:", error);
+      const errorRatings: Record<string, number> = {};
       venues.forEach((venue) => {
-        errorRatings[venue.id] = 0.0
-      })
-      setVenueVibeRatings(errorRatings)
+        errorRatings[venue.id] = 0.0;
+      });
+      setVenueVibeRatings(errorRatings);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 

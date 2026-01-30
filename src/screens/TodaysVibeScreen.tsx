@@ -33,6 +33,9 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const [loading, setLoading] = useState(true)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<VibeImage | null>(null)
+  const [displayedTodayVibes, setDisplayedTodayVibes] = useState<VibeImage[]>([])
+  const [currentTodayPage, setCurrentTodayPage] = useState(1)
+  const ITEMS_PER_PAGE = 5;
 
   const screenWidth = Dimensions.get("window").width
   const imageSize = (screenWidth - 48) / 2 // 2 columns with padding
@@ -49,6 +52,23 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
 
     return unsubscribe
   }, [navigation, venueId])
+
+  useEffect(() => {
+    // Reset pagination when todayVibes changes
+    setCurrentTodayPage(1);
+    setDisplayedTodayVibes(todayVibes.slice(0, ITEMS_PER_PAGE));
+  }, [todayVibes]);
+
+  const loadMoreTodayVibes = () => {
+    if (displayedTodayVibes.length >= todayVibes.length) {
+      return; // No more items to load
+    }
+    const nextPage = currentTodayPage + 1;
+    const startIndex = 0;
+    const endIndex = nextPage * ITEMS_PER_PAGE;
+    setDisplayedTodayVibes(todayVibes.slice(startIndex, endIndex));
+    setCurrentTodayPage(nextPage);
+  };
 
   const loadVibeData = async () => {
     try {
@@ -192,12 +212,14 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
           ) : (
             <FlatList
               key="today-vibes"
-              data={todayVibes}
+              data={displayedTodayVibes}
               renderItem={renderVibeImage}
               keyExtractor={(item) => item.id}
               numColumns={2}
               columnWrapperStyle={styles.vibeRow}
               contentContainerStyle={styles.vibeGrid}
+              onEndReached={loadMoreTodayVibes}
+              onEndReachedThreshold={0.5}
             />
           )}
         </View>
