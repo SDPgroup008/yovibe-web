@@ -36,14 +36,22 @@ The Analytics Dashboard tracks user sessions on the web app, recording:
 {
   id: string,
   userId: string | null,  // null for unauthenticated users
+  uniqueVisitorId: string,  // Generated ID stored in localStorage
   isAuthenticated: boolean,
   startTime: Timestamp,
   endTime?: Timestamp,
   duration?: number,  // in seconds
   platform: 'web',
-  userAgent?: string
+  userAgent?: string,
+  visitNumber?: number  // How many times this user visited today
 }
 ```
+
+### Unique Visitor Tracking
+- **Authenticated users**: Tracked by `userId`
+- **Unauthenticated users**: Tracked by `uniqueVisitorId` (stored in browser localStorage)
+- Each visitor gets a unique ID that persists across sessions
+- Visit count increments each time the same user visits within the same day
 
 ## Firestore Security Rules
 
@@ -66,6 +74,17 @@ match /analytics_sessions/{sessionId} {
   allow delete: if false;
 }
 ```
+
+### Composite Index Required
+Create this index in Firestore for efficient queries:
+
+Collection: `analytics_sessions`
+- `uniqueVisitorId` (Ascending)
+- `startTime` (Ascending)
+
+And another:
+- `startTime` (Ascending)
+- `__name__` (Ascending)
 
 ## Navigation Updates
 
@@ -101,14 +120,28 @@ Added `AdminDashboard: undefined` to `ProfileStackParamList`
 
 ### Summary Metrics (Last 30 Days)
 - Total sessions
-- Authenticated user count
-- Unauthenticated visitor count
+- Unique authenticated users
+- Unique unauthenticated visitors
+- Total unique users (auth + unauth)
 - Average session duration
+- Average visits per user
 
 ### Trend Data
 - **Daily**: Shows last 30 days
 - **Weekly**: Shows last 12 weeks
 - **Monthly**: Shows last 12 months
+- Each period shows unique user counts
+Authenticated users tracked by user ID
+- Unauthenticated users tracked by generated visitor ID (localStorage)
+- Visitor IDs persist across sessions in same browser
+- Clearing browser data resets visitor ID
+- No personal data stored beyond user IDs
+- User agent string stored for device type analysis
+- Data only accessible to admin users
+- No tracking of specific pages or actions (just overall sessions)
+- Each visit within a day is counted separately
+- Shows both authenticated and guest users
+- Includes last visit time
 
 ## Privacy Considerations
 

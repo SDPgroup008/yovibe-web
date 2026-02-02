@@ -11,7 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
-import AnalyticsService, { AnalyticsSummary, TrendData } from '../../services/AnalyticsService';
+import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData } from '../../services/AnalyticsService';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
@@ -19,6 +19,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
 
   useEffect(() => {
@@ -29,17 +30,17 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     setLoading(true);
     try {
       // Get summary for last 30 days
-      const endDate = new Date();
-      const startDate = new Date();
-      startDate.setDate(endDate.getDate() - 30);
-
-      const summaryData = await AnalyticsService.getAnalyticsSummary(startDate, endDate);
+      const summaryData = await AnalyticsService.getAnalyticsSummary();
       setSummary(summaryData);
 
       // Get trend data
       const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
       const trends = await AnalyticsService.getTrendData(selectedPeriod, limit);
       setTrendData(trends);
+      
+      // Get frequent visitors today
+      const visitors = await AnalyticsService.getFrequentVisitorsToday();
+      setFrequentVisitors(visitors);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {
@@ -125,20 +126,27 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
           <Ionicons name="people" size={32} color="#4CAF50" />
           <Text style={styles.summaryValue}>{summary?.totalSessions || 0}</Text>
           <Text style={styles.summaryLabel}>Total Sessions</Text>
-          <Text style={styles.summarySubtext}>Last 30 days</Text>
+          <Text style={styles.summarySubtext}>All time</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Ionicons name="people" size={32} color="#9C27B0" />
+          <Text style={styles.summaryValue}>{summary?.totalUniqueUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>Unique Users</Text>
+          <Text style={styles.summarySubtext}>All visitors</Text>
         </View>
 
         <View style={styles.summaryCard}>
           <Ionicons name="person-circle" size={32} color="#2196F3" />
-          <Text style={styles.summaryValue}>{summary?.authenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>Authenticated</Text>
+          <Text style={styles.summaryValue}>{summary?.uniqueAuthenticatedUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>Unique Auth</Text>
           <Text style={styles.summarySubtext}>Users</Text>
         </View>
 
         <View style={styles.summaryCard}>
           <Ionicons name="person-outline" size={32} color="#FF9800" />
-          <Text style={styles.summaryValue}>{summary?.unauthenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>Unauthenticated</Text>
+          <Text style={styles.summaryValue}>{summary?.uniqueUnauthenticatedUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>Unique Guests</Text>
           <Text style={styles.summarySubtext}>Visitors</Text>
         </View>
 
@@ -149,6 +157,36 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
           </Text>
           <Text style={styles.summaryLabel}>Avg. Duration</Text>
           <Text style={styles.summarySubtext}>Per session</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Ionicons name="repeat" size={32} color="#E91E63" />
+          <Text style={styles.summaryValue}>
+            {summary?.averageVisitsPerUser.toFixed(1) || '0.0'}
+          </Text>
+          <Text style={styles.summaryLabel}>Avg. Visits</Text>
+          <Text style={styles.summarySubtext}>Per user</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Ionicons name="person-add" size={32} color="#4CAF50" />
+          <Text style={styles.summaryValue}>{summary?.totalNewUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>New Users</Text>
+          <Text style={styles.summarySubtext}>Last 30 days</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Ionicons name="person-add" size={32} color="#2196F3" />
+          <Text style={styles.summaryValue}>{summary?.newAuthenticatedUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>New Auth</Text>
+          <Text style={styles.summarySubtext}>Users</Text>
+        </View>
+
+        <View style={styles.summaryCard}>
+          <Ionicons name="person-add-outline" size={32} color="#FF9800" />
+          <Text style={styles.summaryValue}>{summary?.newUnauthenticatedUsers || 0}</Text>
+          <Text style={styles.summaryLabel}>New Guests</Text>
+          <Text style={styles.summarySubtext}>Visitors</Text>
         </View>
       </View>
 
@@ -178,6 +216,43 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             Monthly
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Frequent Visitors Today */}
+      <View style={styles.frequentVisitorsSection}>
+        <Text style={styles.sectionTitle}>Today's Frequent Visitors</Text>
+        {frequentVisitors.length === 0 ? (
+          <Text style={styles.noDataText}>No visitors today yet</Text>
+        ) : (
+          frequentVisitors.slice(0, 10).map((visitor, index) => (
+            <View key={visitor.uniqueVisitorId} style={styles.visitorCard}>
+              <View style={styles.visitorHeader}>
+                <Ionicons
+                  name={visitor.isAuthenticated ? 'person-circle' : 'person-outline'}
+                  size={24}
+                  color={visitor.isAuthenticated ? '#2196F3' : '#FF9800'}
+                />
+                <View style={styles.visitorInfo}>
+                  <Text style={styles.visitorType}>
+                    {visitor.isAuthenticated ? 'Authenticated User' : 'Guest Visitor'}
+                  </Text>
+                  <Text style={styles.visitorId} numberOfLines={1}>
+                    {visitor.userId || visitor.uniqueVisitorId}
+                  </Text>
+                </View>
+                <View style={styles.visitBadge}>
+                  <Text style={styles.visitBadgeText}>{visitor.visitCount}</Text>
+                  <Text style={styles.visitBadgeLabel}>
+                    {visitor.visitCount === 1 ? 'visit' : 'visits'}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.lastVisit}>
+                Last visit: {visitor.lastVisit.toLocaleTimeString()}
+              </Text>
+            </View>
+          ))
+        )}
       </View>
 
       {/* Chart */}
@@ -221,6 +296,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Avg. Duration:</Text>
               <Text style={styles.detailValue}>{formatDuration(item.averageDuration)}</Text>
+            </View>
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>New Users:</Text>
+              <Text style={[styles.detailValue, { color: '#4CAF50' }]}>
+                {item.totalNewUsers || 0}
+              </Text>
             </View>
           </View>
         ))}
@@ -424,6 +505,62 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+  },
+  frequentVisitorsSection: {
+    padding: 16,
+    marginBottom: 16,
+  },
+  noDataText: {
+    color: '#AAAAAA',
+    fontSize: 14,
+    textAlign: 'center',
+    padding: 20,
+  },
+  visitorCard: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  visitorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  visitorInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  visitorType: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  visitorId: {
+    color: '#AAAAAA',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  visitBadge: {
+    backgroundColor: '#2196F3',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  visitBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  visitBadgeLabel: {
+    color: '#FFFFFF',
+    fontSize: 10,
+  },
+  lastVisit: {
+    color: '#666666',
+    fontSize: 12,
+    marginTop: 4,
   },
 });
 
