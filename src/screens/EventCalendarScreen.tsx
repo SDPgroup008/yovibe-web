@@ -192,7 +192,14 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
       />
 
       <View style={styles.eventsContainer}>
-        <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+        <View style={styles.dateTitleContainer}>
+          <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+          {!loading && (
+            <View style={styles.eventCountBadge}>
+              <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
+            </View>
+          )}
+        </View>
 
         {loading ? (
           <View style={styles.loadingContainer}>
@@ -240,11 +247,30 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  dateTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
   dateTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 16,
+  },
+  eventCountBadge: {
+    backgroundColor: "#2196F3",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minWidth: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eventCountText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
   },
   loadingContainer: {
     flex: 1,
