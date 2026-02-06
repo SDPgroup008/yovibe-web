@@ -205,13 +205,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const openGoogleMaps = (venue: Venue) => {
     let url: string
     
-    // Check if venue has latitude and longitude coordinates
-    if (venue.latitude && venue.longitude) {
-      // Use coordinates for precise navigation
-      url = `https://www.google.com/maps/dir/?api=1&destination=${venue.latitude},${venue.longitude}&destination_place_id=${venue.name}`
-    } else {
-      // Fallback to searching by venue name and location
+    // Prioritize using venue name for better search results
+    if (venue.name && venue.location) {
+      // Use venue name and location for more accurate search
       const searchQuery = encodeURIComponent(`${venue.name} ${venue.location}`)
+      url = `https://www.google.com/maps/dir/?api=1&destination=${searchQuery}`
+    } else if (venue.name) {
+      // Use venue name only if location is not available
+      const searchQuery = encodeURIComponent(venue.name)
+      url = `https://www.google.com/maps/dir/?api=1&destination=${searchQuery}`
+    } else if (venue.latitude && venue.longitude) {
+      // Fallback to coordinates if venue name is not available
+      url = `https://www.google.com/maps/dir/?api=1&destination=${venue.latitude},${venue.longitude}`
+    } else {
+      // Final fallback: search mode if nothing else is available
+      const searchQuery = encodeURIComponent(venue.location || "Unknown Location")
       url = `https://www.google.com/maps/search/?api=1&query=${searchQuery}`
     }
     
