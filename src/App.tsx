@@ -21,7 +21,47 @@ import { onMessage } from "firebase/messaging";
 
 const Stack = createStackNavigator();
 
-// 🔔 Banner component with animation + auto-dismiss
+// 🔔 Persistent Permission Banner that floats at the top
+function PermissionBanner({ onAllow, onBlock }) {
+  const slideAnim = useRef(new Animated.Value(-100)).current;
+
+  useEffect(() => {
+    Animated.timing(slideAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handleAction = (callback) => {
+    Animated.timing(slideAnim, {
+      toValue: -100,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      callback();
+    });
+  };
+
+  return (
+    <Animated.View style={[styles.permissionBanner, { transform: [{ translateY: slideAnim }] }]}>
+      <View style={styles.permissionContent}>
+        <Text style={styles.permissionTitle}>📢 Stay Updated!</Text>
+        <Text style={styles.permissionBody}>Enable notifications to get updates about events and vibes</Text>
+      </View>
+      <View style={styles.permissionActions}>
+        <TouchableOpacity onPress={() => handleAction(onBlock)} style={styles.blockButton}>
+          <Text style={styles.blockButtonText}>Block</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleAction(onAllow)} style={styles.allowButton}>
+          <Text style={styles.allowButtonText}>Allow</Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
+// 🔔 Temporary notification banner with auto-dismiss
 function NotificationBanner({ title, body, onClose }) {
   const slideAnim = useRef(new Animated.Value(-100)).current;
 
@@ -87,6 +127,7 @@ function AppContent() {
   const { user, loading, consumeRedirectIntent } = useAuth();
   const [initializing, setInitializing] = useState(true);
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
+  const [showPermissionBanner, setShowPermissionBanner] = useState(false);
 
   useEffect(() => {
     if (!loading) {
@@ -122,33 +163,46 @@ function AppContent() {
     }
   }, [user, loading, consumeRedirectIntent]);
 
-  // 🔔 Register service worker + notifications
+  // 🔔 Register service worker and show permission banner after 5 seconds
   useEffect(() => {
+    // Register service worker immediately
     (async () => {
       if ("serviceWorker" in navigator) {
         try {
           const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
           console.log("Service worker registered:", registration);
-
           await navigator.serviceWorker.ready;
           console.log("Service worker is active and ready");
         } catch (err) {
           console.error("Service worker registration failed:", err);
-          return;
-        }
-      }
-
-      const granted = await requestNotificationPermission();
-      if (granted) {
-        const token = await getWebFcmToken();
-        if (token) {
-          console.log("Web FCM token retrieved:", token);
-          // Trigger GitHub Action to append token
-          await saveTokenToRepo(token);
         }
       }
     })();
 
+    // Check if permission has already been granted or denied
+    const currentPermission = Notification.permission;
+    if (currentPermission === "default") {
+      // Show banner after 5 seconds if permission hasn't been decided
+      const bannerTimer = setTimeout(() => {
+        setShowPermissionBanner(true);
+      }, 5000);
+      return () => clearTimeout(bannerTimer);
+    }
+
+    // If already granted, get token
+    if (currentPermission === "granted") {
+      (async () => {
+        const token = await getWebFcmToken();
+        if (token) {
+          console.log("Web FCM token retrieved:", token);
+          await saveTokenToRepo(token);
+        }
+      })();
+    }
+  }, []);
+
+  // 🔔 Listen for foreground notifications
+  useEffect(() => {
     const unsubscribe = onMessage(messaging, (payload) => {
       console.log("Foreground notification:", payload);
       setBanner({
@@ -159,6 +213,24 @@ function AppContent() {
 
     return () => unsubscribe();
   }, []);
+
+  // 🔔 Handle permission banner actions
+  const handleAllowNotifications = async () => {
+    setShowPermissionBanner(false);
+    const granted = await requestNotificationPermission();
+    if (granted) {
+      const token = await getWebFcmToken();
+      if (token) {
+        console.log("Web FCM token retrieved:", token);
+        await saveTokenToRepo(token);
+      }
+    }
+  };
+
+  const handleBlockNotifications = () => {
+    setShowPermissionBanner(false);
+    console.log("User blocked notifications");
+  };
 
   if (initializing) {
     return (
@@ -171,11 +243,20 @@ function AppContent() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Permission banner at the very top */}
+      {showPermissionBanner && (
+        <PermissionBanner
+          onAllow={handleAllowNotifications}
+          onBlock={handleBlockNotifications}
+        />
+      )}
+      
       <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Main">
         <Stack.Screen name="Main" component={MainTabNavigator} />
         <Stack.Screen name="Auth" component={AuthNavigator} />
       </Stack.Navigator>
 
+      {/* Temporary notification banner */}
       {banner && (
         <NotificationBanner
           title={banner.title}
@@ -209,6 +290,61 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginTop: 16,
     fontSize: 16,
+  },
+  permissionBanner: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: "#4CAF50",
+    padding: 16,
+    elevation: 10,
+    zIndex: 9999,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  permissionContent: {
+    marginBottom: 12,
+  },
+  permissionTitle: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
+    marginBottom: 4,
+  },
+  permissionBody: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  permissionActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+  },
+  blockButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  blockButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  allowButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    backgroundColor: "#fff",
+  },
+  allowButtonText: {
+    color: "#4CAF50",
+    fontWeight: "bold",
+    fontSize: 14,
   },
   banner: {
     position: "absolute",

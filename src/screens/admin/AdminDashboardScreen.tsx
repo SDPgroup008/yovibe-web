@@ -11,13 +11,14 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
-import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData } from '../../services/AnalyticsService';
+import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
 const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
@@ -29,6 +30,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const loadAnalytics = async () => {
     setLoading(true);
     try {
+      // Get today's summary
+      const todayData = await AnalyticsService.getTodaySummary();
+      setTodaySummary(todayData);
+      
       // Get summary for last 30 days
       const summaryData = await AnalyticsService.getAnalyticsSummary();
       setSummary(summaryData);
@@ -99,6 +104,116 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     );
   };
 
+  const renderLineChart = (data: TrendData[]) => {
+    if (data.length === 0) return null;
+
+    const maxValue = Math.max(
+      ...data.map(d => Math.max(d.totalSessions, d.totalNewUsers, d.totalUniqueUsers)),
+      1
+    );
+    const chartWidth = Dimensions.get('window').width - 64;
+    const chartHeight = 200;
+    const pointSpacing = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth / 2;
+
+    // Calculate points for each line
+    const sessionPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalSessions / maxValue) * chartHeight,
+      value: item.totalSessions,
+    }));
+
+    const newUserPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalNewUsers / maxValue) * chartHeight,
+      value: item.totalNewUsers,
+    }));
+
+    const uniqueUserPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalUniqueUsers / maxValue) * chartHeight,
+      value: item.totalUniqueUsers,
+    }));
+
+    // Create SVG path for lines
+    const createPath = (points: typeof sessionPoints) => {
+      if (points.length === 0) return '';
+      let path = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i++) {
+        path += ` L ${points[i].x} ${points[i].y}`;
+      }
+      return path;
+    };
+
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+        <View style={[styles.lineChartContainer, { width: Math.max(chartWidth, data.length * 60) }]}>
+          <View style={[styles.lineChart, { height: chartHeight }]}>
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.gridLine,
+                  { bottom: ratio * chartHeight, width: Math.max(chartWidth, data.length * 60) },
+                ]}
+              />
+            ))}
+
+            {/* Data points and lines */}
+            {sessionPoints.map((point, index) => (
+              <View key={`session-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.sessionPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+
+            {newUserPoints.map((point, index) => (
+              <View key={`new-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.newUserPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+
+            {uniqueUserPoints.map((point, index) => (
+              <View key={`unique-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.uniqueUserPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* X-axis labels */}
+          <View style={styles.xAxisLabels}>
+            {data.map((item, index) => (
+              <Text
+                key={index}
+                style={[styles.xAxisLabel, { left: index * pointSpacing - 30 }]}
+                numberOfLines={1}
+              >
+                {formatDate(item.date)}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -118,6 +233,61 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         <TouchableOpacity onPress={loadAnalytics} style={styles.refreshButton}>
           <Ionicons name="refresh" size={24} color="#FFFFFF" />
         </TouchableOpacity>
+      </View>
+
+      {/* TODAY'S SUMMARY - Refreshes Daily */}
+      <View style={styles.todaySection}>
+        <View style={styles.todayHeader}>
+          <Ionicons name="today" size={24} color="#4CAF50" />
+          <Text style={styles.todayTitle}>Today's Activity</Text>
+          <Text style={styles.todayTimestamp}>
+            Updated: {todaySummary?.lastUpdated.toLocaleTimeString() || 'N/A'}
+          </Text>
+        </View>
+
+        <View style={styles.todayGrid}>
+          {/* Total Sessions Today */}
+          <View style={[styles.todayCard, styles.todayCardPrimary]}>
+            <Text style={styles.todayCardValue}>{todaySummary?.totalSessions || 0}</Text>
+            <Text style={styles.todayCardLabel}>Total Sessions</Text>
+          </View>
+
+          {/* New Users Today */}
+          <View style={[styles.todayCard, styles.todayCardSuccess]}>
+            <Text style={styles.todayCardValue}>{todaySummary?.totalNewUsers || 0}</Text>
+            <Text style={styles.todayCardLabel}>New Users</Text>
+            <View style={styles.todayCardBreakdown}>
+              <Text style={styles.todayCardBreakdownText}>
+                🔐 {todaySummary?.newAuthenticatedUsers || 0} Auth
+              </Text>
+              <Text style={styles.todayCardBreakdownText}>
+                👤 {todaySummary?.newUnauthenticatedUsers || 0} Guest
+              </Text>
+            </View>
+          </View>
+
+          {/* Returning Users Today */}
+          <View style={[styles.todayCard, styles.todayCardInfo]}>
+            <Text style={styles.todayCardValue}>{todaySummary?.totalReturningUsers || 0}</Text>
+            <Text style={styles.todayCardLabel}>Returning Users</Text>
+            <View style={styles.todayCardBreakdown}>
+              <Text style={styles.todayCardBreakdownText}>
+                🔐 {todaySummary?.returningAuthenticatedUsers || 0} Auth
+              </Text>
+              <Text style={styles.todayCardBreakdownText}>
+                👤 {todaySummary?.returningUnauthenticatedUsers || 0} Guest
+              </Text>
+            </View>
+          </View>
+
+          {/* Average Duration Today */}
+          <View style={[styles.todayCard, styles.todayCardWarning]}>
+            <Text style={styles.todayCardValue}>
+              {formatDuration(todaySummary?.averageDuration || 0)}
+            </Text>
+            <Text style={styles.todayCardLabel}>Avg. Duration</Text>
+          </View>
+        </View>
       </View>
 
       {/* Summary Cards */}
@@ -216,6 +386,42 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             Monthly
           </Text>
         </TouchableOpacity>
+      </View>
+
+      {/* Line Chart for Trends */}
+      <View style={styles.chartSection}>
+        <Text style={styles.sectionTitle}>Trend Analysis - Line Chart</Text>
+        <View style={styles.legendContainer}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#2196F3' }]} />
+            <Text style={styles.legendText}>Total Sessions</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
+            <Text style={styles.legendText}>New Users</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
+            <Text style={styles.legendText}>Unique Users</Text>
+          </View>
+        </View>
+        {renderLineChart(trendData)}
+      </View>
+
+      {/* Bar Chart for Session Comparison */}
+      <View style={styles.chartSection}>
+        <Text style={styles.sectionTitle}>Session Comparison - Bar Chart</Text>
+        <View style={styles.legendContainer}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#2196F3' }]} />
+            <Text style={styles.legendText}>Authenticated</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
+            <Text style={styles.legendText}>Unauthenticated</Text>
+          </View>
+        </View>
+        {renderSimpleChart(trendData)}
       </View>
 
       {/* Frequent Visitors Today */}
@@ -345,6 +551,82 @@ const styles = StyleSheet.create({
   refreshButton: {
     padding: 8,
   },
+  todaySection: {
+    margin: 16,
+    padding: 16,
+    backgroundColor: '#1E1E1E',
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#4CAF50',
+  },
+  todayHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  todayTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginLeft: 8,
+    flex: 1,
+  },
+  todayTimestamp: {
+    fontSize: 12,
+    color: '#AAAAAA',
+  },
+  todayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  todayCard: {
+    flex: 1,
+    minWidth: 150,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  todayCardPrimary: {
+    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+    borderColor: '#2196F3',
+    borderWidth: 1,
+  },
+  todayCardSuccess: {
+    backgroundColor: 'rgba(76, 175, 80, 0.15)',
+    borderColor: '#4CAF50',
+    borderWidth: 1,
+  },
+  todayCardInfo: {
+    backgroundColor: 'rgba(156, 39, 176, 0.15)',
+    borderColor: '#9C27B0',
+    borderWidth: 1,
+  },
+  todayCardWarning: {
+    backgroundColor: 'rgba(255, 152, 0, 0.15)',
+    borderColor: '#FF9800',
+    borderWidth: 1,
+  },
+  todayCardValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  todayCardLabel: {
+    fontSize: 14,
+    color: '#AAAAAA',
+    textAlign: 'center',
+  },
+  todayCardBreakdown: {
+    marginTop: 8,
+    gap: 4,
+  },
+  todayCardBreakdownText: {
+    fontSize: 12,
+    color: '#CCCCCC',
+    textAlign: 'center',
+  },
   summaryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -470,6 +752,75 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
+  },
+  lineChartContainer: {
+    padding: 16,
+  },
+  lineChart: {
+    position: 'relative',
+    backgroundColor: '#1E1E1E',
+    borderRadius: 8,
+    padding: 16,
+  },
+  gridLine: {
+    position: 'absolute',
+    left: 0,
+    height: 1,
+    backgroundColor: '#333333',
+  },
+  linePoint: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  sessionPoint: {
+    backgroundColor: '#2196F3',
+  },
+  newUserPoint: {
+    backgroundColor: '#4CAF50',
+  },
+  uniqueUserPoint: {
+    backgroundColor: '#FF9800',
+  },
+  xAxisLabels: {
+    position: 'relative',
+    height: 40,
+    marginTop: 8,
+  },
+  xAxisLabel: {
+    position: 'absolute',
+    fontSize: 10,
+    color: '#AAAAAA',
+    width: 60,
+    textAlign: 'center',
+  },
+  chartSection: {
+    marginBottom: 24,
+    padding: 16,
+  },
+  legendContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 12,
+    paddingHorizontal: 8,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    color: '#AAAAAA',
+    fontSize: 12,
   },
   detailsSection: {
     padding: 16,

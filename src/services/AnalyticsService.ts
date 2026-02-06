@@ -63,25 +63,63 @@ export interface UserVisitData {
   lastVisit: Date;
 }
 
+export interface TodaySummary {
+  totalSessions: number;
+  newAuthenticatedUsers: number;
+  newUnauthenticatedUsers: number;
+  returningAuthenticatedUsers: number;
+  returningUnauthenticatedUsers: number;
+  totalNewUsers: number;
+  totalReturningUsers: number;
+  averageDuration: number;
+  lastUpdated: Date;
+}
+
 class AnalyticsService {
   private sessionsCollection = collection(db, 'analytics_sessions');
 
   /**
-   * Check if a visitor is new (first time visiting) in a given period
+   * Check if a visitor is new (first time visiting EVER)
    */
-  private async isNewVisitor(uniqueVisitorId: string, userId: string | null, beforeDate: Date): Promise<boolean> {
+  private async isFirstTimeVisitor(uniqueVisitorId: string): Promise<boolean> {
     try {
       const q = query(
         this.sessionsCollection,
         where('uniqueVisitorId', '==', uniqueVisitorId),
-        where('startTime', '<', Timestamp.fromDate(beforeDate)),
         orderBy('startTime', 'asc')
       );
 
       const snapshot = await getDocs(q);
-      return snapshot.empty; // New if no sessions before this period
+      // New if this is their first or only session
+      return snapshot.size <= 1;
     } catch (error) {
-      console.error('Analytics: Error checking new visitor', error);
+      console.error('Analytics: Error checking first time visitor', error);
+      return false;
+    }
+  }
+
+  /**
+   * Check if visitor's first session was within a date range
+   */
+  private async isNewInPeriod(uniqueVisitorId: string, startDate: Date, endDate: Date): Promise<boolean> {
+    try {
+      const q = query(
+        this.sessionsCollection,
+        where('uniqueVisitorId', '==', uniqueVisitorId),
+        orderBy('startTime', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return false;
+      
+      // Get first session ever
+      const firstSession = snapshot.docs[0].data();
+      const firstVisit = firstSession.startTime.toDate();
+      
+      // Check if first visit was in this period
+      return firstVisit >= startDate && firstVisit < endDate;
+    } catch (error) {
+      console.error('Analytics: Error checking new in period', error);
       return false;
     }
   }
@@ -236,16 +274,25 @@ class AnalyticsService {
         totalVisits += data.visitNumber || 1;
       });
 
-      // Check which users are new (first time visitors in this period)
+      // Track new vs returning users
+      const processedVisitors = new Set<string>();
+      
       for (const doc of snapshot.docs) {
         const data = doc.data();
-        const isNew = await this.isNewVisitor(data.uniqueVisitorId, data.userId, thirtyDaysAgo);
+        const visitorId = data.uniqueVisitorId;
         
-        if (isNew) {
-          if (data.isAuthenticated && data.userId) {
-            newAuthUsers.add(data.userId);
-          } else if (data.uniqueVisitorId) {
-            newUnauthUsers.add(data.uniqueVisitorId);
+        // Only check once per unique visitor
+        if (!processedVisitors.has(visitorId)) {
+          processedVisitors.add(visitorId);
+          const now = new Date();
+          const isNew = await this.isNewInPeriod(visitorId, thirtyDaysAgo, now);
+          
+          if (isNew) {
+            if (data.isAuthenticated && data.userId) {
+              newAuthUsers.add(data.userId);
+            } else if (data.uniqueVisitorId) {
+              newUnauthUsers.add(data.uniqueVisitorId);
+            }
           }
         }
       }
@@ -367,15 +414,43 @@ class AnalyticsService {
       // Check for new users in each period
       for (const [dateKey, stats] of Object.entries(dataByDate)) {
         const periodStart = new Date(dateKey);
+        let periodEnd: Date;
+        
+        // Calculate period end based on type
+        switch (period) {
+          case 'daily':
+            periodEnd = new Date(periodStart);
+            periodEnd.setDate(periodEnd.getDate() + 1);
+            break;
+          case 'weekly':
+            periodEnd = new Date(periodStart);
+            periodEnd.setDate(periodEnd.getDate() + 7);
+            break;
+          case 'yearly':
+            periodEnd = new Date(periodStart);
+            periodEnd.setMonth(periodEnd.getMonth() + 1);
+            break;
+          default:
+            periodEnd = new Date(periodStart);
+            periodEnd.setDate(periodEnd.getDate() + 1);
+        }
+        
+        const processedVisitors = new Set<string>();
         
         for (const session of stats.sessions) {
-          const isNew = await this.isNewVisitor(session.uniqueVisitorId, session.userId, periodStart);
+          const visitorId = session.uniqueVisitorId;
           
-          if (isNew) {
-            if (session.isAuthenticated && session.userId) {
-              stats.newAuthUsers.add(session.userId);
-            } else if (session.uniqueVisitorId) {
-              stats.newUnauthUsers.add(session.uniqueVisitorId);
+          // Only check once per unique visitor
+          if (!processedVisitors.has(visitorId)) {
+            processedVisitors.add(visitorId);
+            const isNew = await this.isNewInPeriod(visitorId, periodStart, periodEnd);
+            
+            if (isNew) {
+              if (session.isAuthenticated && session.userId) {
+                stats.newAuthUsers.add(session.userId);
+              } else if (session.uniqueVisitorId) {
+                stats.newUnauthUsers.add(session.uniqueVisitorId);
+              }
             }
           }
         }
@@ -399,6 +474,85 @@ class AnalyticsService {
         .sort((a, b) => a.date.localeCompare(b.date));
     } catch (error) {
       console.error('Analytics: Error getting trend data', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get today's summary with new and returning users breakdown
+   */
+  async getTodaySummary(): Promise<TodaySummary> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const q = query(
+        this.sessionsCollection,
+        where('startTime', '>=', Timestamp.fromDate(today)),
+        where('startTime', '<', Timestamp.fromDate(tomorrow)),
+        orderBy('startTime', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      
+      const newAuthUsers = new Set<string>();
+      const newUnauthUsers = new Set<string>();
+      const returningAuthUsers = new Set<string>();
+      const returningUnauthUsers = new Set<string>();
+      const processedVisitors = new Set<string>();
+      
+      let totalDuration = 0;
+      let sessionsWithDuration = 0;
+
+      // Process each session
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        const visitorId = data.uniqueVisitorId;
+        
+        // Track duration
+        if (data.duration) {
+          totalDuration += data.duration;
+          sessionsWithDuration++;
+        }
+        
+        // Check if new or returning (only once per visitor)
+        if (!processedVisitors.has(visitorId)) {
+          processedVisitors.add(visitorId);
+          const isNew = await this.isNewInPeriod(visitorId, today, tomorrow);
+          
+          if (isNew) {
+            // New user today
+            if (data.isAuthenticated && data.userId) {
+              newAuthUsers.add(data.userId);
+            } else if (data.uniqueVisitorId) {
+              newUnauthUsers.add(data.uniqueVisitorId);
+            }
+          } else {
+            // Returning user
+            if (data.isAuthenticated && data.userId) {
+              returningAuthUsers.add(data.userId);
+            } else if (data.uniqueVisitorId) {
+              returningUnauthUsers.add(data.uniqueVisitorId);
+            }
+          }
+        }
+      }
+
+      return {
+        totalSessions: snapshot.size,
+        newAuthenticatedUsers: newAuthUsers.size,
+        newUnauthenticatedUsers: newUnauthUsers.size,
+        returningAuthenticatedUsers: returningAuthUsers.size,
+        returningUnauthenticatedUsers: returningUnauthUsers.size,
+        totalNewUsers: newAuthUsers.size + newUnauthUsers.size,
+        totalReturningUsers: returningAuthUsers.size + returningUnauthUsers.size,
+        averageDuration: sessionsWithDuration > 0 ? totalDuration / sessionsWithDuration : 0,
+        lastUpdated: new Date(),
+      };
+    } catch (error) {
+      console.error('Analytics: Error getting today summary', error);
       throw error;
     }
   }
