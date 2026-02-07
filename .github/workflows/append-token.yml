@@ -28,7 +28,8 @@ jobs:
             # Pull latest changes first
             git pull origin main
             
-            # Append the token
+            # Append the token and capture exit code
+            set +e  # Don't exit on error
             node -e "
             const fs = require('fs');
             const path = 'tokens.json';
@@ -45,46 +46,55 @@ jobs:
               process.exit(0);
             } else {
               console.log('Token already exists, skipping.');
-              process.exit(1);
+              process.exit(100);
             }
             "
+            NODE_EXIT_CODE=$?
+            set -e  # Re-enable exit on error
             
-            # Check if token was appended (exit code 0) or already exists (exit code 1)
-            if [ $? -eq 1 ]; then
-              echo "Token already exists. No changes needed."
+            # Check if token was appended (exit code 0) or already exists (exit code 100)
+            if [ $NODE_EXIT_CODE -eq 100 ]; then
+              echo "✅ Token already exists. No changes needed."
               SUCCESS=true
               break
             fi
             
-            # Commit the changes
-            git add tokens.json
-            git commit -m "Append new FCM token"
-            
-            # Try to push
-            if git push origin main; then
-              echo "Push successful!"
-              SUCCESS=true
-              break
-            else
-              echo "Push failed. Retrying..."
-              RETRY_COUNT=$((RETRY_COUNT + 1))
+            # If token was added, commit and push
+            if [ $NODE_EXIT_CODE -eq 0 ]; then
+              git add tokens.json
+              git commit -m "Append new FCM token"
               
-              if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
-                # Reset to match remote before retry
-                git reset --hard origin/main
+              # Try to push
+              if git push origin main; then
+                echo "✅ Push successful!"
+                SUCCESS=true
+                break
+              else
+                echo "❌ Push failed. Retrying..."
+                RETRY_COUNT=$((RETRY_COUNT + 1))
                 
-                # Wait with exponential backoff
-                WAIT_TIME=$((RETRY_COUNT * 2))
-                echo "Waiting ${WAIT_TIME} seconds before retry..."
-                sleep $WAIT_TIME
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  # Reset to match remote before retry
+                  git reset --hard origin/main
+                  
+                  # Wait with exponential backoff
+                  WAIT_TIME=$((RETRY_COUNT * 2))
+                  echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
+                  sleep $WAIT_TIME
+                fi
               fi
+            else
+              echo "❌ Unexpected error from node script (exit code: $NODE_EXIT_CODE)"
+              exit 1
             fi
           done
           
           if [ "$SUCCESS" = false ]; then
-            echo "Failed to append and push token after $MAX_RETRIES attempts"
+            echo "❌ Failed to append and push token after $MAX_RETRIES attempts"
             exit 1
           fi
+          
+          echo "✅ Workflow completed successfully"
         env:
           CLIENT_PAYLOAD: ${{ toJson(github.event.client_payload) }}
           GITHUB_TOKEN: ${{ github.token }}

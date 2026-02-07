@@ -612,43 +612,49 @@ class FirebaseService {
   async getEvents(): Promise<Event[]> {
     try {
       console.log("FirebaseService: Getting events")
+      
+      // Clean up old events using existing function
+      await this.deletePastEvents()
+      
       const eventsRef = collection(db, "YoVibe/data/events")
       const querySnapshot = await getDocs(eventsRef)
       const events: Event[] = []
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        if (!data.isDeleted) {
-          if (!data.date || typeof data.date.toDate !== "function") {
-            console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
-            return
-          }
-
-          const eventDate = data.date.toDate()
-          if (eventDate >= new Date()) {
-            events.push({
-              id: doc.id,
-              name: data.name,
-              venueId: data.venueId,
-              venueName: data.venueName,
-              description: data.description,
-              date: eventDate,
-              time: data.time || "Time TBD",
-              posterImageUrl: data.posterImageUrl,
-              artists: data.artists,
-              isFeatured: data.isFeatured,
-              location: data.location,
-              priceIndicator: data.priceIndicator || 1,
-              entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toDateString() }] : []),
-              ticketContacts: data.ticketContacts || [],
-              attendees: data.attendees || [],
-              createdAt: data.createdAt?.toDate?.() || new Date(),
-              createdBy: data.createdBy,
-              createdByType: data.createdByType,
-              isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
-            })
-          }
+        
+        // Skip deleted events
+        if (data.isDeleted === true) {
+          return
         }
+        
+        if (!data.date || typeof data.date.toDate !== "function") {
+          console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
+          return
+        }
+
+        const eventDate = data.date.toDate()
+        events.push({
+          id: doc.id,
+          name: data.name,
+          venueId: data.venueId,
+          venueName: data.venueName,
+          description: data.description,
+          date: eventDate,
+          time: data.time || "Time TBD",
+          posterImageUrl: data.posterImageUrl,
+          artists: data.artists,
+          isFeatured: data.isFeatured,
+          location: data.location,
+          priceIndicator: data.priceIndicator || 1,
+          entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toDateString() }] : []),
+          ticketContacts: data.ticketContacts || [],
+          attendees: data.attendees || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          createdBy: data.createdBy,
+          createdByType: data.createdByType,
+          isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
+        })
       })
 
       console.log("FirebaseService: Found", events.length, "events")
@@ -662,10 +668,16 @@ class FirebaseService {
   async getEventsPaginated(pageSize: number = 5, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
       console.log("FirebaseService: Getting paginated events, pageSize:", pageSize)
+      
+      // Clean up old events using existing function
+      await this.deletePastEvents()
+      
       const eventsRef = collection(db, "YoVibe/data/events")
       
       let q = query(
         eventsRef,
+        where("isDeleted", "!=", true),
+        orderBy("isDeleted", "asc"),
         orderBy("date", "asc"),
         limit(pageSize)
       )
@@ -673,6 +685,8 @@ class FirebaseService {
       if (lastDoc) {
         q = query(
           eventsRef,
+          where("isDeleted", "!=", true),
+          orderBy("isDeleted", "asc"),
           orderBy("date", "asc"),
           startAfter(lastDoc),
           limit(pageSize)
@@ -685,11 +699,6 @@ class FirebaseService {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        
-        // Skip if explicitly deleted
-        if (data.isDeleted === true) {
-          return
-        }
         
         if (!data.date || typeof data.date.toDate !== "function") {
           console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
@@ -738,40 +747,42 @@ class FirebaseService {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        if (!data.isDeleted) {
-          if (!data.date || typeof data.date.toDate !== "function") {
-            console.warn(`FirebaseService: Skipping featured event ${doc.id} with invalid date field`, data.date)
-            return
-          }
-
-          const eventDate = data.date.toDate()
-          if (eventDate >= new Date()) {
-            events.push({
-              id: doc.id,
-              name: data.name,
-              venueId: data.venueId,
-              venueName: data.venueName,
-              description: data.description,
-              date: eventDate,
-              time: data.time || "Time TBD",
-              posterImageUrl: data.posterImageUrl,
-              artists: data.artists,
-              isFeatured: data.isFeatured,
-              location: data.location,
-              priceIndicator: data.priceIndicator || 1,
-              entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toString() }] : []),
-              ticketContacts: data.ticketContacts || [],
-              attendees: data.attendees || [],
-              createdAt: data.createdAt?.toDate?.() || new Date(),
-              createdBy: data.createdBy,
-              createdByType: data.createdByType,
-              isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
-            })
-          }
+        
+        // Skip deleted events
+        if (data.isDeleted === true) {
+          return
         }
+        
+        if (!data.date || typeof data.date.toDate !== "function") {
+          console.warn(`FirebaseService: Skipping featured event ${doc.id} with invalid date field`, data.date)
+          return
+        }
+
+        const eventDate = data.date.toDate()
+        events.push({
+          id: doc.id,
+          name: data.name,
+          venueId: data.venueId,
+          venueName: data.venueName,
+          description: data.description,
+          date: eventDate,
+          time: data.time || "Time TBD",
+          posterImageUrl: data.posterImageUrl,
+          artists: data.artists,
+          isFeatured: data.isFeatured,
+          location: data.location,
+          priceIndicator: data.priceIndicator || 1,
+          entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toString() }] : []),
+          ticketContacts: data.ticketContacts || [],
+          attendees: data.attendees || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          createdBy: data.createdBy,
+          createdByType: data.createdByType,
+          isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
+        })
       })
 
-      return events
+      return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
       console.error("Error getting featured events:", error)
       return []
@@ -787,40 +798,42 @@ class FirebaseService {
 
       querySnapshot.forEach((doc) => {
         const data = doc.data()
-        if (!data.isDeleted) {
-          if (!data.date || typeof data.date.toDate !== "function") {
-            console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
-            return
-          }
-
-          const eventDate = data.date.toDate()
-          if (eventDate >= new Date()) {
-            events.push({
-              id: doc.id,
-              name: data.name,
-              venueId: data.venueId,
-              venueName: data.venueName,
-              description: data.description,
-              date: eventDate,
-              time: data.time || "Time TBD",
-              posterImageUrl: data.posterImageUrl,
-              artists: data.artists,
-              isFeatured: data.isFeatured,
-              location: data.location,
-              priceIndicator: data.priceIndicator || 1,
-              entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toString() }] : []),
-              ticketContacts: data.ticketContacts || [],
-              attendees: data.attendees || [],
-              createdAt: data.createdAt?.toDate?.() || new Date(),
-              createdBy: data.createdBy,
-              createdByType: data.createdByType,
-              isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
-            })
-          }
+        
+        // Skip deleted events
+        if (data.isDeleted === true) {
+          return
         }
+        
+        if (!data.date || typeof data.date.toDate !== "function") {
+          console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
+          return
+        }
+
+        const eventDate = data.date.toDate()
+        events.push({
+          id: doc.id,
+          name: data.name,
+          venueId: data.venueId,
+          venueName: data.venueName,
+          description: data.description,
+          date: eventDate,
+          time: data.time || "Time TBD",
+          posterImageUrl: data.posterImageUrl,
+          artists: data.artists,
+          isFeatured: data.isFeatured,
+          location: data.location,
+          priceIndicator: data.priceIndicator || 1,
+          entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toString() }] : []),
+          ticketContacts: data.ticketContacts || [],
+          attendees: data.attendees || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          createdBy: data.createdBy,
+          createdByType: data.createdByType,
+          isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
+        })
       })
 
-      return events
+      return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
       console.error("Error getting events by venue:", error)
       return []
@@ -963,37 +976,85 @@ class FirebaseService {
 
   async deletePastEvents(): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting past events")
+      console.log("========================================")
+      console.log("🗑️  DELETE PAST EVENTS - STARTING")
+      console.log("========================================")
+      
       const eventsRef = collection(db, "YoVibe/data/events")
       const querySnapshot = await getDocs(eventsRef)
       const now = new Date()
+      
+      console.log(`📅 Current Date/Time: ${now.toLocaleString()}`)
+      console.log(`📊 Total Events in Database: ${querySnapshot.size}`)
+      console.log("----------------------------------------")
 
       const deletePromises: Promise<void>[] = []
+      let deletedCount = 0
+      let skippedCount = 0
+      let alreadyDeletedCount = 0
+      let invalidDateCount = 0
+
       querySnapshot.forEach((doc) => {
         const data = doc.data()
+        const eventId = doc.id
+        const eventName = data.name || "Unnamed Event"
+        
+        console.log(`\n📌 Event: "${eventName}" (ID: ${eventId})`)
+        
         if (data.date && typeof data.date.toDate === "function") {
           const eventDate: Date = data.date.toDate()
+          console.log(`   📅 Event Date: ${eventDate.toLocaleString()}`)
 
-          // Compute the "expiry" date = eventDate + 1 day
+          // Compute the "expiry" date = next day at 5:00 AM
           const expiryDate = new Date(eventDate)
           expiryDate.setDate(expiryDate.getDate() + 1)
+          expiryDate.setHours(5, 0, 0, 0) // Set to 5:00 AM
+          console.log(`   ⏰ Expiry Date (Next day at 5:00 AM): ${expiryDate.toLocaleString()}`)
+          console.log(`   🔍 isDeleted flag: ${data.isDeleted}`)
 
+          // Check if already deleted
+          if (data.isDeleted) {
+            console.log(`   ⏭️  SKIPPED: Already marked as deleted`)
+            alreadyDeletedCount++
+          }
           // Only delete if we are past the expiry date
-          if (expiryDate <= now && !data.isDeleted) {
+          else if (expiryDate <= now) {
+            console.log(`   ✅ WILL DELETE: Expiry date (${expiryDate.toLocaleString()}) <= Now (${now.toLocaleString()})`)
+            deletedCount++
             deletePromises.push(
               updateDoc(doc.ref, {
                 isDeleted: true,
                 deletedAt: Timestamp.now(),
               })
             )
+          } else {
+            const timeUntilExpiry = expiryDate.getTime() - now.getTime()
+            const hoursUntilExpiry = Math.floor(timeUntilExpiry / (1000 * 60 * 60))
+            const minutesUntilExpiry = Math.floor((timeUntilExpiry % (1000 * 60 * 60)) / (1000 * 60))
+            console.log(`   ⏭️  SKIPPED: Event not expired yet (Expires in ${hoursUntilExpiry}h ${minutesUntilExpiry}m)`)
+            skippedCount++
           }
+        } else {
+          console.log(`   ❌ INVALID: No valid date field`)
+          invalidDateCount++
         }
       })
 
+      console.log("\n----------------------------------------")
+      console.log("⏳ Executing deletion updates...")
       await Promise.all(deletePromises)
-      console.log("FirebaseService: Past events marked as deleted")
+      
+      console.log("\n========================================")
+      console.log("📊 DELETE PAST EVENTS - SUMMARY")
+      console.log("========================================")
+      console.log(`✅ Events Marked as Deleted: ${deletedCount}`)
+      console.log(`⏭️  Events Skipped (Not Expired): ${skippedCount}`)
+      console.log(`🔄 Events Already Deleted: ${alreadyDeletedCount}`)
+      console.log(`❌ Events with Invalid Dates: ${invalidDateCount}`)
+      console.log(`📊 Total Events Processed: ${querySnapshot.size}`)
+      console.log("========================================\n")
     } catch (error) {
-      console.error("Error deleting past events:", error)
+      console.error("❌ Error deleting past events:", error)
     }
   }
 

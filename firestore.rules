@@ -1,0 +1,143 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/YoVibe/data/users/$(request.auth.uid)).data.userType == 'admin';
+    }
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // YoVibe data collection
+    match /YoVibe/data/{document=**} {
+      // Default: deny all
+      allow read, write: if false;
+    }
+    
+    // Users collection
+    match /YoVibe/data/users/{userId} {
+      // Anyone can read user profiles
+      allow read: if true;
+      
+      // Users can create their own profile
+      allow create: if request.auth != null && request.auth.uid == userId;
+      
+      // Users can update their own profile
+      allow update: if request.auth != null && request.auth.uid == userId;
+      
+      // Only admins can delete users
+      allow delete: if isAdmin();
+    }
+    
+    // Venues collection
+    match /YoVibe/data/venues/{venueId} {
+      // Anyone can read venues
+      allow read: if true;
+      
+      // Authenticated users can create venues
+      allow create: if isAuthenticated();
+      
+      // Venue owners and admins can update venues
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == resource.data.ownerId || isAdmin());
+      
+      // Admins can delete venues
+      allow delete: if isAdmin();
+    }
+    
+    // Events collection
+    match /YoVibe/data/events/{eventId} {
+      // Anyone can read events (including deleted ones for cleanup)
+      allow read: if true;
+      
+      // Authenticated users can create events
+      allow create: if isAuthenticated();
+      
+      // Anyone can update events to mark them as deleted (for automatic cleanup)
+      // Authenticated users can update their own events
+      allow update: if true;
+      
+      // Only admins can permanently delete events
+      allow delete: if isAdmin();
+    }
+    
+    // Vibe Ratings collection
+    match /YoVibe/data/vibeRatings/{ratingId} {
+      // Anyone can read vibe ratings
+      allow read: if true;
+      
+      // Authenticated users can create vibe ratings
+      allow create: if isAuthenticated();
+      
+      // Users can update their own ratings
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+      
+      // Users can delete their own ratings
+      allow delete: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+    }
+    
+    // Vibe Images collection
+    match /YoVibe/data/vibeImages/{imageId} {
+      // Anyone can read vibe images
+      allow read: if true;
+      
+      // Authenticated users can create vibe images
+      allow create: if isAuthenticated();
+      
+      // Users can update their own images
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.uploadedBy;
+      
+      // Users can delete their own images, admins can delete any
+      allow delete: if isAuthenticated() && 
+        (request.auth.uid == resource.data.uploadedBy || isAdmin());
+    }
+    
+    // Analytics sessions collection
+    match /analytics_sessions/{sessionId} {
+      // Anyone can create a session (for tracking)
+      allow create: if true;
+      
+      // Only the session owner (or system) can update their session
+      allow update: if request.auth.uid == resource.data.userId || resource.data.userId == null;
+      
+      // Only admins can read analytics data
+      allow read: if isAdmin();
+      
+      // Prevent deletion
+      allow delete: if false;
+    }
+    
+    // Tickets collection
+    match /YoVibe/data/tickets/{ticketId} {
+      // Users can read their own tickets
+      allow read: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+      
+      // Admins can read all tickets
+      allow read: if isAdmin();
+      
+      // Authenticated users can create tickets
+      allow create: if isAuthenticated();
+      
+      // Users can update their own tickets
+      allow update: if isAuthenticated() && 
+        request.auth.uid == resource.data.userId;
+      
+      // Admins can delete tickets
+      allow delete: if isAdmin();
+    }
+    
+    // Default deny for any other paths
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
