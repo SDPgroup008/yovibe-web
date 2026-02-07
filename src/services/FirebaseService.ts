@@ -663,11 +663,9 @@ class FirebaseService {
     try {
       console.log("FirebaseService: Getting paginated events, pageSize:", pageSize)
       const eventsRef = collection(db, "YoVibe/data/events")
-      const today = new Date()
       
       let q = query(
         eventsRef,
-        where("isDeleted", "==", false),
         orderBy("date", "asc"),
         limit(pageSize)
       )
@@ -675,7 +673,6 @@ class FirebaseService {
       if (lastDoc) {
         q = query(
           eventsRef,
-          where("isDeleted", "==", false),
           orderBy("date", "asc"),
           startAfter(lastDoc),
           limit(pageSize)
@@ -688,35 +685,40 @@ class FirebaseService {
       
       querySnapshot.forEach((doc) => {
         const data = doc.data()
+        
+        // Skip if explicitly deleted
+        if (data.isDeleted === true) {
+          return
+        }
+        
         if (!data.date || typeof data.date.toDate !== "function") {
           console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
           return
         }
 
         const eventDate = data.date.toDate()
-        if (eventDate >= today) {
-          events.push({
-            id: doc.id,
-            name: data.name,
-            venueId: data.venueId,
-            venueName: data.venueName,
-            description: data.description,
-            date: eventDate,
-            time: data.time || "Time TBD",
-            posterImageUrl: data.posterImageUrl,
-            artists: data.artists,
-            isFeatured: data.isFeatured,
-            location: data.location,
-            priceIndicator: data.priceIndicator || 1,
-            entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toDateString() }] : []),
-            ticketContacts: data.ticketContacts || [],
-            attendees: data.attendees || [],
-            createdAt: data.createdAt?.toDate?.() || new Date(),
-            createdBy: data.createdBy,
-            createdByType: data.createdByType,
-            isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
-          })
-        }
+        
+        events.push({
+          id: doc.id,
+          name: data.name,
+          venueId: data.venueId,
+          venueName: data.venueName,
+          description: data.description,
+          date: eventDate,
+          time: data.time || "Time TBD",
+          posterImageUrl: data.posterImageUrl,
+          artists: data.artists,
+          isFeatured: data.isFeatured,
+          location: data.location,
+          priceIndicator: data.priceIndicator || 1,
+          entryFees: data.entryFees || (data.entryFee ? [{ name: "General", amount: data.entryFee.toDateString() }] : []),
+          ticketContacts: data.ticketContacts || [],
+          attendees: data.attendees || [],
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          createdBy: data.createdBy,
+          createdByType: data.createdByType,
+          isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
+        })
       })
       
       console.log("FirebaseService: Found", events.length, "paginated events")

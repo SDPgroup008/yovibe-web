@@ -296,8 +296,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#4CAF50",
-    padding: 16,
+    backgroundColor: "#2196F3",
+    padding: 12,
     elevation: 10,
     zIndex: 9999,
     shadowColor: "#000",
@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     shadowRadius: 3.84,
   },
   permissionContent: {
-    marginBottom: 12,
+    marginBottom: 10,
   },
   permissionTitle: {
     color: "#fff",
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   allowButtonText: {
-    color: "#4CAF50",
+    color: "#2196F3",
     fontWeight: "bold",
     fontSize: 14,
   },
