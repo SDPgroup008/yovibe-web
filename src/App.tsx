@@ -18,6 +18,7 @@ import { navigationRef } from "./utils/navigationRef";
 // 🔔 Import Firebase helpers for notifications
 import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
+import NotificationService from "./services/NotificationService";
 
 const Stack = createStackNavigator();
 
@@ -74,7 +75,7 @@ function NotificationBanner({ title, body, onClose }) {
 
     const timer = setTimeout(() => {
       handleClose();
-    }, 3000);
+    }, 15000);
 
     return () => clearTimeout(timer);
   }, []);
@@ -203,8 +204,12 @@ function AppContent() {
 
   // 🔔 Listen for foreground notifications
   useEffect(() => {
-    const unsubscribe = onMessage(messaging, (payload) => {
+    const unsubscribe = onMessage(messaging, async (payload) => {
       console.log("Foreground notification:", payload);
+      
+      // Save notification to Firestore
+      await NotificationService.processIncomingNotification(payload, user?.uid);
+      
       setBanner({
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
@@ -212,7 +217,7 @@ function AppContent() {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user]);
 
   // 🔔 Handle permission banner actions
   const handleAllowNotifications = async () => {

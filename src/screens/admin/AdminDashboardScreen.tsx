@@ -7,11 +7,14 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   Dimensions,
+  RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
+import NotificationService from '../../services/NotificationService';
+import type { NotificationAnalytics } from '../../models/Notification';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
@@ -21,36 +24,54 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
+  const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationAnalytics[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
   useEffect(() => {
     loadAnalytics();
   }, [selectedPeriod]);
 
-  const loadAnalytics = async () => {
-    setLoading(true);
-    try {
-      // Get today's summary
-      const todayData = await AnalyticsService.getTodaySummary();
-      setTodaySummary(todayData);
-      
-      // Get summary for last 30 days
-      const summaryData = await AnalyticsService.getAnalyticsSummary();
-      setSummary(summaryData);
+  const loadAnalytics = async (force: boolean = false) => {
+    // Check cache - if data was fetched recently, skip (unless forced)
+    const now = Date.now();
+    if (!force && now - lastFetchTime < CACHE_DURATION && summary !== null) {
+      console.log('Using cached analytics data');
+      return;
+    }
 
-      // Get trend data
+    setLoading(true);
+    setRefreshing(true);
+    try {
+      // Parallelize all data fetching for faster loading
       const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
-      const trends = await AnalyticsService.getTrendData(selectedPeriod, limit);
-      setTrendData(trends);
       
-      // Get frequent visitors today
-      const visitors = await AnalyticsService.getFrequentVisitorsToday();
+      const [todayData, summaryData, trends, visitors, notifAnalytics] = await Promise.all([
+        AnalyticsService.getTodaySummary(),
+        AnalyticsService.getAnalyticsSummary(),
+        AnalyticsService.getTrendData(selectedPeriod, limit),
+        AnalyticsService.getFrequentVisitorsToday(),
+        NotificationService.getAllNotificationAnalytics(),
+      ]);
+
+      setTodaySummary(todayData);
+      setSummary(summaryData);
+      setTrendData(trends);
       setFrequentVisitors(visitors);
+      setNotificationAnalytics(notifAnalytics);
+      setLastFetchTime(now);
     } catch (error) {
       console.error('Error loading analytics:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    await loadAnalytics(true); // Force refresh
   };
 
   const formatDuration = (seconds: number): string => {
@@ -159,7 +180,85 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
               />
             ))}
 
-            {/* Data points and lines */}
+            {/* Session line - connecting lines between points */}
+            {sessionPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = sessionPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`session-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.sessionLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* New User line */}
+            {newUserPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = newUserPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`new-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.newUserLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* Unique User line */}
+            {uniqueUserPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = uniqueUserPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`unique-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.uniqueUserLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* Data points */}
             {sessionPoints.map((point, index) => (
               <View key={`session-${index}`}>
                 <View
@@ -224,16 +323,37 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          colors={['#2196F3']}
+          tintColor="#2196F3"
+        />
+      }
+    >
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Analytics Dashboard</Text>
-        <TouchableOpacity onPress={loadAnalytics} style={styles.refreshButton}>
+        <TouchableOpacity onPress={() => loadAnalytics(true)} style={styles.refreshButton}>
           <Ionicons name="refresh" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
+
+      {/* Cache indicator */}
+      {lastFetchTime > 0 && (
+        <View style={styles.cacheIndicator}>
+          <Ionicons name="time-outline" size={14} color="#AAAAAA" />
+          <Text style={styles.cacheText}>
+            Last updated: {new Date(lastFetchTime).toLocaleTimeString()} • 
+            {Math.floor((Date.now() - lastFetchTime) / 1000 / 60)}m ago
+          </Text>
+        </View>
+      )}
 
       {/* TODAY'S SUMMARY - Refreshes Daily */}
       <View style={styles.todaySection}>
@@ -461,6 +581,97 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         )}
       </View>
 
+      {/* Notification Analytics */}
+      <View style={styles.notificationSection}>
+        <View style={styles.sectionHeader}>
+          <Ionicons name="notifications" size={24} color="#FF6B6B" />
+          <Text style={styles.sectionTitle}>Notification Analytics</Text>
+        </View>
+        {notificationAnalytics.length === 0 ? (
+          <Text style={styles.noDataText}>No notification data available</Text>
+        ) : (
+          <>
+            <View style={styles.notificationSummary}>
+              <View style={styles.notificationSummaryCard}>
+                <Text style={styles.notificationSummaryValue}>
+                  {notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0)}
+                </Text>
+                <Text style={styles.notificationSummaryLabel}>Total Sent</Text>
+              </View>
+              <View style={styles.notificationSummaryCard}>
+                <Text style={styles.notificationSummaryValue}>
+                  {notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0)}
+                </Text>
+                <Text style={styles.notificationSummaryLabel}>Total Opened</Text>
+              </View>
+              <View style={styles.notificationSummaryCard}>
+                <Text style={styles.notificationSummaryValue}>
+                  {(
+                    (notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0) /
+                      Math.max(notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0), 1)) *
+                    100
+                  ).toFixed(1)}%
+                </Text>
+                <Text style={styles.notificationSummaryLabel}>Avg Open Rate</Text>
+              </View>
+            </View>
+            
+            {notificationAnalytics.slice(0, 10).map((notification, index) => (
+              <View key={notification.notificationId} style={styles.notificationCard}>
+                <View style={styles.notificationHeader}>
+                  <Text style={styles.notificationId} numberOfLines={1}>
+                    ID: {notification.notificationId}
+                  </Text>
+                  <Text style={styles.notificationDate}>
+                    {notification.createdAt.toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={styles.notificationStats}>
+                  <View style={styles.notificationStat}>
+                    <Text style={styles.notificationStatValue}>{notification.totalSent}</Text>
+                    <Text style={styles.notificationStatLabel}>Sent</Text>
+                  </View>
+                  <View style={styles.notificationStat}>
+                    <Text style={styles.notificationStatValue}>{notification.totalOpened}</Text>
+                    <Text style={styles.notificationStatLabel}>Opened</Text>
+                  </View>
+                  <View style={styles.notificationStat}>
+                    <Text style={styles.notificationStatValue}>{notification.totalRead}</Text>
+                    <Text style={styles.notificationStatLabel}>Read</Text>
+                  </View>
+                </View>
+                <View style={styles.notificationRates}>
+                  <View style={styles.rateBar}>
+                    <Text style={styles.rateLabel}>Open Rate</Text>
+                    <View style={styles.rateBarContainer}>
+                      <View
+                        style={[
+                          styles.rateBarFill,
+                          { width: `${notification.openRate}%`, backgroundColor: '#4CAF50' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.rateValue}>{notification.openRate.toFixed(1)}%</Text>
+                  </View>
+                  <View style={styles.rateBar}>
+                    <Text style={styles.rateLabel}>Read Rate</Text>
+                    <View style={styles.rateBarContainer}>
+                      <View
+                        style={[
+                          styles.rateBarFill,
+                          { width: `${notification.readRate}%`, backgroundColor: '#2196F3' },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.rateValue}>{notification.readRate.toFixed(1)}%</Text>
+                  </View>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+      </View>
+
       {/* Chart */}
       <View style={styles.chartSection}>
         <Text style={styles.chartTitle}>Visitor Trends</Text>
@@ -550,6 +761,21 @@ const styles = StyleSheet.create({
   },
   refreshButton: {
     padding: 8,
+  },
+  cacheIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    backgroundColor: '#1A1A1A',
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A2A2A',
+    gap: 6,
+  },
+  cacheText: {
+    color: '#AAAAAA',
+    fontSize: 12,
   },
   todaySection: {
     margin: 16,
@@ -785,6 +1011,20 @@ const styles = StyleSheet.create({
   uniqueUserPoint: {
     backgroundColor: '#FF9800',
   },
+  connectingLine: {
+    position: 'absolute',
+    height: 2,
+    transformOrigin: '0% 50%',
+  },
+  sessionLine: {
+    backgroundColor: '#2196F3',
+  },
+  newUserLine: {
+    backgroundColor: '#4CAF50',
+  },
+  uniqueUserLine: {
+    backgroundColor: '#9C27B0',
+  },
   xAxisLabels: {
     position: 'relative',
     height: 40,
@@ -912,6 +1152,109 @@ const styles = StyleSheet.create({
     color: '#666666',
     fontSize: 12,
     marginTop: 4,
+  },
+  notificationSection: {
+    padding: 16,
+    backgroundColor: '#1E1E1E',
+    margin: 16,
+    borderRadius: 12,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16,
+  },
+  notificationSummary: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  notificationSummaryCard: {
+    flex: 1,
+    backgroundColor: '#2A2A2A',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  notificationSummaryValue: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FF6B6B',
+  },
+  notificationSummaryLabel: {
+    fontSize: 12,
+    color: '#AAAAAA',
+    marginTop: 4,
+  },
+  notificationCard: {
+    backgroundColor: '#2A2A2A',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  notificationId: {
+    color: '#AAAAAA',
+    fontSize: 12,
+    flex: 1,
+    marginRight: 8,
+  },
+  notificationDate: {
+    color: '#666666',
+    fontSize: 12,
+  },
+  notificationStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 12,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333333',
+  },
+  notificationStat: {
+    alignItems: 'center',
+  },
+  notificationStatValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  notificationStatLabel: {
+    fontSize: 12,
+    color: '#AAAAAA',
+    marginTop: 4,
+  },
+  notificationRates: {
+    gap: 8,
+  },
+  rateBar: {
+    marginBottom: 8,
+  },
+  rateLabel: {
+    fontSize: 12,
+    color: '#AAAAAA',
+    marginBottom: 4,
+  },
+  rateBarContainer: {
+    height: 8,
+    backgroundColor: '#333333',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  rateBarFill: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  rateValue: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    marginTop: 4,
+    textAlign: 'right',
   },
 });
 

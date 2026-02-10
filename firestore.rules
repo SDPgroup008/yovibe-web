@@ -135,6 +135,38 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
     
+    // Notifications collection
+    match /YoVibe/data/notifications/{notificationId} {
+      // Users can read their own notifications and broadcast notifications
+      allow read: if isAuthenticated() && 
+        (request.auth.uid == resource.data.userId || resource.data.userId == null);
+      
+      // Admins can read all notifications
+      allow read: if isAdmin();
+      
+      // System can create notifications (in practice, server-side only)
+      allow create: if true;
+      
+      // Users can update their own notifications (mark as read/opened)
+      allow update: if isAuthenticated() && 
+        (request.auth.uid == resource.data.userId || resource.data.userId == null);
+      
+      // Only admins can delete notifications
+      allow delete: if isAdmin();
+    }
+    
+    // Notification Analytics collection
+    match /YoVibe/data/notification_analytics/{analyticsId} {
+      // Only admins can read notification analytics
+      allow read: if isAdmin();
+      
+      // System can create and update analytics
+      allow create, update: if true;
+      
+      // Prevent deletion
+      allow delete: if false;
+    }
+    
     // Default deny for any other paths
     match /{document=**} {
       allow read, write: if false;

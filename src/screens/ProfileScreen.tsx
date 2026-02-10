@@ -219,7 +219,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   };
 
   const openNotifications = () => {
-    Alert.alert("Notifications", "You have no new notifications");
+    navigation.navigate("Notification");
   };
 
   const openSettings = () => {

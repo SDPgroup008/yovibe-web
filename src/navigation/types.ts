@@ -34,6 +34,7 @@ export type EventsStackParamList = {
   EventDetail: { eventId: string }
   AddEvent: { venueId?: string; venueName?: string }
   VenueDetail: { venueId: string }
+  Notification: undefined
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
 }
 
@@ -64,6 +65,7 @@ export type ProfileStackParamList = {
   AdminVenues: undefined
   AdminEvents: undefined
   AdminDashboard: undefined
+  Notification: undefined
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }

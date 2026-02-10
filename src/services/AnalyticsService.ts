@@ -9,7 +9,8 @@ import {
   DocumentData,
   updateDoc,
   doc,
-  getDoc
+  getDoc,
+  limit
 } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
@@ -571,7 +572,8 @@ class AnalyticsService {
         this.sessionsCollection,
         where('startTime', '>=', Timestamp.fromDate(today)),
         where('startTime', '<', Timestamp.fromDate(tomorrow)),
-        orderBy('startTime', 'desc')
+        orderBy('startTime', 'desc'),
+        limit(500) // Limit to 500 most recent sessions for performance
       );
 
       const snapshot = await getDocs(q);
@@ -596,9 +598,10 @@ class AnalyticsService {
         }
       });
 
-      // Return sorted by visit count (highest first)
+      // Return sorted by visit count (highest first), limited to top 20
       return Array.from(visitorMap.values())
-        .sort((a, b) => b.visitCount - a.visitCount);
+        .sort((a, b) => b.visitCount - a.visitCount)
+        .slice(0, 20);
     } catch (error) {
       console.error('Analytics: Error getting frequent visitors', error);
       throw error;

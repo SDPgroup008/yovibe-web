@@ -112,17 +112,6 @@ async function sendToAllUsers(notification, data = {}) {
 async function main() {
   const args = process.argv.slice(2);
   const mode = args[0] || process.env.MODE || "week";
-  const payloadArg = args[1] ? JSON.parse(args[1]) : null;
-
-  if (mode === "new_event" || mode === "new_venue") {
-    const itemType = mode === "new_event" ? "Event" : "Venue";
-    const title = payloadArg?.title || `${itemType} added`;
-    const body = payloadArg?.body || `${itemType} was added. Tap to view details.`;
-    const data = { type: mode, id: payloadArg?.id || "" };
-
-    await sendToAllUsers({ title, body }, data);
-    process.exit(0);
-  }
 
   // summary mode
   const now = new Date();

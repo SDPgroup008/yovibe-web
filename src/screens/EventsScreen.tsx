@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import FirebaseService from "../services/FirebaseService";
+import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
 import type { EventsScreenProps } from "../navigation/types";
@@ -28,6 +29,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -38,10 +40,20 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   useEffect(() => {
     const unsubscribe = navigation.addListener("focus", () => {
       loadEvents();
+      loadUnreadCount();
     });
 
     return unsubscribe;
   }, [navigation]);
+
+  const loadUnreadCount = async () => {
+    try {
+      const count = await NotificationService.getUnreadCount(user?.uid);
+      setUnreadCount(count);
+    } catch (error) {
+      console.error("Error loading unread count:", error);
+    }
+  };
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -355,9 +367,24 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Upcoming Events</Text>
-        <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
-          <Ionicons name="search" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.notificationButton} 
+            onPress={() => navigation.navigate("Notification" as never)}
+          >
+            <Ionicons name="notifications" size={24} color="#FFFFFF" />
+            {unreadCount > 0 && (
+              <View style={styles.notificationBadge}>
+                <Text style={styles.notificationBadgeText}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.searchButton} onPress={toggleSearch}>
+            <Ionicons name="search" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {showSearch && (
@@ -441,6 +468,37 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.3)",
+  },
+  headerActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  notificationButton: {
+    padding: 12,
+    backgroundColor: "rgba(0, 212, 255, 0.2)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+    position: "relative",
+  },
+  notificationBadge: {
+    position: "absolute",
+    top: 4,
+    right: 4,
+    backgroundColor: "#FF6B6B",
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 6,
+    borderWidth: 2,
+    borderColor: "#0A0A0A",
+  },
+  notificationBadgeText: {
+    color: "#FFFFFF",
+    fontSize: 10,
+    fontWeight: "bold",
   },
   searchContainer: {
     padding: 20,

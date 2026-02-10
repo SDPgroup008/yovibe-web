@@ -24,6 +24,7 @@ import ManageProgramsScreen from "../screens/ManageProgramsScreen"
 import AddVibeScreen from "../screens/AddVibeScreen"
 import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 import TicketContactScreen from "../screens/TicketContactScreen"
+import NotificationScreen from "../screens/NotificationScreen"
 
 // Admin Screens
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
@@ -201,7 +202,8 @@ export const EventsStackNavigator = () => {
       <EventsStack.Screen name="EventsList" component={EventsScreenWrapper} options={{ title: "Events" }} />
       <EventsStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
       <EventsStack.Screen name="AddEvent" component={AddEventScreenProtected} options={{ title: "Add Event" }} />
-      <VenuesStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <EventsStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
+      <EventsStack.Screen name="Notification" component={NotificationScreen} options={{ title: "Notifications" }} />
       <EventsStack.Screen
         name="TicketContactScreen"
         component={TicketContactScreenWrapper}
@@ -288,6 +290,7 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AddVenue" component={AddVenueScreenProtected} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
       <ProfileStack.Screen name="EventDetail" component={EventDetailScreen} options={{ title: "Event Details" }} />
+      <ProfileStack.Screen name="Notification" component={NotificationScreen} options={{ title: "Notifications" }} />
       <ProfileStack.Screen name="AdminDashboard" component={AdminDashboardScreen} options={{ title: "Analytics Dashboard" }} />
       <ProfileStack.Screen name="AdminUsers" component={AdminUsersScreen} options={{ title: "Manage Users" }} />
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
