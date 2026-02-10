@@ -62,6 +62,12 @@ export default function NotificationScreen() {
     )
 
     // Navigate based on notification type or deepLink
+    if (notification.type === "upcoming_summary") {
+      // Navigate to Events screen to show all events
+      navigation.navigate("Events")
+      return
+    }
+    
     if (notification.deepLink) {
       // Parse deepLink and navigate
       if (notification.deepLink.startsWith("/events/")) {
@@ -80,6 +86,8 @@ export default function NotificationScreen() {
     switch (type) {
       case "event_summary":
         return "📅"
+      case "upcoming_summary":
+        return "📊"
       case "ticket_purchase":
         return "🎫"
       case "ticket_validation":
@@ -92,6 +100,21 @@ export default function NotificationScreen() {
         return "👋"
       default:
         return "🔔"
+    }
+  }
+
+  const getIconBackgroundColor = (type: string) => {
+    switch (type) {
+      case "upcoming_summary":
+        return "#E3F2FD"
+      case "event_summary":
+        return "#FFF3E0"
+      case "ticket_purchase":
+        return "#F3E5F5"
+      case "payment_confirmation":
+        return "#E8F5E9"
+      default:
+        return "#FFF3E0"
     }
   }
 
@@ -109,24 +132,45 @@ export default function NotificationScreen() {
     return date.toLocaleDateString()
   }
 
-  const renderNotification = ({ item }: { item: AppNotification }) => (
-    <TouchableOpacity
-      style={[styles.notificationCard, !item.isRead && styles.unreadCard]}
-      onPress={() => handleNotificationPress(item)}
-    >
-      <View style={styles.iconContainer}>
-        <Text style={styles.icon}>{getNotificationIcon(item.type)}</Text>
-      </View>
-      <View style={styles.contentContainer}>
-        <Text style={styles.title}>{item.title}</Text>
-        <Text style={styles.body} numberOfLines={2}>
-          {item.body}
-        </Text>
-        <Text style={styles.timestamp}>{formatTimestamp(item.createdAt)}</Text>
-      </View>
-      {!item.isRead && <View style={styles.unreadDot} />}
-    </TouchableOpacity>
-  )
+  const renderNotification = ({ item }: { item: AppNotification }) => {
+    const isWorkflowSummary = item.type === "upcoming_summary"
+    const eventCount = isWorkflowSummary && item.data?.eventIds 
+      ? JSON.parse(item.data.eventIds).length 
+      : 0
+    const summaryMode = item.data?.summaryMode || "week"
+    
+    return (
+      <TouchableOpacity
+        style={[styles.notificationCard, !item.isRead && styles.unreadCard]}
+        onPress={() => handleNotificationPress(item)}
+      >
+        <View style={[styles.iconContainer, { backgroundColor: getIconBackgroundColor(item.type) }]}>
+          <Text style={styles.icon}>{getNotificationIcon(item.type)}</Text>
+        </View>
+        <View style={styles.contentContainer}>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>{item.title}</Text>
+            {isWorkflowSummary && (
+              <View style={[styles.badge, summaryMode === "today" ? styles.todayBadge : styles.weekBadge]}>
+                <Text style={styles.badgeText}>{summaryMode === "today" ? "TODAY" : "THIS WEEK"}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.body} numberOfLines={isWorkflowSummary ? 3 : 2}>
+            {item.body}
+          </Text>
+          {isWorkflowSummary && eventCount > 0 && (
+            <View style={styles.eventCountContainer}>
+              <Text style={styles.eventCountText}>📅 {eventCount} event{eventCount !== 1 ? "s" : ""}</Text>
+              <Text style={styles.tapToView}>Tap to view all events</Text>
+            </View>
+          )}
+          <Text style={styles.timestamp}>{formatTimestamp(item.createdAt)}</Text>
+        </View>
+        {!item.isRead && <View style={styles.unreadDot} />}
+      </TouchableOpacity>
+    )
+  }
 
   const renderEmptyState = () => (
     <View style={styles.emptyContainer}>
@@ -253,10 +297,49 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#FFF3E0",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+    gap: 8,
+  },
+  badge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  todayBadge: {
+    backgroundColor: "#FF6B6B",
+  },
+  weekBadge: {
+    backgroundColor: "#2196F3",
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+  eventCountContainer: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
+  },
+  eventCountText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#2196F3",
+    marginBottom: 2,
+  },
+  tapToView: {
+    fontSize: 11,
+    color: "#999",
+    fontStyle: "italic",
   },
   icon: {
     fontSize: 24,
