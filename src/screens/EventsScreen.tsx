@@ -46,6 +46,16 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
+  // Listen for new notifications
+  useEffect(() => {
+    const unsubscribe = NotificationService.addNotificationListener(() => {
+      console.log("EventsScreen: New notification received, updating badge count");
+      loadUnreadCount();
+    });
+
+    return unsubscribe;
+  }, [user]);
+
   const loadUnreadCount = async () => {
     try {
       const count = await NotificationService.getUnreadCount(user?.uid);

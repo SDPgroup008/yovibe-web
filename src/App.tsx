@@ -205,15 +205,20 @@ function AppContent() {
   // 🔔 Listen for foreground notifications
   useEffect(() => {
     const unsubscribe = onMessage(messaging, async (payload) => {
-      console.log("Foreground notification:", payload);
+      console.log("Foreground notification received:", payload);
+      console.log("Notification type:", payload.data?.type);
+      console.log("Notification data:", payload.data);
       
-      // Save notification to Firestore
+      // Save notification to Firestore (will handle broadcast vs user-specific)
       await NotificationService.processIncomingNotification(payload, user?.uid);
       
+      // Show foreground banner
       setBanner({
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
       });
+      
+      console.log("Notification banner displayed");
     });
 
     return () => unsubscribe();
