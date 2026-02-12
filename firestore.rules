@@ -87,6 +87,18 @@ service cloud.firestore {
       allow delete: if false;
     }
     
+    // Daily Notification Stats collection
+    match /YoVibe/data/daily_notification_stats/{statsId} {
+      // Only admins can read daily notification stats
+      allow read: if isAdmin(request.auth.uid);
+      
+      // System can create and update daily stats
+      allow create, update: if true;
+      
+      // Prevent deletion
+      allow delete: if false;
+    }
+    
     // Reports: users can create reports; only admins can read/update
     match /YoVibe/data/reports/{reportId} {
       allow create: if request.auth != null && request.resource.data.reporterId == request.auth.uid;

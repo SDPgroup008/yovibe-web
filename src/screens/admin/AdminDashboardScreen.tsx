@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
 import NotificationService from '../../services/NotificationService';
-import type { NotificationAnalytics } from '../../models/Notification';
+import type { NotificationAnalytics, DailyNotificationStats } from '../../models/Notification';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
@@ -25,7 +25,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
   const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationAnalytics[]>([]);
+  const [dailyNotificationStats, setDailyNotificationStats] = useState<DailyNotificationStats[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'notifications'>('overview');
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
@@ -48,12 +50,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
       // Parallelize all data fetching for faster loading
       const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
       
-      const [todayData, summaryData, trends, visitors, notifAnalytics] = await Promise.all([
+      const [todayData, summaryData, trends, visitors, notifAnalytics, dailyStats] = await Promise.all([
         AnalyticsService.getTodaySummary(),
         AnalyticsService.getAnalyticsSummary(),
         AnalyticsService.getTrendData(selectedPeriod, limit),
         AnalyticsService.getFrequentVisitorsToday(),
         NotificationService.getAllNotificationAnalytics(),
+        NotificationService.getDailyNotificationStats(30),
       ]);
 
       setTodaySummary(todayData);
@@ -61,6 +64,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
       setTrendData(trends);
       setFrequentVisitors(visitors);
       setNotificationAnalytics(notifAnalytics);
+      setDailyNotificationStats(dailyStats);
       setLastFetchTime(now);
     } catch (error) {
       console.error('Error loading analytics:', error);
@@ -316,737 +320,799 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
+        <ActivityIndicator size="large" color="#00F5FF" />
         <Text style={styles.loadingText}>Loading analytics...</Text>
       </View>
     );
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          colors={['#2196F3']}
-          tintColor="#2196F3"
-        />
-      }
-    >
+    <View style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Analytics Dashboard</Text>
+        <Text style={styles.headerTitle}>Analytics</Text>
         <TouchableOpacity onPress={() => loadAnalytics(true)} style={styles.refreshButton}>
-          <Ionicons name="refresh" size={24} color="#FFFFFF" />
+          <Ionicons name={refreshing ? "hourglass" : "refresh"} size={24} color="#00F5FF" />
         </TouchableOpacity>
       </View>
 
-      {/* Cache indicator */}
-      {lastFetchTime > 0 && (
-        <View style={styles.cacheIndicator}>
-          <Ionicons name="time-outline" size={14} color="#AAAAAA" />
-          <Text style={styles.cacheText}>
-            Last updated: {new Date(lastFetchTime).toLocaleTimeString()} • 
-            {Math.floor((Date.now() - lastFetchTime) / 1000 / 60)}m ago
-          </Text>
-        </View>
-      )}
-
-      {/* TODAY'S SUMMARY - Refreshes Daily */}
-      <View style={styles.todaySection}>
-        <View style={styles.todayHeader}>
-          <Ionicons name="today" size={24} color="#4CAF50" />
-          <Text style={styles.todayTitle}>Today's Activity</Text>
-          <Text style={styles.todayTimestamp}>
-            Updated: {todaySummary?.lastUpdated.toLocaleTimeString() || 'N/A'}
-          </Text>
-        </View>
-
-        <View style={styles.todayGrid}>
-          {/* Total Sessions Today */}
-          <View style={[styles.todayCard, styles.todayCardPrimary]}>
-            <Text style={styles.todayCardValue}>{todaySummary?.totalSessions || 0}</Text>
-            <Text style={styles.todayCardLabel}>Total Sessions</Text>
-          </View>
-
-          {/* New Users Today */}
-          <View style={[styles.todayCard, styles.todayCardSuccess]}>
-            <Text style={styles.todayCardValue}>{todaySummary?.totalNewUsers || 0}</Text>
-            <Text style={styles.todayCardLabel}>New Users</Text>
-            <View style={styles.todayCardBreakdown}>
-              <Text style={styles.todayCardBreakdownText}>
-                🔐 {todaySummary?.newAuthenticatedUsers || 0} Auth
-              </Text>
-              <Text style={styles.todayCardBreakdownText}>
-                👤 {todaySummary?.newUnauthenticatedUsers || 0} Guest
-              </Text>
-            </View>
-          </View>
-
-          {/* Returning Users Today */}
-          <View style={[styles.todayCard, styles.todayCardInfo]}>
-            <Text style={styles.todayCardValue}>{todaySummary?.totalReturningUsers || 0}</Text>
-            <Text style={styles.todayCardLabel}>Returning Users</Text>
-            <View style={styles.todayCardBreakdown}>
-              <Text style={styles.todayCardBreakdownText}>
-                🔐 {todaySummary?.returningAuthenticatedUsers || 0} Auth
-              </Text>
-              <Text style={styles.todayCardBreakdownText}>
-                👤 {todaySummary?.returningUnauthenticatedUsers || 0} Guest
-              </Text>
-            </View>
-          </View>
-
-          {/* Average Duration Today */}
-          <View style={[styles.todayCard, styles.todayCardWarning]}>
-            <Text style={styles.todayCardValue}>
-              {formatDuration(todaySummary?.averageDuration || 0)}
-            </Text>
-            <Text style={styles.todayCardLabel}>Avg. Duration</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Summary Cards */}
-      <View style={styles.summaryContainer}>
-        <View style={styles.summaryCard}>
-          <Ionicons name="people" size={32} color="#4CAF50" />
-          <Text style={styles.summaryValue}>{summary?.totalSessions || 0}</Text>
-          <Text style={styles.summaryLabel}>Total Sessions</Text>
-          <Text style={styles.summarySubtext}>All time</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="people" size={32} color="#9C27B0" />
-          <Text style={styles.summaryValue}>{summary?.totalUniqueUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>Unique Users</Text>
-          <Text style={styles.summarySubtext}>All visitors</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="person-circle" size={32} color="#2196F3" />
-          <Text style={styles.summaryValue}>{summary?.uniqueAuthenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>Unique Auth</Text>
-          <Text style={styles.summarySubtext}>Users</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="person-outline" size={32} color="#FF9800" />
-          <Text style={styles.summaryValue}>{summary?.uniqueUnauthenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>Unique Guests</Text>
-          <Text style={styles.summarySubtext}>Visitors</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="time" size={32} color="#9C27B0" />
-          <Text style={styles.summaryValue}>
-            {formatDuration(summary?.averageDuration || 0)}
-          </Text>
-          <Text style={styles.summaryLabel}>Avg. Duration</Text>
-          <Text style={styles.summarySubtext}>Per session</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="repeat" size={32} color="#E91E63" />
-          <Text style={styles.summaryValue}>
-            {summary?.averageVisitsPerUser.toFixed(1) || '0.0'}
-          </Text>
-          <Text style={styles.summaryLabel}>Avg. Visits</Text>
-          <Text style={styles.summarySubtext}>Per user</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="person-add" size={32} color="#4CAF50" />
-          <Text style={styles.summaryValue}>{summary?.totalNewUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>New Users</Text>
-          <Text style={styles.summarySubtext}>Last 30 days</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="person-add" size={32} color="#2196F3" />
-          <Text style={styles.summaryValue}>{summary?.newAuthenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>New Auth</Text>
-          <Text style={styles.summarySubtext}>Users</Text>
-        </View>
-
-        <View style={styles.summaryCard}>
-          <Ionicons name="person-add-outline" size={32} color="#FF9800" />
-          <Text style={styles.summaryValue}>{summary?.newUnauthenticatedUsers || 0}</Text>
-          <Text style={styles.summaryLabel}>New Guests</Text>
-          <Text style={styles.summarySubtext}>Visitors</Text>
-        </View>
-      </View>
-
-      {/* Period Selector */}
-      <View style={styles.periodSelector}>
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
         <TouchableOpacity
-          style={[styles.periodButton, selectedPeriod === 'daily' && styles.periodButtonActive]}
-          onPress={() => setSelectedPeriod('daily')}
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+          onPress={() => setActiveTab('overview')}
         >
-          <Text style={[styles.periodButtonText, selectedPeriod === 'daily' && styles.periodButtonTextActive]}>
-            Daily
+          <Ionicons
+            name="speedometer-outline"
+            size={20}
+            color={activeTab === 'overview' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+            Overview
           </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
-          style={[styles.periodButton, selectedPeriod === 'weekly' && styles.periodButtonActive]}
-          onPress={() => setSelectedPeriod('weekly')}
+          style={[styles.tab, activeTab === 'visitors' && styles.tabActive]}
+          onPress={() => setActiveTab('visitors')}
         >
-          <Text style={[styles.periodButtonText, selectedPeriod === 'weekly' && styles.periodButtonTextActive]}>
-            Weekly
+          <Ionicons
+            name="people-outline"
+            size={20}
+            color={activeTab === 'visitors' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'visitors' && styles.tabTextActive]}>
+            Visitors
           </Text>
         </TouchableOpacity>
+
         <TouchableOpacity
-          style={[styles.periodButton, selectedPeriod === 'yearly' && styles.periodButtonActive]}
-          onPress={() => setSelectedPeriod('yearly')}
+          style={[styles.tab, activeTab === 'notifications' && styles.tabActive]}
+          onPress={() => setActiveTab('notifications')}
         >
-          <Text style={[styles.periodButtonText, selectedPeriod === 'yearly' && styles.periodButtonTextActive]}>
-            Monthly
+          <Ionicons
+            name="notifications-outline"
+            size={20}
+            color={activeTab === 'notifications' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'notifications' && styles.tabTextActive]}>
+            Notifications
           </Text>
         </TouchableOpacity>
       </View>
 
-      {/* Line Chart for Trends */}
-      <View style={styles.chartSection}>
-        <Text style={styles.sectionTitle}>Trend Analysis - Line Chart</Text>
-        <View style={styles.legendContainer}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#2196F3' }]} />
-            <Text style={styles.legendText}>Total Sessions</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#4CAF50' }]} />
-            <Text style={styles.legendText}>New Users</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
-            <Text style={styles.legendText}>Unique Users</Text>
-          </View>
-        </View>
-        {renderLineChart(trendData)}
-      </View>
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#00F5FF']}
+            tintColor="#00F5FF"
+          />
+        }
+      >
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <View style={styles.tabContent}>
+            {/* Today's Activity */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="today-outline" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Today's Activity</Text>
+              </View>
+              <Text style={styles.sectionSubtext}>
+                {todaySummary?.lastUpdated.toLocaleTimeString() || 'N/A'}
+              </Text>
 
-      {/* Bar Chart for Session Comparison */}
-      <View style={styles.chartSection}>
-        <Text style={styles.sectionTitle}>Session Comparison - Bar Chart</Text>
-        <View style={styles.legendContainer}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#2196F3' }]} />
-            <Text style={styles.legendText}>Authenticated</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: '#FF9800' }]} />
-            <Text style={styles.legendText}>Unauthenticated</Text>
-          </View>
-        </View>
-        {renderSimpleChart(trendData)}
-      </View>
-
-      {/* Frequent Visitors Today */}
-      <View style={styles.frequentVisitorsSection}>
-        <Text style={styles.sectionTitle}>Today's Frequent Visitors</Text>
-        {frequentVisitors.length === 0 ? (
-          <Text style={styles.noDataText}>No visitors today yet</Text>
-        ) : (
-          frequentVisitors.slice(0, 10).map((visitor, index) => (
-            <View key={visitor.uniqueVisitorId} style={styles.visitorCard}>
-              <View style={styles.visitorHeader}>
-                <Ionicons
-                  name={visitor.isAuthenticated ? 'person-circle' : 'person-outline'}
-                  size={24}
-                  color={visitor.isAuthenticated ? '#2196F3' : '#FF9800'}
-                />
-                <View style={styles.visitorInfo}>
-                  <Text style={styles.visitorType}>
-                    {visitor.isAuthenticated ? 'Authenticated User' : 'Guest Visitor'}
-                  </Text>
-                  <Text style={styles.visitorId} numberOfLines={1}>
-                    {visitor.userId || visitor.uniqueVisitorId}
-                  </Text>
+              <View style={styles.statsGrid}>
+                <View style={[styles.statCard, styles.statCardPrimary]}>
+                  <Ionicons name="pulse" size={24} color="#00F5FF" />
+                  <Text style={styles.statValue}>{todaySummary?.totalSessions || 0}</Text>
+                  <Text style={styles.statLabel}>Sessions</Text>
                 </View>
-                <View style={styles.visitBadge}>
-                  <Text style={styles.visitBadgeText}>{visitor.visitCount}</Text>
-                  <Text style={styles.visitBadgeLabel}>
-                    {visitor.visitCount === 1 ? 'visit' : 'visits'}
+
+                <View style={[styles.statCard, styles.statCardSuccess]}>
+                  <Ionicons name="person-add" size={24} color="#00FF9F" />
+                  <Text style={styles.statValue}>{todaySummary?.totalNewUsers || 0}</Text>
+                  <Text style={styles.statLabel}>New Users</Text>
+                  <View style={styles.statBreakdown}>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.newAuthenticatedUsers || 0} Auth
+                    </Text>
+                    <Text style={styles.statBreakdownDivider}>•</Text>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.newUnauthenticatedUsers || 0} Guest
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statCard, styles.statCardInfo]}>
+                  <Ionicons name="repeat" size={24} color="#FF00FF" />
+                  <Text style={styles.statValue}>{todaySummary?.totalReturningUsers || 0}</Text>
+                  <Text style={styles.statLabel}>Returning</Text>
+                  <View style={styles.statBreakdown}>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.returningAuthenticatedUsers || 0} Auth
+                    </Text>
+                    <Text style={styles.statBreakdownDivider}>•</Text>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.returningUnauthenticatedUsers || 0} Guest
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statCard, styles.statCardWarning]}>
+                  <Ionicons name="time" size={24} color="#FFD700" />
+                  <Text style={styles.statValue}>
+                    {formatDuration(todaySummary?.averageDuration || 0)}
                   </Text>
+                  <Text style={styles.statLabel}>Avg Duration</Text>
                 </View>
               </View>
-              <Text style={styles.lastVisit}>
-                Last visit: {visitor.lastVisit.toLocaleTimeString()}
-              </Text>
             </View>
-          ))
+
+            {/* All-Time Stats */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="stats-chart" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>All-Time Statistics</Text>
+              </View>
+
+              <View style={styles.statsGrid}>
+                <View style={styles.metricCard}>
+                  <Ionicons name="pulse-outline" size={28} color="#00F5FF" />
+                  <Text style={styles.metricValue}>{summary?.totalSessions || 0}</Text>
+                  <Text style={styles.metricLabel}>Total Sessions</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="people-outline" size={28} color="#FF00FF" />
+                  <Text style={styles.metricValue}>{summary?.totalUniqueUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Unique Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="person-circle-outline" size={28} color="#00FF9F" />
+                  <Text style={styles.metricValue}>{summary?.uniqueAuthenticatedUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Auth Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="person-outline" size={28} color="#FFD700" />
+                  <Text style={styles.metricValue}>{summary?.uniqueUnauthenticatedUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Guest Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="timer-outline" size={28} color="#FF00FF" />
+                  <Text style={styles.metricValue}>
+                    {formatDuration(summary?.averageDuration || 0)}
+                  </Text>
+                  <Text style={styles.metricLabel}>Avg Duration</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="repeat-outline" size={28} color="#00F5FF" />
+                  <Text style={styles.metricValue}>
+                    {summary?.averageVisitsPerUser.toFixed(1) || '0.0'}
+                  </Text>
+                  <Text style={styles.metricLabel}>Avg Visits</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Recent New Users */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="person-add-outline" size={24} color="#00FF9F" />
+                <Text style={styles.sectionTitle}>Recent Growth (30 Days)</Text>
+              </View>
+
+              <View style={styles.growthRow}>
+                <View style={styles.growthItem}>
+                  <Text style={styles.growthValue}>{summary?.totalNewUsers || 0}</Text>
+                  <Text style={styles.growthLabel}>Total New</Text>
+                </View>
+                <View style={styles.growthDivider} />
+                <View style={styles.growthItem}>
+                  <Text style={[styles.growthValue, { color: '#00F5FF' }]}>
+                    {summary?.newAuthenticatedUsers || 0}
+                  </Text>
+                  <Text style={styles.growthLabel}>Authenticated</Text>
+                </View>
+                <View style={styles.growthDivider} />
+                <View style={styles.growthItem}>
+                  <Text style={[styles.growthValue, { color: '#FFD700' }]}>
+                    {summary?.newUnauthenticatedUsers || 0}
+                  </Text>
+                  <Text style={styles.growthLabel}>Guests</Text>
+                </View>
+              </View>
+            </View>
+          </View>
         )}
-      </View>
 
-      {/* Notification Analytics */}
-      <View style={styles.notificationSection}>
-        <View style={styles.sectionHeader}>
-          <Ionicons name="notifications" size={24} color="#FF6B6B" />
-          <Text style={styles.sectionTitle}>Notification Analytics</Text>
-        </View>
-        {notificationAnalytics.length === 0 ? (
-          <Text style={styles.noDataText}>No notification data available</Text>
-        ) : (
-          <>
-            <View style={styles.notificationSummary}>
-              <View style={styles.notificationSummaryCard}>
-                <Text style={styles.notificationSummaryValue}>
-                  {notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0)}
+        {/* Visitors Tab */}
+        {activeTab === 'visitors' && (
+          <View style={styles.tabContent}>
+            {/* Period Selector */}
+            <View style={styles.periodSelector}>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'daily' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('daily')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'daily' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Daily
                 </Text>
-                <Text style={styles.notificationSummaryLabel}>Total Sent</Text>
-              </View>
-              <View style={styles.notificationSummaryCard}>
-                <Text style={styles.notificationSummaryValue}>
-                  {notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0)}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'weekly' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('weekly')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'weekly' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Weekly
                 </Text>
-                <Text style={styles.notificationSummaryLabel}>Total Opened</Text>
-              </View>
-              <View style={styles.notificationSummaryCard}>
-                <Text style={styles.notificationSummaryValue}>
-                  {(
-                    (notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0) /
-                      Math.max(notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0), 1)) *
-                    100
-                  ).toFixed(1)}%
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'yearly' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('yearly')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'yearly' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Monthly
                 </Text>
-                <Text style={styles.notificationSummaryLabel}>Avg Open Rate</Text>
-              </View>
+              </TouchableOpacity>
             </View>
-            
-            {notificationAnalytics.slice(0, 10).map((notification, index) => (
-              <View key={notification.notificationId} style={styles.notificationCard}>
-                <View style={styles.notificationHeader}>
-                  <Text style={styles.notificationId} numberOfLines={1}>
-                    ID: {notification.notificationId}
-                  </Text>
-                  <Text style={styles.notificationDate}>
-                    {notification.createdAt.toLocaleDateString()}
-                  </Text>
+
+            {/* Trend Chart */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="trending-up" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Visitor Trends</Text>
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00F5FF' }]} />
+                  <Text style={styles.legendText}>Sessions</Text>
                 </View>
-                <View style={styles.notificationStats}>
-                  <View style={styles.notificationStat}>
-                    <Text style={styles.notificationStatValue}>{notification.totalSent}</Text>
-                    <Text style={styles.notificationStatLabel}>Sent</Text>
-                  </View>
-                  <View style={styles.notificationStat}>
-                    <Text style={styles.notificationStatValue}>{notification.totalOpened}</Text>
-                    <Text style={styles.notificationStatLabel}>Opened</Text>
-                  </View>
-                  <View style={styles.notificationStat}>
-                    <Text style={styles.notificationStatValue}>{notification.totalRead}</Text>
-                    <Text style={styles.notificationStatLabel}>Read</Text>
-                  </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00FF9F' }]} />
+                  <Text style={styles.legendText}>New Users</Text>
                 </View>
-                <View style={styles.notificationRates}>
-                  <View style={styles.rateBar}>
-                    <Text style={styles.rateLabel}>Open Rate</Text>
-                    <View style={styles.rateBarContainer}>
-                      <View
-                        style={[
-                          styles.rateBarFill,
-                          { width: `${notification.openRate}%`, backgroundColor: '#4CAF50' },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.rateValue}>{notification.openRate.toFixed(1)}%</Text>
-                  </View>
-                  <View style={styles.rateBar}>
-                    <Text style={styles.rateLabel}>Read Rate</Text>
-                    <View style={styles.rateBarContainer}>
-                      <View
-                        style={[
-                          styles.rateBarFill,
-                          { width: `${notification.readRate}%`, backgroundColor: '#2196F3' },
-                        ]}
-                      />
-                    </View>
-                    <Text style={styles.rateValue}>{notification.readRate.toFixed(1)}%</Text>
-                  </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                  <Text style={styles.legendText}>Unique Users</Text>
                 </View>
               </View>
-            ))}
-          </>
+              {renderLineChart(trendData)}
+            </View>
+
+            {/* Session Comparison */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="bar-chart" size={24} color="#FF00FF" />
+                <Text style={styles.sectionTitle}>Session Distribution</Text>
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00F5FF' }]} />
+                  <Text style={styles.legendText}>Authenticated</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                  <Text style={styles.legendText}>Unauthenticated</Text>
+                </View>
+              </View>
+              {renderSimpleChart(trendData)}
+            </View>
+
+            {/* Frequent Visitors */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="flame" size={24} color="#FF6B6B" />
+                <Text style={styles.sectionTitle}>Today's Top Visitors</Text>
+              </View>
+
+              {frequentVisitors.length === 0 ? (
+                <Text style={styles.noDataText}>No visitors today yet</Text>
+              ) : (
+                frequentVisitors.slice(0, 10).map((visitor) => (
+                  <View key={visitor.uniqueVisitorId} style={styles.visitorCard}>
+                    <View style={styles.visitorRow}>
+                      <Ionicons
+                        name={visitor.isAuthenticated ? 'person-circle' : 'person-outline'}
+                        size={32}
+                        color={visitor.isAuthenticated ? '#00F5FF' : '#FFD700'}
+                      />
+                      <View style={styles.visitorInfo}>
+                        <Text style={styles.visitorType}>
+                          {visitor.isAuthenticated ? 'Authenticated' : 'Guest'}
+                        </Text>
+                        <Text style={styles.visitorId} numberOfLines={1}>
+                          {visitor.userId || visitor.uniqueVisitorId}
+                        </Text>
+                        <Text style={styles.visitorTime}>
+                          {visitor.lastVisit.toLocaleTimeString()}
+                        </Text>
+                      </View>
+                      <View style={styles.visitorBadge}>
+                        <Text style={styles.visitorBadgeCount}>{visitor.visitCount}</Text>
+                        <Text style={styles.visitorBadgeLabel}>visits</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
         )}
-      </View>
 
-      {/* Chart */}
-      <View style={styles.chartSection}>
-        <Text style={styles.chartTitle}>Visitor Trends</Text>
-        <View style={styles.legend}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#2196F3' }]} />
-            <Text style={styles.legendText}>Authenticated</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, { backgroundColor: '#FF9800' }]} />
-            <Text style={styles.legendText}>Unauthenticated</Text>
-          </View>
-        </View>
-        {renderSimpleChart(trendData)}
-      </View>
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <View style={styles.tabContent}>
+            {/* Daily Notification Stats */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="calendar-outline" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Daily Analytics (30 Days)</Text>
+              </View>
 
-      {/* Detailed Stats */}
-      <View style={styles.detailsSection}>
-        <Text style={styles.sectionTitle}>Detailed Statistics</Text>
-        {trendData.slice().reverse().slice(0, 10).map((item, index) => (
-          <View key={index} style={styles.detailCard}>
-            <Text style={styles.detailDate}>{formatDate(item.date)}</Text>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Total Sessions:</Text>
-              <Text style={styles.detailValue}>{item.totalSessions}</Text>
+              {dailyNotificationStats.length === 0 ? (
+                <Text style={styles.noDataText}>No daily data available</Text>
+              ) : (
+                <>
+                  <View style={styles.statsGrid}>
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="paper-plane" size={24} color="#00F5FF" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.notificationsSent, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Total Sent</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="people" size={24} color="#00FF9F" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.usersReceived, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Users Reached</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="open" size={24} color="#FF00FF" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.notificationsOpened, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Total Opened</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="person-add" size={24} color="#FFD700" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.newSubscriptions, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>New Subs</Text>
+                    </View>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dailyScroll}>
+                    {dailyNotificationStats.slice().reverse().map((dayStat) => (
+                      <View key={dayStat.date} style={styles.dailyCard}>
+                        <Text style={styles.dailyCardDate}>
+                          {new Date(dayStat.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="paper-plane-outline" size={14} color="#00F5FF" />
+                          <Text style={styles.dailyCardText}>{dayStat.notificationsSent}</Text>
+                        </View>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="people-outline" size={14} color="#00FF9F" />
+                          <Text style={styles.dailyCardText}>{dayStat.usersReceived}</Text>
+                        </View>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="open-outline" size={14} color="#FF00FF" />
+                          <Text style={styles.dailyCardText}>{dayStat.notificationsOpened}</Text>
+                        </View>
+                        {dayStat.newSubscriptions > 0 && (
+                          <View style={styles.dailyCardStat}>
+                            <Ionicons name="person-add-outline" size={14} color="#FFD700" />
+                            <Text style={[styles.dailyCardText, { color: '#FFD700' }]}>
+                              +{dayStat.newSubscriptions}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.dailyCardRate}>
+                          <Text style={styles.dailyCardRateValue}>{dayStat.openRate.toFixed(1)}%</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
             </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Authenticated:</Text>
-              <Text style={[styles.detailValue, { color: '#2196F3' }]}>
-                {item.authenticatedSessions}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Unauthenticated:</Text>
-              <Text style={[styles.detailValue, { color: '#FF9800' }]}>
-                {item.unauthenticatedSessions}
-              </Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>Avg. Duration:</Text>
-              <Text style={styles.detailValue}>{formatDuration(item.averageDuration)}</Text>
-            </View>
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>New Users:</Text>
-              <Text style={[styles.detailValue, { color: '#4CAF50' }]}>
-                {item.totalNewUsers || 0}
-              </Text>
+
+            {/* Per-Notification Analytics */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="notifications" size={24} color="#FF00FF" />
+                <Text style={styles.sectionTitle}>Notification Performance</Text>
+              </View>
+
+              {notificationAnalytics.length === 0 ? (
+                <Text style={styles.noDataText}>No notification data available</Text>
+              ) : (
+                <>
+                  <View style={styles.statsRow}>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0)}
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Sent</Text>
+                    </View>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0)}
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Opened</Text>
+                    </View>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {(
+                          (notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0) /
+                            Math.max(notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0), 1)) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Open Rate</Text>
+                    </View>
+                  </View>
+
+                  {notificationAnalytics.slice(0, 10).map((notification) => (
+                    <View key={notification.notificationId} style={styles.notifCard}>
+                      <View style={styles.notifCardHeader}>
+                        <Text style={styles.notifCardId} numberOfLines={1}>
+                          {notification.notificationId}
+                        </Text>
+                        <Text style={styles.notifCardDate}>
+                          {notification.createdAt.toLocaleDateString()}
+                        </Text>
+                      </View>
+
+                      <View style={styles.notifCardStats}>
+                        <View style={styles.notifCardStat}>
+                          <Text style={styles.notifCardStatValue}>{notification.totalSent}</Text>
+                          <Text style={styles.notifCardStatLabel}>Sent</Text>
+                        </View>
+                        <View style={styles.notifCardStat}>
+                          <Text style={styles.notifCardStatValue}>{notification.totalOpened}</Text>
+                          <Text style={styles.notifCardStatLabel}>Opened</Text>
+                        </View>
+                        <View style={styles.notifCardStat}>
+                          <Text style={styles.notifCardStatValue}>{notification.totalRead}</Text>
+                          <Text style={styles.notifCardStatLabel}>Read</Text>
+                        </View>
+                      </View>
+
+                      <View style={styles.notifCardProgress}>
+                        <View style={styles.progressRow}>
+                          <Text style={styles.progressLabel}>Open Rate</Text>
+                          <Text style={styles.progressValue}>{notification.openRate.toFixed(1)}%</Text>
+                        </View>
+                        <View style={styles.progressBarContainer}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              { width: `${notification.openRate}%`, backgroundColor: '#00FF9F' },
+                            ]}
+                          />
+                        </View>
+                      </View>
+
+                      <View style={styles.notifCardProgress}>
+                        <View style={styles.progressRow}>
+                          <Text style={styles.progressLabel}>Read Rate</Text>
+                          <Text style={styles.progressValue}>{notification.readRate.toFixed(1)}%</Text>
+                        </View>
+                        <View style={styles.progressBarContainer}>
+                          <View
+                            style={[
+                              styles.progressBarFill,
+                              { width: `${notification.readRate}%`, backgroundColor: '#00F5FF' },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </>
+              )}
             </View>
           </View>
-        ))}
-      </View>
-    </ScrollView>
+        )}
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#0A0A0F',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#0A0A0F',
   },
   loadingText: {
-    color: '#FFFFFF',
+    color: '#00F5FF',
     marginTop: 16,
     fontSize: 16,
+    fontWeight: '500',
   },
+  
+  // Header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
     paddingTop: 60,
-    backgroundColor: '#1E1E1E',
+    backgroundColor: '#0F0F17',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 24,
+    fontWeight: '700',
     color: '#FFFFFF',
+    letterSpacing: 1,
   },
   refreshButton: {
     padding: 8,
   },
-  cacheIndicator: {
+
+  // Tab Navigation
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0F0F17',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
+  },
+  tab: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    backgroundColor: '#1A1A1A',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2A2A2A',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
     gap: 6,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
   },
-  cacheText: {
-    color: '#AAAAAA',
-    fontSize: 12,
+  tabActive: {
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
   },
-  todaySection: {
-    margin: 16,
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+  },
+  tabTextActive: {
+    color: '#00F5FF',
+  },
+
+  // Tab Content
+  tabContent: {
     padding: 16,
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
   },
-  todayHeader: {
+
+  // Section Cards
+  sectionCard: {
+    backgroundColor: '#14141F',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.1)',
+    shadowColor: '#00F5FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
     marginBottom: 16,
   },
-  todayTitle: {
+  sectionTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: '#FFFFFF',
-    marginLeft: 8,
     flex: 1,
   },
-  todayTimestamp: {
+  sectionSubtext: {
     fontSize: 12,
-    color: '#AAAAAA',
+    color: '#888',
+    marginTop: -8,
+    marginBottom: 16,
   },
-  todayGrid: {
+
+  // Stats Grid
+  statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  todayCard: {
+  statCard: {
     flex: 1,
-    minWidth: 150,
+    minWidth: 140,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
-  },
-  todayCardPrimary: {
-    backgroundColor: 'rgba(33, 150, 243, 0.15)',
-    borderColor: '#2196F3',
     borderWidth: 1,
   },
-  todayCardSuccess: {
-    backgroundColor: 'rgba(76, 175, 80, 0.15)',
-    borderColor: '#4CAF50',
-    borderWidth: 1,
+  statCardPrimary: {
+    backgroundColor: 'rgba(0, 245, 255, 0.05)',
+    borderColor: 'rgba(0, 245, 255, 0.2)',
   },
-  todayCardInfo: {
-    backgroundColor: 'rgba(156, 39, 176, 0.15)',
-    borderColor: '#9C27B0',
-    borderWidth: 1,
+  statCardSuccess: {
+    backgroundColor: 'rgba(0, 255, 159, 0.05)',
+    borderColor: 'rgba(0, 255, 159, 0.2)',
   },
-  todayCardWarning: {
-    backgroundColor: 'rgba(255, 152, 0, 0.15)',
-    borderColor: '#FF9800',
-    borderWidth: 1,
+  statCardInfo: {
+    backgroundColor: 'rgba(255, 0, 255, 0.05)',
+    borderColor: 'rgba(255, 0, 255, 0.2)',
   },
-  todayCardValue: {
-    fontSize: 32,
-    fontWeight: 'bold',
+  statCardWarning: {
+    backgroundColor: 'rgba(255, 215, 0, 0.05)',
+    borderColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#FFFFFF',
+    marginTop: 8,
     marginBottom: 4,
   },
-  todayCardLabel: {
-    fontSize: 14,
-    color: '#AAAAAA',
-    textAlign: 'center',
-  },
-  todayCardBreakdown: {
-    marginTop: 8,
-    gap: 4,
-  },
-  todayCardBreakdownText: {
+  statLabel: {
     fontSize: 12,
-    color: '#CCCCCC',
+    fontWeight: '500',
+    color: '#AAA',
     textAlign: 'center',
   },
-  summaryContainer: {
+  statBreakdown: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 8,
-    justifyContent: 'space-between',
-  },
-  summaryCard: {
-    width: '48%',
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
     alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
   },
-  summaryValue: {
-    fontSize: 28,
-    fontWeight: 'bold',
+  statBreakdownText: {
+    fontSize: 11,
+    color: '#666',
+  },
+  statBreakdownDivider: {
+    fontSize: 11,
+    color: '#444',
+  },
+
+  // Metric Cards
+  metricCard: {
+    flex: 1,
+    minWidth: 100,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 31, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
     color: '#FFFFFF',
     marginTop: 8,
   },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#AAAAAA',
+  metricLabel: {
+    fontSize: 11,
+    color: '#888',
+    textAlign: 'center',
     marginTop: 4,
   },
-  summarySubtext: {
-    fontSize: 12,
-    color: '#666666',
-    marginTop: 2,
+
+  // Growth Section
+  growthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
   },
+  growthItem: {
+    alignItems: 'center',
+  },
+  growthValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#00FF9F',
+  },
+  growthLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 4,
+  },
+  growthDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  // Period Selector
   periodSelector: {
     flexDirection: 'row',
-    padding: 16,
     gap: 8,
+    marginBottom: 20,
+    padding: 4,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
   },
   periodButton: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: 8,
-    backgroundColor: '#1E1E1E',
     alignItems: 'center',
   },
   periodButtonActive: {
-    backgroundColor: '#2196F3',
+    backgroundColor: 'rgba(0, 245, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
   },
   periodButtonText: {
-    color: '#AAAAAA',
     fontSize: 14,
     fontWeight: '600',
+    color: '#666',
   },
   periodButtonTextActive: {
-    color: '#FFFFFF',
+    color: '#00F5FF',
   },
-  chartSection: {
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    marginHorizontal: 16,
-    marginBottom: 16,
-    borderRadius: 12,
-  },
-  chartTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 16,
-  },
-  legend: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
-    marginBottom: 16,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  legendColor: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-  },
-  legendText: {
-    color: '#AAAAAA',
-    fontSize: 12,
-  },
-  chartScrollView: {
-    marginTop: 8,
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    paddingVertical: 16,
-    gap: 8,
-  },
-  barContainer: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  barWrapper: {
-    height: 150,
-    justifyContent: 'flex-end',
-    gap: 2,
-  },
-  bar: {
-    borderRadius: 4,
-    minHeight: 2,
-  },
-  authBar: {
-    backgroundColor: '#2196F3',
-  },
-  unauthBar: {
-    backgroundColor: '#FF9800',
-  },
-  barLabel: {
-    color: '#AAAAAA',
-    fontSize: 10,
-    marginTop: 4,
-    textAlign: 'center',
-  },
-  barValue: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  lineChartContainer: {
-    padding: 16,
-  },
-  lineChart: {
-    position: 'relative',
-    backgroundColor: '#1E1E1E',
-    borderRadius: 8,
-    padding: 16,
-  },
-  gridLine: {
-    position: 'absolute',
-    left: 0,
-    height: 1,
-    backgroundColor: '#333333',
-  },
-  linePoint: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  sessionPoint: {
-    backgroundColor: '#2196F3',
-  },
-  newUserPoint: {
-    backgroundColor: '#4CAF50',
-  },
-  uniqueUserPoint: {
-    backgroundColor: '#FF9800',
-  },
-  connectingLine: {
-    position: 'absolute',
-    height: 2,
-    transformOrigin: '0% 50%',
-  },
-  sessionLine: {
-    backgroundColor: '#2196F3',
-  },
-  newUserLine: {
-    backgroundColor: '#4CAF50',
-  },
-  uniqueUserLine: {
-    backgroundColor: '#9C27B0',
-  },
-  xAxisLabels: {
-    position: 'relative',
-    height: 40,
-    marginTop: 8,
-  },
-  xAxisLabel: {
-    position: 'absolute',
-    fontSize: 10,
-    color: '#AAAAAA',
-    width: 60,
-    textAlign: 'center',
-  },
-  chartSection: {
-    marginBottom: 24,
-    padding: 16,
-  },
-  legendContainer: {
+
+  // Chart Legend
+  chartLegend: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 16,
-    marginBottom: 12,
-    paddingHorizontal: 8,
+    marginBottom: 16,
   },
   legendItem: {
     flexDirection: 'row',
@@ -1054,207 +1120,332 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
   },
   legendText: {
-    color: '#AAAAAA',
     fontSize: 12,
+    color: '#AAA',
   },
-  detailsSection: {
-    padding: 16,
+
+  // Charts (keeping existing chart styles)
+  chartScrollView: {
+    marginVertical: 8,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 16,
-  },
-  detailCard: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  detailDate: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 12,
-  },
-  detailRow: {
+  chartContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'flex-end',
+    height: 150,
+    paddingHorizontal: 8,
   },
-  detailLabel: {
-    color: '#AAAAAA',
-    fontSize: 14,
+  barContainer: {
+    alignItems: 'center',
+    marginHorizontal: 4,
   },
-  detailValue: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
+  barWrapper: {
+    flexDirection: 'column-reverse',
+    alignItems: 'center',
+    height: 150,
   },
-  frequentVisitorsSection: {
-    padding: 16,
-    marginBottom: 16,
+  bar: {
+    width: 20,
+    borderRadius: 4,
   },
-  noDataText: {
-    color: '#AAAAAA',
-    fontSize: 14,
+  authBar: {
+    backgroundColor: '#00F5FF',
+    marginBottom: 2,
+  },
+  unauthBar: {
+    backgroundColor: '#FFD700',
+  },
+  barLabel: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 4,
     textAlign: 'center',
-    padding: 20,
   },
+  barValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+
+  lineChartContainer: {
+    paddingHorizontal: 8,
+  },
+  lineChart: {
+    position: 'relative',
+  },
+  gridLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  connectingLine: {
+    position: 'absolute',
+    height: 2,
+    transformOrigin: 'left center',
+  },
+  sessionLine: {
+    backgroundColor: '#00F5FF',
+  },
+  newUserLine: {
+    backgroundColor: '#00FF9F',
+  },
+  uniqueUserLine: {
+    backgroundColor: '#FFD700',
+  },
+  linePoint: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#0A0A0F',
+  },
+  sessionPoint: {
+    backgroundColor: '#00F5FF',
+  },
+  newUserPoint: {
+    backgroundColor: '#00FF9F',
+  },
+  uniqueUserPoint: {
+    backgroundColor: '#FFD700',
+  },
+  xAxisLabels: {
+    position: 'relative',
+    height: 30,
+    marginTop: 8,
+  },
+  xAxisLabel: {
+    position: 'absolute',
+    fontSize: 10,
+    color: '#888',
+    width: 60,
+    textAlign: 'center',
+  },
+
+  // Visitor Cards
   visitorCard: {
-    backgroundColor: '#1E1E1E',
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
-  visitorHeader: {
+  visitorRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    gap: 12,
   },
   visitorInfo: {
     flex: 1,
-    marginLeft: 12,
   },
   visitorType: {
-    color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '600',
+    color: '#FFFFFF',
   },
   visitorId: {
-    color: '#AAAAAA',
-    fontSize: 12,
+    fontSize: 11,
+    color: '#666',
     marginTop: 2,
   },
-  visitBadge: {
-    backgroundColor: '#2196F3',
+  visitorTime: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 2,
+  },
+  visitorBadge: {
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
   },
-  visitBadgeText: {
-    color: '#FFFFFF',
+  visitorBadgeCount: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#00F5FF',
   },
-  visitBadgeLabel: {
-    color: '#FFFFFF',
+  visitorBadgeLabel: {
     fontSize: 10,
+    color: '#888',
   },
-  lastVisit: {
-    color: '#666666',
-    fontSize: 12,
+
+  // Notification Stats
+  notifStatCard: {
+    flex: 1,
+    minWidth: 140,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  notifStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  notifStatLabel: {
+    fontSize: 11,
+    color: '#888',
     marginTop: 4,
   },
-  notificationSection: {
-    padding: 16,
-    backgroundColor: '#1E1E1E',
-    margin: 16,
-    borderRadius: 12,
+
+  // Daily Notification Cards
+  dailyScroll: {
+    marginTop: 12,
   },
-  sectionHeader: {
+  dailyCard: {
+    width: 130,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  dailyCardDate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  dailyCardStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 16,
+    gap: 6,
+    marginBottom: 6,
   },
-  notificationSummary: {
+  dailyCardText: {
+    fontSize: 12,
+    color: '#AAA',
+  },
+  dailyCardRate: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  dailyCardRateValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#00FF9F',
+  },
+
+  // Stats Row
+  statsRow: {
     flexDirection: 'row',
     gap: 12,
     marginBottom: 16,
   },
-  notificationSummaryCard: {
+  miniStat: {
     flex: 1,
-    backgroundColor: '#2A2A2A',
-    padding: 12,
-    borderRadius: 8,
     alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(20, 20, 31, 0.4)',
+    borderRadius: 8,
   },
-  notificationSummaryValue: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FF6B6B',
+  miniStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#00F5FF',
   },
-  notificationSummaryLabel: {
-    fontSize: 12,
-    color: '#AAAAAA',
+  miniStatLabel: {
+    fontSize: 10,
+    color: '#888',
     marginTop: 4,
   },
-  notificationCard: {
-    backgroundColor: '#2A2A2A',
-    padding: 16,
-    borderRadius: 8,
+
+  // Notification Performance Cards
+  notifCard: {
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 14,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
   },
-  notificationHeader: {
+  notifCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 12,
   },
-  notificationId: {
-    color: '#AAAAAA',
-    fontSize: 12,
+  notifCardId: {
+    fontSize: 11,
+    color: '#666',
+    fontFamily: 'monospace',
     flex: 1,
-    marginRight: 8,
   },
-  notificationDate: {
-    color: '#666666',
-    fontSize: 12,
+  notifCardDate: {
+    fontSize: 11,
+    color: '#888',
   },
-  notificationStats: {
+  notifCardStats: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    gap: 16,
     marginBottom: 12,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#333333',
   },
-  notificationStat: {
+  notifCardStat: {
+    flex: 1,
     alignItems: 'center',
   },
-  notificationStatValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  notifCardStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
     color: '#FFFFFF',
   },
-  notificationStatLabel: {
-    fontSize: 12,
-    color: '#AAAAAA',
+  notifCardStatLabel: {
+    fontSize: 10,
+    color: '#888',
     marginTop: 4,
   },
-  notificationRates: {
-    gap: 8,
+  notifCardProgress: {
+    marginBottom: 10,
   },
-  rateBar: {
-    marginBottom: 8,
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  rateLabel: {
+  progressLabel: {
+    fontSize: 11,
+    color: '#AAA',
+  },
+  progressValue: {
     fontSize: 12,
-    color: '#AAAAAA',
-    marginBottom: 4,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
-  rateBarContainer: {
-    height: 8,
-    backgroundColor: '#333333',
-    borderRadius: 4,
+  progressBarContainer: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 3,
     overflow: 'hidden',
   },
-  rateBarFill: {
+  progressBarFill: {
     height: '100%',
-    borderRadius: 4,
+    borderRadius: 3,
   },
-  rateValue: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    marginTop: 4,
-    textAlign: 'right',
+
+  // No Data
+  noDataText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
 });
 

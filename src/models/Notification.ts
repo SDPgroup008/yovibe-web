@@ -23,3 +23,13 @@ export interface NotificationAnalytics {
   readRate: number
   createdAt: Date
 }
+
+export interface DailyNotificationStats {
+  date: string // Format: YYYY-MM-DD
+  notificationsSent: number
+  usersReceived: number // Total unique users who received notifications
+  notificationsOpened: number
+  newSubscriptions: number // New users who allowed notifications
+  openRate: number
+  createdAt: Date
+}

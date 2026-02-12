@@ -246,6 +246,9 @@ function AppContent() {
       if (token) {
         console.log("Web FCM token retrieved:", token);
         await saveTokenToRepo(token);
+        
+        // Track new subscription in daily stats
+        await NotificationService.trackNewSubscription();
       }
     }
   };

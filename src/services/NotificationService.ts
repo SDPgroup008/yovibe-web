@@ -16,7 +16,7 @@ import {
 import { db } from "../config/firebase"
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
-import type { AppNotification, NotificationAnalytics } from "../models/Notification"
+import type { AppNotification, NotificationAnalytics, DailyNotificationStats } from "../models/Notification"
 
 export class NotificationService {
   private static instance: NotificationService
@@ -86,7 +86,6 @@ export class NotificationService {
       const broadcastQuery = query(
         notificationsRef,
         where("userId", "==", null),
-        orderBy("createdAt", "desc"),
         limit(limitCount)
       )
       const broadcastSnapshot = await getDocs(broadcastQuery)
@@ -115,7 +114,6 @@ export class NotificationService {
         const userQuery = query(
           notificationsRef,
           where("userId", "==", userId),
-          orderBy("createdAt", "desc"),
           limit(limitCount)
         )
         const userSnapshot = await getDocs(userQuery)
@@ -222,6 +220,10 @@ export class NotificationService {
         
         // Update analytics
         await this.updateAnalytics(notificationId, "opened")
+        
+        // Track daily stats
+        const today = new Date().toISOString().split('T')[0]
+        await this.trackDailyStat(today, 'opened')
       }
     } catch (error) {
       console.error("NotificationService: Error marking as opened:", error)
@@ -485,6 +487,9 @@ export class NotificationService {
       console.log("[NotificationService] ✅ Notification saved with ID:", notificationId);
       console.log("[NotificationService] Notifying listeners...");
       
+      // Track daily stats - increment notifications sent      const today = new Date().toISOString().split('T')[0]
+      await this.trackDailyStat(today, 'sent')
+      
       // Notify all listeners that a new notification arrived
       this.notifyListeners()
       
@@ -494,6 +499,95 @@ export class NotificationService {
       console.error("[NotificationService] Error details:", error instanceof Error ? error.message : String(error));
       console.error("[NotificationService] Error stack:", error instanceof Error ? error.stack : "N/A");
       throw error;
+    }
+  }
+
+  // Track daily notification statistics
+  private async trackDailyStat(date: string, action: 'sent' | 'opened' | 'subscription'): Promise<void> {
+    try {
+      const statsRef = collection(db, "YoVibe/data/daily_notification_stats")
+      const q = query(statsRef, where("date", "==", date))
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        // Create new daily stats document
+        await addDoc(statsRef, {
+          date,
+          notificationsSent: action === 'sent' ? 1 : 0,
+          usersReceived: action === 'sent' ? 1 : 0,
+          notificationsOpened: action === 'opened' ? 1 : 0,
+          newSubscriptions: action === 'subscription' ? 1 : 0,
+          createdAt: Timestamp.now(),
+        })
+        console.log("[NotificationService] Created daily stats for", date)
+      } else {
+        // Update existing daily stats
+        const statsDoc = querySnapshot.docs[0]
+        const updateData: any = {}
+        
+        if (action === 'sent') {
+          updateData.notificationsSent = increment(1)
+          updateData.usersReceived = increment(1)
+        } else if (action === 'opened') {
+          updateData.notificationsOpened = increment(1)
+        } else if (action === 'subscription') {
+          updateData.newSubscriptions = increment(1)
+        }
+        
+        await updateDoc(doc(db, "YoVibe/data/daily_notification_stats", statsDoc.id), updateData)
+        console.log("[NotificationService] Updated daily stats for", date, "action:", action)
+      }
+    } catch (error) {
+      console.error("[NotificationService] Error tracking daily stat:", error)
+    }
+  }
+
+  // Track new subscription
+  async trackNewSubscription(): Promise<void> {
+    const today = new Date().toISOString().split('T')[0]
+    await this.trackDailyStat(today, 'subscription')
+  }
+
+  // Get daily notification statistics
+  async getDailyNotificationStats(days: number = 30): Promise<DailyNotificationStats[]> {
+    try {
+      const statsRef = collection(db, "YoVibe/data/daily_notification_stats")
+      
+      // Get stats from the last N days
+      const startDate = new Date()
+      startDate.setDate(startDate.getDate() - days)
+      const startDateStr = startDate.toISOString().split('T')[0]
+      
+      const q = query(
+        statsRef,
+        where("date", ">=", startDateStr),
+        limit(days)
+      )
+      const querySnapshot = await getDocs(q)
+      
+      const stats: DailyNotificationStats[] = []
+      
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        const sent = data.notificationsSent || 0
+        const opened = data.notificationsOpened || 0
+        
+        stats.push({
+          date: data.date,
+          notificationsSent: sent,
+          usersReceived: data.usersReceived || 0,
+          notificationsOpened: opened,
+          newSubscriptions: data.newSubscriptions || 0,
+          openRate: sent > 0 ? (opened / sent) * 100 : 0,
+          createdAt: data.createdAt?.toDate() || new Date(),
+        })
+      })
+      
+      // Sort by date ascending (oldest first) for charts
+      return stats.sort((a, b) => a.date.localeCompare(b.date))
+    } catch (error) {
+      console.error("[NotificationService] Error getting daily stats:", error)
+      return []
     }
   }
 }
