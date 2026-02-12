@@ -30,6 +30,9 @@ export class NotificationService {
 
   // Save a notification to Firestore
   async saveNotification(notification: Omit<AppNotification, "id" | "createdAt">): Promise<string> {
+    console.log("[NotificationService] saveNotification called");
+    console.log("[NotificationService] Input notification:", notification);
+    
     try {
       const notificationData: any = {
         title: notification.title,
@@ -42,8 +45,12 @@ export class NotificationService {
       // Explicitly set userId (null for broadcast, string for user-specific, omit if undefined)
       if (notification.userId === null) {
         notificationData.userId = null
+        console.log("[NotificationService] Setting userId to NULL (broadcast)");
       } else if (notification.userId !== undefined) {
         notificationData.userId = notification.userId
+        console.log("[NotificationService] Setting userId to:", notification.userId);
+      } else {
+        console.log("[NotificationService] No userId set (undefined)");
       }
 
       // Add optional fields if present
@@ -51,11 +58,20 @@ export class NotificationService {
       if (notification.imageUrl) notificationData.imageUrl = notification.imageUrl
       if (notification.deepLink) notificationData.deepLink = notification.deepLink
 
+      console.log("[NotificationService] Final notification data to save:", notificationData);
+      console.log("[NotificationService] Saving to collection: YoVibe/data/notifications");
+      
       const docRef = await addDoc(collection(db, "YoVibe/data/notifications"), notificationData)
-      console.log("NotificationService: Saved notification with ID:", docRef.id, "userId:", notificationData.userId === null ? "null (broadcast)" : notificationData.userId || "undefined")
+      
+      console.log("[NotificationService] ✅ Saved notification with ID:", docRef.id);
+      console.log("[NotificationService] Document path:", docRef.path);
+      
       return docRef.id
     } catch (error) {
-      console.error("NotificationService: Error saving notification:", error)
+      console.error("[NotificationService] ❌ ERROR saving notification:", error);
+      console.error("[NotificationService] Error type:", error instanceof Error ? error.constructor.name : typeof error);
+      console.error("[NotificationService] Error message:", error instanceof Error ? error.message : String(error));
+      console.error("[NotificationService] Error stack:", error instanceof Error ? error.stack : "N/A");
       throw error
     }
   }
@@ -64,31 +80,50 @@ export class NotificationService {
   async getUserNotifications(userId?: string, limitCount: number = 50): Promise<AppNotification[]> {
     try {
       const notificationsRef = collection(db, "YoVibe/data/notifications")
+      const allNotifications: AppNotification[] = []
+
+      // Get broadcast notifications (userId == null)
+      const broadcastQuery = query(
+        notificationsRef,
+        where("userId", "==", null),
+        orderBy("createdAt", "desc"),
+        limit(limitCount)
+      )
+      const broadcastSnapshot = await getDocs(broadcastQuery)
+      console.log(`NotificationService: Found ${broadcastSnapshot.size} broadcast notifications`)
       
-      // Get both user-specific and broadcast notifications
-      // Note: For logged-in users, we fetch both their notifications AND broadcast notifications (userId: null)
-      const q = userId 
-        ? query(
-            notificationsRef,
-            orderBy("createdAt", "desc"),
-            limit(limitCount * 2) // Fetch more to filter client-side
-          )
-        : query(
-            notificationsRef,
-            where("userId", "==", null),
-            orderBy("createdAt", "desc"),
-            limit(limitCount)
-          )
-
-      const querySnapshot = await getDocs(q)
-      const notifications: AppNotification[] = []
-
-      querySnapshot.forEach((doc) => {
+      broadcastSnapshot.forEach((doc) => {
         const data = doc.data()
+        allNotifications.push({
+          id: doc.id,
+          userId: data.userId,
+          title: data.title,
+          body: data.body,
+          type: data.type,
+          data: data.data,
+          imageUrl: data.imageUrl,
+          deepLink: data.deepLink,
+          isRead: data.isRead || false,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          readAt: data.readAt?.toDate(),
+          openedAt: data.openedAt?.toDate(),
+        })
+      })
+
+      // If user is authenticated, also get their personal notifications
+      if (userId) {
+        const userQuery = query(
+          notificationsRef,
+          where("userId", "==", userId),
+          orderBy("createdAt", "desc"),
+          limit(limitCount)
+        )
+        const userSnapshot = await getDocs(userQuery)
+        console.log(`NotificationService: Found ${userSnapshot.size} user-specific notifications`)
         
-        // Filter: include if it's for this user OR it's a broadcast (null userId)
-        if (!userId || data.userId === userId || data.userId === null || data.userId === undefined) {
-          notifications.push({
+        userSnapshot.forEach((doc) => {
+          const data = doc.data()
+          allNotifications.push({
             id: doc.id,
             userId: data.userId,
             title: data.title,
@@ -102,15 +137,15 @@ export class NotificationService {
             readAt: data.readAt?.toDate(),
             openedAt: data.openedAt?.toDate(),
           })
-        }
-      })
+        })
+      }
 
-      // Sort and limit
-      const sortedNotifications = notifications
+      // Sort all notifications by date and limit
+      const sortedNotifications = allNotifications
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, limitCount)
 
-      console.log(`NotificationService: Retrieved ${sortedNotifications.length} notifications (${notifications.filter(n => n.userId === null || n.userId === undefined).length} broadcast)`)
+      console.log(`NotificationService: Retrieved ${sortedNotifications.length} total notifications`)
       return sortedNotifications
     } catch (error) {
       console.error("NotificationService: Error getting notifications:", error)
@@ -122,25 +157,31 @@ export class NotificationService {
   async getUnreadCount(userId?: string): Promise<number> {
     try {
       const notificationsRef = collection(db, "YoVibe/data/notifications")
-      
-      // Fetch all unread notifications and filter client-side
-      const q = query(
+      let count = 0
+
+      // Get broadcast unread notifications (userId == null)
+      const broadcastQuery = query(
         notificationsRef,
+        where("userId", "==", null),
         where("isRead", "==", false)
       )
+      const broadcastSnapshot = await getDocs(broadcastQuery)
+      count += broadcastSnapshot.size
+      console.log(`NotificationService: Found ${broadcastSnapshot.size} unread broadcast notifications`)
 
-      const querySnapshot = await getDocs(q)
-      let count = 0
+      // If user is authenticated, also get their personal unread notifications
+      if (userId) {
+        const userQuery = query(
+          notificationsRef,
+          where("userId", "==", userId),
+          where("isRead", "==", false)
+        )
+        const userSnapshot = await getDocs(userQuery)
+        count += userSnapshot.size
+        console.log(`NotificationService: Found ${userSnapshot.size} unread user notifications`)
+      }
       
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        // Count if it's for this user OR it's a broadcast (null/undefined userId)
-        if (!userId || data.userId === userId || data.userId === null || data.userId === undefined) {
-          count++
-        }
-      })
-      
-      console.log(`NotificationService: Unread count for user ${userId || 'anonymous'}: ${count}`)
+      console.log(`NotificationService: Total unread count for user ${userId || 'anonymous'}: ${count}`)
       return count
     } catch (error) {
       console.error("NotificationService: Error getting unread count:", error)
@@ -413,11 +454,17 @@ export class NotificationService {
 
   // Process incoming push notification and save to Firestore
   async processIncomingNotification(payload: any, userId?: string): Promise<void> {
+    console.log("[NotificationService] processIncomingNotification called");
+    console.log("[NotificationService] Payload:", payload);
+    console.log("[NotificationService] User ID:", userId);
+    
     try {
       const notificationType = payload.data?.type || "other"
+      console.log("[NotificationService] Notification type:", notificationType);
       
       // Broadcast notifications (upcoming_summary from GitHub workflows) should have null userId
       const isBroadcast = notificationType === "upcoming_summary"
+      console.log("[NotificationService] Is broadcast:", isBroadcast);
       
       const notification: Omit<AppNotification, "id" | "createdAt"> = {
         userId: isBroadcast ? null : (userId || undefined),
@@ -430,13 +477,23 @@ export class NotificationService {
         isRead: false,
       }
 
-      await this.saveNotification(notification)
-      console.log("NotificationService: Processed incoming notification, type:", notificationType, "broadcast:", isBroadcast)
+      console.log("[NotificationService] Prepared notification:", notification);
+      console.log("[NotificationService] Calling saveNotification...");
+      
+      const notificationId = await this.saveNotification(notification)
+      
+      console.log("[NotificationService] ✅ Notification saved with ID:", notificationId);
+      console.log("[NotificationService] Notifying listeners...");
       
       // Notify all listeners that a new notification arrived
       this.notifyListeners()
+      
+      console.log("[NotificationService] ✅ Processing complete");
     } catch (error) {
-      console.error("NotificationService: Error processing incoming notification:", error)
+      console.error("[NotificationService] ❌ ERROR processing incoming notification:", error);
+      console.error("[NotificationService] Error details:", error instanceof Error ? error.message : String(error));
+      console.error("[NotificationService] Error stack:", error instanceof Error ? error.stack : "N/A");
+      throw error;
     }
   }
 }

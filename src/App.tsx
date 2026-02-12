@@ -205,20 +205,33 @@ function AppContent() {
   // 🔔 Listen for foreground notifications
   useEffect(() => {
     const unsubscribe = onMessage(messaging, async (payload) => {
-      console.log("Foreground notification received:", payload);
+      console.log("=".repeat(60));
+      console.log("FOREGROUND NOTIFICATION RECEIVED");
+      console.log("Notification received:", payload);
       console.log("Notification type:", payload.data?.type);
       console.log("Notification data:", payload.data);
+      console.log("Current user UID:", user?.uid || "Not logged in");
+      console.log("=".repeat(60));
       
-      // Save notification to Firestore (will handle broadcast vs user-specific)
-      await NotificationService.processIncomingNotification(payload, user?.uid);
+      try {
+        // Save notification to Firestore (will handle broadcast vs user-specific)
+        console.log("Calling NotificationService.processIncomingNotification...");
+        await NotificationService.processIncomingNotification(payload, user?.uid);
+        console.log("✅ Notification saved to Firestore successfully");
+      } catch (error) {
+        console.error("❌ ERROR saving notification to Firestore:", error);
+        console.error("Error details:", error instanceof Error ? error.message : String(error));
+      }
       
       // Show foreground banner
+      console.log("Setting banner with title:", payload.notification?.title);
       setBanner({
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
       });
       
-      console.log("Notification banner displayed");
+      console.log("✅ Notification banner displayed");
+      console.log("=".repeat(60));
     });
 
     return () => unsubscribe();
