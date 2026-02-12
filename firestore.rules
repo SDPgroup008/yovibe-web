@@ -99,6 +99,18 @@ service cloud.firestore {
       allow delete: if false;
     }
     
+    // Notification User Interactions collection
+    match /YoVibe/data/notification_user_interactions/{interactionId} {
+      // Only admins can read user interaction data
+      allow read: if isAdmin(request.auth.uid);
+      
+      // System can create and update user interactions
+      allow create, update: if true;
+      
+      // Prevent deletion
+      allow delete: if false;
+    }
+    
     // Reports: users can create reports; only admins can read/update
     match /YoVibe/data/reports/{reportId} {
       allow create: if request.auth != null && request.resource.data.reporterId == request.auth.uid;

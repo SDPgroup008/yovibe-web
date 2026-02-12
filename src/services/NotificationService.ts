@@ -13,10 +13,10 @@ import {
   Timestamp,
   increment,
 } from "firebase/firestore"
-import { db } from "../config/firebase"
+import { db, auth } from "../config/firebase"
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
-import type { AppNotification, NotificationAnalytics, DailyNotificationStats } from "../models/Notification"
+import type { AppNotification, NotificationAnalytics, DailyNotificationStats, NotificationUserInteraction, NotificationDetailedAnalytics } from "../models/Notification"
 
 export class NotificationService {
   private static instance: NotificationService
@@ -205,7 +205,7 @@ export class NotificationService {
   }
 
   // Mark notification as opened
-  async markAsOpened(notificationId: string): Promise<void> {
+  async markAsOpened(notificationId: string, userId?: string): Promise<void> {
     try {
       const notificationRef = doc(db, "YoVibe/data/notifications", notificationId)
       const notificationDoc = await getDoc(notificationRef)
@@ -224,6 +224,12 @@ export class NotificationService {
         // Track daily stats
         const today = new Date().toISOString().split('T')[0]
         await this.trackDailyStat(today, 'opened')
+        
+        // Track which user opened this notification
+        const trackingUserId = userId || auth.currentUser?.uid
+        if (trackingUserId) {
+          await this.trackUserOpened(notificationId, trackingUserId)
+        }
       }
     } catch (error) {
       console.error("NotificationService: Error marking as opened:", error)
@@ -490,6 +496,12 @@ export class NotificationService {
       // Track daily stats - increment notifications sent      const today = new Date().toISOString().split('T')[0]
       await this.trackDailyStat(today, 'sent')
       
+      // Track which user received this notification
+      const trackingUserId = userId || auth.currentUser?.uid
+      if (trackingUserId) {
+        await this.trackUserInteraction(notificationId, trackingUserId)
+      }
+      
       // Notify all listeners that a new notification arrived
       this.notifyListeners()
       
@@ -587,6 +599,209 @@ export class NotificationService {
       return stats.sort((a, b) => a.date.localeCompare(b.date))
     } catch (error) {
       console.error("[NotificationService] Error getting daily stats:", error)
+      return []
+    }
+  }
+
+  // Track user interaction with a notification (when received)
+  async trackUserInteraction(notificationId: string, userId: string): Promise<void> {
+    try {
+      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
+      
+      // Check if interaction already exists
+      const q = query(
+        interactionsRef,
+        where("notificationId", "==", notificationId),
+        where("userId", "==", userId),
+        limit(1)
+      )
+      const existing = await getDocs(q)
+      
+      if (existing.empty) {
+        await addDoc(interactionsRef, {
+          notificationId,
+          userId,
+          receivedAt: Timestamp.now(),
+        })
+        console.log("[NotificationService] Tracked user interaction:", { notificationId, userId })
+        
+        // Update analytics with unique user count
+        await this.updateUniqueUserCount(notificationId, 'received')
+      }
+    } catch (error) {
+      console.error("[NotificationService] Error tracking user interaction:", error)
+    }
+  }
+
+  // Track when user opens a notification
+  async trackUserOpened(notificationId: string, userId: string): Promise<void> {
+    try {
+      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
+      
+      const q = query(
+        interactionsRef,
+        where("notificationId", "==", notificationId),
+        where("userId", "==", userId),
+        limit(1)
+      )
+      const querySnapshot = await getDocs(q)
+      
+      if (!querySnapshot.empty) {
+        const interactionDoc = querySnapshot.docs[0]
+        const data = interactionDoc.data()
+        
+        if (!data.openedAt) {
+          await updateDoc(doc(db, "YoVibe/data/notification_user_interactions", interactionDoc.id), {
+            openedAt: Timestamp.now(),
+          })
+          console.log("[NotificationService] Tracked user opened:", { notificationId, userId })
+          
+          // Update analytics with unique opened count
+          await this.updateUniqueUserCount(notificationId, 'opened')
+        }
+      }
+    } catch (error) {
+      console.error("[NotificationService] Error tracking user opened:", error)
+    }
+  }
+
+  // Update unique user counts in analytics
+  private async updateUniqueUserCount(notificationId: string, action: 'received' | 'opened'): Promise<void> {
+    try {
+      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
+      const q = query(analyticsRef, where("notificationId", "==", notificationId), limit(1))
+      const querySnapshot = await getDocs(q)
+      
+      if (!querySnapshot.empty) {
+        const analyticsDoc = querySnapshot.docs[0]
+        const updateData: any = {}
+        
+        if (action === 'received') {
+          updateData.uniqueUsersReceived = increment(1)
+        } else if (action === 'opened') {
+          updateData.uniqueUsersOpened = increment(1)
+        }
+        
+        await updateDoc(doc(db, "YoVibe/data/notification_analytics", analyticsDoc.id), updateData)
+      } else {
+        // Create analytics if doesn't exist
+        await addDoc(analyticsRef, {
+          notificationId,
+          totalSent: 0,
+          totalOpened: 0,
+          totalRead: 0,
+          uniqueUsersReceived: action === 'received' ? 1 : 0,
+          uniqueUsersOpened: action === 'opened' ? 1 : 0,
+          createdAt: Timestamp.now(),
+        })
+      }
+    } catch (error) {
+      console.error("[NotificationService] Error updating unique user count:", error)
+    }
+  }
+
+  // Get detailed analytics for a notification with user lists
+  async getNotificationDetailedAnalytics(notificationId: string): Promise<NotificationDetailedAnalytics | null> {
+    try {
+      // Get basic analytics
+      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
+      const q = query(analyticsRef, where("notificationId", "==", notificationId), limit(1))
+      const analyticsSnapshot = await getDocs(q)
+      
+      if (analyticsSnapshot.empty) {
+        return null
+      }
+      
+      const analyticsData = analyticsSnapshot.docs[0].data()
+      
+      // Get user interactions
+      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
+      const interactionsQuery = query(interactionsRef, where("notificationId", "==", notificationId))
+      const interactionsSnapshot = await getDocs(interactionsQuery)
+      
+      const usersWhoReceived: string[] = []
+      const usersWhoOpened: string[] = []
+      
+      interactionsSnapshot.forEach((doc) => {
+        const data = doc.data()
+        usersWhoReceived.push(data.userId)
+        if (data.openedAt) {
+          usersWhoOpened.push(data.userId)
+        }
+      })
+      
+      const totalSent = analyticsData.totalSent || 0
+      const totalOpened = analyticsData.totalOpened || 0
+      
+      return {
+        notificationId,
+        totalSent,
+        totalOpened,
+        totalRead: analyticsData.totalRead || 0,
+        openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
+        readRate: totalSent > 0 ? ((analyticsData.totalRead || 0) / totalSent) * 100 : 0,
+        createdAt: analyticsData.createdAt?.toDate() || new Date(),
+        uniqueUsersReceived: usersWhoReceived.length,
+        uniqueUsersOpened: usersWhoOpened.length,
+        usersWhoReceived,
+        usersWhoOpened,
+      }
+    } catch (error) {
+      console.error("[NotificationService] Error getting detailed analytics:", error)
+      return null
+    }
+  }
+
+  // Get all notifications with user interaction details
+  async getAllNotificationDetailedAnalytics(limitCount: number = 20): Promise<NotificationDetailedAnalytics[]> {
+    try {
+      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
+      const q = query(analyticsRef, limit(limitCount))
+      const querySnapshot = await getDocs(q)
+      
+      const detailedAnalytics: NotificationDetailedAnalytics[] = []
+      
+      for (const analyticsDoc of querySnapshot.docs) {
+        const data = analyticsDoc.data()
+        const notificationId = data.notificationId
+        
+        // Get user interactions for this notification
+        const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
+        const interactionsQuery = query(interactionsRef, where("notificationId", "==", notificationId))
+        const interactionsSnapshot = await getDocs(interactionsQuery)
+        
+        const usersWhoReceived: string[] = []
+        const usersWhoOpened: string[] = []
+        
+        interactionsSnapshot.forEach((doc) => {
+          const interactionData = doc.data()
+          usersWhoReceived.push(interactionData.userId)
+          if (interactionData.openedAt) {
+            usersWhoOpened.push(interactionData.userId)
+          }
+        })
+        
+        const totalSent = data.totalSent || 0
+        const totalOpened = data.totalOpened || 0
+        
+        detailedAnalytics.push({
+          notificationId,
+          totalSent,
+          totalOpened,
+          totalRead: data.totalRead || 0,
+          openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
+          readRate: totalSent > 0 ? ((data.totalRead || 0) / totalSent) * 100 : 0,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          uniqueUsersReceived: usersWhoReceived.length,
+          uniqueUsersOpened: usersWhoOpened.length,
+          usersWhoReceived,
+          usersWhoOpened,
+        })
+      }
+      
+      return detailedAnalytics
+    } catch (error) {
+      console.error("[NotificationService] Error getting all detailed analytics:", error)
       return []
     }
   }

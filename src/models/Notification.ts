@@ -22,6 +22,8 @@ export interface NotificationAnalytics {
   openRate: number
   readRate: number
   createdAt: Date
+  uniqueUsersReceived: number // Unique users who received this notification
+  uniqueUsersOpened: number // Unique users who opened this notification
 }
 
 export interface DailyNotificationStats {
@@ -32,4 +34,20 @@ export interface DailyNotificationStats {
   newSubscriptions: number // New users who allowed notifications
   openRate: number
   createdAt: Date
+}
+
+// Track individual user interactions with notifications
+export interface NotificationUserInteraction {
+  id: string
+  notificationId: string
+  userId: string // FCM token or user ID
+  receivedAt: Date
+  openedAt?: Date
+  readAt?: Date
+}
+
+// Detailed analytics with user lists
+export interface NotificationDetailedAnalytics extends NotificationAnalytics {
+  usersWhoReceived: string[] // List of user IDs who received
+  usersWhoOpened: string[] // List of user IDs who opened
 }

@@ -52,7 +52,7 @@ export default function NotificationScreen() {
 
   const handleNotificationPress = async (notification: AppNotification) => {
     // Mark as opened
-    await NotificationService.markAsOpened(notification.id)
+    await NotificationService.markAsOpened(notification.id, user?.uid)
     
     // Update local state
     setNotifications(prev =>

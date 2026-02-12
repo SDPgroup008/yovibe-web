@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert } from "react-native"
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
@@ -23,6 +23,38 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
+
+  const openInGoogleMaps = async () => {
+    if (!venue) return
+
+    try {
+      // Encode venue name for URL
+      const venueName = encodeURIComponent(venue.name)
+      
+      // Use Google Maps URL scheme (works on both iOS and Android)
+      const url = `https://www.google.com/maps/search/?api=1&query=${venueName}`
+      
+      // Check if the URL can be opened
+      const supported = await Linking.canOpenURL(url)
+      
+      if (supported) {
+        await Linking.openURL(url)
+      } else {
+        Alert.alert(
+          "Cannot Open Maps",
+          "Unable to open Google Maps. Please ensure you have Google Maps installed.",
+          [{ text: "OK" }]
+        )
+      }
+    } catch (error) {
+      console.error("Error opening Google Maps:", error)
+      Alert.alert(
+        "Error",
+        "Failed to open Google Maps. Please try again.",
+        [{ text: "OK" }]
+      )
+    }
+  }
 
   useEffect(() => {
     const loadVenueAndEvents = async () => {
@@ -115,11 +147,11 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   }, [venueId, user, navigation])
 
   const handleManagePrograms = () => {
-    navigation.navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
+    (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
   }
 
   const handleAddEvent = () => {
-    navigation.navigate("AddEvent", { venueId, venueName: venue?.name || "" })
+    (navigation as any).navigate("AddEvent", { venueId, venueName: venue?.name || "" })
   }
 
   const handleDeleteVenue = async () => {
@@ -131,7 +163,11 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         onPress: async () => {
           try {
             setLoading(true)
-            await FirebaseService.deleteEventsByVenue(venueId)
+            // Delete all events associated with this venue
+            const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+            for (const event of venueEvents) {
+              await FirebaseService.deleteEvent(event.id)
+            }
             await FirebaseService.deleteVenue(venueId)
             Alert.alert("Success", "Venue and associated events deleted successfully")
             navigation.goBack()
@@ -146,7 +182,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   }
 
   const handleTodaysVibe = () => {
-    navigation.navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
+    (navigation as any).navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
   }
 
   if (loading) {
@@ -266,8 +302,8 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
                 <View style={styles.eventInfo}>
                   <Text style={styles.eventName}>{event.name}</Text>
                   <Text style={styles.eventDate}>
-                    {event.date && typeof event.date.toDate === "function"
-                      ? event.date.toDate().toDateString()
+                    {event.date && typeof (event.date as any).toDate === "function"
+                      ? (event.date as any).toDate().toDateString()
                       : new Date(event.date).toDateString()}
                   </Text>
                   <Text style={styles.eventArtists}>{event.artists.join(", ")}</Text>
@@ -279,12 +315,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
 
         <TouchableOpacity
           style={styles.directionsButton}
-          onPress={() => {
-            (navigation as any).navigate("Map", {
-              screen: "MapView",
-              params: { destinationVenueId: venueId },
-            })
-          }}
+          onPress={openInGoogleMaps}
         >
           <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
           <Text style={styles.directionsButtonText}>Get Directions</Text>

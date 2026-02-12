@@ -14,7 +14,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
 import NotificationService from '../../services/NotificationService';
-import type { NotificationAnalytics, DailyNotificationStats } from '../../models/Notification';
+import type { NotificationAnalytics, NotificationDetailedAnalytics, DailyNotificationStats } from '../../models/Notification';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
@@ -24,7 +24,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
-  const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationAnalytics[]>([]);
+  const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationDetailedAnalytics[]>([]);
+  const [expandedNotifications, setExpandedNotifications] = useState<Set<string>>(new Set());
   const [dailyNotificationStats, setDailyNotificationStats] = useState<DailyNotificationStats[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
   const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'notifications'>('overview');
@@ -55,7 +56,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         AnalyticsService.getAnalyticsSummary(),
         AnalyticsService.getTrendData(selectedPeriod, limit),
         AnalyticsService.getFrequentVisitorsToday(),
-        NotificationService.getAllNotificationAnalytics(),
+        NotificationService.getAllNotificationDetailedAnalytics(),
         NotificationService.getDailyNotificationStats(30),
       ]);
 
@@ -788,63 +789,150 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
                     </View>
                   </View>
 
-                  {notificationAnalytics.slice(0, 10).map((notification) => (
-                    <View key={notification.notificationId} style={styles.notifCard}>
-                      <View style={styles.notifCardHeader}>
-                        <Text style={styles.notifCardId} numberOfLines={1}>
-                          {notification.notificationId}
-                        </Text>
-                        <Text style={styles.notifCardDate}>
-                          {notification.createdAt.toLocaleDateString()}
-                        </Text>
-                      </View>
+                  {notificationAnalytics.slice(0, 10).map((notification) => {
+                    const isExpanded = expandedNotifications.has(notification.notificationId);
+                    
+                    return (
+                      <View key={notification.notificationId} style={styles.notifCard}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setExpandedNotifications(prev => {
+                              const next = new Set(prev);
+                              if (next.has(notification.notificationId)) {
+                                next.delete(notification.notificationId);
+                              } else {
+                                next.add(notification.notificationId);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <View style={styles.notifCardHeader}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.notifCardId} numberOfLines={1}>
+                                {notification.notificationId}
+                              </Text>
+                              <Text style={styles.notifCardDate}>
+                                {notification.createdAt.toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <Ionicons
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={20}
+                              color="#00F5FF"
+                            />
+                          </View>
 
-                      <View style={styles.notifCardStats}>
-                        <View style={styles.notifCardStat}>
-                          <Text style={styles.notifCardStatValue}>{notification.totalSent}</Text>
-                          <Text style={styles.notifCardStatLabel}>Sent</Text>
-                        </View>
-                        <View style={styles.notifCardStat}>
-                          <Text style={styles.notifCardStatValue}>{notification.totalOpened}</Text>
-                          <Text style={styles.notifCardStatLabel}>Opened</Text>
-                        </View>
-                        <View style={styles.notifCardStat}>
-                          <Text style={styles.notifCardStatValue}>{notification.totalRead}</Text>
-                          <Text style={styles.notifCardStatLabel}>Read</Text>
-                        </View>
-                      </View>
+                          <View style={styles.notifCardStats}>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.totalSent}</Text>
+                              <Text style={styles.notifCardStatLabel}>Sent</Text>
+                            </View>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.totalOpened}</Text>
+                              <Text style={styles.notifCardStatLabel}>Opened</Text>
+                            </View>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.uniqueUsersReceived}</Text>
+                              <Text style={styles.notifCardStatLabel}>Unique Users</Text>
+                            </View>
+                          </View>
 
-                      <View style={styles.notifCardProgress}>
-                        <View style={styles.progressRow}>
-                          <Text style={styles.progressLabel}>Open Rate</Text>
-                          <Text style={styles.progressValue}>{notification.openRate.toFixed(1)}%</Text>
-                        </View>
-                        <View style={styles.progressBarContainer}>
-                          <View
-                            style={[
-                              styles.progressBarFill,
-                              { width: `${notification.openRate}%`, backgroundColor: '#00FF9F' },
-                            ]}
-                          />
-                        </View>
-                      </View>
+                          <View style={styles.notifCardProgress}>
+                            <View style={styles.progressRow}>
+                              <Text style={styles.progressLabel}>Open Rate</Text>
+                              <Text style={styles.progressValue}>{notification.openRate.toFixed(1)}%</Text>
+                            </View>
+                            <View style={styles.progressBarContainer}>
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  { width: `${notification.openRate}%`, backgroundColor: '#00FF9F' },
+                                ]}
+                              />
+                            </View>
+                          </View>
 
-                      <View style={styles.notifCardProgress}>
-                        <View style={styles.progressRow}>
-                          <Text style={styles.progressLabel}>Read Rate</Text>
-                          <Text style={styles.progressValue}>{notification.readRate.toFixed(1)}%</Text>
-                        </View>
-                        <View style={styles.progressBarContainer}>
-                          <View
-                            style={[
-                              styles.progressBarFill,
-                              { width: `${notification.readRate}%`, backgroundColor: '#00F5FF' },
-                            ]}
-                          />
-                        </View>
+                          <View style={styles.notifCardProgress}>
+                            <View style={styles.progressRow}>
+                              <Text style={styles.progressLabel}>Read Rate</Text>
+                              <Text style={styles.progressValue}>{notification.readRate.toFixed(1)}%</Text>
+                            </View>
+                            <View style={styles.progressBarContainer}>
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  { width: `${notification.readRate}%`, backgroundColor: '#00F5FF' },
+                                ]}
+                              />
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+
+                        {isExpanded && (
+                          <View style={styles.userListsContainer}>
+                            <View style={styles.userListSection}>
+                              <View style={styles.userListHeader}>
+                                <Ionicons name="people" size={16} color="#00FF9F" />
+                                <Text style={styles.userListTitle}>
+                                  Users Received ({notification.usersWhoReceived.length})
+                                </Text>
+                              </View>
+                              {notification.usersWhoReceived.length > 0 ? (
+                                <View style={styles.userChipsContainer}>
+                                  {notification.usersWhoReceived.slice(0, 10).map((userId, idx) => (
+                                    <View key={idx} style={styles.userChip}>
+                                      <Text style={styles.userChipText} numberOfLines={1}>
+                                        {userId.substring(0, 8)}...
+                                      </Text>
+                                    </View>
+                                  ))}
+                                  {notification.usersWhoReceived.length > 10 && (
+                                    <View style={styles.userChip}>
+                                      <Text style={styles.userChipText}>
+                                        +{notification.usersWhoReceived.length - 10} more
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ) : (
+                                <Text style={styles.noUsersText}>No users</Text>
+                              )}
+                            </View>
+
+                            <View style={styles.userListSection}>
+                              <View style={styles.userListHeader}>
+                                <Ionicons name="open" size={16} color="#FF00FF" />
+                                <Text style={styles.userListTitle}>
+                                  Users Opened ({notification.usersWhoOpened.length})
+                                </Text>
+                              </View>
+                              {notification.usersWhoOpened.length > 0 ? (
+                                <View style={styles.userChipsContainer}>
+                                  {notification.usersWhoOpened.slice(0, 10).map((userId, idx) => (
+                                    <View key={idx} style={[styles.userChip, styles.userChipOpened]}>
+                                      <Text style={styles.userChipText} numberOfLines={1}>
+                                        {userId.substring(0, 8)}...
+                                      </Text>
+                                    </View>
+                                  ))}
+                                  {notification.usersWhoOpened.length > 10 && (
+                                    <View style={[styles.userChip, styles.userChipOpened]}>
+                                      <Text style={styles.userChipText}>
+                                        +{notification.usersWhoOpened.length - 10} more
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ) : (
+                                <Text style={styles.noUsersText}>No users</Text>
+                              )}
+                            </View>
+                          </View>
+                        )}
                       </View>
-                    </View>
-                  ))}
+                    );
+                  })}
                 </>
               )}
             </View>
@@ -1438,6 +1526,56 @@ const styles = StyleSheet.create({
   progressBarFill: {
     height: '100%',
     borderRadius: 3,
+  },
+
+  // User Lists in Notifications
+  userListsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  userListSection: {
+    marginBottom: 12,
+  },
+  userListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  userListTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  userChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  userChip: {
+    backgroundColor: 'rgba(0, 255, 159, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 159, 0.3)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: 100,
+  },
+  userChipOpened: {
+    backgroundColor: 'rgba(255, 0, 255, 0.1)',
+    borderColor: 'rgba(255, 0, 255, 0.3)',
+  },
+  userChipText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontFamily: 'monospace',
+  },
+  noUsersText: {
+    fontSize: 11,
+    color: '#666',
+    fontStyle: 'italic',
   },
 
   // No Data
