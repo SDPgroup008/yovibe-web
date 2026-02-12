@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -12,8 +12,10 @@ import {
   ImageBackground,
   Platform,
   TextInput,
+  RefreshControl,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useIsFocused } from "@react-navigation/native";
 import FirebaseService from "../services/FirebaseService";
 import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
@@ -22,10 +24,12 @@ import type { EventsScreenProps } from "../navigation/types";
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   const { user, setRedirectIntent } = useAuth();
+  const isFocused = useIsFocused();
   const [events, setEvents] = useState<Event[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
@@ -34,17 +38,23 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [dataCache, setDataCache] = useState<{data: Event[], timestamp: number} | null>(null);
+  const flatListRef = useRef<FlatList>(null);
   const ITEMS_PER_PAGE = 5;
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+  // Initial data load only - no reload on focus
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
+    if (events.length === 0) {
       loadEvents();
-      loadUnreadCount();
-    });
+    }
+  }, []);
 
-    return unsubscribe;
-  }, [navigation]);
+  // Update notification badge when screen is focused
+  useEffect(() => {
+    if (isFocused) {
+      loadUnreadCount();
+    }
+  }, [isFocused]);
 
   // Listen for new notifications
   useEffect(() => {
@@ -108,9 +118,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     return Date.now() - dataCache.timestamp < CACHE_DURATION;
   };
 
-  const loadEvents = async (isInitial: boolean = true) => {
+  const loadEvents = async (isInitial: boolean = true, isRefresh: boolean = false) => {
     try {
-      if (isInitial) {
+      if (isInitial && !isRefresh) {
         // Check cache first for initial load
         if (isCacheValid()) {
           console.log("Using cached events data");
@@ -120,6 +130,10 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           return;
         }
         setLoading(true);
+      }
+
+      if (isRefresh) {
+        setRefreshing(true);
       }
 
       // AUTO-LOAD ALL EVENTS: Fetch all data in batches with 7-second delays
@@ -221,8 +235,15 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
       console.error("Error loading events:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setDataCache(null); // Clear cache to force fresh load
+    await loadEvents(true, true);
+  }, []);
 
   const handleEventSelect = (eventId: string) => {
     navigation.navigate("EventDetail", { eventId });
@@ -426,6 +447,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={displayedEvents}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
@@ -433,6 +455,17 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           contentContainerStyle={styles.eventsList}
           onEndReached={loadMoreEvents}
           onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#2196F3"]}
+              tintColor="#2196F3"
+            />
+          }
+          initialNumToRender={5}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
 

@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking } from "react-native"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { useIsFocused } from "@react-navigation/native"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
 import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
@@ -16,9 +17,13 @@ import VibeAnalysisService from "../services/VibeAnalysisService"
 const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation }) => {
   const { venueId } = route.params
   const { user } = useAuth()
+  const isFocused = useIsFocused()
+  const scrollViewRef = useRef<ScrollView>(null)
+  
   const [venue, setVenue] = useState<Venue | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomVenue, setIsCustomVenue] = useState(false)
@@ -134,17 +139,38 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
       }
     )
 
-    // Handle navigation focus to refresh data
-    const unsubscribeNavigation = navigation.addListener("focus", () => {
-      loadVenueAndEvents()
-    })
-
     // Cleanup listeners on unmount
     return () => {
       unsubscribeVibe()
-      unsubscribeNavigation()
     }
-  }, [venueId, user, navigation])
+  }, [venueId, user])
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      const venueData = await FirebaseService.getVenueById(venueId)
+      setVenue(venueData)
+      
+      if (user && venueData) {
+        setIsOwner(venueData.ownerId === user.id)
+        setIsAdmin(user.userType === "admin")
+        
+        const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+        setEvents(venueEvents)
+        
+        if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
+          setIsCustomVenue(true)
+        } else {
+          setIsCustomVenue(false)
+        }
+      }
+    } catch (error) {
+      console.error("Error refreshing venue details:", error)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [venueId, user])
 
   const handleManagePrograms = () => {
     (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
@@ -202,7 +228,18 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   }
 
   return (
-    <ScrollView style={styles.container}>
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={["#2196F3"]}
+          tintColor="#2196F3"
+        />
+      }
+    >
       <Image source={{ uri: venue.backgroundImageUrl }} style={styles.headerImage} />
 
       <View style={styles.contentContainer}>

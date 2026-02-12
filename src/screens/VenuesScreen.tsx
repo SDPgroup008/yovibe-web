@@ -1,8 +1,9 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator } from "react-native";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl } from "react-native";
+import { useIsFocused } from "@react-navigation/native";
 import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";
@@ -17,9 +18,11 @@ interface VenuesScreenProps {
 
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const { user, setRedirectIntent } = useAuth();
+  const isFocused = useIsFocused();
 
   const [venues, setVenues] = useState<Venue[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<"nightlife" | "recreation">("nightlife");
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
@@ -27,28 +30,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [dataCache, setDataCache] = useState<{data: Venue[], timestamp: number, version: string} | null>(null);
+  const flatListRef = useRef<FlatList>(null);
   const ITEMS_PER_PAGE = 5;
   const INITIAL_FETCH_SIZE = 10; // Fetch 10 initially to ensure 5 per tab
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   const CACHE_VERSION = '2'; // Increment to bust cache
 
+  // Initial data load only - no reload on focus
   useEffect(() => {
-    // Load venues and initial vibe ratings
-    loadVenues();
-
-    // Handle navigation focus to refresh venues
-    const unsubscribeNavigation = navigation.addListener("focus", () => {
-      // Only reload if cache is expired
-      if (!isCacheValid()) {
-        loadVenues();
-      }
-    });
-
-    // Cleanup listeners on unmount
-    return () => {
-      unsubscribeNavigation();
-    };
-  }, [navigation]);
+    if (venues.length === 0) {
+      loadVenues();
+    }
+  }, []);
 
   const isCacheValid = () => {
     if (!dataCache) {
@@ -67,10 +60,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     return isValid;
   };
 
-  const loadVenues = async (isInitial: boolean = true) => {
-    console.log(`\n🚀 loadVenues CALLED - isInitial: ${isInitial}`);
+  const loadVenues = async (isInitial: boolean = true, isRefresh: boolean = false) => {
+    console.log(`\n🚀 loadVenues CALLED - isInitial: ${isInitial}, isRefresh: ${isRefresh}`);
     try {
-      if (isInitial) {
+      if (isInitial && !isRefresh) {
         console.log("\n🔄 VENUES SCREEN: Loading venues (initial load - fetching venues for both tabs)...")
         console.log(`📦 Current cache state:`, dataCache ? `exists (${dataCache.data?.length || 0} venues, version: ${dataCache.version})` : 'null');
         
@@ -84,6 +77,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         }
         console.log("⚠️ Cache invalid or empty, fetching from Firebase...")
         setLoading(true);
+      }
+
+      if (isRefresh) {
+        setRefreshing(true);
       }
 
       // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
@@ -330,7 +327,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           console.log(`Updated hasMore state: ${newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE}`);
           
           // Update cache
-          setDataCache({ data: updatedVenues, timestamp: Date.now() });
+          setDataCache({ data: updatedVenues, timestamp: Date.now(), version: CACHE_VERSION });
           
           // Load vibe ratings for new venues
           console.log("\n🎵 Loading vibe ratings for new venues...");
@@ -356,10 +353,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         }
       } catch (error) {
         console.error("❌ Error loading more venues:", error);
+      } finally {
+        setRefreshing(false);
       }
       return;
     }
   };
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setDataCache(null); // Clear cache to force fresh load
+    await loadVenues(true, true);
+  }, []);
 
   const renderVenueCard = ({ item }: { item: Venue }) => (
     <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
@@ -454,14 +459,24 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={displayedVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}
-          refreshing={loading}
-          onRefresh={loadVenues}
           contentContainerStyle={styles.venuesList}
           onEndReached={loadMoreVenues}
           onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#2196F3"]}
+              tintColor="#2196F3"
+            />
+          }
+          initialNumToRender={5}
+          maxToRenderPerBatch={10}
+          windowSize={10}
         />
       )}
 

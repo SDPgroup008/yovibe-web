@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from "react-native"
+import { useState, useEffect, useCallback } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import type { Venue } from "../models/Venue"
@@ -12,6 +12,7 @@ import type { MapScreenProps } from "../navigation/types"
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([])
   const [currentPage, setCurrentPage] = useState(1)
@@ -24,13 +25,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
 
+  // Initial load only
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      loadVenues()
-    })
+    loadVenues()
+  }, [])
 
-    return unsubscribe
-  }, [navigation])
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadVenues()
+    setRefreshing(false)
+  }, [])
 
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
@@ -198,7 +203,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           <Text style={styles.emptyText}>No venues found</Text>
         </View>
       ) : (
-        <ScrollView 
+        <ScrollView
           style={styles.venueList}
           onScroll={({ nativeEvent }) => {
             const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
@@ -208,6 +213,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             }
           }}
           scrollEventThrottle={400}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#2196F3"]}
+              tintColor="#2196F3"
+            />
+          }
         >
           {displayedVenues.map((venue) => (
             <View key={venue.id} style={[styles.venueCard, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>

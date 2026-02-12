@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
+import { useState, useEffect, useRef, useCallback } from "react"
+import { View, Text, StyleSheet, Dimensions, TouchableOpacity, Alert, ActivityIndicator, RefreshControl } from "react-native"
 import MapView, { Marker, Callout, PROVIDER_GOOGLE, Polyline } from "react-native-maps"
 import { Ionicons } from "@expo/vector-icons"
 import LocationService from "../services/LocationService"
@@ -16,6 +16,7 @@ const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY" // Replace with your actu
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [directions, setDirections] = useState<Array<{ latitude: number; longitude: number }>>([])
@@ -26,14 +27,19 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
 
+  // Initial load
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      loadVenues()
-      getUserLocation()
-    })
+    loadVenues()
+    getUserLocation()
+  }, [])
 
-    return unsubscribe
-  }, [navigation])
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadVenues()
+    await getUserLocation()
+    setRefreshing(false)
+  }, [])
 
   useEffect(() => {
     // If a destination venue ID is provided, show directions to it

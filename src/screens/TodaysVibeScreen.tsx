@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Dimensions,
   Modal,
+  RefreshControl,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -31,6 +32,7 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const [todayVibes, setTodayVibes] = useState<VibeImage[]>([])
   const [weekVibes, setWeekVibes] = useState<Record<string, VibeImage[]>>({})
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedDay, setSelectedDay] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<VibeImage | null>(null)
   const [displayedTodayVibes, setDisplayedTodayVibes] = useState<VibeImage[]>([])
@@ -40,18 +42,10 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   const screenWidth = Dimensions.get("window").width
   const imageSize = (screenWidth - 48) / 2 // 2 columns with padding
 
+  // Initial data load only
   useEffect(() => {
     loadVibeData()
   }, [venueId])
-
-  useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
-      console.log("TodaysVibeScreen focused, refreshing data...")
-      loadVibeData()
-    })
-
-    return unsubscribe
-  }, [navigation, venueId])
 
   useEffect(() => {
     // Reset pagination when todayVibes changes
@@ -70,9 +64,11 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
     setCurrentTodayPage(nextPage);
   };
 
-  const loadVibeData = async () => {
+  const loadVibeData = async (isRefresh: boolean = false) => {
     try {
-      setLoading(true)
+      if (!isRefresh) {
+        setLoading(true)
+      }
 
       // Load today's vibes
       const today = new Date()
@@ -101,8 +97,14 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
       console.error("Error loading vibe data:", error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    await loadVibeData(true)
+  }, [venueId])
 
   const formatTime = (date: Date) => {
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -220,6 +222,14 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
               contentContainerStyle={styles.vibeGrid}
               onEndReached={loadMoreTodayVibes}
               onEndReachedThreshold={0.5}
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={onRefresh}
+                  colors={["#2196F3"]}
+                  tintColor="#2196F3"
+                />
+              }
             />
           )}
         </View>

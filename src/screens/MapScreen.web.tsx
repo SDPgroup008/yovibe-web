@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from "react-native"
+import { useState, useEffect, useCallback } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
@@ -14,6 +14,7 @@ import type { MapScreenProps } from "../navigation/types"
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
 
@@ -84,17 +85,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
     setupVibeListeners()
 
-    // Handle navigation focus to refresh venues
-    const unsubscribeNavigation = navigation.addListener("focus", () => {
-      loadVenues()
-    })
-
     // Cleanup listeners on unmount
     return () => {
-      unsubscribeNavigation()
       unsubscribeVibeListeners.forEach((unsubscribe) => unsubscribe())
     }
-  }, [navigation])
+  }, [])
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadVenues()
+    setRefreshing(false)
+  }, [])
 
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
@@ -251,7 +253,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           <Text style={styles.emptyText}>No venues found</Text>
         </View>
       ) : (
-        <ScrollView style={styles.venueList}>
+        <ScrollView
+          style={styles.venueList}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#2196F3"]}
+              tintColor="#2196F3"
+            />
+          }
+        >
           {getSortedVenues().map((venue) => (
             <View key={venue.id} style={[styles.venueCard, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
               <View style={styles.venueInfo}>

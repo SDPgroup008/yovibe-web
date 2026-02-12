@@ -1,10 +1,11 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator } from "react-native"
+import { useState, useEffect, useCallback } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl } from "react-native"
 import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
+import { useIsFocused } from "@react-navigation/native"
 import FirebaseService from "../services/FirebaseService"
 import type { Event } from "../models/Event"
 import type { CalendarScreenProps } from "../navigation/types"
@@ -99,21 +100,25 @@ const normalizeEvent = (raw: any): Event => {
 }
 
 const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
+  const isFocused = useIsFocused()
   const [events, setEvents] = useState<Event[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
 
+  // Initial data load only
   useEffect(() => {
-    const unsubscribe = navigation.addListener("focus", () => {
+    if (events.length === 0) {
       loadEvents()
-    })
-    return unsubscribe
-  }, [navigation])
+    }
+  }, [])
 
-  const loadEvents = async () => {
+  const loadEvents = async (isRefresh: boolean = false) => {
     try {
-      setLoading(true)
+      if (!isRefresh) {
+        setLoading(true)
+      }
       const rawEvents = await FirebaseService.getEvents()
       const normalized: Event[] = (rawEvents || []).map((ev: any) => normalizeEvent(ev))
       setEvents(normalized)
@@ -138,8 +143,14 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
       console.error("Error loading events for calendar:", error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    await loadEvents(true)
+  }, [])
 
   const handleDateSelect = (day: any) => {
     const newSelectedDate = day.dateString
@@ -231,6 +242,14 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
                 </View>
               </TouchableOpacity>
             )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#2196F3"]}
+                tintColor="#2196F3"
+              />
+            }
           />
         )}
       </View>
