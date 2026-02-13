@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,12 +8,16 @@ import {
   TouchableOpacity,
   Dimensions,
   RefreshControl,
+  Modal,
+  Pressable,
+  FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
 import NotificationService from '../../services/NotificationService';
+import TokenService, { TokenAnalyticsSummary, DailyTokenStats, TokenRecord } from '../../services/TokenService';
 import type { NotificationAnalytics, NotificationDetailedAnalytics, DailyNotificationStats } from '../../models/Notification';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
@@ -33,9 +37,29 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [refreshing, setRefreshing] = useState(false);
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
+  // Token analytics state
+  const [tokenSummary, setTokenSummary] = useState<TokenAnalyticsSummary | null>(null);
+  const [dailyTokenStats, setDailyTokenStats] = useState<DailyTokenStats[]>([]);
+  const [tokenRecords, setTokenRecords] = useState<TokenRecord[]>([]);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenPage, setTokenPage] = useState(0);
+  const [tokenTotalPages, setTokenTotalPages] = useState(0);
+  const [tokenModalVisible, setTokenModalVisible] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [hasLoadedMoreTokens, setHasLoadedMoreTokens] = useState(false);
+  const TOKEN_PAGE_SIZE = 20;
+  const INITIAL_DAYS = 7;
+
   useEffect(() => {
     loadAnalytics();
   }, [selectedPeriod]);
+
+  // Load token analytics when notifications tab is opened
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      loadTokenAnalytics();
+    }
+  }, [activeTab]);
 
   const loadAnalytics = async (force: boolean = false) => {
     // Check cache - if data was fetched recently, skip (unless forced)
@@ -73,6 +97,113 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
       setLoading(false);
       setRefreshing(false);
     }
+  };
+
+  // Token analytics functions
+  const loadTokenAnalytics = async (force: boolean = false) => {
+    try {
+      setTokenLoading(true);
+      
+      // Load token summary and initial daily stats
+      const [summaryData, initialStats] = await Promise.all([
+        TokenService.getTokenAnalyticsSummary(),
+        TokenService.getInitialDailyStats(),
+      ]);
+
+      setTokenSummary(summaryData);
+      setDailyTokenStats(initialStats);
+      setHasLoadedMoreTokens(false);
+      
+      // Get total pages for pagination
+      const totalPages = await TokenService.getTotalPages(TOKEN_PAGE_SIZE);
+      setTokenTotalPages(totalPages);
+      setTokenPage(0);
+
+      // Load first page of token records
+      const records = await TokenService.getTokenRecords({ page: 0, pageSize: TOKEN_PAGE_SIZE });
+      setTokenRecords(records);
+
+      // Update sync time
+      setLastSyncTime(TokenService.getLastSyncTime());
+    } catch (error) {
+      console.error('Error loading token analytics:', error);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  // Load more daily stats (pagination)
+  const loadMoreDailyStats = async () => {
+    if (hasLoadedMoreTokens) return;
+    
+    try {
+      setTokenLoading(true);
+      const moreStats = await TokenService.loadMoreDailyStats(INITIAL_DAYS, 30);
+      setDailyTokenStats(moreStats);
+      setHasLoadedMoreTokens(true);
+    } catch (error) {
+      console.error('Error loading more daily stats:', error);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  // Load more token records for modal
+  const loadMoreTokenRecords = async () => {
+    if (tokenPage >= tokenTotalPages - 1) return;
+    
+    try {
+      const nextPage = tokenPage + 1;
+      const newRecords = await TokenService.getTokenRecords({ page: nextPage, pageSize: TOKEN_PAGE_SIZE });
+      setTokenRecords(prev => [...prev, ...newRecords]);
+      setTokenPage(nextPage);
+    } catch (error) {
+      console.error('Error loading more token records:', error);
+    }
+  };
+
+  // Force refresh token data
+  const forceRefreshTokens = async () => {
+    await TokenService.forceRefresh();
+    await loadTokenAnalytics(true);
+  };
+
+  // Format last sync time
+  const formatLastSyncTime = () => {
+    if (!lastSyncTime) return 'Never synced';
+    const date = new Date(lastSyncTime);
+    return `Last synced: ${date.toLocaleTimeString()}`;
+  };
+
+  // Render token bar chart
+  const renderTokenBarChart = (data: DailyTokenStats[]) => {
+    if (data.length === 0) return null;
+
+    const maxTokens = Math.max(...data.map(d => d.newTokens), 1);
+    const chartWidth = Dimensions.get('window').width - 64;
+    const barWidth = Math.max(chartWidth / data.length - 8, 30);
+
+    return (
+      <View style={styles.chartRow}>
+        {data.map((item, index) => {
+          const barHeight = (item.newTokens / maxTokens) * 100;
+          const date = new Date(item.date);
+          const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          return (
+            <View key={index} style={[styles.tokenBarContainer, { width: barWidth }]}>
+              <View style={styles.tokenBarWrapper}>
+                <View style={[styles.tokenBar, { height: barHeight }]} />
+              </View>
+              <Text style={styles.tokenBarLabel} numberOfLines={1}>
+                {dateLabel}
+              </Text>
+              <Text style={styles.tokenBarValue}>{item.newTokens}</Text>
+            </View>
+          );
+        })}
+      </View>
+    );
   };
 
   const handleRefresh = async () => {
@@ -668,11 +799,124 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         {/* Notifications Tab */}
         {activeTab === 'notifications' && (
           <View style={styles.tabContent}>
+            {/* Token Subscribers Section - NEW */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Ionicons name="notifications" size={24} color="#00F5FF" />
+                  <Text style={styles.sectionTitle}>Notification Subscribers</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.syncButton}
+                  onPress={forceRefreshTokens}
+                  disabled={tokenLoading}
+                >
+                  <Ionicons 
+                    name={tokenLoading ? "hourglass" : "sync"} 
+                    size={20} 
+                    color="#00F5FF" 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              {/* Last Sync Time */}
+              <Text style={styles.syncTimeText}>{formatLastSyncTime()}</Text>
+
+              {/* Token Summary Cards */}
+              {tokenLoading && !tokenSummary ? (
+                <View style={styles.tokenLoadingContainer}>
+                  <ActivityIndicator size="large" color="#00F5FF" />
+                  <Text style={styles.loadingText}>Loading token data...</Text>
+                </View>
+              ) : (
+                <>
+                  {/* Summary Cards with Growth */}
+                  <View style={styles.tokenSummaryRow}>
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={styles.tokenSummaryIcon}>
+                        <Ionicons name="notifications" size={28} color="#00F5FF" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.totalTokens.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Total Subscribers</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(0, 255, 159, 0.1)' }]}>
+                        <Ionicons name="checkmark-circle" size={28} color="#00FF9F" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.activeTokens.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Active Tokens</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(255, 215, 0, 0.1)' }]}>
+                        <Ionicons name="trending-up" size={28} color="#FFD700" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <View style={styles.growthRowInline}>
+                          <Text style={styles.tokenSummaryValue}>
+                            +{tokenSummary?.newTokensToday || 0}
+                          </Text>
+                          <Ionicons 
+                            name={tokenSummary && tokenSummary.growthPercentage >= 0 ? "arrow-up" : "arrow-down"} 
+                            size={16} 
+                            color={tokenSummary && tokenSummary.growthPercentage >= 0 ? "#00FF9F" : "#FF6B6B"}
+                          />
+                          <Text style={[styles.growthPercentage, { color: tokenSummary && tokenSummary.growthPercentage >= 0 ? "#00FF9F" : "#FF6B6B" }]}>
+                            {Math.abs(tokenSummary?.growthPercentage || 0).toFixed(1)}%
+                          </Text>
+                        </View>
+                        <Text style={styles.tokenSummaryLabel}>Today</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Daily Subscription Bar Chart */}
+                  <View style={styles.tokenChartSection}>
+                    <View style={styles.tokenChartHeader}>
+                      <Text style={styles.tokenChartTitle}>Daily New Subscribers (30 Days)</Text>
+                      {!hasLoadedMoreTokens ? (
+                        <TouchableOpacity onPress={loadMoreDailyStats}>
+                          <Text style={styles.loadMoreLink}>Load More</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.loadedText}>Showing 30 days</Text>
+                      )}
+                    </View>
+                    
+                    {dailyTokenStats.length > 0 ? (
+                      renderTokenBarChart(dailyTokenStats)
+                    ) : (
+                      <Text style={styles.noDataText}>No subscription data available</Text>
+                    )}
+                  </View>
+
+                  {/* View Details Button */}
+                  <TouchableOpacity 
+                    style={styles.viewDetailsButton}
+                    onPress={() => setTokenModalVisible(true)}
+                  >
+                    <Ionicons name="list-outline" size={20} color="#00F5FF" />
+                    <Text style={styles.viewDetailsButtonText}>View All Token Records</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#00F5FF" />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
             {/* Daily Notification Stats */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
-                <Ionicons name="calendar-outline" size={24} color="#00F5FF" />
-                <Text style={styles.sectionTitle}>Daily Analytics (30 Days)</Text>
+                <Ionicons name="calendar-outline" size={24} color="#FF00FF" />
+                <Text style={styles.sectionTitle}>Daily Notification Analytics (30 Days)</Text>
               </View>
 
               {dailyNotificationStats.length === 0 ? (
@@ -755,7 +999,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             {/* Per-Notification Analytics */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
-                <Ionicons name="notifications" size={24} color="#FF00FF" />
+                <Ionicons name="notifications" size={24} color="#00F5FF" />
                 <Text style={styles.sectionTitle}>Notification Performance</Text>
               </View>
 
@@ -939,6 +1183,104 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
           </View>
         )}
       </ScrollView>
+
+      {/* Token Records Modal */}
+      <Modal
+        visible={tokenModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setTokenModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Token Records</Text>
+              <TouchableOpacity onPress={() => setTokenModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalStatsRow}>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenSummary?.totalTokens || 0}</Text>
+                <Text style={styles.modalStatLabel}>Total Tokens</Text>
+              </View>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenRecords.length}</Text>
+                <Text style={styles.modalStatLabel}>Showing</Text>
+              </View>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenTotalPages}</Text>
+                <Text style={styles.modalStatLabel}>Pages</Text>
+              </View>
+            </View>
+
+            <View style={styles.modalTableHeader}>
+              <Text style={[styles.modalTableHeaderText, { flex: 2 }]}>Token</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 1 }]}>Subscribed</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 0.5 }]}>Status</Text>
+            </View>
+
+            {tokenLoading ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#00F5FF" />
+                <Text style={styles.loadingText}>Loading records...</Text>
+              </View>
+            ) : (
+              <>
+                <FlatList
+                  data={tokenRecords}
+                  keyExtractor={(item, index) => `${item.token}-${index}`}
+                  renderItem={({ item }) => (
+                    <View style={styles.modalTableRow}>
+                      <Text style={[styles.modalTableCell, { flex: 2 }]} numberOfLines={1}>
+                        {item.token}
+                      </Text>
+                      <Text style={[styles.modalTableCell, { flex: 1 }]}>
+                        {item.subscribedAt.toLocaleDateString()}
+                      </Text>
+                      <View style={[styles.modalTableCellContainer, { flex: 0.5, alignItems: 'flex-start' }]}>
+                        <View style={[
+                          styles.statusDot,
+                          { backgroundColor: item.isActive ? '#00FF9F' : '#FF4444' }
+                        ]} />
+                      </View>
+                    </View>
+                  )}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
+                  windowSize={10}
+                />
+
+                {/* Load More Button */}
+                {tokenPage < tokenTotalPages - 1 && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreTokenRecords}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Load More Records</Text>
+                    <Ionicons name="chevron-down" size={16} color="#00F5FF" />
+                  </TouchableOpacity>
+                )}
+
+                {!hasLoadedMoreTokens && dailyTokenStats.length < 30 && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreDailyStats}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Load 30-Day History</Text>
+                    <Ionicons name="chevron-down" size={16} color="#00F5FF" />
+                  </TouchableOpacity>
+                )}
+
+                {tokenRecords.length === 0 && (
+                  <Text style={styles.noDataText}>No token records found</Text>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -1220,6 +1562,12 @@ const styles = StyleSheet.create({
   // Charts (keeping existing chart styles)
   chartScrollView: {
     marginVertical: 8,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 150,
+    paddingHorizontal: 8,
   },
   chartContainer: {
     flexDirection: 'row',
@@ -1576,6 +1924,258 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#666',
     fontStyle: 'italic',
+  },
+
+  // Token Analytics Styles
+  tokenBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 120,
+    paddingHorizontal: 4,
+    marginBottom: 16,
+  },
+  tokenBarWrapper: {
+    flexDirection: 'column-reverse',
+    alignItems: 'center',
+    height: 120,
+    justifyContent: 'flex-start',
+  },
+  tokenBar: {
+    width: 24,
+    borderRadius: 6,
+    minHeight: 4,
+  },
+  tokenBarLabel: {
+    fontSize: 9,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  tokenBarValue: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
+  },
+  syncTimeText: {
+    fontSize: 11,
+    color: '#888',
+  },
+  tokenLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  tokenSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  tokenSummaryCard: {
+    flex: 1,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tokenSummaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tokenSummaryContent: {
+    flex: 1,
+  },
+  tokenSummaryValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tokenSummaryLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  growthRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  growthPercentage: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tokenChartSection: {
+    backgroundColor: 'rgba(20, 20, 31, 0.4)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tokenChartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  tokenChartTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  loadMoreLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  loadedText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+  },
+  viewDetailsButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00F5FF',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '95%',
+    maxHeight: '85%',
+    backgroundColor: '#0F0F17',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  modalStatsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 16,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+  },
+  modalStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  modalStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#00F5FF',
+  },
+  modalStatLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  modalTableHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(20, 20, 31, 0.8)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalTableHeaderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#888',
+    textTransform: 'uppercase',
+  },
+  modalLoadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  modalTableRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  modalTableCell: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontFamily: 'monospace',
+  },
+  modalTableCellContainer: {
+    justifyContent: 'center',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  loadMoreButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00F5FF',
   },
 
   // No Data
