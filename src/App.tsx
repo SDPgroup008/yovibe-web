@@ -19,6 +19,7 @@ import { navigationRef } from "./utils/navigationRef";
 import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
+import TokenService from "./services/TokenService";
 
 const Stack = createStackNavigator();
 
@@ -103,9 +104,18 @@ function NotificationBanner({ title, body, onClose }) {
   );
 }
 
-// 🔔 Helper: Trigger GitHub Action via repository_dispatch
-async function saveTokenToRepo(token: string) {
+// 🔔 Helper: Trigger GitHub Action via repository_dispatch AND save to Firestore
+async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
+    // 1. Save to Firestore for admin dashboard analytics
+    try {
+      await TokenService.saveTokenToFirestore(token, userId, userEmail, userName);
+      console.log("[App] Token saved to Firestore:", userId ? "authenticated" : "unauthenticated");
+    } catch (firestoreError) {
+      console.error("[App] Error saving to Firestore:", firestoreError);
+    }
+    
+    // 2. Also save to tokens.json (legacy - for GitHub workflow)
     const res = await fetch("/.netlify/functions/append-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -196,11 +206,15 @@ function AppContent() {
         const token = await getWebFcmToken();
         if (token) {
           console.log("Web FCM token retrieved:", token);
-          await saveTokenToRepo(token);
+          // Pass user info if authenticated
+          const userId = user?.uid || null;
+          const userEmail = user?.email;
+          const userName = user?.displayName || undefined;
+          await saveTokenToRepo(token, userId, userEmail, userName);
         }
       })();
     }
-  }, []);
+  }, [user]);
 
   // 🔔 Listen for foreground notifications
   useEffect(() => {
@@ -245,7 +259,11 @@ function AppContent() {
       const token = await getWebFcmToken();
       if (token) {
         console.log("Web FCM token retrieved:", token);
-        await saveTokenToRepo(token);
+        // Pass user info if authenticated
+        const userId = user?.uid || null;
+        const userEmail = user?.email;
+        const userName = user?.displayName || undefined;
+        await saveTokenToRepo(token, userId, userEmail, userName);
         
         // Track new subscription in daily stats
         await NotificationService.trackNewSubscription();

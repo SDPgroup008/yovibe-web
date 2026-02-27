@@ -1,9 +1,28 @@
 /**
- * TokenService - Handles FCM token analytics from tokens.json
+ * TokenService - Handles FCM token analytics
  * 
- * This service integrates with the tokens.json file managed through GitHub workflows
- * to provide analytics on notification subscribers.
+ * This service integrates with both:
+ * - Firebase Firestore for authenticated users
+ * - tokens.json file for unauthenticated users (legacy)
+ * 
+ * The admin dashboard can now filter and analyze notification permissions
+ * across all user types (authenticated vs unauthenticated).
  */
+
+import {
+  collection,
+  addDoc,
+  getDocs,
+  getDoc,
+  updateDoc,
+  doc,
+  query,
+  where,
+  orderBy,
+  limit,
+  Timestamp,
+} from "firebase/firestore";
+import { db } from "../config/firebase";
 
 // Token record interface for detailed tracking
 export interface TokenRecord {
@@ -11,6 +30,31 @@ export interface TokenRecord {
   subscribedAt: Date;
   isActive: boolean;
   userAgent?: string;
+  // New fields for user tracking
+  userId?: string;
+  isAuthenticated: boolean;
+  deviceInfo?: DeviceInfo;
+}
+
+// Device information interface
+export interface DeviceInfo {
+  platform: 'web' | 'ios' | 'android';
+  browser?: string;
+  os?: string;
+  deviceId?: string;
+}
+
+// Firestore token document interface
+export interface FirestoreToken {
+  token: string;
+  userId: string | null;  // null for unauthenticated
+  isAuthenticated: boolean;
+  deviceInfo: DeviceInfo;
+  subscribedAt: Date;
+  lastActiveAt: Date;
+  isActive: boolean;
+  userEmail?: string;  // For authenticated users
+  userName?: string;   // For authenticated users
 }
 
 // Daily token subscription stats
@@ -19,6 +63,8 @@ export interface DailyTokenStats {
   newTokens: number;
   totalTokens: number;
   activeTokens: number;
+  authenticatedNew: number;
+  unauthenticatedNew: number;
 }
 
 // Token analytics summary
@@ -29,12 +75,25 @@ export interface TokenAnalyticsSummary {
   growthPercentage: number;
   previousDayCount: number;
   lastUpdated: Date;
+  // New fields for user type breakdown
+  authenticatedCount: number;
+  unauthenticatedCount: number;
+}
+
+// Filter options for querying tokens
+export interface TokenFilterOptions {
+  isAuthenticated?: boolean;
+  isActive?: boolean;
+  userId?: string;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 // Pagination options
 export interface TokenPaginationOptions {
   page: number;
   pageSize: number;
+  filter?: TokenFilterOptions;
 }
 
 // Cached data interface
@@ -47,6 +106,9 @@ interface CachedTokenData {
 // In-memory cache
 let tokenCache: CachedTokenData | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+// Firestore collection name
+const TOKENS_COLLECTION = "notificationTokens";
 
 class TokenService {
   private static instance: TokenService;
@@ -150,6 +212,8 @@ class TokenService {
         newTokens: dayTokens.length,
         totalTokens: endIndex,
         activeTokens,
+        authenticatedNew: 0, // Legacy tokens.json doesn't track auth
+        unauthenticatedNew: dayTokens.length,
       });
     }
 
@@ -198,6 +262,8 @@ class TokenService {
       growthPercentage,
       previousDayCount,
       lastUpdated: new Date(),
+      authenticatedCount: 0, // Legacy - no auth data from tokens.json
+      unauthenticatedCount: totalTokens,
     };
   }
 
@@ -228,6 +294,7 @@ class TokenService {
         token: token.substring(0, 20) + '...', // Truncate for display
         subscribedAt,
         isActive: true, // Simulate all tokens as active
+        isAuthenticated: false, // Legacy tokens.json - all unauthenticated
       };
     });
   }
@@ -318,6 +385,368 @@ class TokenService {
       invalidTokens,
       healthPercentage,
     };
+  }
+
+  // ============================================================================
+  // NEW METHODS FOR FIRESTORE INTEGRATION
+  // ============================================================================
+
+  /**
+   * Save a notification token to Firestore
+   * For authenticated users, stores with userId. For unauthenticated, stores with null userId.
+   */
+  public async saveTokenToFirestore(
+    token: string,
+    userId: string | null,
+    userEmail?: string,
+    userName?: string
+  ): Promise<string> {
+    try {
+      const now = new Date();
+      const isAuthenticated = userId !== null;
+      
+      // Detect device info from user agent
+      const deviceInfo = this.detectDeviceInfo();
+      
+      // Check if token already exists
+      const existingToken = await this.findTokenInFirestore(token);
+      
+      if (existingToken) {
+        // Update existing token - link to user if previously unauthenticated
+        if (!existingToken.isAuthenticated && isAuthenticated) {
+          await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), {
+            userId,
+            isAuthenticated: true,
+            userEmail,
+            userName,
+            lastActiveAt: Timestamp.now(),
+            isActive: true,
+          });
+          console.log("[TokenService] Updated existing token with user info:", existingToken.id);
+        } else {
+          // Just update last active
+          await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), {
+            lastActiveAt: Timestamp.now(),
+            isActive: true,
+          });
+        }
+        return existingToken.id;
+      }
+      
+      // Create new token document
+      const tokenData: Omit<FirestoreToken, 'subscribedAt' | 'lastActiveAt'> & { subscribedAt: any; lastActiveAt: any } = {
+        token,
+        userId,
+        isAuthenticated,
+        deviceInfo,
+        subscribedAt: Timestamp.now(),
+        lastActiveAt: Timestamp.now(),
+        isActive: true,
+      };
+      
+      if (userEmail) tokenData.userEmail = userEmail;
+      if (userName) tokenData.userName = userName;
+      
+      const docRef = await addDoc(collection(db, TOKENS_COLLECTION), tokenData);
+      console.log("[TokenService] Saved new token to Firestore:", docRef.id);
+      return docRef.id;
+    } catch (error) {
+      console.error("[TokenService] Error saving token to Firestore:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find a token in Firestore by token string
+   */
+  private async findTokenInFirestore(token: string): Promise<{ id: string; isAuthenticated: boolean } | null> {
+    try {
+      const q = query(collection(db, TOKENS_COLLECTION), where("token", "==", token), limit(1));
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        return null;
+      }
+      
+      const doc = snapshot.docs[0];
+      const data = doc.data();
+      return {
+        id: doc.id,
+        isAuthenticated: data.isAuthenticated,
+      };
+    } catch (error) {
+      console.error("[TokenService] Error finding token:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Detect device information from user agent
+   */
+  private detectDeviceInfo(): DeviceInfo {
+    if (typeof window === 'undefined') {
+      return { platform: 'web' };
+    }
+    
+    const ua = navigator.userAgent;
+    let platform: 'web' | 'ios' | 'android' = 'web';
+    let browser = 'unknown';
+    let os = 'unknown';
+    
+    if (/iPhone|iPad|iPod/.test(ua)) {
+      platform = 'ios';
+      os = 'iOS';
+    } else if (/Android/.test(ua)) {
+      platform = 'android';
+      os = 'Android';
+    }
+    
+    if (/Chrome/.test(ua) && !/Edge/.test(ua)) {
+      browser = 'Chrome';
+    } else if (/Safari/.test(ua) && !/Chrome/.test(ua)) {
+      browser = 'Safari';
+    } else if (/Firefox/.test(ua)) {
+      browser = 'Firefox';
+    } else if (/Edge/.test(ua)) {
+      browser = 'Edge';
+    }
+    
+    return { platform, browser, os };
+  }
+
+  /**
+   * Get all tokens from Firestore with optional filtering
+   */
+  public async getTokensFromFirestore(
+    filter?: TokenFilterOptions,
+    maxTokens?: number
+  ): Promise<FirestoreToken[]> {
+    try {
+      let q = collection(db, TOKENS_COLLECTION);
+      const constraints: any[] = [];
+      
+      if (filter?.isActive !== undefined) {
+        constraints.push(where("isActive", "==", filter.isActive));
+      }
+      
+      if (filter?.isAuthenticated !== undefined) {
+        constraints.push(where("isAuthenticated", "==", filter.isAuthenticated));
+      }
+      
+      if (filter?.userId) {
+        constraints.push(where("userId", "==", filter.userId));
+      }
+      
+      constraints.push(orderBy("subscribedAt", "desc"));
+      
+      if (maxTokens) {
+        constraints.push(limit(maxTokens));
+      }
+      
+      q = query(q, ...constraints);
+      const snapshot = await getDocs(q);
+      
+      const tokens: FirestoreToken[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        tokens.push({
+          token: data.token,
+          userId: data.userId,
+          isAuthenticated: data.isAuthenticated,
+          deviceInfo: data.deviceInfo,
+          subscribedAt: data.subscribedAt?.toDate() || new Date(),
+          lastActiveAt: data.lastActiveAt?.toDate() || new Date(),
+          isActive: data.isActive,
+          userEmail: data.userEmail,
+          userName: data.userName,
+        });
+      });
+      
+      return tokens;
+    } catch (error) {
+      console.error("[TokenService] Error getting tokens from Firestore:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get token counts by authentication status
+   */
+  public async getTokenCountsByAuthStatus(): Promise<{
+    total: number;
+    authenticated: number;
+    unauthenticated: number;
+    active: number;
+    inactive: number;
+  }> {
+    try {
+      const allTokens = await this.getTokensFromFirestore();
+      
+      const result = {
+        total: allTokens.length,
+        authenticated: allTokens.filter(t => t.isAuthenticated).length,
+        unauthenticated: allTokens.filter(t => !t.isAuthenticated).length,
+        active: allTokens.filter(t => t.isActive).length,
+        inactive: allTokens.filter(t => !t.isActive).length,
+      };
+      
+      return result;
+    } catch (error) {
+      console.error("[TokenService] Error getting token counts:", error);
+      return { total: 0, authenticated: 0, unauthenticated: 0, active: 0, inactive: 0 };
+    }
+  }
+
+  /**
+   * Get token records with user type information
+   */
+  public async getTokenRecordsWithAuthStatus(
+    options: TokenPaginationOptions
+  ): Promise<TokenRecord[]> {
+    try {
+      // Get tokens from both sources: Firestore + tokens.json
+      const firestoreTokens = await this.getTokensFromFirestore(undefined, 1000);
+      const jsonTokens = await this.fetchTokens();
+      
+      // Combine and deduplicate (Firestore takes priority)
+      const firestoreTokenSet = new Set(firestoreTokens.map(t => t.token));
+      const unauthenticatedFromJson = jsonTokens
+        .filter(t => !firestoreTokenSet.has(t))
+        .map(token => ({
+          token,
+          subscribedAt: new Date(),
+          isActive: true,
+          isAuthenticated: false,
+          userAgent: this.parseUserAgent(token),
+        }));
+      
+      // Convert Firestore tokens to TokenRecord format
+      const authenticatedRecords: TokenRecord[] = firestoreTokens.map(t => ({
+        token: t.token,
+        subscribedAt: t.subscribedAt,
+        isActive: t.isActive,
+        userAgent: t.deviceInfo?.browser,
+        userId: t.userId || undefined,
+        isAuthenticated: t.isAuthenticated,
+        deviceInfo: t.deviceInfo,
+      }));
+      
+      // Combine both
+      const allRecords = [...authenticatedRecords, ...unauthenticatedFromJson];
+      
+      // Apply pagination
+      const { page, pageSize, filter } = options;
+      let filtered = allRecords;
+      
+      if (filter?.isAuthenticated !== undefined) {
+        filtered = filtered.filter(t => t.isAuthenticated === filter.isAuthenticated);
+      }
+      
+      if (filter?.isActive !== undefined) {
+        filtered = filtered.filter(t => t.isActive === filter.isActive);
+      }
+      
+      const startIndex = page * pageSize;
+      return filtered.slice(startIndex, startIndex + pageSize);
+    } catch (error) {
+      console.error("[TokenService] Error getting token records:", error);
+      return [];
+    }
+  }
+
+  /**
+   * Get analytics summary with authentication breakdown
+   */
+  public async getTokenAnalyticsSummaryWithAuth(): Promise<TokenAnalyticsSummary> {
+    try {
+      // Get from Firestore
+      const counts = await this.getTokenCountsByAuthStatus();
+      
+      // Also get from tokens.json for legacy unauthenticated
+      const jsonTokens = await this.fetchTokens();
+      const firestoreTokenSet = new Set((await this.getTokensFromFirestore()).map(t => t.token));
+      const unauthenticatedFromJson = jsonTokens.filter(t => !firestoreTokenSet.has(t));
+      
+      // Total includes both sources
+      const totalAuthenticated = counts.authenticated;
+      const totalUnauthenticated = counts.unauthenticated + unauthenticatedFromJson.length;
+      const total = totalAuthenticated + totalUnauthenticated;
+      
+      // Get today's new tokens from Firestore
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const allFirestoreTokens = await this.getTokensFromFirestore();
+      const newTokensToday = allFirestoreTokens.filter(
+        t => t.subscribedAt >= today
+      ).length;
+      
+      const previousDayCount = total - newTokensToday;
+      const growthPercentage = previousDayCount > 0 
+        ? ((newTokensToday / previousDayCount) * 100)
+        : (newTokensToday > 0 ? 100 : 0);
+      
+      return {
+        totalTokens: total,
+        activeTokens: counts.active,
+        newTokensToday,
+        growthPercentage,
+        previousDayCount,
+        lastUpdated: new Date(),
+        authenticatedCount: totalAuthenticated,
+        unauthenticatedCount: totalUnauthenticated,
+      };
+    } catch (error) {
+      console.error("[TokenService] Error getting analytics summary:", error);
+      return {
+        totalTokens: 0,
+        activeTokens: 0,
+        newTokensToday: 0,
+        growthPercentage: 0,
+        previousDayCount: 0,
+        lastUpdated: new Date(),
+        authenticatedCount: 0,
+        unauthenticatedCount: 0,
+      };
+    }
+  }
+
+  /**
+   * Get daily stats with authentication breakdown
+   */
+  public async getDailyTokenStatsWithAuth(days: number = 30): Promise<DailyTokenStats[]> {
+    try {
+      const tokens = await this.getTokensFromFirestore();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const dailyStats: DailyTokenStats[] = [];
+      
+      for (let i = days - 1; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+        const nextDate = new Date(date);
+        nextDate.setDate(nextDate.getDate() + 1);
+        
+        const dayTokens = tokens.filter(t => {
+          const subDate = new Date(t.subscribedAt);
+          return subDate >= date && subDate < nextDate;
+        });
+        
+        dailyStats.push({
+          date: date.toISOString().split('T')[0],
+          newTokens: dayTokens.length,
+          totalTokens: tokens.filter(t => new Date(t.subscribedAt) < nextDate).length,
+          activeTokens: dayTokens.filter(t => t.isActive).length,
+          authenticatedNew: dayTokens.filter(t => t.isAuthenticated).length,
+          unauthenticatedNew: dayTokens.filter(t => !t.isAuthenticated).length,
+        });
+      }
+      
+      return dailyStats;
+    } catch (error) {
+      console.error("[TokenService] Error getting daily stats:", error);
+      return [];
+    }
   }
 }
 

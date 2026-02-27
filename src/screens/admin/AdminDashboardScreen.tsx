@@ -47,6 +47,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [tokenModalVisible, setTokenModalVisible] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
   const [hasLoadedMoreTokens, setHasLoadedMoreTokens] = useState(false);
+  const [activeTokenFilter, setActiveTokenFilter] = useState<'all' | 'authenticated' | 'unauthenticated'>('all');
   const TOKEN_PAGE_SIZE = 20;
   const INITIAL_DAYS = 7;
 
@@ -104,10 +105,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     try {
       setTokenLoading(true);
       
-      // Load token summary and initial daily stats
+      // Load token summary with auth breakdown and daily stats
       const [summaryData, initialStats] = await Promise.all([
-        TokenService.getTokenAnalyticsSummary(),
-        TokenService.getInitialDailyStats(),
+        TokenService.getTokenAnalyticsSummaryWithAuth(),
+        TokenService.getDailyTokenStatsWithAuth(7), // Initial 7 days
       ]);
 
       setTokenSummary(summaryData);
@@ -119,8 +120,11 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
       setTokenTotalPages(totalPages);
       setTokenPage(0);
 
-      // Load first page of token records
-      const records = await TokenService.getTokenRecords({ page: 0, pageSize: TOKEN_PAGE_SIZE });
+      // Load first page of token records with auth status
+      const records = await TokenService.getTokenRecordsWithAuthStatus({ 
+        page: 0, 
+        pageSize: TOKEN_PAGE_SIZE 
+      });
       setTokenRecords(records);
 
       // Update sync time
@@ -138,7 +142,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     
     try {
       setTokenLoading(true);
-      const moreStats = await TokenService.loadMoreDailyStats(INITIAL_DAYS, 30);
+      const moreStats = await TokenService.getDailyTokenStatsWithAuth(30);
       setDailyTokenStats(moreStats);
       setHasLoadedMoreTokens(true);
     } catch (error) {
@@ -879,6 +883,55 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
                     </View>
                   </View>
 
+                  {/* Authenticated vs Unauthenticated Breakdown */}
+                  <View style={styles.tokenSummaryRow}>
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(138, 43, 226, 0.1)' }]}>
+                        <Ionicons name="person" size={24} color="#8A2BE2" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.authenticatedCount?.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Authenticated Users</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(255, 140, 0, 0.1)' }]}>
+                        <Ionicons name="person-outline" size={24} color="#FF8C00" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.unauthenticatedCount?.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Unauthenticated</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Filter Buttons */}
+                  <View style={styles.filterRow}>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'all' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('all')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'all' && styles.filterButtonTextActive]}>All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'authenticated' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('authenticated')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'authenticated' && styles.filterButtonTextActive]}>Authenticated</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'unauthenticated' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('unauthenticated')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'unauthenticated' && styles.filterButtonTextActive]}>Unauthenticated</Text>
+                    </TouchableOpacity>
+                  </View>
+
                   {/* Daily Subscription Bar Chart */}
                   <View style={styles.tokenChartSection}>
                     <View style={styles.tokenChartHeader}>
@@ -1218,6 +1271,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             <View style={styles.modalTableHeader}>
               <Text style={[styles.modalTableHeaderText, { flex: 2 }]}>Token</Text>
               <Text style={[styles.modalTableHeaderText, { flex: 1 }]}>Subscribed</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 0.7 }]}>Auth</Text>
               <Text style={[styles.modalTableHeaderText, { flex: 0.5 }]}>Status</Text>
             </View>
 
@@ -1239,6 +1293,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
                       <Text style={[styles.modalTableCell, { flex: 1 }]}>
                         {item.subscribedAt.toLocaleDateString()}
                       </Text>
+                      <View style={[styles.modalTableCellContainer, { flex: 0.7 }]}>
+                        <View style={[
+                          styles.authBadge,
+                          { backgroundColor: item.isAuthenticated ? 'rgba(138, 43, 226, 0.2)' : 'rgba(255, 140, 0, 0.2)' }
+                        ]}>
+                          <Text style={[
+                            styles.authBadgeText,
+                            { color: item.isAuthenticated ? '#8A2BE2' : '#FF8C00' }
+                          ]}>
+                            {item.isAuthenticated ? 'Auth' : 'Anon'}
+                          </Text>
+                        </View>
+                      </View>
                       <View style={[styles.modalTableCellContainer, { flex: 0.5, alignItems: 'flex-start' }]}>
                         <View style={[
                           styles.statusDot,
@@ -2159,6 +2226,15 @@ const styles = StyleSheet.create({
   modalTableCellContainer: {
     justifyContent: 'center',
   },
+  authBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  authBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
   statusDot: {
     width: 8,
     height: 8,
@@ -2175,6 +2251,34 @@ const styles = StyleSheet.create({
   loadMoreButtonText: {
     fontSize: 13,
     fontWeight: '600',
+    color: '#00F5FF',
+  },
+
+  // Filter Styles
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterButtonActive: {
+    backgroundColor: 'rgba(0, 245, 255, 0.15)',
+    borderColor: 'rgba(0, 245, 255, 0.4)',
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
     color: '#00F5FF',
   },
 
