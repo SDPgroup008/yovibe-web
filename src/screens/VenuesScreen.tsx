@@ -24,7 +24,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
-  const [activeTab, setActiveTab] = useState<"nightlife" | "recreation">("nightlife");
+  const [activeTab, setActiveTab] = useState<"all" | "nightlife" | "recreation">("all");
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [lastDoc, setLastDoc] = useState<any>(null);
@@ -207,6 +207,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     console.log("\n========== VENUE FILTERING (UI) ==========\nActive Tab:", activeTab.toUpperCase())
     console.log("Total venues available for filtering:", venues.length)
     
+    // Handle "all" tab - return all venues without filtering
+    if (activeTab === "all") {
+      console.log("✅ All tab selected - showing all venues without filtering")
+      const sorted = [...venues].sort((a, b) => {
+        const aVibe = venueVibeRatings[a.id] || 0.0;
+        const bVibe = venueVibeRatings[b.id] || 0.0;
+        return bVibe - aVibe;
+      });
+      console.log("========================================\n")
+      return sorted;
+    }
+    
     let nightlifeCount = 0
     let recreationCount = 0
     let noCategoryCount = 0
@@ -220,9 +232,9 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         noCategoryCount++
         const included = activeTab === "recreation"
         if (included) {
-          console.log(`✅ "${venueName}" - Included in RECREATION (no categories, defaults to "Other")`)
+          console.log(`✅ "${venueName}" - Included in ${activeTab.toUpperCase()} (no categories, defaults to "Other")`)
         } else {
-          console.log(`❌ "${venueName}" - Excluded from NIGHTLIFE (no categories)`)
+          console.log(`❌ "${venueName}" - Excluded from ${activeTab.toUpperCase()} (no categories)`)
         }
         return included;
       }
@@ -428,6 +440,12 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     <View style={[styles.container, activeTab === "recreation" && styles.recreationContainer]}>
       <View style={styles.header}>
         <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === "all" && styles.activeTab]}
+            onPress={() => setActiveTab("all")}
+          >
+            <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
             onPress={() => setActiveTab("nightlife")}

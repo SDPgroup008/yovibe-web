@@ -100,9 +100,30 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     }
   };
 
+  // Migration state for UI feedback
+  const [migrationStatus, setMigrationStatus] = useState<{
+    inProgress: boolean;
+    migrated: number;
+    total: number;
+    errors: number;
+  } | null>(null);
+
   // Token analytics functions
   const loadTokenAnalytics = async (force: boolean = false) => {
     try {
+      // First, migrate legacy tokens from tokens.json to Firestore
+      if (!migrationStatus) {
+        setMigrationStatus({ inProgress: true, migrated: 0, total: 0, errors: 0 });
+        const migrationResult = await TokenService.migrateLegacyTokens();
+        setMigrationStatus({
+          inProgress: false,
+          migrated: migrationResult.migrated,
+          total: migrationResult.total,
+          errors: migrationResult.errors,
+        });
+        console.log('[AdminDashboard] Migration result:', migrationResult);
+      }
+      
       setTokenLoading(true);
       
       // Load token summary with auth breakdown and daily stats
@@ -825,6 +846,21 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
               
               {/* Last Sync Time */}
               <Text style={styles.syncTimeText}>{formatLastSyncTime()}</Text>
+
+              {/* Migration Status */}
+              {migrationStatus?.inProgress ? (
+                <View style={styles.migrationStatus}>
+                  <ActivityIndicator size="small" color="#FFD700" />
+                  <Text style={styles.migrationStatusText}>Migrating legacy tokens...</Text>
+                </View>
+              ) : migrationStatus && migrationStatus.migrated > 0 ? (
+                <View style={styles.migrationStatus}>
+                  <Ionicons name="checkmark-circle" size={14} color="#00FF9F" />
+                  <Text style={styles.migrationStatusText}>
+                    ✓ Migrated {migrationStatus.migrated} tokens from tokens.json
+                  </Text>
+                </View>
+              ) : null}
 
               {/* Token Summary Cards */}
               {tokenLoading && !tokenSummary ? (
@@ -2038,6 +2074,22 @@ const styles = StyleSheet.create({
   syncTimeText: {
     fontSize: 11,
     color: '#888',
+  },
+  migrationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+  },
+  migrationStatusText: {
+    fontSize: 11,
+    color: '#FFD700',
   },
   tokenLoadingContainer: {
     flex: 1,

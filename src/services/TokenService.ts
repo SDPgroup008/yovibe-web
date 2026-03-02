@@ -115,6 +115,7 @@ class TokenService {
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   private readonly INITIAL_DAYS = 7; // Initial load for daily breakdown
   private readonly TOTAL_DAYS = 30; // Full daily breakdown
+  private migrationInProgress = false;
 
   private constructor() {}
 
@@ -123,6 +124,68 @@ class TokenService {
       TokenService.instance = new TokenService();
     }
     return TokenService.instance;
+  }
+
+  /**
+   * Migrate all tokens from tokens.json to Firestore
+   * This ensures legacy tokens are properly stored in Firebase
+   */
+  public async migrateLegacyTokens(): Promise<{
+    migrated: number;
+    total: number;
+    errors: number;
+  }> {
+    if (this.migrationInProgress) {
+      console.log('[TokenService] Migration already in progress, skipping');
+      return { migrated: 0, total: 0, errors: 0 };
+    }
+
+    this.migrationInProgress = true;
+    let migrated = 0;
+    let errors = 0;
+
+    try {
+      console.log('[TokenService] Starting migration of legacy tokens...');
+      
+      // Get all tokens from tokens.json
+      const jsonTokens = await this.fetchTokens(true); // Force refresh to get latest
+      
+      // Get existing tokens from Firestore
+      const firestoreTokens = await this.getTokensFromFirestore(undefined, 10000);
+      const existingTokenSet = new Set(firestoreTokens.map(t => t.token));
+      
+      console.log(`[TokenService] Found ${jsonTokens.length} tokens in JSON, ${existingTokenSet.size} in Firestore`);
+      
+      // Migrate tokens that don't exist in Firestore
+      for (const token of jsonTokens) {
+        if (!existingTokenSet.has(token)) {
+          try {
+            await this.saveTokenToFirestore(
+              token,  // token
+              null,   // userId - null for unauthenticated
+              undefined, // email
+              undefined // name
+            );
+            migrated++;
+            
+            // Add small delay to avoid overwhelming Firestore
+            await new Promise(resolve => setTimeout(resolve, 10));
+          } catch (error) {
+            console.error(`[TokenService] Error migrating token:`, error);
+            errors++;
+          }
+        }
+      }
+      
+      console.log(`[TokenService] Migration complete: ${migrated} tokens migrated, ${errors} errors`);
+      
+      return { migrated, total: jsonTokens.length, errors };
+    } catch (error) {
+      console.error('[TokenService] Migration failed:', error);
+      return { migrated, total: 0, errors: errors + 1 };
+    } finally {
+      this.migrationInProgress = false;
+    }
   }
 
   /**
