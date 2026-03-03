@@ -478,14 +478,18 @@ class TokenService {
       if (existingToken) {
         // Update existing token - link to user if previously unauthenticated
         if (!existingToken.isAuthenticated && isAuthenticated) {
-          await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), {
+          // Only include userName if it's defined
+          const updateData: any = {
             userId,
             isAuthenticated: true,
-            userEmail,
-            userName,
             lastActiveAt: Timestamp.now(),
             isActive: true,
-          });
+          };
+          
+          if (userEmail) updateData.userEmail = userEmail;
+          if (userName) updateData.userName = userName;
+          
+          await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), updateData);
           console.log("[TokenService] Updated existing token with user info:", existingToken.id);
         } else {
           // Just update last active

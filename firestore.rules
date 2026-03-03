@@ -178,13 +178,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
     
-    // Notification tokens - allow anyone to create (for Viber/guest users)
+    // Notification tokens - allow anyone to create and update (for Viber/guest users)
     // Located at YoVibe/data/notificationTokens
-    // Read requires authentication, update/delete only via admin
+    // Read requires authentication, delete only via admin
     match /YoVibe/data/notificationTokens/{tokenId} {
       allow create: if true;
       allow read: if request.auth != null;
-      allow update, delete: if false;
+      allow update: if true; // Allow unauthenticated users to update their tokens
+      allow delete: if false;
     }
   }
 }

@@ -1,11 +1,21 @@
 const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
 
-if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
-  console.error("Missing FIREBASE_SERVICE_ACCOUNT env var");
+// Try to load service account from file first, then environment variable
+let serviceAccount;
+const serviceAccountPath = path.join(__dirname, "eco-guardian-bd74f-firebase-adminsdk-thlcj-b60714ed55.json");
+
+if (fs.existsSync(serviceAccountPath)) {
+  console.log("Loading service account from file:", serviceAccountPath);
+  serviceAccount = require(serviceAccountPath);
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.log("Loading service account from environment variable");
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  console.error("Missing FIREBASE_SERVICE_ACCOUNT env var and service account file not found");
   process.exit(1);
 }
-
-const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),

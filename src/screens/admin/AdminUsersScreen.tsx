@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../../services/FirebaseService"
+import AnalyticsService, { type UserVisitData } from "../../services/AnalyticsService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { User } from "../../models/User"
 import type { AdminUsersScreenProps } from "../../navigation/types"
@@ -15,7 +16,7 @@ type UserCategoryTab = "all" | "club_owner" | "user" | "admin" | "viber"
 const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<User[]>([])
-  const [fcmTokens, setFcmTokens] = useState<string[]>([])
+  const [unauthenticatedVisitors, setUnauthenticatedVisitors] = useState<UserVisitData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<UserCategoryTab>("all")
 
@@ -27,20 +28,16 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
     }
 
     loadUsers()
-    loadFcmTokens()
+    loadUnauthenticatedVisitors()
   }, [currentUser, navigation])
 
-  const loadFcmTokens = async () => {
+  const loadUnauthenticatedVisitors = async () => {
     try {
-      // Fetch tokens from the static JSON file
-      const response = await fetch('/tokens.json')
-      if (response.ok) {
-        const tokens = await response.json()
-        setFcmTokens(tokens || [])
-        console.log('AdminUsersScreen: Loaded', tokens?.length || 0, 'FCM tokens')
-      }
+      const visitors = await AnalyticsService.getAllUnauthenticatedVisitors()
+      setUnauthenticatedVisitors(visitors)
+      console.log('AdminUsersScreen: Loaded', visitors.length, 'unauthenticated visitors')
     } catch (error) {
-      console.error('AdminUsersScreen: Error loading FCM tokens:', error)
+      console.error('AdminUsersScreen: Error loading unauthenticated visitors:', error)
     }
   }
 
@@ -98,7 +95,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
       return users
     }
     if (activeTab === "viber") {
-      // Vibers are users without email (unauthenticated) - show tokens from tokens.json
+      // Vibers are users without email (unauthenticated) - show visitors from analytics
       return []
     }
     return users.filter(user => user.userType === activeTab)
@@ -107,21 +104,23 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   // Get count for each category
   const getCategoryCount = (category: UserCategoryTab): number => {
     if (category === "all") return users.length
-    if (category === "viber") return fcmTokens.length // Use FCM token count for Vibers
+    if (category === "viber") return unauthenticatedVisitors.length // Use visitor count for Vibers
     return users.filter(user => user.userType === category).length
   }
 
-  // Render token item for Vibers tab
-  const renderTokenItem = ({ item, index }: { item: string, index: number }) => (
+  // Render visitor item for Vibers tab
+  const renderVisitorItem = ({ item, index }: { item: UserVisitData, index: number }) => (
     <View style={styles.tokenCard}>
       <View style={styles.userInfo}>
         <View style={[styles.avatarContainer, styles.viberAvatar]}>
-          <Text style={styles.avatarText}>?</Text>
+          <Text style={styles.avatarText}>V</Text>
         </View>
         <View style={styles.userDetails}>
-          <Text style={styles.userEmail}>FCM Token #{index + 1}</Text>
+          <Text style={styles.userEmail}>Visitor #{index + 1}</Text>
           <Text style={styles.userType}>Viber (Unauthenticated)</Text>
-          <Text style={styles.tokenText} numberOfLines={2}>{item}</Text>
+          <Text style={styles.tokenText} numberOfLines={1}>{item.uniqueVisitorId}</Text>
+          <Text style={styles.visitorCount}>Total Visits: {item.visitCount}</Text>
+          <Text style={styles.userDate}>Last Visit: {item.lastVisit.toLocaleDateString()}</Text>
         </View>
       </View>
     </View>
@@ -220,8 +219,8 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const filteredUsers = getFilteredUsers()
   
   // Determine what to show based on active tab
-  const showTokens = activeTab === "viber"
-  const displayData = showTokens ? fcmTokens : filteredUsers
+  const showVisitors = activeTab === "viber"
+  const displayData = showVisitors ? unauthenticatedVisitors : filteredUsers
 
   return (
     <View style={styles.container}>
@@ -246,12 +245,12 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
 
       <FlatList
         data={displayData as any}
-        keyExtractor={(item: any, index: number) => showTokens ? `token-${index}` : (item as User).id}
-        renderItem={showTokens ? renderTokenItem as any : renderUserItem}
+        keyExtractor={(item: any, index: number) => showVisitors ? `visitor-${item.uniqueVisitorId}` : item.id}
+        renderItem={showVisitors ? renderVisitorItem as any : renderUserItem}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>{showTokens ? "No tokens found" : "No users found"}</Text>
+            <Text style={styles.emptyText}>{showVisitors ? "No visitors found" : "No users found"}</Text>
           </View>
         }
       />
@@ -397,6 +396,11 @@ const styles = StyleSheet.create({
     color: "#FF9800",
     marginTop: 4,
     fontFamily: "monospace",
+  },
+  visitorCount: {
+    fontSize: 12,
+    color: "#FFD700",
+    marginTop: 4,
   },
   actionButtons: {
     flexDirection: "row",

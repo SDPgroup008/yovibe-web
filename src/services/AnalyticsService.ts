@@ -607,6 +607,47 @@ class AnalyticsService {
       throw error;
     }
   }
+
+  /**
+   * Get all unique unauthenticated visitor IDs
+   */
+  async getAllUnauthenticatedVisitors(): Promise<UserVisitData[]> {
+    try {
+      const q = query(
+        this.sessionsCollection,
+        where('isAuthenticated', '==', false)
+      );
+
+      const snapshot = await getDocs(q);
+      const visitorMap = new Map<string, UserVisitData>();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const visitorId = data.uniqueVisitorId;
+
+        if (!visitorMap.has(visitorId)) {
+          visitorMap.set(visitorId, {
+            uniqueVisitorId: visitorId,
+            userId: data.userId || null,
+            isAuthenticated: false,
+            visitCount: 1,
+            lastVisit: data.startTime.toDate(),
+          });
+        } else {
+          const existing = visitorMap.get(visitorId)!;
+          existing.visitCount++;
+          existing.lastVisit = data.startTime.toDate();
+        }
+      });
+
+      // Return sorted by visit count (highest first)
+      return Array.from(visitorMap.values())
+        .sort((a, b) => b.visitCount - a.visitCount);
+    } catch (error) {
+      console.error('Analytics: Error getting all unauthenticated visitors', error);
+      throw error;
+    }
+  }
 }
 
 export default new AnalyticsService();
