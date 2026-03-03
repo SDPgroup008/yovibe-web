@@ -292,7 +292,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
 
           <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
             <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.todaysVibeButtonText}>Today's Vibe</Text>
+            <Text style={styles.todaysVibeButtonText}>See Today's Vibe</Text>
           </TouchableOpacity>
         </View>
 

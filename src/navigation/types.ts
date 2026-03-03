@@ -131,3 +131,9 @@ export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "
 
 
 export type CalendarScreenProps = NativeStackScreenProps<CalendarStackParamList, "CalendarView">
+
+// Admin Screens
+export type AdminUsersScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminUsers">
+export type AdminVenuesScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminVenues">
+export type AdminEventsScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminEvents">
+export type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminDashboard">

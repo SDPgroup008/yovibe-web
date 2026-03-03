@@ -2,17 +2,22 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../../services/FirebaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { User } from "../../models/User"
 import type { AdminUsersScreenProps } from "../../navigation/types"
 
-const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ navigation }) => {
+// User type for tab filtering
+type UserCategoryTab = "all" | "club_owner" | "user" | "admin" | "viber"
+
+const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const { user: currentUser } = useAuth()
   const [users, setUsers] = useState<User[]>([])
+  const [fcmTokens, setFcmTokens] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<UserCategoryTab>("all")
 
   useEffect(() => {
     if (currentUser?.userType !== "admin") {
@@ -22,16 +27,33 @@ const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ navigation }) => {
     }
 
     loadUsers()
+    loadFcmTokens()
   }, [currentUser, navigation])
+
+  const loadFcmTokens = async () => {
+    try {
+      // Fetch tokens from the static JSON file
+      const response = await fetch('/tokens.json')
+      if (response.ok) {
+        const tokens = await response.json()
+        setFcmTokens(tokens || [])
+        console.log('AdminUsersScreen: Loaded', tokens?.length || 0, 'FCM tokens')
+      }
+    } catch (error) {
+      console.error('AdminUsersScreen: Error loading FCM tokens:', error)
+    }
+  }
 
   const loadUsers = async () => {
     try {
       setLoading(true)
+      console.log("AdminUsersScreen: Loading users...")
       const allUsers = await FirebaseService.getAllUsers()
+      console.log("AdminUsersScreen: Loaded", allUsers.length, "users")
       setUsers(allUsers)
     } catch (error) {
-      console.error("Error loading users:", error)
-      Alert.alert("Error", "Failed to load users")
+      console.error("AdminUsersScreen: Error loading users:", error)
+      Alert.alert("Error", "Failed to load users. Please try again.")
     } finally {
       setLoading(false)
     }
@@ -59,7 +81,6 @@ const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ navigation }) => {
             setLoading(true)
             await FirebaseService.deleteUser(userId)
             Alert.alert("Success", "User deleted successfully")
-            // Refresh the list after deletion
             loadUsers()
           } catch (error) {
             console.error("Error deleting user:", error)
@@ -71,48 +92,121 @@ const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ navigation }) => {
     ])
   }
 
-  const renderUserItem = ({ item }: { item: User }) => (
-    <View style={styles.userCard}>
+  // Get filtered users based on active tab
+  const getFilteredUsers = (): User[] => {
+    if (activeTab === "all") {
+      return users
+    }
+    if (activeTab === "viber") {
+      // Vibers are users without email (unauthenticated) - show tokens from tokens.json
+      return []
+    }
+    return users.filter(user => user.userType === activeTab)
+  }
+
+  // Get count for each category
+  const getCategoryCount = (category: UserCategoryTab): number => {
+    if (category === "all") return users.length
+    if (category === "viber") return fcmTokens.length // Use FCM token count for Vibers
+    return users.filter(user => user.userType === category).length
+  }
+
+  // Render token item for Vibers tab
+  const renderTokenItem = ({ item, index }: { item: string, index: number }) => (
+    <View style={styles.tokenCard}>
       <View style={styles.userInfo}>
-        <View style={styles.avatarContainer}>
-          <Text style={styles.avatarText}>{item.email.charAt(0).toUpperCase()}</Text>
+        <View style={[styles.avatarContainer, styles.viberAvatar]}>
+          <Text style={styles.avatarText}>?</Text>
         </View>
         <View style={styles.userDetails}>
-          <Text style={styles.userEmail}>{item.email}</Text>
-          <Text style={styles.userType}>
-            {item.userType === "user" ? "Regular User" : item.userType === "club_owner" ? "Club Owner" : "Admin"}
-          </Text>
-          <Text style={styles.userDate}>Joined: {item.createdAt.toDateString()}</Text>
+          <Text style={styles.userEmail}>FCM Token #{index + 1}</Text>
+          <Text style={styles.userType}>Viber (Unauthenticated)</Text>
+          <Text style={styles.tokenText} numberOfLines={2}>{item}</Text>
         </View>
-      </View>
-
-      <View style={styles.actionButtons}>
-        {item.userType !== "admin" && (
-          <>
-            <TouchableOpacity
-              style={[styles.actionButton, item.isFrozen ? styles.unfreezeButton : styles.freezeButton]}
-              onPress={() => handleFreezeUser(item.id, !item.isFrozen)}
-            >
-              <Ionicons
-                name={item.isFrozen ? "snow-outline" : "snow"}
-                size={20}
-                color={item.isFrozen ? "#2196F3" : "#FFFFFF"}
-              />
-              <Text style={styles.actionButtonText}>{item.isFrozen ? "Unfreeze" : "Freeze"}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionButton, styles.deleteButton]}
-              onPress={() => handleDeleteUser(item.id)}
-            >
-              <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.actionButtonText}>Delete</Text>
-            </TouchableOpacity>
-          </>
-        )}
       </View>
     </View>
   )
+
+  // Render user item for other tabs
+  const renderUserItem = ({ item }: { item: User }) => {
+    // Defensive checks for missing data
+    const email = item.email || ''
+    const isViber = !email || email === ''
+    
+    // For display - Vibers show token, others show email
+    const displayValue = isViber 
+      ? (item.uid ? `Token: ${item.uid.substring(0, 20)}...` : 'No Token') 
+      : email
+    
+    const avatarLetter = email ? email.charAt(0).toUpperCase() : '?'
+    const userTypeLabel = item.userType === "user" ? "Regular User" : item.userType === "club_owner" ? "Club Owner" : item.userType === "admin" ? "Admin" : "Unknown"
+    const joinDate = item.createdAt ? item.createdAt.toDateString() : (item.lastLoginAt ? item.lastLoginAt.toDateString() : 'Unknown')
+    
+    return (
+      <View style={styles.userCard}>
+        <View style={styles.userInfo}>
+          <View style={[styles.avatarContainer, isViber && styles.viberAvatar]}>
+            <Text style={styles.avatarText}>{avatarLetter}</Text>
+          </View>
+          <View style={styles.userDetails}>
+            <Text style={styles.userEmail}>{displayValue}</Text>
+            <Text style={styles.userType}>
+              {isViber ? "Viber (Unauthenticated)" : userTypeLabel}
+            </Text>
+            <Text style={styles.userDate}>Joined: {joinDate}</Text>
+            {item.userType === "club_owner" && item.venueId && (
+              <Text style={styles.venueInfo}>Club ID: {item.venueId}</Text>
+            )}
+          </View>
+        </View>
+
+        <View style={styles.actionButtons}>
+          {item.userType !== "admin" && !isViber && (
+            <>
+              <TouchableOpacity
+                style={[styles.actionButton, item.isFrozen ? styles.unfreezeButton : styles.freezeButton]}
+                onPress={() => handleFreezeUser(item.id, !item.isFrozen)}
+              >
+                <Ionicons
+                  name={item.isFrozen ? "snow-outline" : "snow"}
+                  size={20}
+                  color={item.isFrozen ? "#2196F3" : "#FFFFFF"}
+                />
+                <Text style={styles.actionButtonText}>{item.isFrozen ? "Unfreeze" : "Freeze"}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.deleteButton]}
+                onPress={() => handleDeleteUser(item.id)}
+              >
+                <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Delete</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </View>
+    )
+  }
+
+  // Tab button component
+  const renderTabButton = (tab: UserCategoryTab, label: string) => {
+    const count = getCategoryCount(tab)
+    const isActive = activeTab === tab
+    
+    return (
+      <TouchableOpacity
+        key={tab}
+        style={[styles.tab, isActive && styles.activeTab]}
+        onPress={() => setActiveTab(tab)}
+      >
+        <Text style={[styles.tabText, isActive && styles.activeTabText]}>{label}</Text>
+        <View style={[styles.badge, isActive && styles.activeBadge]}>
+          <Text style={styles.badgeText}>{count}</Text>
+        </View>
+      </TouchableOpacity>
+    )
+  }
 
   if (loading) {
     return (
@@ -123,19 +217,41 @@ const AdminUsersScreen: React.FC<AdminUsersScreenProps> = ({ navigation }) => {
     )
   }
 
+  const filteredUsers = getFilteredUsers()
+  
+  // Determine what to show based on active tab
+  const showTokens = activeTab === "viber"
+  const displayData = showTokens ? fcmTokens : filteredUsers
+
   return (
     <View style={styles.container}>
       <Text style={styles.headerText}>Manage Users</Text>
       <Text style={styles.subHeaderText}>Total Users: {users.length}</Text>
 
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.tabScrollView}
+          contentContainerStyle={styles.tabScrollContent}
+        >
+          {renderTabButton("all", "All Users")}
+          {renderTabButton("club_owner", "Club Owners")}
+          {renderTabButton("user", "Regular Users")}
+          {renderTabButton("admin", "Admins")}
+          {renderTabButton("viber", "Vibers")}
+        </ScrollView>
+      </View>
+
       <FlatList
-        data={users}
-        keyExtractor={(item) => item.id}
-        renderItem={renderUserItem}
+        data={displayData as any}
+        keyExtractor={(item: any, index: number) => showTokens ? `token-${index}` : (item as User).id}
+        renderItem={showTokens ? renderTokenItem as any : renderUserItem}
         contentContainerStyle={styles.listContainer}
         ListEmptyComponent={
           <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No users found</Text>
+            <Text style={styles.emptyText}>{showTokens ? "No tokens found" : "No users found"}</Text>
           </View>
         }
       />
@@ -160,6 +276,52 @@ const styles = StyleSheet.create({
     color: "#BBBBBB",
     marginBottom: 16,
   },
+  tabScrollView: {
+    flexGrow: 0,
+  },
+  tabContainer: {
+    marginBottom: 16,
+  },
+  tabScrollContent: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#1E1E1E",
+    gap: 8,
+  },
+  activeTab: {
+    backgroundColor: "#2196F3",
+  },
+  tabText: {
+    color: "#BBBBBB",
+    fontSize: 14,
+  },
+  activeTabText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  badge: {
+    backgroundColor: "#333333",
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    minWidth: 24,
+    alignItems: "center",
+  },
+  activeBadge: {
+    backgroundColor: "rgba(255,255,255,0.3)",
+  },
+  badgeText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
@@ -179,6 +341,12 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
+  tokenCard: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+  },
   userInfo: {
     flexDirection: "row",
     alignItems: "center",
@@ -192,6 +360,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginRight: 16,
+  },
+  viberAvatar: {
+    backgroundColor: "#FF9800",
   },
   avatarText: {
     fontSize: 24,
@@ -215,6 +386,17 @@ const styles = StyleSheet.create({
   userDate: {
     fontSize: 12,
     color: "#BBBBBB",
+  },
+  venueInfo: {
+    fontSize: 12,
+    color: "#FF9800",
+    marginTop: 4,
+  },
+  tokenText: {
+    fontSize: 12,
+    color: "#FF9800",
+    marginTop: 4,
+    fontFamily: "monospace",
   },
   actionButtons: {
     flexDirection: "row",

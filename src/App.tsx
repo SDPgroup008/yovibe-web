@@ -209,8 +209,8 @@ function AppContent() {
           // Pass user info if authenticated
           const userId = user?.uid || null;
           const userEmail = user?.email;
-          const userName = user?.displayName || undefined;
-          await saveTokenToRepo(token, userId, userEmail, userName);
+          const userName = user?.displayName || null; // Pass null instead of undefined for unauthenticated users
+          await saveTokenToRepo(token, userId, userEmail ?? undefined, userName ?? undefined);
         }
       })();
     }

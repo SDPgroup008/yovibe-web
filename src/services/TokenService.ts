@@ -52,9 +52,10 @@ export interface FirestoreToken {
   deviceInfo: DeviceInfo;
   subscribedAt: Date;
   lastActiveAt: Date;
+  createdAt: Date;  // When the token was first created
   isActive: boolean;
   userEmail?: string;  // For authenticated users
-  userName?: string;   // For authenticated users
+  userName?: string;   // For authenticated users (or generated guest name)
 }
 
 // Daily token subscription stats
@@ -108,7 +109,7 @@ let tokenCache: CachedTokenData | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Firestore collection name
-const TOKENS_COLLECTION = "notificationTokens";
+const TOKENS_COLLECTION = "YoVibe/data/notificationTokens";
 
 class TokenService {
   private static instance: TokenService;
@@ -496,19 +497,26 @@ class TokenService {
         return existingToken.id;
       }
       
+      // Generate guest name for unauthenticated users
+      let finalUserName = userName;
+      if (!isAuthenticated && !finalUserName) {
+        finalUserName = await this.generateGuestUserName();
+      }
+      
       // Create new token document
-      const tokenData: Omit<FirestoreToken, 'subscribedAt' | 'lastActiveAt'> & { subscribedAt: any; lastActiveAt: any } = {
+      const tokenData: Omit<FirestoreToken, 'subscribedAt' | 'lastActiveAt' | 'createdAt'> & { subscribedAt: any; lastActiveAt: any; createdAt: any } = {
         token,
         userId,
         isAuthenticated,
         deviceInfo,
         subscribedAt: Timestamp.now(),
         lastActiveAt: Timestamp.now(),
+        createdAt: Timestamp.now(),
         isActive: true,
       };
       
       if (userEmail) tokenData.userEmail = userEmail;
-      if (userName) tokenData.userName = userName;
+      if (finalUserName) tokenData.userName = finalUserName;
       
       const docRef = await addDoc(collection(db, TOKENS_COLLECTION), tokenData);
       console.log("[TokenService] Saved new token to Firestore:", docRef.id);
@@ -516,6 +524,47 @@ class TokenService {
     } catch (error) {
       console.error("[TokenService] Error saving token to Firestore:", error);
       throw error;
+    }
+  }
+  
+  /**
+   * Generate a unique guest username for unauthenticated users
+   * Finds the highest guest number and increments from there
+   */
+  private async generateGuestUserName(): Promise<string> {
+    try {
+      // Query for existing guest users, ordered by userName
+      const q = query(
+        collection(db, TOKENS_COLLECTION),
+        where("isAuthenticated", "==", false),
+        orderBy("userName", "desc"),
+        limit(1)
+      );
+      
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        // No existing guests, start with guest 1
+        return "guest 1";
+      }
+      
+      const lastGuest = snapshot.docs[0].data();
+      const lastUserName = lastGuest.userName;
+      
+      // Extract the number from the last guest username (e.g., "guest 15" -> 15)
+      const match = lastUserName?.match(/guest\s+(\d+)/i);
+      
+      if (match) {
+        const lastNumber = parseInt(match[1], 10);
+        return `guest ${lastNumber + 1}`;
+      }
+      
+      // If we can't parse the number, append a new guest
+      return "guest 1";
+    } catch (error) {
+      console.error("[TokenService] Error generating guest username:", error);
+      // Fallback: use timestamp-based unique name
+      return `guest_${Date.now()}`;
     }
   }
 
@@ -619,6 +668,7 @@ class TokenService {
           deviceInfo: data.deviceInfo,
           subscribedAt: data.subscribedAt?.toDate() || new Date(),
           lastActiveAt: data.lastActiveAt?.toDate() || new Date(),
+          createdAt: data.createdAt?.toDate() || new Date(),
           isActive: data.isActive,
           userEmail: data.userEmail,
           userName: data.userName,

@@ -450,7 +450,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
             style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
             onPress={() => setActiveTab("nightlife")}
           >
-            <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs & Bars</Text>
+            <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === "recreation" && styles.activeTab]}

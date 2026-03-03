@@ -176,6 +176,74 @@ class FirebaseService {
     }
   }
 
+  // Admin methods - User Management
+  async getAllUsers(): Promise<User[]> {
+    try {
+      console.log("FirebaseService: Getting all users")
+      const usersRef = collection(db, "YoVibe/data/users")
+      const querySnapshot = await getDocs(usersRef)
+      const users: User[] = []
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        // Skip deleted users
+        if (data.isDeleted === true) {
+          return
+        }
+        users.push({
+          id: doc.id,
+          uid: data.uid,
+          email: data.email,
+          userType: data.userType,
+          displayName: data.displayName,
+          photoURL: data.photoURL,
+          venueId: data.venueId,
+          isFrozen: data.isFrozen || false,
+          createdAt: data.createdAt?.toDate?.() || new Date(),
+          lastLoginAt: data.lastLoginAt?.toDate?.() || new Date(),
+        })
+      })
+
+      console.log("FirebaseService: Found", users.length, "users")
+      return users
+    } catch (error) {
+      console.error("FirebaseService: Error getting all users:", error)
+      throw error
+    }
+  }
+
+  async freezeUser(userId: string, isFrozen: boolean): Promise<void> {
+    try {
+      console.log("FirebaseService:", isFrozen ? "Freezing" : "Unfreezing", "user", userId)
+      const userRef = doc(db, "YoVibe/data/users", userId)
+      await updateDoc(userRef, {
+        isFrozen: isFrozen,
+        frozenAt: isFrozen ? Timestamp.now() : null,
+      })
+      console.log("FirebaseService: User frozen status updated")
+    } catch (error) {
+      console.error("FirebaseService: Error freezing/unfreezing user:", error)
+      throw error
+    }
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    try {
+      console.log("FirebaseService: Soft deleting user", userId)
+      const userRef = doc(db, "YoVibe/data/users", userId)
+      await updateDoc(userRef, {
+        isDeleted: true,
+        deletedAt: Timestamp.now(),
+        email: `deleted_${Date.now()}@yovibe.app`, // Anonymize email
+        displayName: "Deleted User",
+      })
+      console.log("FirebaseService: User soft deleted successfully")
+    } catch (error) {
+      console.error("FirebaseService: Error deleting user:", error)
+      throw error
+    }
+  }
+
   // Venue methods
   async getVenues(): Promise<Venue[]> {
     try {
