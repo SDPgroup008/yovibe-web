@@ -4,15 +4,14 @@
 importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
 
-// Initialize Firebase with the same config as the app
+// Initialize Firebase with the correct web config
 firebase.initializeApp({
-  apiKey: "AIzaSyD6k2Rr2p-K-c8v-qf9Y9k6r1s3v2p0k1j",
+  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
   authDomain: "eco-guardian-bd74f.firebaseapp.com",
   projectId: "eco-guardian-bd74f",
   storageBucket: "eco-guardian-bd74f.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abc123def456ghi789",
-  vapidKey: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp2NwhsV7I"
+  messagingSenderId: "917905910857",
+  appId: "1:917905910857:web:a1b2c3d4e5f6g7h8i9j0"
 });
 
 // Retrieve Firebase Messaging instance

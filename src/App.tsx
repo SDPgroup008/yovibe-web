@@ -21,6 +21,9 @@ import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
 
+// Store messaging instance in a ref to handle async initialization
+let messagingInstance = null;
+
 const Stack = createStackNavigator();
 
 // 🔔 Persistent Permission Banner that floats at the top
@@ -185,7 +188,7 @@ function AppContent() {
           await navigator.serviceWorker.ready;
           console.log("Service worker is active and ready");
         } catch (err) {
-          console.error("Service worker registration failed:", err);
+          console.warn("Service worker registration failed:", err);
         }
       }
     })();
@@ -200,17 +203,21 @@ function AppContent() {
       return () => clearTimeout(bannerTimer);
     }
 
-    // If already granted, get token
+    // If already granted, get token (wrapped in try-catch for safety)
     if (currentPermission === "granted") {
       (async () => {
-        const token = await getWebFcmToken();
-        if (token) {
-          console.log("Web FCM token retrieved:", token);
-          // Pass user info if authenticated
-          const userId = user?.uid || null;
-          const userEmail = user?.email;
-          const userName = user?.displayName || null; // Pass null instead of undefined for unauthenticated users
-          await saveTokenToRepo(token, userId, userEmail ?? undefined, userName ?? undefined);
+        try {
+          const token = await getWebFcmToken();
+          if (token) {
+            console.log("Web FCM token retrieved:", token);
+            // Pass user info if authenticated
+            const userId = user?.uid || null;
+            const userEmail = user?.email;
+            const userName = user?.displayName || null;
+            await saveTokenToRepo(token, userId, userEmail ?? undefined, userName ?? undefined);
+          }
+        } catch (tokenErr) {
+          console.warn("Error getting FCM token:", tokenErr);
         }
       })();
     }
@@ -218,6 +225,12 @@ function AppContent() {
 
   // 🔔 Listen for foreground notifications
   useEffect(() => {
+    // Only set up listener if messaging is available
+    if (!messaging) {
+      console.log("Messaging not available, skipping foreground notification listener");
+      return;
+    }
+    
     const unsubscribe = onMessage(messaging, async (payload) => {
       console.log("=".repeat(60));
       console.log("FOREGROUND NOTIFICATION RECEIVED");

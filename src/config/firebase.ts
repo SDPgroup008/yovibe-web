@@ -1,8 +1,8 @@
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth, setPersistence, browserSessionPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-import { getMessaging, getToken } from "firebase/messaging";
+import { getMessaging, isSupported, getToken } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
@@ -10,25 +10,100 @@ const firebaseConfig = {
   projectId: "eco-guardian-bd74f",
   storageBucket: "eco-guardian-bd74f.appspot.com",
   messagingSenderId: "917905910857",
-  appId: "1:917905910857:android:5886ab1db46cec56912398",
+  appId: "1:917905910857:web:a1b2c3d4e5f6g7h8i9j0", // Web app ID
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
-const messaging = getMessaging(app);
+// Initialize Firebase only once
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-setPersistence(auth, browserSessionPersistence);
+// Initialize services with error handling
+let auth, db, storage, messaging;
+
+try {
+  auth = getAuth(app);
+  setPersistence(auth, browserSessionPersistence);
+} catch (err) {
+  console.error("Error initializing Firebase Auth:", err);
+}
+
+try {
+  db = getFirestore(app);
+} catch (err) {
+  console.error("Error initializing Firebase Firestore:", err);
+}
+
+try {
+  storage = getStorage(app);
+} catch (err) {
+  console.error("Error initializing Firebase Storage:", err);
+}
+
+// Initialize messaging only if supported (browser check for web platform)
+let messagingSupported = false;
+
+async function initializeMessaging(): Promise<typeof messaging> {
+  if (typeof window === 'undefined') {
+    // Server-side rendering - don't initialize
+    return null;
+  }
+  
+  try {
+    // Check if FCM is supported in this browser
+    messagingSupported = await isSupported();
+    
+    if (messagingSupported) {
+      messaging = getMessaging(app);
+      return messaging;
+    } else {
+      console.log("Firebase Messaging is not supported in this browser");
+      return null;
+    }
+  } catch (err) {
+    console.error("Error checking messaging support:", err);
+    return null;
+  }
+}
+
+// Try to initialize messaging, but don't fail if it doesn't work
+initializeMessaging().catch(err => {
+  console.warn("Firebase messaging initialization skipped:", err);
+});
 
 // --- Notification helpers ---
 export async function requestNotificationPermission(): Promise<boolean> {
-  const result = await Notification.requestPermission();
-  return result === "granted";
+  try {
+    // Check if messaging is supported first
+    if (!messagingSupported) {
+      const supported = await isSupported();
+      if (!supported) {
+        console.log("Notifications not supported in this browser");
+        return false;
+      }
+      messagingSupported = true;
+      messaging = getMessaging(app);
+    }
+    
+    const result = await Notification.requestPermission();
+    return result === "granted";
+  } catch (err) {
+    console.error("Error requesting notification permission:", err);
+    return false;
+  }
 }
 
 export async function getWebFcmToken(): Promise<string | null> {
   try {
+    // Check if messaging is supported
+    if (!messaging) {
+      const supported = await isSupported();
+      if (!supported) {
+        console.log("FCM not supported, skipping token generation");
+        return null;
+      }
+      messagingSupported = true;
+      messaging = getMessaging(app);
+    }
+    
     const token = await getToken(messaging, {
       vapidKey:
         process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
@@ -41,8 +116,7 @@ export async function getWebFcmToken(): Promise<string | null> {
   }
 }
 
-// Export Firebase services
+// Export Firebase services with null checks
 export { app, auth, db, storage, messaging };
 
-export const hasFirebaseConfig = true
-  
+export const hasFirebaseConfig = true;
