@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "yo-vibe",
+    "name": "YoVibe",
     "slug": "yo-vibe",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,12 +11,28 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yovibe.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "YoVibe needs access to your location to show nearby venues and events.",
+        "NSCameraUsageDescription": "YoVibe needs camera access to take photos for vibes and tickets.",
+        "NSPhotoLibraryUsageDescription": "YoVibe needs photo library access to select images for vibes."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#121212"
-      }
+      },
+      "package": "com.yovibe.app",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "VIBRATE",
+        "RECEIVE_BOOT_COMPLETED"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -24,7 +40,9 @@
         "babel": {
           "include": ["@expo/vector-icons"]
         }
-      }
+      },
+      "favicon": "./assets/favicon.png",
+      "manifest": "./web/manifest.json"
     },
     "platforms": ["ios", "android", "web"],
     "experiments": {

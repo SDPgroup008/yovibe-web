@@ -2,29 +2,55 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+  <!-- iOS Safari viewport settings to prevent zoom and ensure proper rendering -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="theme-color" content="#121212" />
+  <!-- iOS PWA meta tags -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="YoVibe" />
   <title>YoVibe - Find the Best Nightlife</title>
-  <link rel="icon" type="image/png" href="/apple-touch-icon.png" />
+  <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <meta name="description" content="Discover the best nightlife venues and events in your city" />
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
   <style>
-    html, body, #root {
+    /* CSS custom properties for consistent theming */
+    :root {
+      --bg-color: #121212;
+      --text-color: #ffffff;
+      --accent-color: #2196F3;
+    }
+    
+    /* Reset and base styles */
+    html, body {
       width: 100%;
       height: 100%;
       margin: 0;
       padding: 0;
-      background-color: #121212;
+      overflow: hidden; /* Prevent scroll bounce on iOS */
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    #root {
+      width: 100%;
+      height: 100%;
+      background-color: var(--bg-color);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
+    /* Loading screen styles */
     .loading {
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      height: 100%;
+      height: 100vh; /* Fallback */
+      height: 100dvh; /* Dynamic viewport height for iOS */
       color: white;
+      background-color: var(--bg-color);
     }
     
     .loading-spinner {
@@ -32,7 +58,7 @@
       height: 50px;
       border: 3px solid rgba(255, 255, 255, 0.3);
       border-radius: 50%;
-      border-top-color: #2196F3;
+      border-top-color: var(--accent-color);
       animation: spin 1s ease-in-out infinite;
       margin-bottom: 20px;
     }
@@ -41,8 +67,54 @@
       to { transform: rotate(360deg); }
     }
     
-    .expo-loading-indicator {
-      display: none;
+    .loading-text {
+      font-size: 16px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    
+    /* Error screen styles */
+    .error-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      height: 100vh;
+      height: 100dvh;
+      color: white;
+      background-color: var(--bg-color);
+      padding: 20px;
+      text-align: center;
+      box-sizing: border-box;
+    }
+    
+    .error-title {
+      font-size: 24px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #ff5252;
+    }
+    
+    .error-message {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 20px;
+      max-width: 300px;
+    }
+    
+    .retry-button {
+      padding: 12px 24px;
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    .retry-button:active {
+      opacity: 0.8;
     }
   </style>
 </head>
@@ -59,8 +131,78 @@
   <div id="root">
     <div class="loading">
       <div class="loading-spinner"></div>
-      <p>Loading YoVibe...</p>
+      <p class="loading-text">Loading YoVibe...</p>
     </div>
   </div>
+  
+  <!-- Error handling script to catch JavaScript errors -->
+  <script>
+    // Global error handler for catching uncaught errors
+    (function() {
+      // Store original console methods
+      var originalError = console.error;
+      
+      // Error tracking
+      var errorCount = 0;
+      var MAX_ERRORS = 5;
+      
+      // Show error screen
+      function showErrorScreen(message) {
+        var root = document.getElementById('root');
+        if (root) {
+          var errorHtml = '<div class="error-screen">' +
+            '<h1 class="error-title">Oops! Something went wrong</h1>' +
+            '<p class="error-message">' + message + '</p>' +
+            '<button class="retry-button" onclick="window.location.reload()">Tap to Retry</button>' +
+          '</div>';
+          root.innerHTML = errorHtml;
+        }
+      }
+      
+      // Log errors but suppress React warnings that might cause confusion
+      console.error = function() {
+        var args = Array.prototype.slice.call(arguments);
+        // Check if this is a critical error that should show the error screen
+        var errorStr = args.join(' ');
+        
+        // Critical errors that indicate app failure
+        if (
+          errorStr.indexOf('Cannot read property') !== -1 ||
+          errorStr.indexOf('undefined is not an object') !== -1 ||
+          errorStr.indexOf('is not defined') !== -1 ||
+          errorStr.indexOf('Failed to compile') !== -1 ||
+          errorStr.indexOf('Module not found') !== -1
+        ) {
+          errorCount++;
+          originalError.apply(console, args);
+          
+          if (errorCount >= MAX_ERRORS) {
+            showErrorScreen('The app encountered an error. Please refresh the page.');
+          }
+        } else {
+          // Pass through non-critical errors
+          originalError.apply(console, args);
+        }
+      };
+      
+      // Handle uncaught promise rejections
+      window.onunhandledrejection = function(event) {
+        originalError('Unhandled Promise Rejection:', event.reason);
+      };
+      
+      // Handle runtime errors
+      window.onerror = function(message, source, lineno, colno, error) {
+        originalError('Global Error:', message, 'at', source + ':' + lineno + ':' + colno);
+        if (error && error.stack) {
+          originalError('Stack:', error.stack);
+        }
+      };
+      
+      // Expose retry function globally
+      window.reloadApp = function() {
+        window.location.reload();
+      };
+    })();
+  </script>
 </body>
 </html>
