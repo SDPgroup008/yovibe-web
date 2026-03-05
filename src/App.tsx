@@ -201,7 +201,12 @@ function AppContent() {
     })();
 
     // Check if permission has already been granted or denied
-    const currentPermission = Notification.permission;
+    // First check if Notification API exists (required for iOS Safari)
+    let currentPermission = "denied";
+    if (typeof Notification !== 'undefined' && Notification.permission) {
+      currentPermission = Notification.permission;
+    }
+    
     if (currentPermission === "default") {
       // Show banner after 5 seconds if permission hasn't been decided
       const bannerTimer = setTimeout(() => {
