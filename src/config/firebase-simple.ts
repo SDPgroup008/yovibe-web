@@ -23,6 +23,12 @@ setPersistence(auth, browserSessionPersistence);
 
 // --- Notification helpers ---
 export async function requestNotificationPermission(): Promise<boolean> {
+  // Check if Notification API exists (required for iOS Safari)
+  if (typeof Notification === 'undefined' || !Notification.requestPermission) {
+    console.log("Notification API not available in this browser");
+    return false;
+  }
+  
   const result = await Notification.requestPermission();
   return result === "granted";
 }
