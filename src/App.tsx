@@ -107,28 +107,35 @@ function NotificationBanner({ title, body, onClose }) {
   );
 }
 
-// 🔔 Helper: Trigger GitHub Action via repository_dispatch AND save to Firestore
+// 🔔 Trigger GitHub Action via repository_dispatch AND save to Firestore with topic subscription
 async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
-    // 1. Save to Firestore for admin dashboard analytics
-    try {
-      await TokenService.saveTokenToFirestore(token, userId, userEmail, userName);
-      console.log("[App] Token saved to Firestore:", userId ? "authenticated" : "unauthenticated");
-    } catch (firestoreError) {
-      console.error("[App] Error saving to Firestore:", firestoreError);
+    // Save to Firestore AND subscribe to "all-users" topic via Netlify function
+    // This handles both storage and topic subscription in one place
+    const res = await fetch("/.netlify/functions/save-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, userId, userEmail, userName }),
+    });
+
+    if (!res.ok) {
+      console.error("Failed to save token:", await res.text());
+    } else {
+      const result = await res.json();
+      console.log("[App] Token saved and subscribed to all-users:", result);
     }
     
-    // 2. Also save to tokens.json (legacy - for GitHub workflow)
-    const res = await fetch("/.netlify/functions/append-token", {
+    // Also save to tokens.json (legacy - for GitHub workflow and backward compatibility)
+    const legacyRes = await fetch("/.netlify/functions/append-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
     });
 
-    if (!res.ok) {
-      console.error("Failed to trigger Netlify function:", await res.text());
+    if (!legacyRes.ok) {
+      console.error("Failed to trigger Netlify function:", await legacyRes.text());
     } else {
-      console.log("Netlify function triggered successfully");
+      console.log("Legacy Netlify function triggered successfully");
     }
   } catch (err) {
     console.error("Error calling Netlify function:", err);
