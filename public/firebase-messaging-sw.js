@@ -1,8 +1,9 @@
 // Firebase Messaging Service Worker
 // This file is required for push notifications to work on web
 
-importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
+// IMPORTANT: Use the same Firebase version as in package.json (firebase: ^10.8.0)
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
 // Initialize Firebase with the correct web config
 firebase.initializeApp({
@@ -16,6 +17,17 @@ firebase.initializeApp({
 
 // Retrieve Firebase Messaging instance
 const messaging = firebase.messaging();
+
+// Service worker lifecycle events for better iOS compatibility
+self.addEventListener('install', (event) => {
+  console.log('[firebase-messaging-sw.js] Service Worker installing');
+  self.skipWaiting(); // Skip waiting, activate immediately
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('[firebase-messaging-sw.js] Service Worker activating');
+  event.waitUntil(clients.claim()); // Take control of all pages immediately
+});
 
 // Handle background messages
 messaging.onBackgroundMessage(function(payload) {
