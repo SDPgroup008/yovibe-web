@@ -276,10 +276,12 @@ function AppContent() {
     console.log("[iOS-NOTIF] User tapped Allow - requesting permission...");
     const granted = await requestNotificationPermission();
     console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied');
+    
     if (granted) {
       console.log("[iOS-NOTIF] Getting FCM token...");
       const token = await getWebFcmToken();
       console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO');
+      
       if (token) {
         console.log("[iOS-NOTIF] FCM Token (first 20 chars):", token.substring(0, 20) + "...");
         // Pass user info if authenticated
@@ -293,7 +295,9 @@ function AppContent() {
         // Track new subscription in daily stats
         await NotificationService.trackNewSubscription();
       } else {
-        console.error("[iOS-NOTIF] ERROR: No token received from FCM");
+        console.warn("[iOS-NOTIF] No FCM token received - browser permission was granted but FCM is not supported on this browser. In-app notifications will still work.");
+        // Still save a placeholder or show in-app notifications
+        // For now, we just log this - the user can still receive in-app notifications
       }
     } else {
       console.error("[iOS-NOTIF] ERROR: Permission not granted");

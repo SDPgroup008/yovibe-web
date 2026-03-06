@@ -73,29 +73,41 @@ initializeMessaging().catch(err => {
 // --- Notification helpers ---
 export async function requestNotificationPermission(): Promise<boolean> {
   try {
-    // Check if messaging is supported first
-    if (!messagingSupported) {
-      console.log("[iOS-NOTIF] Checking if FCM is supported...");
-      const supported = await isSupported();
-      console.log("[iOS-NOTIF] FCM supported:", supported);
-      if (!supported) {
-        console.log("[iOS-NOTIF] Notifications not supported in this browser");
-        return false;
-      }
-      messagingSupported = true;
-      messaging = getMessaging(app);
-    }
-    
-    // Check if Notification API exists (required for iOS Safari)
+    // Check if Notification API exists first (required for iOS Safari)
     if (typeof Notification === 'undefined' || !Notification.requestPermission) {
       console.log("[iOS-NOTIF] Notification API not available in this browser");
       return false;
     }
     
-    console.log("[iOS-NOTIF] Requesting notification permission...");
+    // Request permission from the browser first
+    console.log("[iOS-NOTIF] Requesting notification permission from browser...");
     const result = await Notification.requestPermission();
-    console.log("[iOS-NOTIF] Permission result:", result);
-    return result === "granted";
+    console.log("[iOS-NOTIF] Browser permission result:", result);
+    
+    if (result !== "granted") {
+      console.log("[iOS-NOTIF] Browser denied permission");
+      return false;
+    }
+    
+    // Browser granted permission, now check if FCM is supported
+    console.log("[iOS-NOTIF] Browser granted permission, checking FCM support...");
+    const supported = await isSupported();
+    console.log("[iOS-NOTIF] FCM supported:", supported);
+    
+    if (!supported) {
+      console.log("[iOS-NOTIF] FCM not supported - browser permission granted but FCM unavailable");
+      // Permission granted by browser but FCM not supported
+      // We still return true so the UI knows permission was granted
+      return true;
+    }
+    
+    // Initialize messaging if not already done
+    if (!messaging) {
+      messagingSupported = true;
+      messaging = getMessaging(app);
+    }
+    
+    return true;
   } catch (err) {
     console.error("[iOS-NOTIF] Error requesting notification permission:", err);
     return false;
