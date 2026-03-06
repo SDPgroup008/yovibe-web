@@ -59,7 +59,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   // Listen for new notifications
   useEffect(() => {
     const unsubscribe = NotificationService.addNotificationListener(() => {
-      console.log("EventsScreen: New notification received, updating badge count");
+      // console.log("EventsScreen: New notification received, updating badge count");
       loadUnreadCount();
     });
 
@@ -71,7 +71,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
       const count = await NotificationService.getUnreadCount(user?.uid);
       setUnreadCount(count);
     } catch (error) {
-      console.error("Error loading unread count:", error);
+      // console.error("Error loading unread count:", error);
     }
   };
 
@@ -123,7 +123,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
       if (isInitial && !isRefresh) {
         // Check cache first for initial load
         if (isCacheValid()) {
-          console.log("Using cached events data");
+          // console.log("Using cached events data");
           setEvents(dataCache!.data);
           setFilteredEvents(dataCache!.data);
           setLoading(false);
@@ -138,7 +138,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
 
       // AUTO-LOAD ALL EVENTS: Fetch all data in batches with 7-second delays
       if (isInitial) {
-        console.log("\n🚀 EVENTS AUTO-LOAD: Fetching ALL events from Firebase in batches...\n");
+        // console.log("\n🚀 EVENTS AUTO-LOAD: Fetching ALL events from Firebase in batches...\n");
         
         let allEvents: any[] = [];
         let currentLastDoc = null;
@@ -148,18 +148,18 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         
         while (true) {
           fetchCount++;
-          console.log(`\n${'='.repeat(60)}`);
-          console.log(`📅 EVENT BATCH #${fetchCount}: Requesting ${BATCH_SIZE} events...`);
-          console.log(`${'='.repeat(60)}`);
+          // console.log(`\n${'='.repeat(60)}`);
+          // console.log(`📅 EVENT BATCH #${fetchCount}: Requesting ${BATCH_SIZE} events...`);
+          // console.log(`${'='.repeat(60)}`);
           
           const { events: paginatedEvents, lastDoc: newLastDoc } = await FirebaseService.getEventsPaginated(BATCH_SIZE, currentLastDoc);
           
-          console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-          console.log(`   • Received: ${paginatedEvents.length} events`);
-          console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+          // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
+          // console.log(`   • Received: ${paginatedEvents.length} events`);
+          // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
           
           if (paginatedEvents.length === 0) {
-            console.log(`\n⛔ BATCH #${fetchCount}: No events returned - End of data`);
+            // console.log(`\n⛔ BATCH #${fetchCount}: No events returned - End of data`);
             break;
           }
           
@@ -175,33 +175,33 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           });
           setEvents(sortedSoFar);
           setFilteredEvents(sortedSoFar);
-          console.log(`🎨 DISPLAYED: Batch #${fetchCount} sorted and visible (${sortedSoFar.length} events)`);
+          // console.log(`🎨 DISPLAYED: Batch #${fetchCount} sorted and visible (${sortedSoFar.length} events)`);
           
           // Hide loading spinner after first batch is displayed
           if (fetchCount === 1) {
-            console.log("🎬 First batch complete - hiding loading spinner");
+            // console.log("🎬 First batch complete - hiding loading spinner");
             setLoading(false);
           }
           
-          console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-          console.log(`   • Total events loaded: ${allEvents.length}`);
-          console.log(`   • Displayed (sorted by date): ${sortedSoFar.length}`);
+          // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
+          // console.log(`   • Total events loaded: ${allEvents.length}`);
+          // console.log(`   • Displayed (sorted by date): ${sortedSoFar.length}`);
           
           if (!newLastDoc) {
-            console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All events loaded!`);
+            // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All events loaded!`);
             break;
           }
           
-          console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
+          // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
           await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
         
-        console.log(`\n${'='.repeat(60)}`);
-        console.log(`🎉 EVENTS AUTO-LOAD COMPLETE!`);
-        console.log(`${'='.repeat(60)}`);
-        console.log(`   • Total batches: ${fetchCount}`);
-        console.log(`   • Total events: ${allEvents.length}`);
-        console.log(`${'='.repeat(60)}\n`);
+        // console.log(`\n${'='.repeat(60)}`);
+        // console.log(`🎉 EVENTS AUTO-LOAD COMPLETE!`);
+        // console.log(`${'='.repeat(60)}`);
+        // console.log(`   • Total batches: ${fetchCount}`);
+        // console.log(`   • Total events: ${allEvents.length}`);
+        // console.log(`${'='.repeat(60)}\n`);
         
         // Sort events by date (closest to today first)
         const sortedEvents = [...allEvents].sort((a, b) => {
@@ -218,7 +218,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         
         // Cache the complete data
         setDataCache({ data: sortedEvents, timestamp: Date.now() });
-        console.log("💾 Complete events dataset cached");
+        // console.log("💾 Complete events dataset cached");
 
         // Get featured events
         const featured = await FirebaseService.getFeaturedEvents();
@@ -232,7 +232,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         setFeaturedEvents(sortedFeatured);
       }
     } catch (error) {
-      console.error("Error loading events:", error);
+      // console.error("Error loading events:", error);
     } finally {
       setLoading(false);
       setRefreshing(false);

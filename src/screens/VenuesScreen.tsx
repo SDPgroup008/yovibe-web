@@ -45,37 +45,37 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
   const isCacheValid = () => {
     if (!dataCache) {
-      console.log("🔍 Cache check: No cache exists");
+      // console.log("🔍 Cache check: No cache exists");
       return false;
     }
     // Check version match (invalidate old caches without version)
     if (!dataCache.version || dataCache.version !== CACHE_VERSION) {
-      console.log(`🔍 Cache check: Version mismatch (cached: ${dataCache.version}, current: ${CACHE_VERSION}) - invalidating cache`);
+      // console.log(`🔍 Cache check: Version mismatch (cached: ${dataCache.version}, current: ${CACHE_VERSION}) - invalidating cache`);
       setDataCache(null); // Clear old cache
       return false;
     }
     // Check timestamp
     const isValid = Date.now() - dataCache.timestamp < CACHE_DURATION;
-    console.log(`🔍 Cache check: Version OK, timestamp ${isValid ? 'valid' : 'expired'}`);
+    // console.log(`🔍 Cache check: Version OK, timestamp ${isValid ? 'valid' : 'expired'}`);
     return isValid;
   };
 
   const loadVenues = async (isInitial: boolean = true, isRefresh: boolean = false) => {
-    console.log(`\n🚀 loadVenues CALLED - isInitial: ${isInitial}, isRefresh: ${isRefresh}`);
+    // console.log(`\n🚀 loadVenues CALLED - isInitial: ${isInitial}, isRefresh: ${isRefresh}`);
     try {
       if (isInitial && !isRefresh) {
-        console.log("\n🔄 VENUES SCREEN: Loading venues (initial load - fetching venues for both tabs)...")
-        console.log(`📦 Current cache state:`, dataCache ? `exists (${dataCache.data?.length || 0} venues, version: ${dataCache.version})` : 'null');
+        // console.log("\n🔄 VENUES SCREEN: Loading venues (initial load - fetching venues for both tabs)...")
+        // console.log(`📦 Current cache state:`, dataCache ? `exists (${dataCache.data?.length || 0} venues, version: ${dataCache.version})` : 'null');
         
         // Check cache first
         if (isCacheValid()) {
-          console.log("✅ Using cached venues data (cache is valid)");
-          console.log("Cached venues count:", dataCache!.data.length)
+          // console.log("✅ Using cached venues data (cache is valid)");
+          // console.log("Cached venues count:", dataCache!.data.length)
           setVenues(dataCache!.data);
           setLoading(false);
           return;
         }
-        console.log("⚠️ Cache invalid or empty, fetching from Firebase...")
+        // console.log("⚠️ Cache invalid or empty, fetching from Firebase...")
         setLoading(true);
       }
 
@@ -85,7 +85,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
       // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
       if (isInitial) {
-        console.log("\n🚀 STARTING AUTO-LOAD: Will fetch ALL venues from Firebase in batches...\n");
+        // console.log("\n🚀 STARTING AUTO-LOAD: Will fetch ALL venues from Firebase in batches...\n");
         
         let allVenues: any[] = [];
         let currentLastDoc = null;
@@ -96,19 +96,19 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         // Keep fetching until Firebase has no more data
         while (true) {
           fetchCount++;
-          console.log(`\n${'='.repeat(60)}`);
-          console.log(`📥 BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues from Firebase...`);
-          console.log(`${'='.repeat(60)}`);
+          // console.log(`\n${'='.repeat(60)}`);
+          // console.log(`📥 BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues from Firebase...`);
+          // console.log(`${'='.repeat(60)}`);
           
           const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
           
-          console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-          console.log(`   • Received: ${paginatedVenues.length} venues`);
-          console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+          // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
+          // console.log(`   • Received: ${paginatedVenues.length} venues`);
+          // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
           
           // If no venues returned, we're done
           if (paginatedVenues.length === 0) {
-            console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data reached`);
+            // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data reached`);
             break;
           }
           
@@ -118,10 +118,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           
           // 🚀 IMMEDIATELY DISPLAY the batch to users
           setVenues(allVenues);
-          console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
+          // console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
           
           // 🎵 Load vibe ratings for this batch BEFORE moving to next batch
-          console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
+          // console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
           const today = new Date();
           for (const venue of paginatedVenues) {
             const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
@@ -134,11 +134,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
               setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
             }
           }
-          console.log(`✅ Vibe ratings loaded for batch #${fetchCount}`);
+          // console.log(`✅ Vibe ratings loaded for batch #${fetchCount}`);
           
           // Hide loading spinner after first batch is displayed
           if (fetchCount === 1) {
-            console.log("🎬 First batch complete - hiding loading spinner");
+            // console.log("🎬 First batch complete - hiding loading spinner");
             setLoading(false);
           }
           
@@ -153,30 +153,30 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
             return !v.categories.some((cat: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()));
           });
           
-          console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-          console.log(`   • Total venues: ${allVenues.length}`);
-          console.log(`   • Nightlife: ${nightlifeVenues.length}`);
-          console.log(`   • Recreation: ${recreationVenues.length}`);
+          // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
+          // console.log(`   • Total venues: ${allVenues.length}`);
+          // console.log(`   • Nightlife: ${nightlifeVenues.length}`);
+          // console.log(`   • Recreation: ${recreationVenues.length}`);
           
           // If Firebase says no more data (lastDoc is null), we're done
           if (!newLastDoc) {
-            console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All data loaded!`);
+            // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All data loaded!`);
             break;
           }
           
           // Wait 5 seconds before next batch
-          console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before fetching next batch...`);
+          // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before fetching next batch...`);
           await new Promise(resolve => setTimeout(resolve, DELAY_MS));
         }
         
-        console.log(`\n${'='.repeat(60)}`);
-        console.log(`🎉 AUTO-LOAD COMPLETE!`);
-        console.log(`${'='.repeat(60)}`);
-        console.log(`   • Total batches fetched: ${fetchCount}`);
-        console.log(`   • Total venues loaded: ${allVenues.length}`);
-        console.log(`   • Nightlife venues: ${allVenues.filter(v => v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
-        console.log(`   • Recreation venues: ${allVenues.filter(v => !v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
-        console.log(`${'='.repeat(60)}\n`);
+        // console.log(`\n${'='.repeat(60)}`);
+        // console.log(`🎉 AUTO-LOAD COMPLETE!`);
+        // console.log(`${'='.repeat(60)}`);
+        // console.log(`   • Total batches fetched: ${fetchCount}`);
+        // console.log(`   • Total venues loaded: ${allVenues.length}`);
+        // console.log(`   • Nightlife venues: ${allVenues.filter(v => v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
+        // console.log(`   • Recreation venues: ${allVenues.filter(v => !v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
+        // console.log(`${'='.repeat(60)}\n`);
         
         setVenues(allVenues);
         setLastDoc(null); // No more data to fetch
@@ -184,11 +184,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         
         // Cache the complete data with version
         setDataCache({ data: allVenues, timestamp: Date.now(), version: CACHE_VERSION });
-        console.log("💾 Complete dataset cached with version:", CACHE_VERSION)
-        console.log("✅ All vibe ratings already loaded per batch\n")
+        // console.log("💾 Complete dataset cached with version:", CACHE_VERSION)
+        // console.log("✅ All vibe ratings already loaded per batch\n")
       }
     } catch (error) {
-      console.error("❌ Error loading venues:", error);
+      // console.error("❌ Error loading venues:", error);
       const errorRatings: Record<string, number> = {};
       venues.forEach((venue) => {
         errorRatings[venue.id] = 0.0;
@@ -204,18 +204,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   };
 
   const getFilteredVenues = () => {
-    console.log("\n========== VENUE FILTERING (UI) ==========\nActive Tab:", activeTab.toUpperCase())
-    console.log("Total venues available for filtering:", venues.length)
+    // console.log("\n========== VENUE FILTERING (UI) ==========\nActive Tab:", activeTab.toUpperCase())
+    // console.log("Total venues available for filtering:", venues.length)
     
     // Handle "all" tab - return all venues without filtering
     if (activeTab === "all") {
-      console.log("✅ All tab selected - showing all venues without filtering")
+      // console.log("✅ All tab selected - showing all venues without filtering")
       const sorted = [...venues].sort((a, b) => {
         const aVibe = venueVibeRatings[a.id] || 0.0;
         const bVibe = venueVibeRatings[b.id] || 0.0;
         return bVibe - aVibe;
       });
-      console.log("========================================\n")
+      // console.log("========================================\n")
       return sorted;
     }
     
@@ -231,11 +231,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       if (!venue.categories || !Array.isArray(venue.categories) || venue.categories.length === 0) {
         noCategoryCount++
         const included = activeTab === "recreation"
-        if (included) {
-          console.log(`✅ "${venueName}" - Included in ${activeTab.toUpperCase()} (no categories, defaults to "Other")`)
-        } else {
-          console.log(`❌ "${venueName}" - Excluded from ${activeTab.toUpperCase()} (no categories)`)
-        }
+        // if (included) {
+        //   console.log(`✅ "${venueName}" - Included in ${activeTab.toUpperCase()} (no categories, defaults to "Other")`)
+        // } else {
+        //   console.log(`❌ "${venueName}" - Excluded from ${activeTab.toUpperCase()} (no categories)`)
+        // }
         return included;
       }
       
@@ -245,31 +245,33 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       
       if (isNightlife) {
         nightlifeCount++
-        if (activeTab === "nightlife") {
-          console.log(`✅ "${venueName}" - Included in NIGHTLIFE - Categories: [${categories.join(", ")}]`)
-          return true
-        } else {
-          console.log(`❌ "${venueName}" - Excluded from RECREATION (is nightlife venue) - Categories: [${categories.join(", ")}]`)
-          return false
-        }
+        // if (activeTab === "nightlife") {
+        //   console.log(`✅ "${venueName}" - Included in NIGHTLIFE - Categories: [${categories.join(", ")}]`)
+        //   return true
+        // } else {
+        //   console.log(`❌ "${venueName}" - Excluded from RECREATION (is nightlife venue) - Categories: [${categories.join(", ")}]`)
+        //   return false
+        // }
+        return activeTab === "nightlife";
       } else {
         recreationCount++
-        if (activeTab === "recreation") {
-          console.log(`✅ "${venueName}" - Included in RECREATION - Categories: [${categories.join(", ")}]`)
-          return true
-        } else {
-          console.log(`❌ "${venueName}" - Excluded from NIGHTLIFE (is recreation venue) - Categories: [${categories.join(", ")}]`)
-          return false
-        }
+        // if (activeTab === "recreation") {
+        //   console.log(`✅ "${venueName}" - Included in RECREATION - Categories: [${categories.join(", ")}]`)
+        //   return true
+        // } else {
+        //   console.log(`❌ "${venueName}" - Excluded from NIGHTLIFE (is recreation venue) - Categories: [${categories.join(", ")}]`)
+        //   return false
+        // }
+        return activeTab === "recreation";
       }
     });
     
-    console.log("\n--- FILTERING SUMMARY ---")
-    console.log("Total venues processed:", venues.length)
-    console.log("Nightlife venues found:", nightlifeCount)
-    console.log("Recreation venues found:", recreationCount)
-    console.log("No category venues found:", noCategoryCount)
-    console.log("Venues passing filter for", activeTab, "tab:", filtered.length)
+    // console.log("\n--- FILTERING SUMMARY ---")
+    // console.log("Total venues processed:", venues.length)
+    // console.log("Nightlife venues found:", nightlifeCount)
+    // console.log("Recreation venues found:", recreationCount)
+    // console.log("No category venues found:", noCategoryCount)
+    // console.log("Venues passing filter for", activeTab, "tab:", filtered.length)
 
     // Sort by current vibe rating (highest first)
     const sorted = filtered.sort((a, b) => {
@@ -278,11 +280,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       return bVibe - aVibe;
     });
     
-    console.log("\nAfter sorting by vibe rating (top 3):")
-    sorted.slice(0, 3).forEach((venue, idx) => {
-      console.log(`${idx + 1}. "${venue.name}" - Vibe: ${(venueVibeRatings[venue.id] || 0.0).toFixed(1)}`)
-    })
-    console.log("========================================\n")
+    // console.log("\nAfter sorting by vibe rating (top 3):")
+    // sorted.slice(0, 3).forEach((venue, idx) => {
+    //   console.log(`${idx + 1}. "${venue.name}" - Vibe: ${(venueVibeRatings[venue.id] || 0.0).toFixed(1)}`)
+    // })
+    // console.log("========================================\n")
     
     return sorted;
   };
@@ -291,17 +293,17 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     const filtered = getFilteredVenues();
     setCurrentPage(1);
     const toDisplay = filtered.slice(0, ITEMS_PER_PAGE);
-    console.log("\n📱 DISPLAY UPDATE: Showing first", toDisplay.length, "venues out of", filtered.length, "filtered venues")
-    toDisplay.forEach((venue, idx) => {
-      console.log(`  ${idx + 1}. "${venue.name}" - Categories: [${venue.categories?.join(", ") || "None"}]`)
-    })
+    // console.log("\n📱 DISPLAY UPDATE: Showing first", toDisplay.length, "venues out of", filtered.length, "filtered venues")
+    // toDisplay.forEach((venue, idx) => {
+    //   console.log(`  ${idx + 1}. "${venue.name}" - Categories: [${venue.categories?.join(", ") || "None"}]`)
+    // })
     setDisplayedVenues(toDisplay);
   }, [venues, activeTab, venueVibeRatings]);
 
   const loadMoreVenues = async () => {
     const filtered = getFilteredVenues();
     
-    console.log(`\n📜 SCROLL LOAD MORE: User scrolled - displayed: ${displayedVenues.length}, filtered available: ${filtered.length}, hasMore: ${hasMore}`);
+    // console.log(`\n📜 SCROLL LOAD MORE: User scrolled - displayed: ${displayedVenues.length}, filtered available: ${filtered.length}, hasMore: ${hasMore}`);
     
     // First check if we need to load more from existing filtered venues
     if (displayedVenues.length < filtered.length) {
@@ -310,7 +312,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       const startIndex = 0;
       const endIndex = nextPage * ITEMS_PER_PAGE;
       const newDisplayed = filtered.slice(startIndex, endIndex);
-      console.log(`✅ Displaying ${newDisplayed.length} venues from cache (page ${nextPage})`);
+      // console.log(`✅ Displaying ${newDisplayed.length} venues from cache (page ${nextPage})`);
       setDisplayedVenues(newDisplayed);
       setCurrentPage(nextPage);
       return;
@@ -319,30 +321,30 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     // All filtered venues are displayed, check if we can fetch more from Firebase
     if (displayedVenues.length >= filtered.length) {
       if (!hasMore || !lastDoc) {
-        console.log("⛔ All venues displayed and no more data available from Firebase");
+        // console.log("⛔ All venues displayed and no more data available from Firebase");
         return;
       }
       
-      console.log("\n🔄 All filtered venues displayed. Fetching more from Firebase...\n");
+      // console.log("\n🔄 All filtered venues displayed. Fetching more from Firebase...\n");
       
       try {
         const { venues: moreVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(ITEMS_PER_PAGE, lastDoc);
         
         if (moreVenues.length > 0) {
           const updatedVenues = [...venues, ...moreVenues];
-          console.log(`✅ Added ${moreVenues.length} more venues. Total venues: ${updatedVenues.length}`);
+          // console.log(`✅ Added ${moreVenues.length} more venues. Total venues: ${updatedVenues.length}`);
           
           setVenues(updatedVenues);
           setLastDoc(newLastDoc);
           setHasMore(newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE);
           
-          console.log(`Updated hasMore state: ${newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE}`);
+          // console.log(`Updated hasMore state: ${newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE}`);
           
           // Update cache
           setDataCache({ data: updatedVenues, timestamp: Date.now(), version: CACHE_VERSION });
           
           // Load vibe ratings for new venues
-          console.log("\n🎵 Loading vibe ratings for new venues...");
+          // console.log("\n🎵 Loading vibe ratings for new venues...");
           const today = new Date();
           const newRatings = { ...venueVibeRatings };
           for (const venue of moreVenues) {
@@ -352,19 +354,19 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
                 return image.uploadedAt > latest.uploadedAt ? image : latest;
               });
               newRatings[venue.id] = latestVibe.vibeRating || 0.0;
-              console.log(`  "${venue.name}" - Vibe: ${newRatings[venue.id].toFixed(1)}`);
+              // console.log(`  "${venue.name}" - Vibe: ${newRatings[venue.id].toFixed(1)}`);
             } else {
               newRatings[venue.id] = 0.0;
-              console.log(`  "${venue.name}" - Vibe: 0.0`);
+              // console.log(`  "${venue.name}" - Vibe: 0.0`);
             }
           }
           setVenueVibeRatings(newRatings);
         } else {
-          console.log("⛔ No more venues available from Firebase");
+          // console.log("⛔ No more venues available from Firebase");
           setHasMore(false);
         }
       } catch (error) {
-        console.error("❌ Error loading more venues:", error);
+        // console.error("❌ Error loading more venues:", error);
       } finally {
         setRefreshing(false);
       }

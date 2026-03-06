@@ -247,13 +247,13 @@ class FirebaseService {
   // Venue methods
   async getVenues(): Promise<Venue[]> {
     try {
-      console.log("FirebaseService: Getting venues")
+      // console.log("FirebaseService: Getting venues")
       const venuesRef = collection(db, "YoVibe/data/venues")
-      const querySnapshot = await getDocs(venuesRef)
-      console.log("FirebaseService: Total venues in database:", querySnapshot.size)
+      const querySnapshot = await getDocs(venuesRef);
+      // console.log("FirebaseService: Total venues in database:", querySnapshot.size);
 
       if (querySnapshot.empty) {
-        console.log("FirebaseService: No venues found in database, returning mock data for development")
+        // console.log("FirebaseService: No venues found in database, returning mock data for development");
         return this.getMockVenues()
       }
 
@@ -280,29 +280,29 @@ class FirebaseService {
         }
       })
 
-      console.log("FirebaseService: Found", venues.length, "active venues")
+      // console.log("FirebaseService: Found", venues.length, "active venues");
 
       if (venues.length === 0) {
-        console.log("FirebaseService: All venues are deleted, returning mock data for development")
+        // console.log("FirebaseService: All venues are deleted, returning mock data for development");
         return this.getMockVenues()
       }
 
       return venues
     } catch (error) {
-      console.error("FirebaseService: Error getting venues:", error)
-      console.log("FirebaseService: Falling back to mock data due to error")
+      // console.error("FirebaseService: Error getting venues:", error);
+      // console.log("FirebaseService: Falling back to mock data due to error");
       return this.getMockVenues()
     }
   }
 
   async getVenuesPaginated(pageSize: number = 5, lastDoc?: DocumentSnapshot): Promise<{venues: Venue[], lastDoc: DocumentSnapshot | null}> {
     try {
-      console.log("\n========== FIREBASE VENUE PAGINATION ==========\nRequested page size:", pageSize)
-      if (lastDoc) {
-        console.log("Continuing from last document (pagination cursor set)")
-      } else {
-        console.log("Starting fresh fetch (first page)")
-      }
+      // console.log("\n========== FIREBASE VENUE PAGINATION ==========\nRequested page size:", pageSize)
+      // if (lastDoc) {
+      //   console.log("Continuing from last document (pagination cursor set)")
+      // } else {
+      //   console.log("Starting fresh fetch (first page)")
+      // }
       
       const venuesRef = collection(db, "YoVibe/data/venues")
       
@@ -322,7 +322,7 @@ class FirebaseService {
       }
       
       const querySnapshot = await getDocs(q)
-      console.log("\nFirebase returned", querySnapshot.size, "venue documents")
+      // console.log("\nFirebase returned", querySnapshot.size, "venue documents")
       
       const venues: Venue[] = []
       let deletedCount = 0
@@ -335,11 +335,11 @@ class FirebaseService {
         
         if (data.isDeleted) {
           deletedCount++
-          console.log(`❌ EXCLUDED: "${venueName}" (ID: ${doc.id}) - Reason: Marked as deleted (isDeleted=true)`)
+          // console.log(`❌ EXCLUDED: "${venueName}" (ID: ${doc.id}) - Reason: Marked as deleted (isDeleted=true)`)
         } else {
           loadedCount++
           const categories = data.categories || []
-          console.log(`✅ LOADED: "${venueName}" (ID: ${doc.id}) - Categories: [${categories.join(", ")}], Type: ${data.venueType || "nightlife"}`)
+          // console.log(`✅ LOADED: "${venueName}" (ID: ${doc.id}) - Categories: [${categories.join(", ")}], Type: ${data.venueType || "nightlife"}`)
           venues.push({
             id: doc.id,
             name: data.name,
@@ -359,17 +359,17 @@ class FirebaseService {
         }
       })
       
-      console.log("\n--- FIREBASE FETCH SUMMARY ---")
-      console.log("Total documents from Firebase:", querySnapshot.size)
-      console.log("Loaded venues:", loadedCount)
-      console.log("Excluded (deleted):", deletedCount)
-      console.log("Returning", venues.length, "venues to screen")
-      console.log("Has more pages:", querySnapshot.docs.length === pageSize)
-      console.log("========================================\n")
+      // console.log("\n--- FIREBASE FETCH SUMMARY ---")
+      // console.log("Total documents from Firebase:", querySnapshot.size)
+      // console.log("Loaded venues:", loadedCount)
+      // console.log("Excluded (deleted):", deletedCount)
+      // console.log("Returning", venues.length, "venues to screen")
+      // console.log("Has more pages:", querySnapshot.docs.length === pageSize)
+      // console.log("========================================\n")
       
       return { venues, lastDoc: lastVisible }
     } catch (error) {
-      console.error("❌ Error getting paginated venues from Firestore:", error)
+      // console.error("❌ Error getting paginated venues from Firestore:", error)
       return { venues: [], lastDoc: null }
     }
   }
@@ -679,7 +679,7 @@ class FirebaseService {
   // Event methods
   async getEvents(): Promise<Event[]> {
     try {
-      console.log("FirebaseService: Getting events")
+      // console.log("FirebaseService: Getting events")
       
       // Clean up old events using existing function
       await this.deletePastEvents()
@@ -697,7 +697,7 @@ class FirebaseService {
         }
         
         if (!data.date || typeof data.date.toDate !== "function") {
-          console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
+          // console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
           return
         }
 
@@ -725,17 +725,17 @@ class FirebaseService {
         })
       })
 
-      console.log("FirebaseService: Found", events.length, "events")
+      // console.log("FirebaseService: Found", events.length, "events")
       return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
-      console.error("Error getting events from Firestore:", error)
+      // console.error("Error getting events from Firestore:", error)
       return []
     }
   }
 
   async getEventsPaginated(pageSize: number = 5, lastDoc?: DocumentSnapshot): Promise<{events: Event[], lastDoc: DocumentSnapshot | null}> {
     try {
-      console.log("FirebaseService: Getting paginated events, pageSize:", pageSize)
+      // console.log("FirebaseService: Getting paginated events, pageSize:", pageSize)
       
       // Clean up old events using existing function
       await this.deletePastEvents()
@@ -769,7 +769,7 @@ class FirebaseService {
         const data = doc.data()
         
         if (!data.date || typeof data.date.toDate !== "function") {
-          console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
+          // console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
           return
         }
 
@@ -798,10 +798,10 @@ class FirebaseService {
         })
       })
       
-      console.log("FirebaseService: Found", events.length, "paginated events")
+      // console.log("FirebaseService: Found", events.length, "paginated events")
       return { events, lastDoc: lastVisible }
     } catch (error) {
-      console.error("Error getting paginated events from Firestore:", error)
+      // console.error("Error getting paginated events from Firestore:", error)
       return { events: [], lastDoc: null }
     }
   }

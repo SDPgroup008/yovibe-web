@@ -62,7 +62,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     try {
       // Check cache first
       if (isCacheValid()) {
-        console.log("Using cached venues data for map");
+        // console.log("Using cached venues data for map");
         setVenues(dataCache!.data);
         setLoading(false);
         return;
@@ -71,7 +71,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       setLoading(true);
       
       // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
-      console.log("\n🚀 MAP AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
+      // console.log("\n🚀 MAP AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
       
       let allVenues: any[] = [];
       let currentLastDoc = null;
@@ -81,18 +81,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       
       while (true) {
         fetchCount++;
-        console.log(`\n${'='.repeat(60)}`);
-        console.log(`🗺️  MAP BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
-        console.log(`${'='.repeat(60)}`);
+        // console.log(`\n${'='.repeat(60)}`);
+        // console.log(`🗺️  MAP BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
+        // console.log(`${'='.repeat(60)}`);
         
         const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
         
-        console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-        console.log(`   • Received: ${paginatedVenues.length} venues`);
-        console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+        // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
+        // console.log(`   • Received: ${paginatedVenues.length} venues`);
+        // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
         
         if (paginatedVenues.length === 0) {
-          console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
+          // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
           break;
         }
         
@@ -101,32 +101,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         
         // 🚀 IMMEDIATELY DISPLAY the batch to users
         setVenues(allVenues);
-        console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
+        // console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
         
         // Hide loading spinner after first batch is displayed
         if (fetchCount === 1) {
-          console.log("🎬 First batch complete - hiding loading spinner");
+          // console.log("🎬 First batch complete - hiding loading spinner");
           setLoading(false);
         }
         
-        console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-        console.log(`   • Total venues loaded: ${allVenues.length}`);
+        // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
+        // console.log(`   • Total venues loaded: ${allVenues.length}`);
         
         if (!newLastDoc) {
-          console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
+          // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
           break;
         }
         
-        console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
+        // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
         await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
       
-      console.log(`\n${'='.repeat(60)}`);
-      console.log(`🎉 MAP AUTO-LOAD COMPLETE!`);
-      console.log(`${'='.repeat(60)}`);
-      console.log(`   • Total batches: ${fetchCount}`);
-      console.log(`   • Total venues: ${allVenues.length}`);
-      console.log(`${'='.repeat(60)}\n`);
+      // console.log(`\n${'='.repeat(60)}`);
+      // console.log(`🎉 MAP AUTO-LOAD COMPLETE!`);
+      // console.log(`${'='.repeat(60)}`);
+      // console.log(`   • Total batches: ${fetchCount}`);
+      // console.log(`   • Total venues: ${allVenues.length}`);
+      // console.log(`${'='.repeat(60)}\n`);
       
       setVenues(allVenues);
       setLastDoc(null);
@@ -134,9 +134,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       
       // Cache the complete data
       setDataCache({ data: allVenues, timestamp: Date.now() });
-      console.log("💾 Complete venues dataset cached for map");
+      // console.log("💾 Complete venues dataset cached for map");
     } catch (error) {
-      console.error("Error loading venues for map:", error)
+      // console.error("Error loading venues for map:", error)
     } finally {
       setLoading(false)
     }
