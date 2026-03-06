@@ -7,12 +7,12 @@ importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-comp
 
 // Initialize Firebase with the correct web config
 firebase.initializeApp({
-  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
+  apiKey: "AIzaSyBYNPWQj74P7EpmbVxX6ETVHEPayu2-UpE",
   authDomain: "eco-guardian-bd74f.firebaseapp.com",
   projectId: "eco-guardian-bd74f",
   storageBucket: "eco-guardian-bd74f.appspot.com",
   messagingSenderId: "917905910857",
-  appId: "1:917905910857:web:a1b2c3d4e5f6g7h8i9j0"
+  appId: "1:917905910857:web:6a0a450f36d2cbb6912398",
 });
 
 // Retrieve Firebase Messaging instance

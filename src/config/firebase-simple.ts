@@ -5,12 +5,13 @@ import { getStorage } from "firebase/storage";
 import { getMessaging, getToken } from "firebase/messaging";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCu3hXDaqQ58VvHNQ1On5wxcgaU0CIXCo8",
+  apiKey: "AIzaSyBYNPWQj74P7EpmbVxX6ETVHEPayu2-UpE",
   authDomain: "eco-guardian-bd74f.firebaseapp.com",
   projectId: "eco-guardian-bd74f",
   storageBucket: "eco-guardian-bd74f.appspot.com",
   messagingSenderId: "917905910857",
-  appId: "1:917905910857:android:5886ab1db46cec56912398",
+  appId: "1:917905910857:web:6a0a450f36d2cbb6912398",
+  measurementId: "G-8PRQWEZP8L"
 };
 
 const app = initializeApp(firebaseConfig);
