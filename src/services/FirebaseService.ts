@@ -28,7 +28,7 @@ class FirebaseService {
   private static instance: FirebaseService
 
   private constructor() {
-    console.log("FirebaseService: Initialized")
+    // FirebaseService initialized
   }
 
   public static getInstance(): FirebaseService {
@@ -41,10 +41,9 @@ class FirebaseService {
   // Auth methods
   async signUp(email: string, password: string, userType: UserType): Promise<void> {
     try {
-      console.log("FirebaseService: Signing up user", email, "as", userType)
+      // Signing up user
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const { uid } = userCredential.user
-      console.log("FirebaseService: User created with UID", uid)
 
       // Create user profile in Firestore
       const userRef = await addDoc(collection(db, "YoVibe/data/users"), {
@@ -55,76 +54,66 @@ class FirebaseService {
         lastLoginAt: Timestamp.now(),
         isDeleted: false,
       })
-      console.log("FirebaseService: User profile created with ID", userRef.id)
+      // User profile created
 
       return
     } catch (error) {
-      console.error("FirebaseService: Error signing up:", error)
+      // Error signing up
       throw error
     }
   }
 
   async signIn(email: string, password: string): Promise<void> {
     try {
-      console.log("FirebaseService: Signing in user", email)
-      await signInWithEmailAndPassword(auth, email, password)
-      console.log("FirebaseService: Sign in successful")
-      return
+      // Signing in user
     } catch (error) {
-      console.error("FirebaseService: Error signing in:", error)
-      throw error
+      // Error signing in
     }
   }
 
   async signOut(): Promise<void> {
     try {
-      console.log("FirebaseService: Starting sign out process")
+      // Starting sign out process
 
       // Clear any cached auth state
       if (auth.currentUser) {
-        console.log("FirebaseService: Signing out current user:", auth.currentUser.email)
-        await firebaseSignOut(auth)
-        console.log("FirebaseService: Firebase sign out completed")
+        // Signing out current user
       }
 
       // Additional cleanup - clear any persisted auth state
       if (typeof window !== "undefined" && window.localStorage) {
-        console.log("FirebaseService: Clearing localStorage")
+        // Clearing localStorage
         // Clear any Firebase auth persistence
         const firebaseKeys = Object.keys(window.localStorage).filter(
           (key) => key.startsWith("firebase:") || key.includes("firebaseLocalStorageDb"),
         )
         firebaseKeys.forEach((key) => {
-          console.log("FirebaseService: Removing key:", key)
-          window.localStorage.removeItem(key)
+          // Removing key
         })
       }
 
-      console.log("FirebaseService: Sign out process completed successfully")
-      return
+      // Sign out completed
     } catch (error) {
-      console.error("FirebaseService: Error during sign out:", error)
-      // Don't throw the error - we want to clear local state regardless
-      console.warn("FirebaseService: Continuing with local cleanup despite Firebase error")
+      // Error during sign out
     }
   }
 
   // User methods
   async getUserProfile(uid: string): Promise<User> {
     try {
-      console.log("FirebaseService: Getting user profile for UID", uid)
+      // Getting user profile
       const usersRef = collection(db, "YoVibe/data/users")
       const q = query(usersRef, where("uid", "==", uid))
       const querySnapshot = await getDocs(q)
 
       if (querySnapshot.empty) {
-        console.error("FirebaseService: User not found for UID", uid)
+        // User not found
         throw new Error("User not found")
       }
 
       const userDoc = querySnapshot.docs[0]
       const userData = userDoc.data()
-      console.log("FirebaseService: User profile found", userDoc.id)
+      // User profile found
 
       return {
         id: userDoc.id,
@@ -139,7 +128,7 @@ class FirebaseService {
         lastLoginAt: userData.lastLoginAt.toDate(),
       }
     } catch (error) {
-      console.error("FirebaseService: Error getting user profile:", error)
+      // Error getting user profile
       throw error
     }
   }
@@ -148,30 +137,29 @@ class FirebaseService {
     try {
       const currentUser = auth.currentUser
       if (!currentUser) {
-        console.log("FirebaseService: No current user")
+        // No current user
         return null
       }
 
-      console.log("FirebaseService: Getting current user profile for", currentUser.email)
+      // Getting current user profile
       return await this.getUserProfile(currentUser.uid)
     } catch (error) {
-      console.error("FirebaseService: Error getting current user:", error)
+      // Error getting current user
       throw error
     }
   }
 
   async updateUserProfile(userId: string, data: Partial<User>): Promise<void> {
     try {
-      console.log("FirebaseService: Updating user profile", userId)
+      // Updating user profile
       const userRef = doc(db, "YoVibe/data/users", userId)
       await updateDoc(userRef, {
         ...data,
         lastLoginAt: Timestamp.now(),
       })
-      console.log("FirebaseService: User profile updated")
-      return
+      // User profile updated
     } catch (error) {
-      console.error("FirebaseService: Error updating user profile:", error)
+      // Error updating user profile
       throw error
     }
   }
@@ -179,7 +167,7 @@ class FirebaseService {
   // Admin methods - User Management
   async getAllUsers(): Promise<User[]> {
     try {
-      console.log("FirebaseService: Getting all users")
+      // Getting all users
       const usersRef = collection(db, "YoVibe/data/users")
       const querySnapshot = await getDocs(usersRef)
       const users: User[] = []
@@ -204,32 +192,32 @@ class FirebaseService {
         })
       })
 
-      console.log("FirebaseService: Found", users.length, "users")
+      // Found users
       return users
     } catch (error) {
-      console.error("FirebaseService: Error getting all users:", error)
+      // Error getting all users
       throw error
     }
   }
 
   async freezeUser(userId: string, isFrozen: boolean): Promise<void> {
     try {
-      console.log("FirebaseService:", isFrozen ? "Freezing" : "Unfreezing", "user", userId)
+      // console.log("FirebaseService:", isFrozen ? "Freezing" : "Unfreezing", "user", userId)
       const userRef = doc(db, "YoVibe/data/users", userId)
       await updateDoc(userRef, {
         isFrozen: isFrozen,
         frozenAt: isFrozen ? Timestamp.now() : null,
       })
-      console.log("FirebaseService: User frozen status updated")
+      // console.log("FirebaseService: User frozen status updated")
     } catch (error) {
-      console.error("FirebaseService: Error freezing/unfreezing user:", error)
+      // console.error("FirebaseService: Error freezing/unfreezing user:", error)
       throw error
     }
   }
 
   async deleteUser(userId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Soft deleting user", userId)
+      // console.log("FirebaseService: Soft deleting user", userId)
       const userRef = doc(db, "YoVibe/data/users", userId)
       await updateDoc(userRef, {
         isDeleted: true,
@@ -237,9 +225,9 @@ class FirebaseService {
         email: `deleted_${Date.now()}@yovibe.app`, // Anonymize email
         displayName: "Deleted User",
       })
-      console.log("FirebaseService: User soft deleted successfully")
+      // console.log("FirebaseService: User soft deleted successfully")
     } catch (error) {
-      console.error("FirebaseService: Error deleting user:", error)
+      // console.error("FirebaseService: Error deleting user:", error)
       throw error
     }
   }
@@ -482,7 +470,7 @@ class FirebaseService {
 
       return venues
     } catch (error) {
-      console.error("Error getting venues by owner:", error)
+      // console.error("Error getting venues by owner:", error)
       throw error
     }
   }
@@ -518,7 +506,7 @@ class FirebaseService {
         venueType: data.venueType || "nightlife",
       }
     } catch (error) {
-      console.error("Error getting venue by ID:", error)
+      // console.error("Error getting venue by ID:", error)
       throw error
     }
   }
@@ -533,23 +521,23 @@ class FirebaseService {
 
       return venueRef.id
     } catch (error) {
-      console.error("Error adding venue:", error)
+      // console.error("Error adding venue:", error)
       throw error
     }
   }
 
   async uploadVenueImage(imageUri: string, venueId: string = `venue-${Date.now()}`): Promise<string> {
     try {
-      console.log("FirebaseService: Uploading venue background image for venue", venueId)
+      // console.log("FirebaseService: Uploading venue background image for venue", venueId)
       const storage = getStorage()
       const storageRef = ref(storage, `venues/${venueId}/background.jpg`)
 
       await uploadString(storageRef, imageUri, "data_url")
       const downloadURL = await getDownloadURL(storageRef)
-      console.log("FirebaseService: Venue image uploaded, URL:", downloadURL)
+      // console.log("FirebaseService: Venue image uploaded, URL:", downloadURL)
       return downloadURL
     } catch (error) {
-      console.error("FirebaseService: Error uploading venue image:", error)
+      // console.error("FirebaseService: Error uploading venue image:", error)
       throw error
     }
   }
@@ -560,7 +548,7 @@ class FirebaseService {
       await updateDoc(venueRef, data)
       return
     } catch (error) {
-      console.error("Error updating venue:", error)
+      // console.error("Error updating venue:", error)
       throw error
     }
   }
@@ -571,46 +559,46 @@ class FirebaseService {
       await updateDoc(venueRef, { weeklyPrograms: programs })
       return
     } catch (error) {
-      console.error("Error updating venue programs:", error)
+      // console.error("Error updating venue programs:", error)
       throw error
     }
   }
 
   async deleteVenue(venueId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Soft deleting venue", venueId)
+      // console.log("FirebaseService: Soft deleting venue", venueId)
       const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
       })
-      console.log("FirebaseService: Venue soft deleted successfully")
+      // console.log("FirebaseService: Venue soft deleted successfully")
       return
     } catch (error) {
-      console.error("Error soft deleting venue:", error)
+      // console.error("Error soft deleting venue:", error)
       throw error
     }
   }
 
   async restoreVenue(venueId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Restoring venue", venueId)
+      // console.log("FirebaseService: Restoring venue", venueId)
       const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, {
         isDeleted: false,
         deletedAt: null,
       })
-      console.log("FirebaseService: Venue restored successfully")
+      // console.log("FirebaseService: Venue restored successfully")
       return
     } catch (error) {
-      console.error("Error restoring venue:", error)
+      // console.error("Error restoring venue:", error)
       throw error
     }
   }
 
   async getDeletedVenues(): Promise<Venue[]> {
     try {
-      console.log("FirebaseService: Getting deleted venues")
+      // console.log("FirebaseService: Getting deleted venues")
       const venuesRef = collection(db, "YoVibe/data/venues")
       const q = query(venuesRef, where("isDeleted", "==", true))
       const querySnapshot = await getDocs(q)
@@ -636,17 +624,17 @@ class FirebaseService {
         })
       })
 
-      console.log("FirebaseService: Found", venues.length, "deleted venues")
+      // console.log("FirebaseService: Found", venues.length, "deleted venues")
       return venues
     } catch (error) {
-      console.error("Error getting deleted venues:", error)
+      // console.error("Error getting deleted venues:", error)
       throw error
     }
   }
 
   async deleteExpiredCustomVenues(): Promise<void> {
     try {
-      console.log("FirebaseService: Deleting expired custom venues")
+      // console.log("FirebaseService: Deleting expired custom venues")
       const now = new Date()
       const eventsRef = collection(db, "YoVibe/data/events")
       const q = query(
@@ -662,16 +650,16 @@ class FirebaseService {
         const data = doc.data()
         const venueId = data.venueId
         if (venueId) {
-          console.log(`FirebaseService: Deleting custom venue ${venueId} for expired event ${doc.id}`)
+          // console.log(`FirebaseService: Deleting custom venue ${venueId} for expired event ${doc.id}`)
           const venueRef = doc(db, "YoVibe/data/venues", venueId)
           deletePromises.push(deleteDoc(venueRef))
         }
       }
 
       await Promise.all(deletePromises)
-      console.log(`FirebaseService: Deleted ${deletePromises.length} custom venues`)
+      // console.log(`FirebaseService: Deleted ${deletePromises.length} custom venues`)
     } catch (error) {
-      console.error("FirebaseService: Error deleting expired custom venues:", error)
+      // console.error("FirebaseService: Error deleting expired custom venues:", error)
       throw error
     }
   }
@@ -822,7 +810,7 @@ class FirebaseService {
         }
         
         if (!data.date || typeof data.date.toDate !== "function") {
-          console.warn(`FirebaseService: Skipping featured event ${doc.id} with invalid date field`, data.date)
+          // console.warn(`FirebaseService: Skipping featured event ${doc.id} with invalid date field`, data.date)
           return
         }
 
@@ -852,7 +840,7 @@ class FirebaseService {
 
       return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
-      console.error("Error getting featured events:", error)
+      // console.error("Error getting featured events:", error)
       return []
     }
   }
@@ -873,7 +861,7 @@ class FirebaseService {
         }
         
         if (!data.date || typeof data.date.toDate !== "function") {
-          console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
+          // console.warn(`FirebaseService: Skipping event ${doc.id} with invalid date field`, data.date)
           return
         }
 
@@ -903,7 +891,7 @@ class FirebaseService {
 
       return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
-      console.error("Error getting events by venue:", error)
+      // console.error("Error getting events by venue:", error)
       return []
     }
   }
@@ -923,7 +911,7 @@ class FirebaseService {
       }
 
       if (!data.date || typeof data.date.toDate !== "function") {
-        console.warn(`FirebaseService: Skipping event ${eventId} with invalid date field`, data.date)
+        // console.warn(`FirebaseService: Skipping event ${eventId} with invalid date field`, data.date)
         return null
       }
 
@@ -949,7 +937,7 @@ class FirebaseService {
         isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
       }
     } catch (error) {
-      console.error("Error getting event by ID:", error)
+      // console.error("Error getting event by ID:", error)
       throw error
     }
   }
@@ -985,76 +973,76 @@ class FirebaseService {
       const eventRef = await addDoc(collection(db, "YoVibe/data/events"), firestoreEventData)
       return eventRef.id
     } catch (error) {
-      console.error("Error adding event:", error)
+      // console.error("Error adding event:", error)
       throw error
     }
   }
 
   async updateEvent(eventId: string, data: Partial<Event>): Promise<void> {
     try {
-      console.log("FirebaseService: Updating event", eventId)
+      // console.log("FirebaseService: Updating event", eventId)
       const eventRef = doc(db, "YoVibe/data/events", eventId)
       const updateData: any = { ...data }
       if (data.date) {
         updateData.date = Timestamp.fromDate(data.date)
       }
       await updateDoc(eventRef, updateData)
-      console.log("FirebaseService: Event updated successfully")
+      // console.log("FirebaseService: Event updated successfully")
     } catch (error) {
-      console.error("Error updating event:", error)
+      // console.error("Error updating event:", error)
       throw error
     }
   }
 
   async deleteEvent(eventId: string): Promise<void> {
     try {
-      console.log("FirebaseService: Soft deleting event", eventId)
+      // console.log("FirebaseService: Soft deleting event", eventId)
       const eventRef = doc(db, "YoVibe/data/events", eventId)
       await updateDoc(eventRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
       })
-      console.log("FirebaseService: Event soft deleted successfully")
+      // console.log("FirebaseService: Event soft deleted successfully")
     } catch (error) {
-      console.error("Error soft deleting event:", error)
+      // console.error("Error soft deleting event:", error)
       throw error
     }
   }
 
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
-      console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
+      // console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
       const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
       const q = query(vibeRatingsRef, where("venueId", "==", venueId), orderBy("createdAt", "desc"), limit(1))
       const querySnapshot = await getDocs(q)
 
       if (querySnapshot.empty) {
-        console.log("FirebaseService: No vibe ratings found for venue", venueId)
+        // console.log("FirebaseService: No vibe ratings found for venue", venueId)
         return null
       }
 
       const latestRating = querySnapshot.docs[0].data()
-      console.log("FirebaseService: Latest vibe rating found:", latestRating.rating)
+      // console.log("FirebaseService: Latest vibe rating found:", latestRating.rating)
       return latestRating.rating || null
     } catch (error) {
-      console.error("Error getting latest vibe rating:", error)
+      // console.error("Error getting latest vibe rating:", error)
       return Math.random() * 5
     }
   }
 
   async deletePastEvents(): Promise<void> {
     try {
-      console.log("========================================")
-      console.log("🗑️  DELETE PAST EVENTS - STARTING")
-      console.log("========================================")
+      // console.log("========================================")
+      // console.log("🗑️  DELETE PAST EVENTS - STARTING")
+      // console.log("========================================")
       
       const eventsRef = collection(db, "YoVibe/data/events")
       const querySnapshot = await getDocs(eventsRef)
       const now = new Date()
       
-      console.log(`📅 Current Date/Time: ${now.toLocaleString()}`)
-      console.log(`📊 Total Events in Database: ${querySnapshot.size}`)
-      console.log("----------------------------------------")
+      // console.log(`📅 Current Date/Time: ${now.toLocaleString()}`)
+      // console.log(`📊 Total Events in Database: ${querySnapshot.size}`)
+      // console.log("----------------------------------------")
 
       const deletePromises: Promise<void>[] = []
       let deletedCount = 0
@@ -1067,27 +1055,27 @@ class FirebaseService {
         const eventId = doc.id
         const eventName = data.name || "Unnamed Event"
         
-        console.log(`\n📌 Event: "${eventName}" (ID: ${eventId})`)
+        // console.log(`\n📌 Event: "${eventName}" (ID: ${eventId})`)
         
         if (data.date && typeof data.date.toDate === "function") {
           const eventDate: Date = data.date.toDate()
-          console.log(`   📅 Event Date: ${eventDate.toLocaleString()}`)
+          // console.log(`   📅 Event Date: ${eventDate.toLocaleString()}`)
 
           // Compute the "expiry" date = next day at 5:00 AM
           const expiryDate = new Date(eventDate)
           expiryDate.setDate(expiryDate.getDate() + 1)
           expiryDate.setHours(5, 0, 0, 0) // Set to 5:00 AM
-          console.log(`   ⏰ Expiry Date (Next day at 5:00 AM): ${expiryDate.toLocaleString()}`)
-          console.log(`   🔍 isDeleted flag: ${data.isDeleted}`)
+          // console.log(`   ⏰ Expiry Date (Next day at 5:00 AM): ${expiryDate.toLocaleString()}`)
+          // console.log(`   🔍 isDeleted flag: ${data.isDeleted}`)
 
           // Check if already deleted
           if (data.isDeleted) {
-            console.log(`   ⏭️  SKIPPED: Already marked as deleted`)
+            // console.log(`   ⏭️  SKIPPED: Already marked as deleted`)
             alreadyDeletedCount++
           }
           // Only delete if we are past the expiry date
           else if (expiryDate <= now) {
-            console.log(`   ✅ WILL DELETE: Expiry date (${expiryDate.toLocaleString()}) <= Now (${now.toLocaleString()})`)
+            // console.log(`   ✅ WILL DELETE: Expiry date (${expiryDate.toLocaleString()}) <= Now (${now.toLocaleString()})`)
             deletedCount++
             deletePromises.push(
               updateDoc(doc.ref, {
@@ -1099,37 +1087,37 @@ class FirebaseService {
             const timeUntilExpiry = expiryDate.getTime() - now.getTime()
             const hoursUntilExpiry = Math.floor(timeUntilExpiry / (1000 * 60 * 60))
             const minutesUntilExpiry = Math.floor((timeUntilExpiry % (1000 * 60 * 60)) / (1000 * 60))
-            console.log(`   ⏭️  SKIPPED: Event not expired yet (Expires in ${hoursUntilExpiry}h ${minutesUntilExpiry}m)`)
+            // console.log(`   ⏭️  SKIPPED: Event not expired yet (Expires in ${hoursUntilExpiry}h ${minutesUntilExpiry}m)`)
             skippedCount++
           }
         } else {
-          console.log(`   ❌ INVALID: No valid date field`)
+          // console.log(`   ❌ INVALID: No valid date field`)
           invalidDateCount++
         }
       })
 
-      console.log("\n----------------------------------------")
-      console.log("⏳ Executing deletion updates...")
+      // console.log("\n----------------------------------------")
+      // console.log("⏳ Executing deletion updates...")
       await Promise.all(deletePromises)
       
-      console.log("\n========================================")
-      console.log("📊 DELETE PAST EVENTS - SUMMARY")
-      console.log("========================================")
-      console.log(`✅ Events Marked as Deleted: ${deletedCount}`)
-      console.log(`⏭️  Events Skipped (Not Expired): ${skippedCount}`)
-      console.log(`🔄 Events Already Deleted: ${alreadyDeletedCount}`)
-      console.log(`❌ Events with Invalid Dates: ${invalidDateCount}`)
-      console.log(`📊 Total Events Processed: ${querySnapshot.size}`)
-      console.log("========================================\n")
+      // console.log("\n========================================")
+      // console.log("📊 DELETE PAST EVENTS - SUMMARY")
+      // console.log("========================================")
+      // console.log(`✅ Events Marked as Deleted: ${deletedCount}`)
+      // console.log(`⏭️  Events Skipped (Not Expired): ${skippedCount}`)
+      // console.log(`🔄 Events Already Deleted: ${alreadyDeletedCount}`)
+      // console.log(`❌ Events with Invalid Dates: ${invalidDateCount}`)
+      // console.log(`📊 Total Events Processed: ${querySnapshot.size}`)
+      // console.log("========================================\n")
     } catch (error) {
-      console.error("❌ Error deleting past events:", error)
+      // console.error("❌ Error deleting past events:", error)
     }
   }
 
 
   async getVibeImagesByVenueAndDate(venueId: string, date: Date): Promise<VibeImage[]> {
     try {
-      console.log("FirebaseService: Getting vibe images for venue", venueId, "on", date.toDateString())
+      // console.log("FirebaseService: Getting vibe images for venue", venueId, "on", date.toDateString())
       const startOfDay = new Date(date)
       startOfDay.setHours(0, 0, 0, 0)
       const endOfDay = new Date(date)
@@ -1158,17 +1146,17 @@ class FirebaseService {
         })
       })
 
-      console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
+      // console.log("FirebaseService: Found", vibeImages.length, "vibe images for today")
       return vibeImages
     } catch (error) {
-      console.error("Error getting vibe images by venue and date:", error)
+      // console.error("Error getting vibe images by venue and date:", error)
       return []
     }
   }
 
   async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
     try {
-      console.log("FirebaseService: Getting vibe images for venue", venueId, "for the week")
+      // console.log("FirebaseService: Getting vibe images for venue", venueId, "for the week")
       const endDate = new Date()
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - 7)
@@ -1203,17 +1191,17 @@ class FirebaseService {
         })
       })
 
-      console.log("FirebaseService: Found vibe images for", Object.keys(weekData).length, "days")
+      // console.log("FirebaseService: Found vibe images for", Object.keys(weekData).length, "days")
       return weekData
     } catch (error) {
-      console.error("Error getting vibe images by venue and week:", error)
+      // console.error("Error getting vibe images by venue and week:", error)
       return {}
     }
   }
 
   async uploadVibeImage(fileOrUrl: Blob | string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
     try {
-      console.log("FirebaseService: Uploading vibe image for venue", venueId);
+      // console.log("FirebaseService: Uploading vibe image for venue", venueId);
 
       // If it's already a remote http(s) URL, return it directly
       if (typeof fileOrUrl === "string" && (fileOrUrl.startsWith("http://") || fileOrUrl.startsWith("https://"))) {
@@ -1228,7 +1216,7 @@ class FirebaseService {
       if (typeof fileOrUrl === "string" && fileOrUrl.startsWith("data:")) {
         const snapshot = await uploadString(ref, fileOrUrl, "data_url");
         const downloadURL = await getDownloadURL(snapshot.ref);
-        console.log("FirebaseService: Vibe image uploaded (data_url), URL:", downloadURL);
+        // console.log("FirebaseService: Vibe image uploaded (data_url), URL:", downloadURL);
         return downloadURL;
       }
 
@@ -1242,13 +1230,13 @@ class FirebaseService {
       if (fileOrUrl instanceof Blob) {
         const snapshot = await uploadBytes(ref, fileOrUrl);
         const downloadURL = await getDownloadURL(snapshot.ref);
-        console.log("FirebaseService: Vibe image uploaded (blob), URL:", downloadURL);
+        // console.log("FirebaseService: Vibe image uploaded (blob), URL:", downloadURL);
         return downloadURL;
       }
 
       throw new Error("uploadVibeImage: unsupported file type");
     } catch (error) {
-      console.error("FirebaseService: Error uploading vibe image:", error);
+      // console.error("FirebaseService: Error uploading vibe image:", error);
       throw error;
     }
   }
@@ -1257,30 +1245,30 @@ class FirebaseService {
 
   async uploadEventImage(imageUri: string, eventId: string = `event-${Date.now()}`): Promise<string> {
     try {
-      console.log("FirebaseService: Uploading event poster image for event", eventId)
+      // console.log("FirebaseService: Uploading event poster image for event", eventId)
       const storage = getStorage()
       const storageRef = ref(storage, `events/${eventId}/poster.jpg`)
-      console.log("Current user UID:", auth.currentUser?.uid)
-      console.log("Auth token exists:", !!await auth.currentUser?.getIdToken())
+      // console.log("Current user UID:", auth.currentUser?.uid)
+      // console.log("Auth token exists:", !!await auth.currentUser?.getIdToken())
 
       await uploadString(storageRef, imageUri, "data_url")
       const downloadURL = await getDownloadURL(storageRef)
-      console.log("FirebaseService: Event image uploaded, URL:", downloadURL)
+      // console.log("FirebaseService: Event image uploaded, URL:", downloadURL)
       return downloadURL
     } catch (error) {
-      console.error("FirebaseService: Error uploading event image:", error)
+      // console.error("FirebaseService: Error uploading event image:", error)
       throw error
     }
   }
 
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
     try {
-      console.log("FirebaseService: Adding vibe image for venue", vibeImageData.venueId)
+      // console.log("FirebaseService: Adding vibe image for venue", vibeImageData.venueId)
       const vibeImageRef = await addDoc(collection(db, "YoVibe/data/vibeImages"), {
         ...vibeImageData,
         uploadedAt: Timestamp.fromDate(vibeImageData.uploadedAt),
       })
-      console.log("FirebaseService: Vibe image added with ID", vibeImageRef.id)
+      // console.log("FirebaseService: Vibe image added with ID", vibeImageRef.id)
 
       const vibeRating = await this.getLatestVibeRating(vibeImageData.venueId)
       if (vibeRating !== null) {
@@ -1289,7 +1277,7 @@ class FirebaseService {
 
       return vibeImageRef.id
     } catch (error) {
-      console.error("FirebaseService: Error adding vibe image:", error)
+      // console.error("FirebaseService: Error adding vibe image:", error)
       throw error
     }
   }
