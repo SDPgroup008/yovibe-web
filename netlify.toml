@@ -8,6 +8,8 @@
 [functions]
   # Tell Netlify where your serverless functions live
   directory = "netlify/functions"
+  # Use esbuild to bundle function dependencies (including firebase-admin)
+  node_bundler = "esbuild"
 
 [[redirects]]
   from = "/*"
