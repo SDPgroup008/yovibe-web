@@ -16,7 +16,7 @@ import {
 import { navigationRef } from "./utils/navigationRef";
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
+import { requestNotificationPermission, getWebFcmToken, messaging, ensureMessagingInitialized } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
@@ -195,6 +195,11 @@ function AppContent() {
           console.log("[iOS-NOTIF] Service worker registered:", registration.scope);
           await navigator.serviceWorker.ready;
           console.log("[iOS-NOTIF] Service worker is active and ready");
+          
+          // Now that service worker is ready, initialize FCM
+          console.log("[iOS-NOTIF] Initializing FCM after service worker ready...");
+          await ensureMessagingInitialized();
+          console.log("[iOS-NOTIF] FCM initialization complete");
         } catch (err) {
           console.warn("[iOS-NOTIF] Service worker registration failed:", err);
         }
