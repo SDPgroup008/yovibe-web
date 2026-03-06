@@ -24,19 +24,19 @@ try {
   auth = getAuth(app);
   setPersistence(auth, browserSessionPersistence);
 } catch (err) {
-  console.error("Error initializing Firebase Auth:", err);
+  // console.error("Error initializing Firebase Auth:", err);
 }
 
 try {
   db = getFirestore(app);
 } catch (err) {
-  console.error("Error initializing Firebase Firestore:", err);
+  // console.error("Error initializing Firebase Firestore:", err);
 }
 
 try {
   storage = getStorage(app);
 } catch (err) {
-  console.error("Error initializing Firebase Storage:", err);
+  // console.error("Error initializing Firebase Storage:", err);
 }
 
 // Initialize messaging only if supported (browser check for web platform)
@@ -56,18 +56,18 @@ async function initializeMessaging(): Promise<typeof messaging> {
       messaging = getMessaging(app);
       return messaging;
     } else {
-      console.log("Firebase Messaging is not supported in this browser");
+      console.log("[iOS-NOTIF] Firebase Messaging is not supported in this browser");
       return null;
     }
   } catch (err) {
-    console.error("Error checking messaging support:", err);
+    console.error("[iOS-NOTIF] Error checking messaging support:", err);
     return null;
   }
 }
 
 // Try to initialize messaging, but don't fail if it doesn't work
 initializeMessaging().catch(err => {
-  console.warn("Firebase messaging initialization skipped:", err);
+  // console.warn("Firebase messaging initialization skipped:", err);
 });
 
 // --- Notification helpers ---
@@ -75,9 +75,11 @@ export async function requestNotificationPermission(): Promise<boolean> {
   try {
     // Check if messaging is supported first
     if (!messagingSupported) {
+      console.log("[iOS-NOTIF] Checking if FCM is supported...");
       const supported = await isSupported();
+      console.log("[iOS-NOTIF] FCM supported:", supported);
       if (!supported) {
-        console.log("Notifications not supported in this browser");
+        console.log("[iOS-NOTIF] Notifications not supported in this browser");
         return false;
       }
       messagingSupported = true;
@@ -86,14 +88,16 @@ export async function requestNotificationPermission(): Promise<boolean> {
     
     // Check if Notification API exists (required for iOS Safari)
     if (typeof Notification === 'undefined' || !Notification.requestPermission) {
-      console.log("Notification API not available in this browser");
+      console.log("[iOS-NOTIF] Notification API not available in this browser");
       return false;
     }
     
+    console.log("[iOS-NOTIF] Requesting notification permission...");
     const result = await Notification.requestPermission();
+    console.log("[iOS-NOTIF] Permission result:", result);
     return result === "granted";
   } catch (err) {
-    console.error("Error requesting notification permission:", err);
+    console.error("[iOS-NOTIF] Error requesting notification permission:", err);
     return false;
   }
 }
@@ -102,23 +106,27 @@ export async function getWebFcmToken(): Promise<string | null> {
   try {
     // Check if messaging is supported
     if (!messaging) {
+      console.log("[iOS-NOTIF] Messaging not initialized, checking support...");
       const supported = await isSupported();
+      console.log("[iOS-NOTIF] FCM supported:", supported);
       if (!supported) {
-        console.log("FCM not supported, skipping token generation");
+        console.log("[iOS-NOTIF] FCM not supported, skipping token generation");
         return null;
       }
       messagingSupported = true;
       messaging = getMessaging(app);
     }
     
+    console.log("[iOS-NOTIF] Getting FCM token with VAPID key...");
     const token = await getToken(messaging, {
       vapidKey:
         process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
         "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s",
     });
+    console.log("[iOS-NOTIF] Token generated successfully:", token ? 'YES' : 'NO');
     return token || null;
   } catch (err) {
-    console.error("Error getting web FCM token:", err);
+    console.error("[iOS-NOTIF] Error getting web FCM token:", err);
     return null;
   }
 }

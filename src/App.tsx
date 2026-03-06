@@ -119,10 +119,10 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
     });
 
     if (!res.ok) {
-      console.error("Failed to save token:", await res.text());
+      // console.error("Failed to save token:", await res.text());
     } else {
       const result = await res.json();
-      console.log("[App] Token saved and subscribed to all-users:", result);
+      // console.log("[App] Token saved and subscribed to all-users:", result);
     }
     
     // Also save to tokens.json (legacy - for GitHub workflow and backward compatibility)
@@ -133,12 +133,12 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
     });
 
     if (!legacyRes.ok) {
-      console.error("Failed to trigger Netlify function:", await legacyRes.text());
+      // console.error("Failed to trigger Netlify function:", await legacyRes.text());
     } else {
-      console.log("Legacy Netlify function triggered successfully");
+      // console.log("Legacy Netlify function triggered successfully");
     }
   } catch (err) {
-    console.error("Error calling Netlify function:", err);
+    // console.error("Error calling Netlify function:", err);
   }
 }
 
@@ -174,12 +174,12 @@ function AppContent() {
                 navigationRef.current?.navigate(intent.routeName as any);
               }
             } catch (navErr) {
-              console.warn("Post-login navigation error:", navErr);
+              // console.warn("Post-login navigation error:", navErr);
             }
           }, 50);
         }
       } catch (err) {
-        console.warn("Failed to consume redirect intent:", err);
+        // console.warn("Failed to consume redirect intent:", err);
       }
     }
   }, [user, loading, consumeRedirectIntent]);
@@ -191,12 +191,15 @@ function AppContent() {
       if ("serviceWorker" in navigator) {
         try {
           const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-          console.log("Service worker registered:", registration);
+          // 🔔 iOS Debug: Service worker registered
+          console.log("[iOS-NOTIF] Service worker registered:", registration.scope);
           await navigator.serviceWorker.ready;
-          console.log("Service worker is active and ready");
+          console.log("[iOS-NOTIF] Service worker is active and ready");
         } catch (err) {
-          console.warn("Service worker registration failed:", err);
+          console.warn("[iOS-NOTIF] Service worker registration failed:", err);
         }
+      } else {
+        console.warn("[iOS-NOTIF] Service worker not supported in this browser");
       }
     })();
 
@@ -240,38 +243,28 @@ function AppContent() {
   useEffect(() => {
     // Only set up listener if messaging is available
     if (!messaging) {
-      console.log("Messaging not available, skipping foreground notification listener");
+      // console.log("Messaging not available, skipping foreground notification listener");
       return;
     }
     
     const unsubscribe = onMessage(messaging, async (payload) => {
-      console.log("=".repeat(60));
-      console.log("FOREGROUND NOTIFICATION RECEIVED");
-      console.log("Notification received:", payload);
-      console.log("Notification type:", payload.data?.type);
-      console.log("Notification data:", payload.data);
-      console.log("Current user UID:", user?.uid || "Not logged in");
-      console.log("=".repeat(60));
+      // 🔔 iOS Debug: Foreground notification
+      console.log("[iOS-NOTIF] Foreground notification received");
+      console.log("[iOS-NOTIF] Title:", payload.notification?.title);
+      console.log("[iOS-NOTIF] Data:", payload.data);
       
       try {
         // Save notification to Firestore (will handle broadcast vs user-specific)
-        console.log("Calling NotificationService.processIncomingNotification...");
         await NotificationService.processIncomingNotification(payload, user?.uid);
-        console.log("✅ Notification saved to Firestore successfully");
       } catch (error) {
-        console.error("❌ ERROR saving notification to Firestore:", error);
-        console.error("Error details:", error instanceof Error ? error.message : String(error));
+        // console.error("❌ ERROR saving notification to Firestore:", error);
       }
       
       // Show foreground banner
-      console.log("Setting banner with title:", payload.notification?.title);
       setBanner({
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
       });
-      
-      console.log("✅ Notification banner displayed");
-      console.log("=".repeat(60));
     });
 
     return () => unsubscribe();
@@ -280,26 +273,36 @@ function AppContent() {
   // 🔔 Handle permission banner actions
   const handleAllowNotifications = async () => {
     setShowPermissionBanner(false);
+    console.log("[iOS-NOTIF] User tapped Allow - requesting permission...");
     const granted = await requestNotificationPermission();
+    console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied');
     if (granted) {
+      console.log("[iOS-NOTIF] Getting FCM token...");
       const token = await getWebFcmToken();
+      console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO');
       if (token) {
-        console.log("Web FCM token retrieved:", token);
+        console.log("[iOS-NOTIF] FCM Token (first 20 chars):", token.substring(0, 20) + "...");
         // Pass user info if authenticated
         const userId = user?.uid || null;
         const userEmail = user?.email;
         const userName = user?.displayName || undefined;
+        console.log("[iOS-NOTIF] Saving token to Firestore...");
         await saveTokenToRepo(token, userId, userEmail, userName);
+        console.log("[iOS-NOTIF] Token saved successfully!");
         
         // Track new subscription in daily stats
         await NotificationService.trackNewSubscription();
+      } else {
+        console.error("[iOS-NOTIF] ERROR: No token received from FCM");
       }
+    } else {
+      console.error("[iOS-NOTIF] ERROR: Permission not granted");
     }
   };
 
   const handleBlockNotifications = () => {
     setShowPermissionBanner(false);
-    console.log("User blocked notifications");
+    console.log("[iOS-NOTIF] User tapped Block");
   };
 
   if (initializing) {

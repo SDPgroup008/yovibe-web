@@ -66,30 +66,30 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    console.log("AuthContext: Setting up auth state listener");
+    // console.log("AuthContext: Setting up auth state listener");
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       try {
         if (firebaseUser) {
           // Authenticated: load profile and set user
-          console.log("AuthContext: Firebase user detected, loading profile...");
+          // console.log("AuthContext: Firebase user detected, loading profile...");
           const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
-          console.log("AuthContext: User profile loaded:", userProfile?.email);
+          // console.log("AuthContext: User profile loaded:", userProfile?.email);
           setUser(userProfile);
         } else {
           // No firebase user
           if (!initializedRef.current) {
             // First time: don't clear user state yet, just mark initialized.
             // This avoids briefly showing signed-out UI while we resolve initial state.
-            console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
+            // console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
           } else {
             // After initial load, a null firebaseUser means the user is signed out.
-            console.log("AuthContext: Firebase user is null after initialization — clearing user.");
+            // console.log("AuthContext: Firebase user is null after initialization — clearing user.");
             setUser(null);
           }
         }
       } catch (error) {
-        console.error("AuthContext: Error while handling auth state change:", error);
+        // console.error("AuthContext: Error while handling auth state change:", error);
         // On error, be conservative: clear user so UI doesn't assume stale data
         setUser(null);
       } finally {
@@ -98,12 +98,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           initializedRef.current = true;
         }
         setIsLoading(false);
-        console.log("AuthContext: Auth state resolved. isLoading = false");
+        // console.log("AuthContext: Auth state resolved. isLoading = false");
       }
     });
 
     return () => {
-      console.log("AuthContext: Cleaning up auth listener");
+      // console.log("AuthContext: Cleaning up auth listener");
       unsubscribe();
     };
   }, []);
@@ -120,9 +120,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           'web'
         );
         sessionIdRef.current = sessionId;
-        console.log('Analytics: Session started for', user ? 'authenticated user' : 'guest');
+        // console.log('Analytics: Session started for', user ? 'authenticated user' : 'guest');
       } catch (error) {
-        console.error('Analytics: Failed to start session', error);
+        // console.error('Analytics: Failed to start session', error);
       }
     };
 
@@ -130,9 +130,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (sessionIdRef.current) {
         try {
           await AnalyticsService.endSession(sessionIdRef.current);
-          console.log('Analytics: Session ended');
+          // console.log('Analytics: Session ended');
         } catch (error) {
-          console.error('Analytics: Failed to end session', error);
+          // console.error('Analytics: Failed to end session', error);
         }
       }
     };
@@ -150,10 +150,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       await FirebaseService.signIn(email, password);
-      console.log("AuthContext: Sign in successful");
+      // console.log("AuthContext: Sign in successful");
       // onAuthStateChanged will populate user
     } catch (error) {
-      console.error("AuthContext: Sign in failed:", error);
+      // console.error("AuthContext: Sign in failed:", error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -168,10 +168,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       await FirebaseService.signUp(email, password, userType);
-      console.log("AuthContext: Sign up successful");
+      // console.log("AuthContext: Sign up successful");
       // onAuthStateChanged will populate user
     } catch (error) {
-      console.error("AuthContext: Sign up failed:", error);
+      // console.error("AuthContext: Sign up failed:", error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -188,13 +188,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signOut = async () => {
     setIsLoading(true);
     try {
-      console.log("AuthContext: Signing out...");
+      // console.log("AuthContext: Signing out...");
       await FirebaseService.signOut();
       // Clear local user state explicitly so UI can immediately reflect unauthenticated state.
       setUser(null);
-      console.log("AuthContext: Signed out successfully and local user cleared");
+      // console.log("AuthContext: Signed out successfully and local user cleared");
     } catch (error) {
-      console.error("AuthContext: Sign out error:", error);
+      // console.error("AuthContext: Sign out error:", error);
       // Ensure local state is cleared even if signOut failed at the service level
       setUser(null);
       throw error;
@@ -213,9 +213,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const setRedirectIntent = (intent: RedirectIntent) => {
     try {
       sessionStorage.setItem(REDIRECT_INTENT_KEY, JSON.stringify(intent));
-      console.log("AuthContext: Redirect intent saved", intent);
+      // console.log("AuthContext: Redirect intent saved", intent);
     } catch (err) {
-      console.warn("AuthContext: Failed to save redirect intent", err);
+      // console.warn("AuthContext: Failed to save redirect intent", err);
     }
   };
 
@@ -225,10 +225,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (!raw) return null;
       sessionStorage.removeItem(REDIRECT_INTENT_KEY);
       const parsed = JSON.parse(raw) as RedirectIntent;
-      console.log("AuthContext: Redirect intent consumed", parsed);
+      // console.log("AuthContext: Redirect intent consumed", parsed);
       return parsed;
     } catch (err) {
-      console.warn("AuthContext: Failed to consume redirect intent", err);
+      // console.warn("AuthContext: Failed to consume redirect intent", err);
       return null;
     }
   };

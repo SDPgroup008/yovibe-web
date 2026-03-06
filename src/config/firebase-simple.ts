@@ -26,24 +26,28 @@ setPersistence(auth, browserSessionPersistence);
 export async function requestNotificationPermission(): Promise<boolean> {
   // Check if Notification API exists (required for iOS Safari)
   if (typeof Notification === 'undefined' || !Notification.requestPermission) {
-    console.log("Notification API not available in this browser");
+    console.log("[iOS-NOTIF] Notification API not available in this browser");
     return false;
   }
   
+  console.log("[iOS-NOTIF] Requesting notification permission...");
   const result = await Notification.requestPermission();
+  console.log("[iOS-NOTIF] Permission result:", result);
   return result === "granted";
 }
 
 export async function getWebFcmToken(): Promise<string | null> {
   try {
+    console.log("[iOS-NOTIF] Getting FCM token...");
     const token = await getToken(messaging, {
       vapidKey:
         process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
         "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s",
     });
+    console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO');
     return token || null;
   } catch (err) {
-    console.error("Error getting web FCM token:", err);
+    console.error("[iOS-NOTIF] Error getting web FCM token:", err);
     return null;
   }
 }
