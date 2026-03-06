@@ -202,7 +202,8 @@ function AppContent() {
 
     // Check if permission has already been granted or denied
     // First check if Notification API exists (required for iOS Safari)
-    let currentPermission = "denied";
+    // On iOS Safari, Notification.permission may be undefined until requestPermission is called
+    let currentPermission = "default";
     if (typeof Notification !== 'undefined' && Notification.permission) {
       currentPermission = Notification.permission;
     }
