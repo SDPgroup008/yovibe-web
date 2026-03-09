@@ -222,22 +222,19 @@ class FirebaseService {
   }
 
   async deleteUser(userId: string): Promise<void> {
-    console.log("[DELETE] deleteUser: Method invoked with userId:", userId);
     try {
-      console.log("[DELETE] deleteUser: Creating document reference for users collection");
-      const userRef = doc(db, "YoVibe/data/users", userId);
-      console.log("[DELETE] deleteUser: Document reference created, preparing soft-delete update");
-      console.log("[DELETE] deleteUser: Setting isDeleted = true, deletedAt = now, anonymizing email");
+      // console.log("FirebaseService: Soft deleting user", userId)
+      const userRef = doc(db, "YoVibe/data/users", userId)
       await updateDoc(userRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
         email: `deleted_${Date.now()}@yovibe.app`, // Anonymize email
         displayName: "Deleted User",
-      });
-      console.log("[DELETE] deleteUser: Soft delete successful for user:", userId);
+      })
+      // console.log("FirebaseService: User soft deleted successfully")
     } catch (error) {
-      console.error("[DELETE] deleteUser: Error soft deleting user:", error);
-      throw error;
+      // console.error("FirebaseService: Error deleting user:", error)
+      throw error
     }
   }
 
@@ -574,21 +571,18 @@ class FirebaseService {
   }
 
   async deleteVenue(venueId: string): Promise<void> {
-    console.log("[DELETE] deleteVenue: Method invoked with venueId:", venueId);
     try {
-      console.log("[DELETE] deleteVenue: Creating document reference for venues collection");
-      const venueRef = doc(db, "YoVibe/data/venues", venueId);
-      console.log("[DELETE] deleteVenue: Document reference created, preparing soft-delete update");
-      console.log("[DELETE] deleteVenue: Setting isDeleted = true, deletedAt = now");
+      // console.log("FirebaseService: Soft deleting venue", venueId)
+      const venueRef = doc(db, "YoVibe/data/venues", venueId)
       await updateDoc(venueRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
-      });
-      console.log("[DELETE] deleteVenue: Soft delete successful for venue:", venueId);
-      return;
+      })
+      // console.log("FirebaseService: Venue soft deleted successfully")
+      return
     } catch (error) {
-      console.error("[DELETE] deleteVenue: Error soft deleting venue:", error);
-      throw error;
+      // console.error("Error soft deleting venue:", error)
+      throw error
     }
   }
 
@@ -645,51 +639,34 @@ class FirebaseService {
   }
 
   async deleteExpiredCustomVenues(): Promise<void> {
-    console.log("[DELETE] deleteExpiredCustomVenues: Method invoked");
     try {
-      console.log("[DELETE] deleteExpiredCustomVenues: Creating Firestore query for expired events");
-      const now = new Date();
-      console.log("[DELETE] deleteExpiredCustomVenues: Current time:", now.toISOString());
-      const eventsRef = collection(db, "YoVibe/data/events");
+      // console.log("FirebaseService: Deleting expired custom venues")
+      const now = new Date()
+      const eventsRef = collection(db, "YoVibe/data/events")
       const q = query(
         eventsRef,
         where("createdByType", "!=", "club_owner"),
         where("date", "<=", Timestamp.fromDate(now)),
         where("isDeleted", "==", false)
-      );
-      console.log("[DELETE] deleteExpiredCustomVenues: Executing query to find expired events...");
-      const querySnapshot = await getDocs(q);
-      console.log("[DELETE] deleteExpiredCustomVenues: Query returned", querySnapshot.size, "expired events");
-      const deletePromises: Promise<void>[] = [];
+      )
+      const querySnapshot = await getDocs(q)
+      const deletePromises: Promise<void>[] = []
 
       for (const doc of querySnapshot.docs) {
-        const data = doc.data();
-        const venueId = data.venueId;
-        const eventId = doc.id;
-        console.log("[DELETE] deleteExpiredCustomVenues: Processing event:", eventId, "venueId:", venueId);
+        const data = doc.data()
+        const venueId = data.venueId
         if (venueId) {
-          console.log("[DELETE] deleteExpiredCustomVenues: Creating document reference for venue:", venueId);
-          const venueRef = doc(db, "YoVibe/data/venues", venueId);
-          console.log("[DELETE] deleteExpiredCustomVenues: Preparing soft-delete update for venue:", venueId);
-          console.log("[DELETE] deleteExpiredCustomVenues: Setting isDeleted = true, deletedAt = now, deletedReason = auto_deleted_expired_event");
-          // Use soft delete instead of hard delete
-          deletePromises.push(updateDoc(venueRef, {
-            isDeleted: true,
-            deletedAt: Timestamp.now(),
-            deletedReason: "auto_deleted_expired_event",
-          }));
-          console.log("[DELETE] deleteExpiredCustomVenues: Soft delete queued for venue:", venueId);
-        } else {
-          console.log("[DELETE] deleteExpiredCustomVenues: Event", eventId, "has no venueId, skipping");
+          // console.log(`FirebaseService: Deleting custom venue ${venueId} for expired event ${doc.id}`)
+          const venueRef = doc(db, "YoVibe/data/venues", venueId)
+          deletePromises.push(deleteDoc(venueRef))
         }
       }
 
-      console.log("[DELETE] deleteExpiredCustomVenues: Executing", deletePromises.length, "soft delete operations...");
-      await Promise.all(deletePromises);
-      console.log("[DELETE] deleteExpiredCustomVenues: Successfully soft deleted", deletePromises.length, "custom venues");
+      await Promise.all(deletePromises)
+      // console.log(`FirebaseService: Deleted ${deletePromises.length} custom venues`)
     } catch (error) {
-      console.error("[DELETE] deleteExpiredCustomVenues: Error deleting expired custom venues:", error);
-      throw error;
+      // console.error("FirebaseService: Error deleting expired custom venues:", error)
+      throw error
     }
   }
 
@@ -1024,20 +1001,17 @@ class FirebaseService {
   }
 
   async deleteEvent(eventId: string): Promise<void> {
-    console.log("[DELETE] deleteEvent: Method invoked with eventId:", eventId);
     try {
-      console.log("[DELETE] deleteEvent: Creating document reference for events collection");
-      const eventRef = doc(db, "YoVibe/data/events", eventId);
-      console.log("[DELETE] deleteEvent: Document reference created, preparing soft-delete update");
-      console.log("[DELETE] deleteEvent: Setting isDeleted = true, deletedAt = now");
+      // console.log("FirebaseService: Soft deleting event", eventId)
+      const eventRef = doc(db, "YoVibe/data/events", eventId)
       await updateDoc(eventRef, {
         isDeleted: true,
         deletedAt: Timestamp.now(),
-      });
-      console.log("[DELETE] deleteEvent: Soft delete successful for event:", eventId);
+      })
+      // console.log("FirebaseService: Event soft deleted successfully")
     } catch (error) {
-      console.error("[DELETE] deleteEvent: Error soft deleting event:", error);
-      throw error;
+      // console.error("Error soft deleting event:", error)
+      throw error
     }
   }
 
@@ -1063,61 +1037,86 @@ class FirebaseService {
   }
 
   async deletePastEvents(): Promise<void> {
-    console.log("[DELETE] deletePastEvents: Method invoked");
     try {
-      console.log("[DELETE] deletePastEvents: Creating Firestore reference for events collection");
-      const eventsRef = collection(db, "YoVibe/data/events");
-      console.log("[DELETE] deletePastEvents: Fetching all events from Firestore...");
-      const querySnapshot = await getDocs(eventsRef);
-      const now = new Date();
-      console.log("[DELETE] deletePastEvents: Current time:", now.toISOString());
-      console.log("[DELETE] deletePastEvents: Total events in database:", querySnapshot.size);
+      // console.log("========================================")
+      // console.log("🗑️  DELETE PAST EVENTS - STARTING")
+      // console.log("========================================")
       
-      const deletePromises: Promise<void>[] = [];
-      let deletedCount = 0;
-      let skippedCount = 0;
-      let alreadyDeletedCount = 0;
-      let invalidDateCount = 0;
+      const eventsRef = collection(db, "YoVibe/data/events")
+      const querySnapshot = await getDocs(eventsRef)
+      const now = new Date()
+      
+      // console.log(`📅 Current Date/Time: ${now.toLocaleString()}`)
+      // console.log(`📊 Total Events in Database: ${querySnapshot.size}`)
+      // console.log("----------------------------------------")
+
+      const deletePromises: Promise<void>[] = []
+      let deletedCount = 0
+      let skippedCount = 0
+      let alreadyDeletedCount = 0
+      let invalidDateCount = 0
 
       querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        const eventId = doc.id;
-        const eventName = data.name || "Unnamed Event";
-        console.log("[DELETE] deletePastEvents: Processing event:", eventName, "(ID:", eventId, ")");
+        const data = doc.data()
+        const eventId = doc.id
+        const eventName = data.name || "Unnamed Event"
+        
+        // console.log(`\n📌 Event: "${eventName}" (ID: ${eventId})`)
         
         if (data.date && typeof data.date.toDate === "function") {
-          const eventDate: Date = data.date.toDate();
-          console.log("[DELETE] deletePastEvents: Event date:", eventDate.toISOString());
-          if (eventDate < now) {
-            if (data.isDeleted) {
-              console.log("[DELETE] deletePastEvents: Event already marked as deleted, skipping");
-              alreadyDeletedCount++;
-            } else {
-              console.log("[DELETE] deletePastEvents: Event is past and not deleted, preparing soft delete...");
-              deletePromises.push(updateDoc(doc(eventsRef, eventId), {
+          const eventDate: Date = data.date.toDate()
+          // console.log(`   📅 Event Date: ${eventDate.toLocaleString()}`)
+
+          // Compute the "expiry" date = next day at 5:00 AM
+          const expiryDate = new Date(eventDate)
+          expiryDate.setDate(expiryDate.getDate() + 1)
+          expiryDate.setHours(5, 0, 0, 0) // Set to 5:00 AM
+          // console.log(`   ⏰ Expiry Date (Next day at 5:00 AM): ${expiryDate.toLocaleString()}`)
+          // console.log(`   🔍 isDeleted flag: ${data.isDeleted}`)
+
+          // Check if already deleted
+          if (data.isDeleted) {
+            // console.log(`   ⏭️  SKIPPED: Already marked as deleted`)
+            alreadyDeletedCount++
+          }
+          // Only delete if we are past the expiry date
+          else if (expiryDate <= now) {
+            // console.log(`   ✅ WILL DELETE: Expiry date (${expiryDate.toLocaleString()}) <= Now (${now.toLocaleString()})`)
+            deletedCount++
+            deletePromises.push(
+              updateDoc(doc.ref, {
                 isDeleted: true,
                 deletedAt: Timestamp.now(),
-                deletedReason: "auto_deleted_past_event",
-              }));
-              deletedCount++;
-            }
+              })
+            )
           } else {
-            console.log("[DELETE] deletePastEvents: Event is in the future, skipping");
-            skippedCount++;
+            const timeUntilExpiry = expiryDate.getTime() - now.getTime()
+            const hoursUntilExpiry = Math.floor(timeUntilExpiry / (1000 * 60 * 60))
+            const minutesUntilExpiry = Math.floor((timeUntilExpiry % (1000 * 60 * 60)) / (1000 * 60))
+            // console.log(`   ⏭️  SKIPPED: Event not expired yet (Expires in ${hoursUntilExpiry}h ${minutesUntilExpiry}m)`)
+            skippedCount++
           }
         } else {
-          console.log("[DELETE] deletePastEvents: Event has no valid date, skipping");
-          invalidDateCount++;
+          // console.log(`   ❌ INVALID: No valid date field`)
+          invalidDateCount++
         }
-      });
+      })
 
-      console.log("[DELETE] deletePastEvents: Summary - To delete:", deletedCount, ", Already deleted:", alreadyDeletedCount, ", Skipped (future):", skippedCount, ", Invalid date:", invalidDateCount);
-      console.log("[DELETE] deletePastEvents: Executing", deletePromises.length, "soft delete operations...");
-      await Promise.all(deletePromises);
-      console.log("[DELETE] deletePastEvents: Successfully soft deleted", deletePromises.length, "past events");
+      // console.log("\n----------------------------------------")
+      // console.log("⏳ Executing deletion updates...")
+      await Promise.all(deletePromises)
+      
+      // console.log("\n========================================")
+      // console.log("📊 DELETE PAST EVENTS - SUMMARY")
+      // console.log("========================================")
+      // console.log(`✅ Events Marked as Deleted: ${deletedCount}`)
+      // console.log(`⏭️  Events Skipped (Not Expired): ${skippedCount}`)
+      // console.log(`🔄 Events Already Deleted: ${alreadyDeletedCount}`)
+      // console.log(`❌ Events with Invalid Dates: ${invalidDateCount}`)
+      // console.log(`📊 Total Events Processed: ${querySnapshot.size}`)
+      // console.log("========================================\n")
     } catch (error) {
-      console.error("[DELETE] deletePastEvents: Error deleting past events:", error);
-      throw error;
+      // console.error("❌ Error deleting past events:", error)
     }
   }
 
