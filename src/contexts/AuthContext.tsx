@@ -66,30 +66,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    // console.log("AuthContext: Setting up auth state listener");
+    console.log("AuthContext: Setting up auth state listener");
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("AuthContext: onAuthStateChanged fired, firebaseUser:", firebaseUser ? firebaseUser.uid : null);
       try {
         if (firebaseUser) {
           // Authenticated: load profile and set user
-          // console.log("AuthContext: Firebase user detected, loading profile...");
-          const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
-          // console.log("AuthContext: User profile loaded:", userProfile?.email);
-          setUser(userProfile);
+          console.log("AuthContext: Firebase user detected, loading profile for UID:", firebaseUser.uid);
+          try {
+            const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
+            console.log("AuthContext: User profile loaded successfully:", userProfile?.email);
+            setUser(userProfile);
+          } catch (profileError) {
+            // User exists in Firebase Auth but not in Firestore
+            console.log("AuthContext: Profile error (will create basic profile):", profileError);
+            // Create a basic user profile so they can use the app
+            console.log("AuthContext: User profile not found in Firestore, creating basic profile");
+            const basicProfile = {
+              id: firebaseUser.uid,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              userType: 'user' as const,
+              displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              photoURL: firebaseUser.photoURL || undefined,
+              venueId: undefined,
+              isFrozen: false,
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+            };
+            console.log("AuthContext: Created basic profile:", basicProfile.email);
+            setUser(basicProfile);
+          }
         } else {
           // No firebase user
+          console.log("AuthContext: No firebase user (signed out)");
           if (!initializedRef.current) {
             // First time: don't clear user state yet, just mark initialized.
-            // This avoids briefly showing signed-out UI while we resolve initial state.
-            // console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
+            console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
           } else {
             // After initial load, a null firebaseUser means the user is signed out.
-            // console.log("AuthContext: Firebase user is null after initialization — clearing user.");
+            console.log("AuthContext: Firebase user is null after initialization — clearing user.");
             setUser(null);
           }
         }
       } catch (error) {
-        // console.error("AuthContext: Error while handling auth state change:", error);
+        console.error("AuthContext: Error while handling auth state change:", error);
         // On error, be conservative: clear user so UI doesn't assume stale data
         setUser(null);
       } finally {
@@ -148,12 +170,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
+    console.log("AuthContext: Starting sign in for:", email);
     try {
       await FirebaseService.signIn(email, password);
-      // console.log("AuthContext: Sign in successful");
-      // onAuthStateChanged will populate user
+      console.log("AuthContext: Sign in successful in Firebase Auth");
+      // onAuthStateChanged will populate user - wait a moment for the listener to fire
+      console.log("AuthContext: Waiting for onAuthStateChanged to fire...");
     } catch (error) {
-      // console.error("AuthContext: Sign in failed:", error);
+      console.error("AuthContext: Sign in failed:", error);
       throw error;
     } finally {
       setIsLoading(false);
