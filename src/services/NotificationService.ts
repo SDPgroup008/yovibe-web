@@ -493,8 +493,13 @@ export class NotificationService {
       console.log("[NotificationService] ✅ Notification saved with ID:", notificationId);
       console.log("[NotificationService] Notifying listeners...");
       
-      // Track daily stats - increment notifications sent      const today = new Date().toISOString().split('T')[0]
-      await this.trackDailyStat(today, 'sent')
+      // Track daily stats - increment notifications sent
+      try {
+        const todayStr = new Date().toISOString().split('T')[0];
+        await this.trackDailyStat(todayStr, 'sent')
+      } catch (statsError) {
+        console.warn("[NotificationService] Failed to track daily stats:", statsError);
+      }
       
       // Track which user received this notification
       const trackingUserId = userId || auth.currentUser?.uid

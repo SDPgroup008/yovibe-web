@@ -98,9 +98,35 @@ function computeRangeForWeek(now = new Date()) {
 }
 
 /**
+ * Track sent notifications to prevent duplicates within a time window
+ */
+const sentNotifications = new Map();
+
+function getNotificationKey(notification, data) {
+  // Create a unique key based on title and time window (hourly)
+  const hour = new Date().getHours();
+  return `${notification.title}-${hour}`;
+}
+
+function isDuplicateNotification(notification, data) {
+  const key = getNotificationKey(notification, data);
+  if (sentNotifications.has(key)) {
+    console.log(`[DUPLICATE] Notification with key "${key}" already sent this hour, skipping`);
+    return true;
+  }
+  sentNotifications.set(key, Date.now());
+  return false;
+}
+
+/**
  * Send a notification to all users via topic.
  */
 async function sendToAllUsers(notification, data = {}) {
+  // Check for duplicate notification
+  if (isDuplicateNotification(notification, data)) {
+    return { success: 0, failed: 0, duplicate: true };
+  }
+  
   try {
     const message = {
       topic: "all-users",
