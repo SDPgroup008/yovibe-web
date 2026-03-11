@@ -37,6 +37,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [refreshing, setRefreshing] = useState(false);
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 
+  // NEW: Granular visitor data state
+  const [hourlyVisitors, setHourlyVisitors] = useState<{ hour: number; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [dailyVisitors, setDailyVisitors] = useState<{ day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [weeklyVisitors, setWeeklyVisitors] = useState<{ week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [granularLoading, setGranularLoading] = useState(false);
+
   // Token analytics state
   const [tokenSummary, setTokenSummary] = useState<TokenAnalyticsSummary | null>(null);
   const [dailyTokenStats, setDailyTokenStats] = useState<DailyTokenStats[]>([]);
@@ -52,29 +58,75 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const INITIAL_DAYS = 7;
 
   useEffect(() => {
+    console.log(`[ADMIN-DASHBOARD] useEffect triggered - selectedPeriod changed to: ${selectedPeriod}`);
+    console.log(`[ADMIN-DASHBOARD] Calling loadAnalytics() due to period change...`);
     loadAnalytics();
+    
+    // Also load granular visitor data when period changes
+    if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD] Tab is 'visitors' - loading granular visitor data...`);
+      loadGranularVisitorData();
+    }
   }, [selectedPeriod]);
+
+  // Load granular data when visitors tab is opened
+  useEffect(() => {
+    if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD] Visitors tab opened - loading granular data...`);
+      loadGranularVisitorData();
+    }
+  }, [activeTab]);
 
   // Load token analytics when notifications tab is opened
   useEffect(() => {
+    console.log(`[ADMIN-DASHBOARD] useEffect triggered - activeTab changed to: ${activeTab}`);
     if (activeTab === 'notifications') {
+      console.log(`[ADMIN-DASHBOARD] Tab is 'notifications' - calling loadTokenAnalytics()`);
       loadTokenAnalytics();
+    } else {
+      console.log(`[ADMIN-DASHBOARD] Tab is '${activeTab}' - skipping token analytics load`);
     }
   }, [activeTab]);
+
+  // Log when data is being rendered for each tab
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Overview Tab - todaySummary: ${todaySummary ? 'loaded' : 'null'}, summary: ${summary ? 'loaded' : 'null'}`);
+    } else if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Visitors Tab - trendData: ${trendData.length} items, frequentVisitors: ${frequentVisitors.length} items`);
+    } else if (activeTab === 'notifications') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Notifications Tab - notificationAnalytics: ${notificationAnalytics.length} items, dailyNotificationStats: ${dailyNotificationStats.length} items, tokenSummary: ${tokenSummary ? 'loaded' : 'null'}`);
+    }
+  }, [activeTab, todaySummary, summary, trendData, frequentVisitors, notificationAnalytics, dailyNotificationStats, tokenSummary]);
 
   const loadAnalytics = async (force: boolean = false) => {
     // Check cache - if data was fetched recently, skip (unless forced)
     const now = Date.now();
+    const timestamp = new Date().toISOString();
+    
+    console.log(`[ADMIN-DASHBOARD] ${timestamp} - loadAnalytics() STARTING - force: ${force}, selectedPeriod: ${selectedPeriod}`);
+    console.log(`[ADMIN-DASHBOARD] Cache check - lastFetchTime: ${lastFetchTime}, now: ${now}, cacheDuration: ${CACHE_DURATION}, diff: ${now - lastFetchTime}`);
+    
     if (!force && now - lastFetchTime < CACHE_DURATION && summary !== null) {
-      console.log('Using cached analytics data');
+      console.log(`[ADMIN-DASHBOARD] Using cached analytics data (cache hit)`);
       return;
     }
 
+    console.log(`[ADMIN-DASHBOARD] Cache miss - initiating data fetch for period: ${selectedPeriod}`);
     setLoading(true);
     setRefreshing(true);
     try {
       // Parallelize all data fetching for faster loading
       const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
+      
+      console.log(`[ADMIN-DASHBOARD] ${timestamp} - Initiating API calls - limit: ${limit}`);
+      console.log(`[ADMIN-DASHBOARD] API calls to make:`);
+      console.log(`[ADMIN-DASHBOARD]   1. AnalyticsService.getTodaySummary()`);
+      console.log(`[ADMIN-DASHBOARD]   2. AnalyticsService.getAnalyticsSummary()`);
+      console.log(`[ADMIN-DASHBOARD]   3. AnalyticsService.getTrendData(period: ${selectedPeriod}, limit: ${limit})`);
+      console.log(`[ADMIN-DASHBOARD]   4. AnalyticsService.getFrequentVisitorsToday()`);
+      console.log(`[ADMIN-DASHBOARD]   5. NotificationService.getAllNotificationDetailedAnalytics()`);
+      console.log(`[ADMIN-DASHBOARD]   6. NotificationService.getDailyNotificationStats(days: 30)`);
       
       const [todayData, summaryData, trends, visitors, notifAnalytics, dailyStats] = await Promise.all([
         AnalyticsService.getTodaySummary(),
@@ -85,18 +137,43 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         NotificationService.getDailyNotificationStats(30),
       ]);
 
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - DATA RECEIVED from all API calls`);
+      console.log(`[ADMIN-DASHBOARD]   - todayData: ${JSON.stringify(todayData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - summaryData: ${JSON.stringify(summaryData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - trends (length: ${trends?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - visitors (length: ${visitors?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - notifAnalytics (length: ${notifAnalytics?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - dailyStats (length: ${dailyStats?.length || 0})`);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Processing and setting state for all data...`);
       setTodaySummary(todayData);
+      console.log(`[ADMIN-DASHBOARD]   - todaySummary SET`);
+      
       setSummary(summaryData);
+      console.log(`[ADMIN-DASHBOARD]   - summary SET`);
+      
       setTrendData(trends);
+      console.log(`[ADMIN-DASHBOARD]   - trendData SET (${trends.length} items)`);
+      
       setFrequentVisitors(visitors);
+      console.log(`[ADMIN-DASHBOARD]   - frequentVisitors SET (${visitors.length} items)`);
+      
       setNotificationAnalytics(notifAnalytics);
+      console.log(`[ADMIN-DASHBOARD]   - notificationAnalytics SET (${notifAnalytics.length} items)`);
+      
       setDailyNotificationStats(dailyStats);
+      console.log(`[ADMIN-DASHBOARD]   - dailyNotificationStats SET (${dailyStats.length} items)`);
+      
       setLastFetchTime(now);
+      console.log(`[ADMIN-DASHBOARD]   - lastFetchTime UPDATED to: ${now}`);
+      
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadAnalytics() COMPLETE - All data processed and state updated`);
     } catch (error) {
-      console.error('Error loading analytics:', error);
+      console.error(`[ADMIN-DASHBOARD] Error loading analytics:`, error);
     } finally {
       setLoading(false);
       setRefreshing(false);
+      console.log(`[ADMIN-DASHBOARD] Loading states reset - loading: false, refreshing: false`);
     }
   };
 
@@ -110,64 +187,109 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
 
   // Token analytics functions
   const loadTokenAnalytics = async (force: boolean = false) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[ADMIN-DASHBOARD] ${timestamp} - loadTokenAnalytics() STARTING - force: ${force}, activeTab: notifications`);
+    
     try {
       // First, migrate legacy tokens from tokens.json to Firestore
       if (!migrationStatus) {
+        console.log(`[ADMIN-DASHBOARD] Migration not done - starting token migration from tokens.json`);
         setMigrationStatus({ inProgress: true, migrated: 0, total: 0, errors: 0 });
+        
+        console.log(`[ADMIN-DASHBOARD] Calling TokenService.migrateLegacyTokens()...`);
         const migrationResult = await TokenService.migrateLegacyTokens();
+        
+        console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Migration COMPLETE`);
+        console.log(`[ADMIN-DASHBOARD] Migration result: migrated=${migrationResult.migrated}, total=${migrationResult.total}, errors=${migrationResult.errors}`);
+        
         setMigrationStatus({
           inProgress: false,
           migrated: migrationResult.migrated,
           total: migrationResult.total,
           errors: migrationResult.errors,
         });
-        console.log('[AdminDashboard] Migration result:', migrationResult);
       }
       
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Starting token analytics data fetch...`);
       setTokenLoading(true);
       
       // Load token summary with auth breakdown and daily stats
+      console.log(`[ADMIN-DASHBOARD] API calls to make:`);
+      console.log(`[ADMIN-DASHBOARD]   1. TokenService.getTokenAnalyticsSummaryWithAuth()`);
+      console.log(`[ADMIN-DASHBOARD]   2. TokenService.getDailyTokenStatsWithAuth(days: 7)`);
+      
       const [summaryData, initialStats] = await Promise.all([
         TokenService.getTokenAnalyticsSummaryWithAuth(),
         TokenService.getDailyTokenStatsWithAuth(7), // Initial 7 days
       ]);
 
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - TOKEN DATA RECEIVED`);
+      console.log(`[ADMIN-DASHBOARD]   - tokenSummary: ${JSON.stringify(summaryData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - initialStats (length: ${initialStats?.length || 0})`);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Processing token data and updating state...`);
       setTokenSummary(summaryData);
+      console.log(`[ADMIN-DASHBOARD]   - tokenSummary SET`);
+      
       setDailyTokenStats(initialStats);
+      console.log(`[ADMIN-DASHBOARD]   - dailyTokenStats SET (${initialStats.length} items)`);
+      
       setHasLoadedMoreTokens(false);
+      console.log(`[ADMIN-DASHBOARD]   - hasLoadedMoreTokens SET to false`);
       
       // Get total pages for pagination
+      console.log(`[ADMIN-DASHBOARD] Fetching total pages for pagination...`);
       const totalPages = await TokenService.getTotalPages(TOKEN_PAGE_SIZE);
+      console.log(`[ADMIN-DASHBOARD]   - Total pages: ${totalPages}`);
       setTokenTotalPages(totalPages);
       setTokenPage(0);
 
       // Load first page of token records with auth status
+      console.log(`[ADMIN-DASHBOARD] Loading first page of token records (page: 0, pageSize: ${TOKEN_PAGE_SIZE})...`);
       const records = await TokenService.getTokenRecordsWithAuthStatus({ 
         page: 0, 
         pageSize: TOKEN_PAGE_SIZE 
       });
+      console.log(`[ADMIN-DASHBOARD]   - Loaded ${records.length} token records`);
       setTokenRecords(records);
+      console.log(`[ADMIN-DASHBOARD]   - tokenRecords SET (${records.length} items)`);
 
       // Update sync time
-      setLastSyncTime(TokenService.getLastSyncTime());
+      const syncTime = TokenService.getLastSyncTime();
+      setLastSyncTime(syncTime);
+      console.log(`[ADMIN-DASHBOARD]   - lastSyncTime SET to: ${syncTime}`);
+      
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadTokenAnalytics() COMPLETE - All token data loaded`);
     } catch (error) {
-      console.error('Error loading token analytics:', error);
+      console.error(`[ADMIN-DASHBOARD] Error loading token analytics:`, error);
     } finally {
       setTokenLoading(false);
+      console.log(`[ADMIN-DASHBOARD] Token loading state reset - tokenLoading: false`);
     }
   };
 
   // Load more daily stats (pagination)
   const loadMoreDailyStats = async () => {
-    if (hasLoadedMoreTokens) return;
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadMoreDailyStats() STARTING - hasLoadedMoreTokens: ${hasLoadedMoreTokens}`);
+    
+    if (hasLoadedMoreTokens) {
+      console.log(`[ADMIN-DASHBOARD] Already loaded more stats, skipping...`);
+      return;
+    }
     
     try {
+      console.log(`[ADMIN-DASHBOARD] Calling TokenService.getDailyTokenStatsWithAuth(days: 30)...`);
       setTokenLoading(true);
       const moreStats = await TokenService.getDailyTokenStatsWithAuth(30);
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Received ${moreStats.length} daily stats`);
+      
       setDailyTokenStats(moreStats);
+      console.log(`[ADMIN-DASHBOARD] dailyTokenStats updated with ${moreStats.length} items`);
+      
       setHasLoadedMoreTokens(true);
+      console.log(`[ADMIN-DASHBOARD] hasLoadedMoreTokens set to true`);
     } catch (error) {
-      console.error('Error loading more daily stats:', error);
+      console.error(`[ADMIN-DASHBOARD] Error loading more daily stats:`, error);
     } finally {
       setTokenLoading(false);
     }
@@ -175,22 +297,78 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
 
   // Load more token records for modal
   const loadMoreTokenRecords = async () => {
-    if (tokenPage >= tokenTotalPages - 1) return;
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadMoreTokenRecords() STARTING - currentPage: ${tokenPage}, totalPages: ${tokenTotalPages}`);
+    
+    if (tokenPage >= tokenTotalPages - 1) {
+      console.log(`[ADMIN-DASHBOARD] Already at last page, skipping...`);
+      return;
+    }
     
     try {
       const nextPage = tokenPage + 1;
+      console.log(`[ADMIN-DASHBOARD] Loading page ${nextPage} of ${tokenTotalPages}...`);
       const newRecords = await TokenService.getTokenRecords({ page: nextPage, pageSize: TOKEN_PAGE_SIZE });
-      setTokenRecords(prev => [...prev, ...newRecords]);
+      console.log(`[ADMIN-DASHBOARD] Received ${newRecords.length} new records`);
+      
+      setTokenRecords(prev => {
+        const updated = [...prev, ...newRecords];
+        console.log(`[ADMIN-DASHBOARD] tokenRecords updated - previous: ${prev.length}, new: ${newRecords.length}, total: ${updated.length}`);
+        return updated;
+      });
       setTokenPage(nextPage);
+      console.log(`[ADMIN-DASHBOARD] tokenPage updated to: ${nextPage}`);
     } catch (error) {
-      console.error('Error loading more token records:', error);
+      console.error(`[ADMIN-DASHBOARD] Error loading more token records:`, error);
     }
   };
 
   // Force refresh token data
   const forceRefreshTokens = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - forceRefreshTokens() STARTING`);
     await TokenService.forceRefresh();
+    console.log(`[ADMIN-DASHBOARD] TokenService.forceRefresh() complete, calling loadTokenAnalytics(true)...`);
     await loadTokenAnalytics(true);
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - forceRefreshTokens() COMPLETE`);
+  };
+
+  // Load granular visitor data based on selected period
+  const loadGranularVisitorData = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadGranularVisitorData() STARTING - period: ${selectedPeriod}`);
+    setGranularLoading(true);
+    try {
+      const now = new Date();
+      
+      if (selectedPeriod === 'daily') {
+        // Get today's date
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        console.log(`[ADMIN-DASHBOARD] Fetching hourly data for today: ${today.toISOString()}`);
+        const data = await AnalyticsService.getHourlyVisitorsForDay(today);
+        setHourlyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Hourly data loaded: ${data.filter(d => d.sessions > 0).length} hours with sessions`);
+      } else if (selectedPeriod === 'weekly') {
+        // Get current week's start (Sunday)
+        const today = new Date(now);
+        const dayOfWeek = today.getDay();
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - dayOfWeek);
+        console.log(`[ADMIN-DASHBOARD] Fetching daily data for week starting: ${weekStart.toISOString()}`);
+        const data = await AnalyticsService.getDailyVisitorsForWeek(weekStart);
+        setDailyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Daily data loaded: ${data.filter(d => d.sessions > 0).length} days with sessions`);
+      } else if (selectedPeriod === 'yearly') {
+        // Get current month
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        console.log(`[ADMIN-DASHBOARD] Fetching weekly data for ${year}-${month + 1}`);
+        const data = await AnalyticsService.getWeeklyVisitorsForMonth(year, month);
+        setWeeklyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Weekly data loaded: ${data.filter(d => d.sessions > 0).length} weeks with sessions`);
+      }
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading granular visitor data:`, error);
+    } finally {
+      setGranularLoading(false);
+    }
   };
 
   // Format last sync time
@@ -202,12 +380,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
 
   // Render token bar chart
   const renderTokenBarChart = (data: DailyTokenStats[]) => {
-    if (data.length === 0) return null;
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderTokenBarChart() called with ${data?.length || 0} data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderTokenBarChart: No data to render`);
+      return null;
+    }
 
     const maxTokens = Math.max(...data.map(d => d.newTokens), 1);
     const chartWidth = Dimensions.get('window').width - 64;
     const barWidth = Math.max(chartWidth / data.length - 8, 30);
 
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderTokenBarChart: Rendering ${data.length} bars, maxTokens: ${maxTokens}`);
+    
     return (
       <View style={styles.chartRow}>
         {data.map((item, index) => {
@@ -232,7 +417,9 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   };
 
   const handleRefresh = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - handleRefresh() called - forcing analytics refresh`);
     await loadAnalytics(true); // Force refresh
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - handleRefresh() complete`);
   };
 
   const formatDuration = (seconds: number): string => {
@@ -255,11 +442,18 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   };
 
   const renderSimpleChart = (data: TrendData[]) => {
-    if (data.length === 0) return null;
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderSimpleChart() called with ${data?.length || 0} trend data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderSimpleChart: No data to render`);
+      return null;
+    }
 
     const maxSessions = Math.max(...data.map(d => d.totalSessions), 1);
     const chartWidth = Dimensions.get('window').width - 64;
     const barWidth = Math.max(chartWidth / data.length - 8, 20);
+    
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderSimpleChart: Rendering ${data.length} bars, maxSessions: ${maxSessions}`);
 
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
@@ -286,8 +480,163 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     );
   };
 
+  // NEW: Render hourly data for daily view
+  const renderHourlyChart = (data: { hour: number; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No hourly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+    const chartWidth = Dimensions.get('window').width - 64;
+    const barWidth = Math.max(chartWidth / 24 - 4, 20);
+
+    // Only show hours with data or every 3rd hour to avoid clutter
+    const showEveryNth = 3;
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Hourly bar chart */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+          <View style={styles.chartContainer}>
+            {data.map((item, index) => {
+              const barHeight = (item.sessions / maxSessions) * 120;
+              const showLabel = index % showEveryNth === 0;
+              
+              return (
+                <View key={index} style={[styles.barContainer, { width: barWidth }]}>
+                  <Text style={styles.barValue}>{item.sessions > 0 ? item.sessions : ''}</Text>
+                  <View style={styles.barWrapper}>
+                    <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 2) }]} />
+                  </View>
+                  {showLabel && (
+                    <Text style={styles.barLabel}>
+                      {item.hour}:00
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // NEW: Render daily data for weekly view
+  const renderDailyChart = (data: { day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No daily data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Daily bars - using existing styles */}
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const barHeight = (item.sessions / maxSessions) * 120;
+            
+            return (
+              <View key={index} style={styles.barContainer}>
+                <Text style={styles.barValue}>{item.sessions}</Text>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                </View>
+                <Text style={styles.barLabel}>{item.dayName}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  // NEW: Render weekly data for monthly view
+  const renderWeeklyChart = (data: { week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No weekly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Weekly bars - using existing styles */}
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const barHeight = (item.sessions / maxSessions) * 120;
+            
+            return (
+              <View key={index} style={styles.barContainer}>
+                <Text style={styles.barValue}>{item.sessions}</Text>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                </View>
+                <Text style={styles.barLabel}>{item.weekLabel}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
   const renderLineChart = (data: TrendData[]) => {
-    if (data.length === 0) return null;
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderLineChart() called with ${data?.length || 0} trend data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderLineChart: No data to render`);
+      return null;
+    }
 
     const maxValue = Math.max(
       ...data.map(d => Math.max(d.totalSessions, d.totalNewUsers, d.totalUniqueUsers)),
@@ -296,6 +645,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     const chartWidth = Dimensions.get('window').width - 64;
     const chartHeight = 200;
     const pointSpacing = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth / 2;
+    
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderLineChart: Rendering ${data.length} points, maxValue: ${maxValue}`);
 
     // Calculate points for each line
     const sessionPoints = data.map((item, index) => ({
@@ -474,7 +825,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     );
   };
 
+  console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDER - loading: ${loading}, activeTab: ${activeTab}`);
+  
   if (loading) {
+    console.log(`[ADMIN-DASHBOARD-RENDER] Showing loading spinner`);
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#00F5FF" />
@@ -738,11 +1092,33 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
               </TouchableOpacity>
             </View>
 
-            {/* Trend Chart */}
+            {/* NEW: Granular Visitor Data Chart */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="analytics" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>
+                  {selectedPeriod === 'daily' ? 'Hourly Visitors Today' : 
+                   selectedPeriod === 'weekly' ? 'Daily Visitors This Week' : 
+                   'Weekly Visitors This Month'}
+                </Text>
+              </View>
+              
+              {granularLoading ? (
+                <ActivityIndicator size="small" color="#00F5FF" />
+              ) : (
+                <>
+                  {selectedPeriod === 'daily' && renderHourlyChart(hourlyVisitors)}
+                  {selectedPeriod === 'weekly' && renderDailyChart(dailyVisitors)}
+                  {selectedPeriod === 'yearly' && renderWeeklyChart(weeklyVisitors)}
+                </>
+              )}
+            </View>
+
+            {/* Trend Chart - Legacy data */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="trending-up" size={24} color="#00F5FF" />
-                <Text style={styles.sectionTitle}>Visitor Trends</Text>
+                <Text style={styles.sectionTitle}>Visitor Trends (30 Days)</Text>
               </View>
               <View style={styles.chartLegend}>
                 <View style={styles.legendItem}>

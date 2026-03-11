@@ -253,10 +253,9 @@ class AnalyticsService {
       const uniqueUnauthUsers = new Set<string>();
       let totalVisits = 0;
 
-      // Track new users
-      const newAuthUsers = new Set<string>();
-      const newUnauthUsers = new Set<string>();
-
+      // Collect all unique visitor IDs first
+      const allVisitorIds: string[] = [];
+      
       snapshot.forEach((doc) => {
         const data = doc.data();
         if (data.isAuthenticated) {
@@ -264,7 +263,10 @@ class AnalyticsService {
           if (data.userId) uniqueAuthUsers.add(data.userId);
         } else {
           unauthenticatedCount++;
-          if (data.uniqueVisitorId) uniqueUnauthUsers.add(data.uniqueVisitorId);
+          if (data.uniqueVisitorId) {
+            uniqueUnauthUsers.add(data.uniqueVisitorId);
+            allVisitorIds.push(data.uniqueVisitorId);
+          }
         }
 
         if (data.duration) {
@@ -275,28 +277,45 @@ class AnalyticsService {
         totalVisits += data.visitNumber || 1;
       });
 
-      // Track new vs returning users
-      const processedVisitors = new Set<string>();
+      // OPTIMIZATION: Single batched query to get all visitors' first session times
+      // instead of N+1 queries (one per unique visitor)
+      const uniqueVisitorsArray = Array.from(uniqueUnauthUsers);
+      const visitorFirstSessions = new Map<string, Date>();
       
-      for (const doc of snapshot.docs) {
-        const data = doc.data();
-        const visitorId = data.uniqueVisitorId;
-        
-        // Only check once per unique visitor
-        if (!processedVisitors.has(visitorId)) {
-          processedVisitors.add(visitorId);
-          const now = new Date();
-          const isNew = await this.isNewInPeriod(visitorId, thirtyDaysAgo, now);
+      if (uniqueVisitorsArray.length > 0) {
+        // Fetch in batches of 30 (Firestore 'in' limit)
+        const BATCH_SIZE = 30;
+        for (let i = 0; i < uniqueVisitorsArray.length; i += BATCH_SIZE) {
+          const batch = uniqueVisitorsArray.slice(i, i + BATCH_SIZE);
+          const batchQuery = query(
+            this.sessionsCollection,
+            where('uniqueVisitorId', 'in', batch),
+            orderBy('startTime', 'asc')
+          );
           
-          if (isNew) {
-            if (data.isAuthenticated && data.userId) {
-              newAuthUsers.add(data.userId);
-            } else if (data.uniqueVisitorId) {
-              newUnauthUsers.add(data.uniqueVisitorId);
+          const batchSnapshot = await getDocs(batchQuery);
+          batchSnapshot.forEach((doc) => {
+            const data = doc.data();
+            const vid = data.uniqueVisitorId;
+            if (vid && !visitorFirstSessions.has(vid)) {
+              visitorFirstSessions.set(vid, data.startTime.toDate());
             }
-          }
+          });
         }
       }
+
+      // Determine new vs returning users using the batched data
+      const newUnauthUsers = new Set<string>();
+      uniqueUnauthUsers.forEach((visitorId) => {
+        const firstSession = visitorFirstSessions.get(visitorId);
+        if (firstSession && firstSession >= thirtyDaysAgo) {
+          newUnauthUsers.add(visitorId);
+        }
+      });
+
+      // For authenticated users, assume all tracked users in the period are "new" 
+      // since we don't have historical data - this can be refined later
+      const newAuthUsers = new Set<string>(uniqueAuthUsers);
 
       const totalUniqueUsers = uniqueAuthUsers.size + uniqueUnauthUsers.size;
 
@@ -317,6 +336,215 @@ class AnalyticsService {
     } catch (error) {
       console.error('Analytics: Error getting summary', error);
       throw error;
+    }
+  }
+
+  /**
+   * Get hourly visitor data for a specific day
+   * Used for daily view - shows 24 hours
+   */
+  async getHourlyVisitorsForDay(date: Date): Promise<{ hour: number; sessions: number; newUsers: number; returningUsers: number }[]> {
+    try {
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const q = query(
+        this.sessionsCollection,
+        where('startTime', '>=', Timestamp.fromDate(startOfDay)),
+        where('startTime', '<=', Timestamp.fromDate(endOfDay)),
+        orderBy('startTime', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      
+      // Initialize 24 hours
+      const hourlyData = Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        sessions: 0,
+        newUsers: 0,
+        returningUsers: 0,
+      }));
+
+      // Get unique visitors who visited before this day to determine new vs returning
+      const startOfTime = new Date(2020, 0, 1); // Far back
+      const visitorQuery = query(
+        this.sessionsCollection,
+        where('startTime', '<', Timestamp.fromDate(startOfDay))
+      );
+      const allVisitorsSnapshot = await getDocs(visitorQuery);
+      const existingVisitors = new Set<string>();
+      allVisitorsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.uniqueVisitorId) existingVisitors.add(data.uniqueVisitorId);
+      });
+
+      const visitorsToday = new Set<string>();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const hour = data.startTime.toDate().getHours();
+        hourlyData[hour].sessions++;
+        
+        const visitorId = data.uniqueVisitorId;
+        if (visitorId) {
+          if (!visitorsToday.has(visitorId)) {
+            visitorsToday.add(visitorId);
+            if (existingVisitors.has(visitorId)) {
+              hourlyData[hour].returningUsers++;
+            } else {
+              hourlyData[hour].newUsers++;
+            }
+          }
+        }
+      });
+
+      return hourlyData;
+    } catch (error) {
+      console.error('Analytics: Error getting hourly visitors', error);
+      return Array.from({ length: 24 }, (_, hour) => ({ hour, sessions: 0, newUsers: 0, returningUsers: 0 }));
+    }
+  }
+
+  /**
+   * Get daily visitor data for a week
+   * Used for weekly view - shows 7 days
+   */
+  async getDailyVisitorsForWeek(weekStartDate: Date): Promise<{ day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]> {
+    try {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const startOfWeek = new Date(weekStartDate);
+      startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 7);
+
+      const q = query(
+        this.sessionsCollection,
+        where('startTime', '>=', Timestamp.fromDate(startOfWeek)),
+        where('startTime', '<', Timestamp.fromDate(endOfWeek)),
+        orderBy('startTime', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      
+      // Initialize 7 days
+      const dailyData = Array.from({ length: 7 }, (_, day) => ({
+        day,
+        dayName: dayNames[day],
+        sessions: 0,
+        newUsers: 0,
+        returningUsers: 0,
+      }));
+
+      // Get unique visitors who visited before this week to determine new vs returning
+      const visitorQuery = query(
+        this.sessionsCollection,
+        where('startTime', '<', Timestamp.fromDate(startOfWeek))
+      );
+      const allVisitorsSnapshot = await getDocs(visitorQuery);
+      const existingVisitors = new Set<string>();
+      allVisitorsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.uniqueVisitorId) existingVisitors.add(data.uniqueVisitorId);
+      });
+
+      const visitorsThisWeek = new Set<string>();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const day = data.startTime.toDate().getDay();
+        dailyData[day].sessions++;
+        
+        const visitorId = data.uniqueVisitorId;
+        if (visitorId) {
+          if (!visitorsThisWeek.has(visitorId)) {
+            visitorsThisWeek.add(visitorId);
+            if (existingVisitors.has(visitorId)) {
+              dailyData[day].returningUsers++;
+            } else {
+              dailyData[day].newUsers++;
+            }
+          }
+        }
+      });
+
+      return dailyData;
+    } catch (error) {
+      console.error('Analytics: Error getting daily visitors for week', error);
+      return Array.from({ length: 7 }, (_, day) => ({ day, dayName: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][day], sessions: 0, newUsers: 0, returningUsers: 0 }));
+    }
+  }
+
+  /**
+   * Get weekly visitor data for a month
+   * Used for monthly view - shows 4-5 weeks
+   */
+  async getWeeklyVisitorsForMonth(year: number, month: number): Promise<{ week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]> {
+    try {
+      const startOfMonth = new Date(year, month, 1);
+      const endOfMonth = new Date(year, month + 1, 0);
+      const weeksInMonth = Math.ceil((endOfMonth.getDate() + startOfMonth.getDay()) / 7);
+
+      const q = query(
+        this.sessionsCollection,
+        where('startTime', '>=', Timestamp.fromDate(startOfMonth)),
+        where('startTime', '<=', Timestamp.fromDate(endOfMonth)),
+        orderBy('startTime', 'asc')
+      );
+
+      const snapshot = await getDocs(q);
+      
+      // Initialize weeks
+      const weeklyData = Array.from({ length: weeksInMonth }, (_, week) => ({
+        week,
+        weekLabel: `Week ${week + 1}`,
+        sessions: 0,
+        newUsers: 0,
+        returningUsers: 0,
+      }));
+
+      // Get unique visitors who visited before this month to determine new vs returning
+      const visitorQuery = query(
+        this.sessionsCollection,
+        where('startTime', '<', Timestamp.fromDate(startOfMonth))
+      );
+      const allVisitorsSnapshot = await getDocs(visitorQuery);
+      const existingVisitors = new Set<string>();
+      allVisitorsSnapshot.forEach(doc => {
+        const data = doc.data();
+        if (data.uniqueVisitorId) existingVisitors.add(data.uniqueVisitorId);
+      });
+
+      const visitorsThisMonth = new Set<string>();
+
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        const sessionDate = data.startTime.toDate();
+        const dayOfMonth = sessionDate.getDate();
+        const week = Math.floor((dayOfMonth + startOfMonth.getDay() - 1) / 7);
+        
+        if (weeklyData[week]) {
+          weeklyData[week].sessions++;
+          
+          const visitorId = data.uniqueVisitorId;
+          if (visitorId) {
+            if (!visitorsThisMonth.has(visitorId)) {
+              visitorsThisMonth.add(visitorId);
+              if (existingVisitors.has(visitorId)) {
+                weeklyData[week].returningUsers++;
+              } else {
+                weeklyData[week].newUsers++;
+              }
+            }
+          }
+        }
+      });
+
+      return weeklyData;
+    } catch (error) {
+      console.error('Analytics: Error getting weekly visitors for month', error);
+      return [];
     }
   }
 
@@ -412,7 +640,48 @@ class AnalyticsService {
         }
       });
 
-      // Check for new users in each period
+      // Check for new users in each period - OPTIMIZED: Use batched queries instead of N+1
+      // First, collect all unique visitor IDs across all periods
+      const allVisitorIds = new Set<string>();
+      for (const [dateKey, stats] of Object.entries(dataByDate)) {
+        for (const session of stats.sessions) {
+          if (session.uniqueVisitorId) {
+            allVisitorIds.add(session.uniqueVisitorId);
+          }
+        }
+      }
+
+      // Fetch all visitor first sessions in batched queries
+      const visitorFirstSessions = new Map<string, Date>();
+      const allVisitorIdsArray = Array.from(allVisitorIds);
+      
+      if (allVisitorIdsArray.length > 0) {
+        const BATCH_SIZE = 30;
+        for (let i = 0; i < allVisitorIdsArray.length; i += BATCH_SIZE) {
+          const batch = allVisitorIdsArray.slice(i, i + BATCH_SIZE);
+          const batchQuery = query(
+            this.sessionsCollection,
+            where('uniqueVisitorId', 'in', batch),
+            orderBy('startTime', 'asc')
+          );
+          
+          try {
+            const batchSnapshot = await getDocs(batchQuery);
+            batchSnapshot.forEach((doc) => {
+              const data = doc.data();
+              const vid = data.uniqueVisitorId;
+              if (vid && !visitorFirstSessions.has(vid)) {
+                visitorFirstSessions.set(vid, data.startTime.toDate());
+              }
+            });
+          } catch (e) {
+            // Handle potential query errors gracefully
+            console.warn('Analytics: Batch query error:', e);
+          }
+        }
+      }
+
+      // Now determine new vs returning users using the batched data
       for (const [dateKey, stats] of Object.entries(dataByDate)) {
         const periodStart = new Date(dateKey);
         let periodEnd: Date;
@@ -442,15 +711,20 @@ class AnalyticsService {
           const visitorId = session.uniqueVisitorId;
           
           // Only check once per unique visitor
-          if (!processedVisitors.has(visitorId)) {
+          if (visitorId && !processedVisitors.has(visitorId)) {
             processedVisitors.add(visitorId);
-            const isNew = await this.isNewInPeriod(visitorId, periodStart, periodEnd);
             
-            if (isNew) {
-              if (session.isAuthenticated && session.userId) {
-                stats.newAuthUsers.add(session.userId);
-              } else if (session.uniqueVisitorId) {
-                stats.newUnauthUsers.add(session.uniqueVisitorId);
+            // Use pre-fetched data instead of making N+1 queries
+            const firstSession = visitorFirstSessions.get(visitorId);
+            if (firstSession) {
+              const isNew = firstSession >= periodStart && firstSession < periodEnd;
+              
+              if (isNew) {
+                if (session.isAuthenticated && session.userId) {
+                  stats.newAuthUsers.add(session.userId);
+                } else if (session.uniqueVisitorId) {
+                  stats.newUnauthUsers.add(session.uniqueVisitorId);
+                }
               }
             }
           }
@@ -502,12 +776,49 @@ class AnalyticsService {
       const newUnauthUsers = new Set<string>();
       const returningAuthUsers = new Set<string>();
       const returningUnauthUsers = new Set<string>();
-      const processedVisitors = new Set<string>();
       
       let totalDuration = 0;
       let sessionsWithDuration = 0;
 
-      // Process each session
+      // OPTIMIZATION: Pre-fetch all visitor first sessions in batched queries
+      // instead of making N+1 queries
+      const allVisitorIds = new Set<string>();
+      snapshot.forEach((doc) => {
+        const vid = doc.data().uniqueVisitorId;
+        if (vid) allVisitorIds.add(vid);
+      });
+
+      const visitorFirstSessions = new Map<string, Date>();
+      const allVisitorIdsArray = Array.from(allVisitorIds);
+      
+      if (allVisitorIdsArray.length > 0) {
+        const BATCH_SIZE = 30;
+        for (let i = 0; i < allVisitorIdsArray.length; i += BATCH_SIZE) {
+          const batch = allVisitorIdsArray.slice(i, i + BATCH_SIZE);
+          const batchQuery = query(
+            this.sessionsCollection,
+            where('uniqueVisitorId', 'in', batch),
+            orderBy('startTime', 'asc')
+          );
+          
+          try {
+            const batchSnapshot = await getDocs(batchQuery);
+            batchSnapshot.forEach((doc) => {
+              const data = doc.data();
+              const vid = data.uniqueVisitorId;
+              if (vid && !visitorFirstSessions.has(vid)) {
+                visitorFirstSessions.set(vid, data.startTime.toDate());
+              }
+            });
+          } catch (e) {
+            console.warn('Analytics: Batch query error:', e);
+          }
+        }
+      }
+
+      // Process each session using pre-fetched data
+      const processedVisitors = new Set<string>();
+      
       for (const doc of snapshot.docs) {
         const data = doc.data();
         const visitorId = data.uniqueVisitorId;
@@ -519,9 +830,12 @@ class AnalyticsService {
         }
         
         // Check if new or returning (only once per visitor)
-        if (!processedVisitors.has(visitorId)) {
+        if (visitorId && !processedVisitors.has(visitorId)) {
           processedVisitors.add(visitorId);
-          const isNew = await this.isNewInPeriod(visitorId, today, tomorrow);
+          
+          // Use pre-fetched data instead of N+1 query
+          const firstSession = visitorFirstSessions.get(visitorId);
+          const isNew = firstSession && firstSession >= today && firstSession < tomorrow;
           
           if (isNew) {
             // New user today
