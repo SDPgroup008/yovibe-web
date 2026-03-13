@@ -1015,6 +1015,36 @@ class FirebaseService {
     }
   }
 
+  // Delete all events associated with a venue (cascade soft delete)
+  async deleteEventsByVenue(venueId: string): Promise<void> {
+    try {
+      // console.log("FirebaseService: Soft deleting events for venue", venueId)
+      const eventsRef = collection(db, "YoVibe/data/events")
+      const q = query(eventsRef, where("venueId", "==", venueId))
+      const querySnapshot = await getDocs(q)
+
+      if (querySnapshot.empty) {
+        // console.log("FirebaseService: No events found for venue", venueId)
+        return
+      }
+
+      // Soft delete each event
+      const deletePromises = querySnapshot.docs.map((eventDoc) => {
+        const eventRef = doc(db, "YoVibe/data/events", eventDoc.id)
+        return updateDoc(eventRef, {
+          isDeleted: true,
+          deletedAt: Timestamp.now(),
+        })
+      })
+
+      await Promise.all(deletePromises)
+      // console.log("FirebaseService: Soft deleted", deletePromises.length, "events for venue")
+    } catch (error) {
+      // console.error("Error soft deleting events by venue:", error)
+      throw error
+    }
+  }
+
   async getLatestVibeRating(venueId: string): Promise<number | null> {
     try {
       // console.log("FirebaseService: Getting latest vibe rating for venue", venueId)
