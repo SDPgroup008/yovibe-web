@@ -10,8 +10,12 @@ import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/f
 import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
+import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
+  // SEO Metadata for Map page
+  const mapSeo = SCREEN_SEO.map;
+
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -238,6 +242,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   return (
     <View style={styles.container}>
+      {/* SEO Metadata for Map page */}
+      <SEOMetadata
+        title={mapSeo.title}
+        description={mapSeo.description}
+        keywords={mapSeo.keywords}
+        type={mapSeo.type}
+      />
+      {/* Screen reader only heading for SEO */}
+      <Text style={styles.srOnly} accessibilityRole="header">
+        {mapSeo.title}
+      </Text>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Venue Locations</Text>
         <Text style={styles.headerSubtitle}>Here's a list of all our venues, sorted by vibe:</Text>
@@ -310,6 +325,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  // Screen reader only style for SEO
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    opacity: 0.001,
+    zIndex: -1,
   },
   header: {
     padding: 16,

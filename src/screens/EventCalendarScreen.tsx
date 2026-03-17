@@ -9,6 +9,7 @@ import { useIsFocused } from "@react-navigation/native"
 import FirebaseService from "../services/FirebaseService"
 import type { Event } from "../models/Event"
 import type { CalendarScreenProps } from "../navigation/types"
+import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 
 type CalendarTheme = {
   backgroundColor?: string
@@ -100,6 +101,9 @@ const normalizeEvent = (raw: any): Event => {
 }
 
 const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
+  // SEO Metadata for Calendar page
+  const calendarSeo = SCREEN_SEO.calendar;
+
   const isFocused = useIsFocused()
   const [events, setEvents] = useState<Event[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
@@ -179,6 +183,17 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* SEO Metadata for Calendar page */}
+      <SEOMetadata
+        title={calendarSeo.title}
+        description={calendarSeo.description}
+        keywords={calendarSeo.keywords}
+        type={calendarSeo.type}
+      />
+      {/* Screen reader only heading for SEO */}
+      <Text style={styles.srOnly} accessibilityRole="header">
+        {calendarSeo.title}
+      </Text>
       <Calendar
         theme={
           {
@@ -261,6 +276,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  // Screen reader only style for SEO
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    opacity: 0.001,
+    zIndex: -1,
   },
   eventsContainer: {
     flex: 1,

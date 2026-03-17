@@ -1,7 +1,7 @@
 {
-  "name": "YoVibe - Nightlife & Events",
+  "name": "YoVibe - Nightlife Events, Parties & Entertainment",
   "short_name": "YoVibe",
-  "description": "Discover the best nightlife venues and events in your city",
+  "description": "YoVibe is your ultimate guide to nightlife, events, entertainment, and vibes in Uganda. Discover the best venues, clubs, bars, parties, concerts, trips, tours, hotels, and experiences. Find events, see who's going, buy tickets, and share the happiness.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#121212",
@@ -33,9 +33,43 @@
       "purpose": "any"
     }
   ],
-  "categories": ["entertainment", "lifestyle", "social"],
+  "categories": ["entertainment", "lifestyle", "social", "events", "nightlife"],
   "lang": "en",
   "dir": "ltr",
   "scope": "/",
-  "prefer_related_applications": false
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "launch_handler": {
+    "client_mode": "auto"
+  },
+  "shortcuts": [
+    {
+      "name": "Events",
+      "short_name": "Events",
+      "description": "Browse upcoming events, parties, and nightlife experiences",
+      "url": "/events",
+      "icons": [{ "src": "/favicon.png", "sizes": "48x48" }]
+    },
+    {
+      "name": "Venues",
+      "short_name": "Venues",
+      "description": "Discover clubs, bars, lounges, and entertainment venues",
+      "url": "/venues",
+      "icons": [{ "src": "/favicon.png", "sizes": "48x48" }]
+    },
+    {
+      "name": "Map",
+      "short_name": "Map",
+      "description": "Explore venues and events on the map",
+      "url": "/map",
+      "icons": [{ "src": "/favicon.png", "sizes": "48x48" }]
+    },
+    {
+      "name": "Calendar",
+      "short_name": "Calendar",
+      "description": "View upcoming events on the calendar",
+      "url": "/calendar",
+      "icons": [{ "src": "/favicon.png", "sizes": "48x48" }]
+    }
+  ]
 }

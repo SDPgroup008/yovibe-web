@@ -21,8 +21,12 @@ import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
 import type { EventsScreenProps } from "../navigation/types";
+import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
+  // SEO Metadata for Events page
+  const eventSeo = SCREEN_SEO.events;
+
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
   const [events, setEvents] = useState<Event[]>([]);
@@ -396,6 +400,17 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      {/* SEO Metadata for Events page */}
+      <SEOMetadata
+        title={eventSeo.title}
+        description={eventSeo.description}
+        keywords={eventSeo.keywords}
+        type={eventSeo.type}
+      />
+      {/* Screen reader only heading for SEO */}
+      <Text style={styles.srOnly} accessibilityRole="header">
+        {eventSeo.title}
+      </Text>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Upcoming Events</Text>
         <View style={styles.headerActions}>
@@ -488,6 +503,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#0A0A0A",
+  },
+  // Screen reader only style for SEO - React Native compatible
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    opacity: 0.001,
+    zIndex: -1,
   },
   header: {
     flexDirection: "row",

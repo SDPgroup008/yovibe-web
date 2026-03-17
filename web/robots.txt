@@ -1,0 +1,63 @@
+# YoVibe robots.txt
+# https://yovibe.net
+
+User-agent: *
+Allow: /
+
+# Main sections - allow crawling for SEO
+Allow: /events
+Allow: /venues
+Allow: /map
+Allow: /calendar
+Allow: /search
+
+# Sitemap location
+Sitemap: https://yovibe.net/sitemap.xml
+
+# Disallow admin/private areas - no SEO value
+Disallow: /admin/
+Disallow: /api/
+Disallow: /profile/
+Disallow: /add-venue
+Disallow: /add-event
+Disallow: /manage-programs
+Disallow: /my-venues
+Disallow: /notifications
+Disallow: /ticket-purchase
+Disallow: /ticket-scanner
+
+# Disallow authentication pages
+Disallow: /login
+Disallow: /signup
+Disallow: /auth/
+
+# Disallow internal app routes
+Disallow: /#/
+Disallow: /?/
+
+# Crawl delay (be nice to server during peak times)
+Crawl-delay: 1
+
+# Googlebot specific settings
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /profile/
+Crawl-delay: 1
+
+# Bingbot
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /api/
+Disallow: /profile/
+Crawl-delay: 1
+
+# Twitterbot
+User-agent: Twitterbot
+Allow: /
+
+# Applebot
+User-agent: Applebot
+Allow: /

@@ -8,15 +8,17 @@ import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
-
-// Auth helper for soft-auth redirect intent
 import { useAuth } from "../contexts/AuthContext";
+import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 
 interface VenuesScreenProps {
   navigation: any;
 }
 
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
+  // SEO Metadata for Venues page
+  const venueSeo = SCREEN_SEO.venues;
+
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
 
@@ -440,6 +442,17 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
   return (
     <View style={[styles.container, activeTab === "recreation" && styles.recreationContainer]}>
+      {/* SEO Metadata for Venues page */}
+      <SEOMetadata
+        title={venueSeo.title}
+        description={venueSeo.description}
+        keywords={venueSeo.keywords}
+        type={venueSeo.type}
+      />
+      {/* Screen reader only heading for SEO */}
+      <Text style={styles.srOnly} accessibilityRole="header">
+        {venueSeo.title}
+      </Text>
       <View style={styles.header}>
         <View style={styles.tabContainer}>
           <TouchableOpacity
@@ -519,6 +532,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  // Screen reader only style for SEO - React Native compatible
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    opacity: 0.001,
+    zIndex: -1,
   },
   recreationContainer: {
     backgroundColor: "#F5F5F5",
