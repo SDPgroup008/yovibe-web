@@ -87,6 +87,22 @@ export const generateDescription = (description: string): string => {
   return description
 }
 
+// Get current path from window.location for dynamic canonical URLs
+const getCurrentPath = (): string => {
+  if (typeof window !== "undefined") {
+    return window.location.pathname || "/"
+  }
+  return "/"
+}
+
+// Generate dynamic canonical URL based on current route
+export const generateCanonicalUrl = (path?: string): string => {
+  const currentPath = path || getCurrentPath()
+  // Remove trailing slash except for root
+  const normalizedPath = currentPath === "/" ? "/" : currentPath.replace(/\/$/, "")
+  return `${DEFAULT_SEO.url}${normalizedPath}`
+}
+
 // Generate keywords string from array
 export const generateKeywords = (keywords: string[]): string => {
   const allKeywords = [...DEFAULT_SEO.keywords.brand, ...DEFAULT_SEO.keywords.primary, ...DEFAULT_SEO.keywords.secondary, ...DEFAULT_SEO.keywords.tertiary, ...keywords]
@@ -117,7 +133,7 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
   const finalKeywords = generateKeywords(keywords)
   const finalUrl = url || DEFAULT_SEO.url
   const finalImage = image || DEFAULT_SEO.image
-  const finalCanonicalUrl = canonicalUrl || finalUrl
+  const finalCanonicalUrl = canonicalUrl || generateCanonicalUrl()
 
   // Robots directive
   const robots = [

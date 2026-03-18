@@ -1,398 +1,414 @@
 "use client"
 
 import React from "react"
-import { View, Text, StyleSheet, useWindowDimensions, ViewStyle, TextStyle } from "react-native"
-import { colors, spacing, fontSize, borderRadius, BREAKPOINTS } from "../utils/responsive"
+import { View, ViewStyle, StyleSheet, Platform, DimensionValue } from "react-native"
+import { useResponsive, useSpacing, useGap, useFontScale, useTouchTarget } from "../utils/responsive"
 
-// Responsive container that adapts to screen width
-interface ResponsiveContainerProps {
-  children: React.ReactNode
+// Type for dimension values (allows both number and string)
+type DValue = DimensionValue | undefined
+
+// ResponsiveView - A View that adapts to screen size
+interface ResponsiveViewProps {
+  children?: React.ReactNode
   style?: ViewStyle
-  maxWidth?: number
-  padding?: boolean
-  centerContent?: boolean
-}
-
-export const ResponsiveContainer: React.FC<ResponsiveContainerProps> = ({
-  children,
-  style,
-  maxWidth = 1200,
-  padding = true,
-  centerContent = false,
-}) => {
-  const { width } = useWindowDimensions()
-  
-  const containerWidth = width >= maxWidth ? maxWidth * 0.9 : width * 0.95
-  const paddingValue = width >= BREAKPOINTS.md ? spacing.lg : spacing.md
-  
-  return (
-    <View
-      style={[
-        styles.container,
-        { width: containerWidth, paddingHorizontal: padding ? paddingValue : 0 },
-        centerContent && styles.centerContent,
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  )
-}
-
-// Responsive card with adaptive sizing
-interface ResponsiveCardProps {
-  children: React.ReactNode
-  style?: ViewStyle
-  variant?: "default" | "elevated" | "outlined"
-}
-
-export const ResponsiveCard: React.FC<ResponsiveCardProps> = ({
-  children,
-  style,
-  variant = "default",
-}) => {
-  const { width } = useWindowDimensions()
-  
-  const isTablet = width >= BREAKPOINTS.md
-  const isDesktop = width >= BREAKPOINTS.lg
-  
-  const cardStyle: ViewStyle = {
-    marginHorizontal: isDesktop ? spacing.xl : isTablet ? spacing.lg : spacing.md,
-    marginBottom: isDesktop ? spacing.xl : spacing.lg,
-    borderRadius: isDesktop ? borderRadius.xxl : borderRadius.xl,
-    ...(variant === "elevated" && styles.elevated),
-    ...(variant === "outlined" && styles.outlined),
-  }
-  
-  return <View style={[styles.card, cardStyle, style]}>{children}</View>
-}
-
-// Responsive typography component
-interface ResponsiveTextProps {
-  children: React.ReactNode
-  style?: TextStyle
-  variant?: "h1" | "h2" | "h3" | "body" | "caption" | "button"
-  color?: string
-  center?: boolean
-}
-
-export const ResponsiveText: React.FC<ResponsiveTextProps> = ({
-  children,
-  style,
-  variant = "body",
-  color,
-  center = false,
-}) => {
-  const { width } = useWindowDimensions()
-  
-  const isTablet = width >= BREAKPOINTS.md
-  const isDesktop = width >= BREAKPOINTS.lg
-  
-  // Font size based on screen
-  const fontSizes = {
-    h1: isDesktop ? 40 : isTablet ? 32 : 28,
-    h2: isDesktop ? 28 : isTablet ? 24 : 20,
-    h3: isDesktop ? 22 : isTablet ? 18 : 16,
-    body: isDesktop ? 16 : isTablet ? 15 : 14,
-    caption: isDesktop ? 13 : isTablet ? 12 : 11,
-    button: isDesktop ? 16 : isTablet ? 15 : 14,
-  }
-  
-  // Font weight based on variant
-  const fontWeights: Record<string, TextStyle["fontWeight"]> = {
-    h1: "800",
-    h2: "700",
-    h3: "600",
-    body: "400",
-    caption: "400",
-    button: "600",
-  }
-  
-  const textStyle: TextStyle = {
-    fontSize: fontSizes[variant],
-    fontWeight: fontWeights[variant],
-    color: color || colors.text,
-    textAlign: center ? "center" : "left",
-    lineHeight: fontSizes[variant] * 1.5,
-  }
-  
-  return <Text style={[textStyle, style]}>{children}</Text>
-}
-
-// Responsive button with touch-friendly sizing
-interface ResponsiveButtonProps {
-  children: React.ReactNode
-  onPress: () => void
-  variant?: "primary" | "secondary" | "outline" | "ghost"
-  size?: "small" | "medium" | "large"
-  disabled?: boolean
-  style?: ViewStyle
-  fullWidth?: boolean
-}
-
-export const ResponsiveButton: React.FC<ResponsiveButtonProps> = ({
-  children,
-  onPress,
-  variant = "primary",
-  size = "medium",
-  disabled = false,
-  style,
-  fullWidth = false,
-}) => {
-  const { width } = useWindowDimensions()
-  
-  const isTablet = width >= BREAKPOINTS.md
-  
-  // Size-based styling
-  const sizes = {
-    small: { paddingVertical: 8, paddingHorizontal: 16 },
-    medium: { paddingVertical: isTablet ? 14 : 12, paddingHorizontal: isTablet ? 28 : 24 },
-    large: { paddingVertical: isTablet ? 18 : 16, paddingHorizontal: isTablet ? 36 : 32 },
-  }
-  
-  // Variant-based styling
-  const variants = {
-    primary: { backgroundColor: colors.primary },
-    secondary: { backgroundColor: colors.backgroundLight },
-    outline: { backgroundColor: "transparent", borderWidth: 2, borderColor: colors.primary },
-    ghost: { backgroundColor: "transparent" },
-  }
-  
-  return (
-    <Text
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        styles.button,
-        sizes[size],
-        variants[variant],
-        disabled && styles.disabled,
-        fullWidth && styles.fullWidth,
-        style,
-      ]}
-    >
-      {children}
-    </Text>
-  )
-}
-
-// Responsive grid for displaying items
-interface ResponsiveGridProps {
-  children: React.ReactNode
-  columns?: number
-  gap?: number
-  style?: ViewStyle
-}
-
-export const ResponsiveGrid: React.FC<ResponsiveGridProps> = ({
-  children,
-  columns,
-  gap,
-  style,
-}) => {
-  const { width } = useWindowDimensions()
-  
-  // Calculate columns based on screen width if not specified
-  const cols = columns || (width >= BREAKPOINTS.xl ? 4 : width >= BREAKPOINTS.lg ? 3 : width >= BREAKPOINTS.md ? 2 : 1)
-  const gridGap = gap || (width >= BREAKPOINTS.md ? spacing.lg : spacing.md)
-  
-  return (
-    <View style={[styles.grid, { flexWrap: "wrap", marginHorizontal: -gridGap / 2 }, style]}>
-      {React.Children.map(children, (child, index) => (
-        <View
-          key={index}
-          style={[
-            { width: `${100 / cols}%`, paddingHorizontal: gridGap / 2, marginBottom: gridGap },
-          ]}
-        >
-          {child}
-        </View>
-      ))}
-    </View>
-  )
-}
-
-// Touch-friendly spacing component
-interface SpacerProps {
-  size?: "xs" | "sm" | "md" | "lg" | "xl" | "xxl"
-}
-
-export const Spacer: React.FC<SpacerProps> = ({ size = "md" }) => {
-  const { width } = useWindowDimensions()
-  
-  const isTablet = width >= BREAKPOINTS.md
-  const isDesktop = width >= BREAKPOINTS.lg
-  
-  // Scale spacing based on screen
-  const scale = isDesktop ? 1.5 : isTablet ? 1.25 : 1
-  
-  const sizes = {
-    xs: spacing.xs,
-    sm: spacing.sm,
-    md: spacing.md,
-    lg: spacing.lg,
-    xl: spacing.xl,
-    xxl: spacing.xxl,
-  }
-  
-  return <View style={{ height: sizes[size] * scale }} />
-}
-
-// Horizontal line with optional spacing
-interface DividerProps {
+  // Layout props
+  flex?: number
+  flexDirection?: "row" | "column" | "row-reverse" | "column-reverse"
+  flexWrap?: "wrap" | "nowrap"
+  justifyContent?: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly"
+  alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline"
+  alignContent?: "flex-start" | "flex-end" | "center" | "stretch" | "space-between" | "space-around"
+  // Spacing props
+  padding?: number
+  paddingHorizontal?: number
+  paddingVertical?: number
+  paddingTop?: number
+  paddingBottom?: number
+  paddingLeft?: number
+  paddingRight?: number
+  margin?: number
+  marginHorizontal?: number
   marginVertical?: number
+  marginTop?: number
+  marginBottom?: number
+  marginLeft?: number
+  marginRight?: number
+  // Size props
+  width?: DValue
+  height?: DValue
+  maxWidth?: DValue
+  maxHeight?: DValue
+  minWidth?: DValue
+  minHeight?: DValue
+  // Border props
+  borderRadius?: number
+  borderWidth?: number
+  borderColor?: string
+  // Background props
+  backgroundColor?: string
+  // Position props
+  position?: "absolute" | "relative"
+  top?: number
+  bottom?: number
+  left?: number
+  right?: number
+  // Overflow
+  overflow?: "visible" | "hidden" | "scroll"
+  // Responsive-only props (applied based on screen size)
+  phone?: Partial<ViewStyle>
+  tablet?: Partial<ViewStyle>
+  desktop?: Partial<ViewStyle>
 }
 
-export const Divider: React.FC<DividerProps> = ({ marginVertical = 24 }) => {
+export const ResponsiveView: React.FC<ResponsiveViewProps> = ({
+  children,
+  style,
+  phone,
+  tablet,
+  desktop,
+  ...props
+}) => {
+  const { isPhone, isTablet, isDesktop, width } = useResponsive()
+
+  // Determine which responsive style to apply
+  let responsiveStyle: ViewStyle = {}
+  if (isPhone && phone) {
+    responsiveStyle = phone as ViewStyle
+  } else if (isTablet && tablet) {
+    responsiveStyle = tablet as ViewStyle
+  } else if (isDesktop && desktop) {
+    responsiveStyle = desktop as ViewStyle
+  }
+
+  // Create clean style object without the responsive props
+  const { phone: _, tablet: __, desktop: ___, ...cleanProps } = props as Record<string, unknown>
+  
+  return (
+    <View style={[cleanProps as ViewStyle, responsiveStyle, style]}>
+      {children}
+    </View>
+  )
+}
+
+// ResponsivePadding - Quick responsive padding component
+interface ResponsivePaddingProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  horizontal?: boolean
+  vertical?: boolean
+  all?: boolean
+}
+
+export const ResponsivePadding: React.FC<ResponsivePaddingProps> = ({
+  children,
+  style,
+  horizontal,
+  vertical,
+  all,
+}) => {
+  const spacing = useSpacing()
+  const { isPhone, isTablet, isDesktop } = useResponsive()
+
+  const paddingValue = isPhone ? spacing.sm : isTablet ? spacing.md : spacing.lg
+
+  const paddingStyle: ViewStyle = {
+    ...(all && { padding: paddingValue }),
+    ...(horizontal && { paddingHorizontal: paddingValue }),
+    ...(vertical && { paddingVertical: paddingValue }),
+  }
+
+  return <View style={[paddingStyle, style]}>{children}</View>
+}
+
+// ResponsiveMargin - Quick responsive margin component
+interface ResponsiveMarginProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  horizontal?: boolean
+  vertical?: boolean
+  all?: boolean
+}
+
+export const ResponsiveMargin: React.FC<ResponsiveMarginProps> = ({
+  children,
+  style,
+  horizontal,
+  vertical,
+  all,
+}) => {
+  const spacing = useSpacing()
+  const { isPhone, isTablet, isDesktop } = useResponsive()
+
+  const marginValue = isPhone ? spacing.sm : isTablet ? spacing.md : spacing.lg
+
+  const marginStyle: ViewStyle = {
+    ...(all && { margin: marginValue }),
+    ...(horizontal && { marginHorizontal: marginValue }),
+    ...(vertical && { marginVertical: marginValue }),
+  }
+
+  return <View style={[marginStyle, style]}>{children}</View>
+}
+
+// ScreenContainer - Main container for screens
+interface ScreenContainerProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  padded?: boolean
+  scrollable?: boolean
+}
+
+export const ScreenContainer: React.FC<ScreenContainerProps> = ({
+  children,
+  style,
+  padded = true,
+}) => {
+  const spacing = useSpacing()
+  const { isPhone, isTablet, isDesktop } = useResponsive()
+
+  const containerStyle: ViewStyle = {
+    flex: 1,
+    backgroundColor: "#0A0A0A",
+    ...(padded && {
+      paddingHorizontal: spacing.containerPadding as number,
+    }),
+  }
+
+  return <View style={[containerStyle, style]}>{children}</View>
+}
+
+// CenteredContainer - Center content in container
+interface CenteredContainerProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+}
+
+export const CenteredContainer: React.FC<CenteredContainerProps> = ({
+  children,
+  style,
+}) => {
+  const spacing = useSpacing()
+  const { isPhone, isTablet, isDesktop } = useResponsive()
+
+  const containerStyle: ViewStyle = {
+    flex: 1,
+    backgroundColor: "#0A0A0A",
+    paddingHorizontal: spacing.xl as number,
+    justifyContent: "center",
+    alignItems: "center",
+  }
+
+  return <View style={[containerStyle, style]}>{children}</View>
+}
+
+// Row - Quick row layout
+interface RowProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  justifyContent?: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly"
+  alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline"
+  gap?: number
+}
+
+export const Row: React.FC<RowProps> = ({
+  children,
+  style,
+  justifyContent,
+  alignItems,
+  gap,
+}) => {
+  const gapValue = useGap()
+
+  const rowStyle: ViewStyle = {
+    flexDirection: "row",
+    ...(justifyContent && { justifyContent }),
+    ...(alignItems && { alignItems }),
+    ...(gap && { gap: gapValue }),
+  }
+
+  return <View style={[rowStyle, style]}>{children}</View>
+}
+
+// Column - Quick column layout
+interface ColumnProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  justifyContent?: "flex-start" | "flex-end" | "center" | "space-between" | "space-around" | "space-evenly"
+  alignItems?: "flex-start" | "flex-end" | "center" | "stretch" | "baseline"
+  gap?: number
+}
+
+export const Column: React.FC<ColumnProps> = ({
+  children,
+  style,
+  justifyContent,
+  alignItems,
+  gap,
+}) => {
+  const gapValue = useGap()
+
+  const columnStyle: ViewStyle = {
+    flexDirection: "column",
+    ...(justifyContent && { justifyContent }),
+    ...(alignItems && { alignItems }),
+    ...(gap && { gap: gapValue }),
+  }
+
+  return <View style={[columnStyle, style]}>{children}</View>
+}
+
+// Card - Responsive card component
+interface CardProps {
+  children?: React.ReactNode
+  style?: ViewStyle
+  elevated?: boolean
+}
+
+export const Card: React.FC<CardProps> = ({
+  children,
+  style,
+  elevated = true,
+}) => {
+  const { isPhone, isTablet, isDesktop } = useResponsive()
+
+  const borderRadius = isPhone ? 16 : isTablet ? 20 : 24
+
+  const cardStyle: ViewStyle = {
+    backgroundColor: "#1A1A2E",
+    borderRadius,
+    overflow: "hidden",
+    ...(elevated && {
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.3,
+      shadowRadius: 16,
+      elevation: 12,
+    }),
+  }
+
+  return <View style={[cardStyle, style]}>{children}</View>
+}
+
+// Divider - Horizontal divider
+interface DividerProps {
+  style?: ViewStyle
+  spacing?: "none" | "small" | "medium" | "large"
+}
+
+export const Divider: React.FC<DividerProps> = ({
+  style,
+  spacing = "medium",
+}) => {
+  const spacingValue = {
+    none: 0,
+    small: 8,
+    medium: 16,
+    large: 24,
+  }[spacing]
+
   return (
     <View
-      style={{
-        height: 1,
-        backgroundColor: colors.border,
-        marginVertical: marginVertical,
-      }}
+      style={[
+        {
+          height: 1,
+          backgroundColor: "#333",
+          marginVertical: spacingValue,
+        },
+        style,
+      ]}
     />
   )
 }
 
-// Section header with optional "See All" button
-interface SectionHeaderProps {
-  title: string
-  subtitle?: string
-  onSeeAll?: () => void
+// Spacer - Empty space component
+interface SpacerProps {
+  size?: "xs" | "sm" | "md" | "lg" | "xl" | "xxl"
+  horizontal?: boolean
 }
 
-export const SectionHeader: React.FC<SectionHeaderProps> = ({
-  title,
-  subtitle,
-  onSeeAll,
+export const Spacer: React.FC<SpacerProps> = ({
+  size = "md",
+  horizontal = false,
 }) => {
-  const { width } = useWindowDimensions()
-  const isTablet = width >= BREAKPOINTS.md
-  
+  const spacing = useSpacing()
+  const sizeValue = (spacing[size as keyof typeof spacing] || 16) as number
+
+  const spacerStyle: ViewStyle = horizontal
+    ? { width: sizeValue }
+    : { height: sizeValue }
+
+  return <View style={spacerStyle} />
+}
+
+// TouchableOverlay - Touchable area with minimum touch target
+interface TouchableOverlayProps {
+  children?: React.ReactNode
+  onPress?: () => void
+  style?: ViewStyle
+  disabled?: boolean
+}
+
+export const TouchableOverlay: React.FC<TouchableOverlayProps> = ({
+  children,
+  onPress,
+  style,
+  disabled = false,
+}) => {
+  const touchTarget = useTouchTarget()
+
   return (
-    <View style={styles.sectionHeader}>
-      <View style={styles.sectionHeaderText}>
-        <Text
-          style={[
-            styles.sectionTitle,
-            { fontSize: isTablet ? 24 : 20 },
-          ]}
-        >
-          {title}
-        </Text>
-        {subtitle && (
-          <Text style={[styles.sectionSubtitle, { fontSize: isTablet ? 14 : 12 }]}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {onSeeAll && (
-        <Text onPress={onSeeAll} style={styles.seeAllButton}>
-          See All
-        </Text>
-      )}
+    <View
+      onTouchEnd={disabled ? undefined : onPress}
+      style={[
+        {
+          minWidth: touchTarget,
+          minHeight: touchTarget,
+          justifyContent: "center",
+          alignItems: "center",
+        },
+        style,
+      ]}
+    >
+      {children}
     </View>
   )
 }
 
-// Responsive image placeholder with aspect ratio
-interface ImagePlaceholderProps {
-  aspectRatio?: number
+// SafeArea - Safe area handling for notched devices
+interface SafeAreaProps {
   children?: React.ReactNode
+  style?: ViewStyle
+  top?: boolean
+  bottom?: boolean
 }
 
-export const ImagePlaceholder: React.FC<ImagePlaceholderProps> = ({
-  aspectRatio = 16 / 9,
+export const SafeArea: React.FC<SafeAreaProps> = ({
+  children,
+  style,
+  top = true,
+  bottom = true,
 }) => {
-  const { width } = useWindowDimensions()
-  
-  const isTablet = width >= BREAKPOINTS.md
-  const isDesktop = width >= BREAKPOINTS.lg
-  
-  const padding = isDesktop ? spacing.lg : isTablet ? spacing.md : spacing.md
-  const containerWidth = width - padding * 2
-  const height = containerWidth / aspectRatio
-  
-  return (
-    <View style={[styles.imagePlaceholder, { height: isDesktop ? height * 1.2 : height }]} />
-  )
-}
+  const { isPhone } = useResponsive()
 
-const styles = StyleSheet.create({
-  container: {
-    alignSelf: "center",
-  },
-  centerContent: {
-    alignItems: "center",
-  },
-  card: {
-    backgroundColor: colors.backgroundLight,
-    borderRadius: borderRadius.xl,
-    overflow: "hidden",
-  },
-  elevated: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  outlined: {
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  button: {
-    color: colors.text,
-    textAlign: "center",
-    borderRadius: borderRadius.md,
-    overflow: "hidden",
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  fullWidth: {
-    width: "100%",
-  },
-  grid: {
-    flexDirection: "row",
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: spacing.md,
-  },
-  sectionHeaderText: {
-    flex: 1,
-  },
-  sectionTitle: {
-    fontWeight: "700",
-    color: colors.text,
-  },
-  sectionSubtitle: {
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  seeAllButton: {
-    color: colors.primary,
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  imagePlaceholder: {
-    backgroundColor: colors.backgroundLighter,
-    width: "100%",
-  },
-})
+  const safeAreaStyle: ViewStyle = {
+    ...(top && { paddingTop: Platform.OS === "ios" ? (isPhone ? 44 : 50) : isPhone ? 24 : 30 }),
+    ...(bottom && { paddingBottom: Platform.OS === "ios" ? (isPhone ? 34 : 40) : isPhone ? 16 : 20 }),
+  }
+
+  return <View style={[safeAreaStyle, style]}>{children}</View>
+}
 
 export default {
-  ResponsiveContainer,
-  ResponsiveCard,
-  ResponsiveText,
-  ResponsiveButton,
-  ResponsiveGrid,
-  Spacer,
+  ResponsiveView,
+  ResponsivePadding,
+  ResponsiveMargin,
+  ScreenContainer,
+  CenteredContainer,
+  Row,
+  Column,
+  Card,
   Divider,
-  SectionHeader,
-  ImagePlaceholder,
+  Spacer,
+  TouchableOverlay,
+  SafeArea,
 }

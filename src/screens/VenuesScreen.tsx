@@ -1,8 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useRef, useCallback } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl } from "react-native";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
@@ -10,6 +10,7 @@ import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
+import { useResponsive, BREAKPOINTS } from "../utils/responsive";
 
 interface VenuesScreenProps {
   navigation: any;
@@ -18,6 +19,43 @@ interface VenuesScreenProps {
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
+
+  // Responsive design values
+  const { width, isPhone, isTablet, isDesktop } = useResponsive();
+  
+  // Calculate responsive values
+  const responsiveValues = useMemo(() => {
+    const isPortrait = Dimensions.get('window').height > Dimensions.get('window').width;
+    
+    // Grid columns for venues (like Resident Advisor, Dice, Songkick)
+    let venueColumns = 1;
+    if (width >= BREAKPOINTS.xxl) venueColumns = 4;
+    else if (width >= BREAKPOINTS.xl) venueColumns = 4;
+    else if (width >= BREAKPOINTS.lg) venueColumns = 3;
+    else if (width >= BREAKPOINTS.md) venueColumns = isPortrait ? 2 : 3;
+    else if (width >= BREAKPOINTS.sm) venueColumns = 2;
+    else venueColumns = 1;
+    
+    // Spacing values
+    const paddingHorizontal = isPhone ? 16 : isTablet ? 24 : isDesktop ? 32 : 40;
+    const cardMargin = isPhone ? 12 : isTablet ? 16 : 20;
+    const cardBorderRadius = isPhone ? 14 : isTablet ? 18 : 22;
+    const cardImageHeight = isPhone ? 180 : isTablet ? 220 : 280;
+    const headerPadding = isPhone ? 16 : isTablet ? 20 : 24;
+    const titleFontSize = isPhone ? 20 : isTablet ? 24 : 28;
+    const tabFontSize = isPhone ? 12 : isTablet ? 14 : 15;
+    
+    return {
+      venueColumns,
+      paddingHorizontal,
+      cardMargin,
+      cardBorderRadius,
+      cardImageHeight,
+      headerPadding,
+      titleFontSize,
+      tabFontSize,
+    };
+  }, [width, isPhone, isTablet, isDesktop]);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -448,6 +486,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         description={venueSeo.description}
         keywords={venueSeo.keywords}
         type={venueSeo.type}
+        url="https://yovibe.net/venues"
       />
       {/* Screen reader only heading for SEO */}
       <Text style={styles.srOnly} accessibilityRole="header">

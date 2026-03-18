@@ -31,9 +31,15 @@ Disallow: /login
 Disallow: /signup
 Disallow: /auth/
 
-# Disallow internal app routes
+# Disallow internal app routes - block hash-based routing but allow clean URLs
 Disallow: /#/
-Disallow: /?/
+
+# Block tracking parameters but allow essential parameters
+Disallow: /?utm_source=
+Disallow: /?utm_medium=
+Disallow: /?utm_campaign=
+Disallow: /?ref=
+Disallow: /?fbclid=
 
 # Crawl delay (be nice to server during peak times)
 Crawl-delay: 1

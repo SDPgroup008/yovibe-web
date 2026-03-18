@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   Platform,
   TextInput,
   RefreshControl,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -23,9 +24,52 @@ import type { Event } from "../models/Event";
 import type { EventsScreenProps } from "../navigation/types";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 
+// Responsive design imports
+import { useResponsive, BREAKPOINTS } from "../utils/responsive";
+
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
+
+  // Responsive design values
+  const { width, isPhone, isTablet, isDesktop } = useResponsive();
+  
+  // Calculate responsive values
+  const responsiveValues = useMemo(() => {
+    const isPortrait = Dimensions.get('window').height > Dimensions.get('window').width;
+    
+    // Grid columns based on screen width (like Resident Advisor, Dice, Songkick)
+    let eventColumns = 1;
+    if (width >= BREAKPOINTS.xxl) eventColumns = 4;
+    else if (width >= BREAKPOINTS.xl) eventColumns = 3;
+    else if (width >= BREAKPOINTS.lg) eventColumns = 2;
+    else if (width >= BREAKPOINTS.md && !isPortrait) eventColumns = 2;
+    else eventColumns = 1;
+    
+    // Spacing values
+    const paddingHorizontal = isPhone ? 16 : isTablet ? 24 : isDesktop ? 32 : 40;
+    const paddingVertical = isPhone ? 12 : isTablet ? 16 : 20;
+    const cardMargin = isPhone ? 16 : isTablet ? 20 : 24;
+    const cardBorderRadius = isPhone ? 16 : isTablet ? 20 : 24;
+    const cardImageHeight = isPhone ? 200 : isTablet ? 260 : 320;
+    const headerPaddingTop = Platform.OS === "ios" ? (isPhone ? 50 : 60) : (isPhone ? 30 : 40);
+    const headerFontSize = isPhone ? 24 : isTablet ? 28 : 32;
+    const bodyFontSize = isPhone ? 14 : isTablet ? 16 : 18;
+    const titleFontSize = isPhone ? 18 : isTablet ? 20 : 22;
+    
+    return {
+      eventColumns,
+      paddingHorizontal,
+      paddingVertical,
+      cardMargin,
+      cardBorderRadius,
+      cardImageHeight,
+      headerPaddingTop,
+      headerFontSize,
+      bodyFontSize,
+      titleFontSize,
+    };
+  }, [width, isPhone, isTablet, isDesktop]);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -406,6 +450,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         description={eventSeo.description}
         keywords={eventSeo.keywords}
         type={eventSeo.type}
+        url="https://yovibe.net/events"
       />
       {/* Screen reader only heading for SEO */}
       <Text style={styles.srOnly} accessibilityRole="header">
@@ -520,11 +565,11 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: 20,
-    paddingTop: Platform.OS === "ios" ? 60 : 30,
+    paddingTop: Platform.OS === "ios" ? 50 : 30,
     backgroundColor: "#1A1A2E",
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "800",
     color: "#FFFFFF",
     textShadowColor: "rgba(0, 212, 255, 0.3)",

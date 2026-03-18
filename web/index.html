@@ -182,6 +182,88 @@
     }
   }
   </script>
+
+  <!-- LocalBusiness Schema for Uganda/Kampala -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "LocalBusiness",
+    "@id": "https://yovibe.net#organization",
+    "name": "YoVibe",
+    "alternateName": "Yo Vibe",
+    "description": "Uganda's premier nightlife events and venue discovery platform. Find parties, concerts, DJ nights, clubs, bars, and buy tickets.",
+    "url": "https://yovibe.net",
+    "telephone": "+256-700-000000",
+    "email": "support@yovibe.net",
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "Kampala Road",
+      "addressLocality": "Kampala",
+      "addressRegion": "Central",
+      "addressCountry": "UG"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": "0.347596",
+      "longitude": "32.582520"
+    },
+    "openingHours": ["Mo-Su 00:00-23:59"],
+    "priceRange": "$",
+    "areaServed": {
+      "@type": "GeoCircle",
+      "geoMidpoint": {
+        "@type": "GeoCoordinates",
+        "latitude": "0.347596",
+        "longitude": "32.582520"
+      },
+      "geoRadius": "100000"
+    },
+    "serviceType": ["Event Discovery", "Nightlife Guide", "Ticket Booking", "Venue Discovery"],
+    "sameAs": [
+      "https://facebook.com/yovibe",
+      "https://instagram.com/yovibe",
+      "https://twitter.com/yovibe",
+      "https://tiktok.com/@yovibe"
+    ]
+  }
+  </script>
+
+  <!-- FAQPage Schema for SEO -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [{
+      "@type": "Question",
+      "name": "What is YoVibe?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "YoVibe is Uganda's premier nightlife events and venue discovery platform. Find parties, concerts, DJ nights, clubs, bars, and buy tickets all in one place."
+      }
+    }, {
+      "@type": "Question",
+      "name": "How do I buy tickets on YoVibe?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Browse events, select the event you want to attend, and click Buy Tickets. You can pay securely through mobile money or credit card."
+      }
+    }, {
+      "@type": "Question",
+      "name": "What cities does YoVibe cover?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "YoVibe covers events and venues across Uganda including Kampala, Entebbe, Jinja, and more."
+      }
+    }, {
+      "@type": "Question",
+      "name": "Can I list my event on YoVibe?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes! Event organizers can list their events on YoVibe. Sign up and use the Add Event feature to list your event."
+      }
+    }]
+  }
+  </script>
   
   <style>
     /* CSS custom properties for consistent theming */
@@ -189,6 +271,24 @@
       --bg-color: #121212;
       --text-color: #ffffff;
       --accent-color: #2196F3;
+      --primary: #00D4FF;
+      --secondary: #8B5CF6;
+      --surface: #1A1A2E;
+      --glass: rgba(18, 18, 18, 0.8);
+      
+      /* Responsive breakpoints */
+      --breakpoint-sm: 480px;
+      --breakpoint-md: 768px;
+      --breakpoint-lg: 1024px;
+      --breakpoint-xl: 1280px;
+      --breakpoint-xxl: 1536px;
+      
+      /* Spacing */
+      --spacing-xs: 4px;
+      --spacing-sm: 8px;
+      --spacing-md: 16px;
+      --spacing-lg: 24px;
+      --spacing-xl: 32px;
     }
     
     /* Reset and base styles */
@@ -197,15 +297,40 @@
       height: 100%;
       margin: 0;
       padding: 0;
-      overflow: hidden; /* Prevent scroll bounce on iOS */
+      overflow-x: hidden;
       -webkit-overflow-scrolling: touch;
+      background-color: var(--bg-color);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    
+    /* Responsive base typography */
+    @media (max-width: 768px) {
+      html {
+        font-size: 14px;
+      }
+    }
+    
+    @media (min-width: 769px) and (max-width: 1024px) {
+      html {
+        font-size: 15px;
+      }
+    }
+    
+    @media (min-width: 1025px) {
+      html {
+        font-size: 16px;
+      }
+    }
+    
+    /* Smooth scrolling */
+    html {
+      scroll-behavior: smooth;
     }
     
     #root {
       width: 100%;
       height: 100%;
       background-color: var(--bg-color);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     }
     
     /* Loading screen styles */
