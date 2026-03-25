@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef, useCallback } from "react"
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl } from "react-native"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "@react-navigation/native"
 import FirebaseService from "../services/FirebaseService"
@@ -13,7 +13,6 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VenueDetailScreenProps } from "../navigation/types"
 import VibeAnalysisService from "../services/VibeAnalysisService"
-
 const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation }) => {
   const { venueId } = route.params
   const { user } = useAuth()
@@ -362,6 +361,22 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   )
 }
 
+const { width, height } = Dimensions.get('window');
+
+// Responsive breakpoints
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] VenueDetailScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -375,166 +390,175 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 16, 18),
   },
   headerImage: {
     width: "100%",
-    height: 200,
+    height: responsiveSize(180, 240, 300),
   },
   contentContainer: {
-    padding: 16,
+    padding: responsiveSize(12, 16, 24),
+    maxWidth: isLargeScreen ? 900 : "100%",
+    alignSelf: "center",
+    width: "100%",
   },
   venueName: {
-    fontSize: 28,
+    fontSize: responsiveSize(22, 26, 32),
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: responsiveSize(4, 6, 8),
   },
   venueLocation: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     color: "#BBBBBB",
-    marginBottom: 12,
+    marginBottom: responsiveSize(10, 12, 16),
   },
   categoriesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 14, 18),
   },
   categoryTag: {
     backgroundColor: "#2196F3",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: responsiveSize(6, 8, 12),
+    paddingVertical: responsiveSize(3, 4, 6),
+    borderRadius: responsiveSize(3, 4, 6),
+    marginRight: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(6, 8, 10),
   },
   categoryText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: responsiveSize(10, 12, 14),
   },
   actionButtonsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginVertical: 16,
+    marginVertical: responsiveSize(12, 16, 20),
+    gap: responsiveSize(6, 8, 10),
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#2196F3",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: responsiveSize(10, 12, 16),
+    paddingVertical: responsiveSize(6, 8, 12),
+    borderRadius: responsiveSize(4, 6, 8),
+    marginRight: 0,
+    marginBottom: 0,
+    flex: isTablet ? 0.48 : undefined,
   },
   deleteButton: {
     backgroundColor: "#FF3B30",
   },
   actionButtonText: {
     color: "#FFFFFF",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
+    fontSize: responsiveSize(12, 14, 16),
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: responsiveSize(16, 20, 24),
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: responsiveSize(12, 16, 20),
+    marginBottom: responsiveSize(6, 8, 12),
   },
   description: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#DDDDDD",
-    lineHeight: 24,
+    lineHeight: responsiveSize(20, 22, 26),
   },
   imagesContainer: {
     flexDirection: "row",
-    marginVertical: 12,
+    marginVertical: responsiveSize(8, 12, 16),
   },
   todayImage: {
-    width: 150,
-    height: 150,
-    borderRadius: 8,
-    marginRight: 12,
+    width: responsiveSize(120, 150, 180),
+    height: responsiveSize(120, 150, 180),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginRight: responsiveSize(8, 10, 12),
   },
   programContainer: {
-    marginTop: 8,
+    marginTop: responsiveSize(6, 8, 12),
   },
   programItem: {
-    flexDirection: "row",
-    paddingVertical: 8,
+    flexDirection: "row" as const,
+    paddingVertical: responsiveSize(6, 8, 12),
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
   programDay: {
-    width: 100,
-    fontSize: 16,
+    width: responsiveSize(80, 100, 120),
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
     color: "#FFFFFF",
   },
   programDescription: {
     flex: 1,
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     color: "#DDDDDD",
   },
   eventCard: {
     flexDirection: "row",
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
+    borderRadius: responsiveSize(6, 8, 12),
     overflow: "hidden",
-    marginBottom: 12,
+    marginBottom: responsiveSize(10, 12, 16),
   },
   eventImage: {
-    width: 80,
-    height: 80,
+    width: responsiveSize(60, 80, 100),
+    height: responsiveSize(60, 80, 100),
   },
   eventInfo: {
     flex: 1,
-    padding: 12,
+    padding: responsiveSize(8, 10, 12),
   },
   eventName: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
     color: "#FFFFFF",
   },
   eventDate: {
-    fontSize: 14,
+    fontSize: responsiveSize(12, 13, 14),
     color: "#BBBBBB",
-    marginTop: 4,
+    marginTop: responsiveSize(2, 3, 4),
   },
   eventArtists: {
-    fontSize: 14,
+    fontSize: responsiveSize(12, 13, 14),
     color: "#2196F3",
-    marginTop: 4,
+    marginTop: responsiveSize(2, 3, 4),
   },
   directionsButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2196F3",
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 24,
+    paddingVertical: responsiveSize(10, 12, 16),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginTop: responsiveSize(16, 20, 28),
+    marginBottom: responsiveSize(16, 20, 28),
   },
   directionsButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
   },
   vibeSection: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
-    marginVertical: 16,
+    borderRadius: responsiveSize(10, 12, 16),
+    padding: responsiveSize(12, 14, 18),
+    marginVertical: responsiveSize(12, 14, 18),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
   },
   vibeSectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 12),
   },
   vibeSectionTitle: {
-    fontSize: 18,
+    fontSize: responsiveSize(16, 18, 20),
     fontWeight: "bold",
     color: "#FFFFFF",
   },
@@ -543,18 +567,18 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
   },
   vibeRatingText: {
-    fontSize: 24,
+    fontSize: responsiveSize(20, 24, 28),
     fontWeight: "bold",
   },
   vibeRatingLabel: {
-    fontSize: 16,
+    fontSize: responsiveSize(12, 14, 16),
     color: "#666666",
     marginLeft: 2,
   },
   vibeDescription: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     color: "#FFFFFF",
-    marginBottom: 12,
+    marginBottom: responsiveSize(10, 12, 16),
     textAlign: "center",
   },
   todaysVibeButton: {
@@ -562,14 +586,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2196F3",
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: responsiveSize(10, 12, 16),
+    borderRadius: responsiveSize(6, 8, 12),
   },
   todaysVibeButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
   },
 })
 

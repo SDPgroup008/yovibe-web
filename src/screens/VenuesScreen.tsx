@@ -10,52 +10,39 @@ import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
-import { useResponsive, BREAKPOINTS } from "../utils/responsive";
+
+// Responsive design hooks
+import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
 
 interface VenuesScreenProps {
   navigation: any;
 }
 
+// Static responsive function for StyleSheet - uses current dimensions
+const responsiveSize = (mobile: number, tablet: number, desktop: number): number => {
+  const { width } = Dimensions.get('window');
+  if (width >= BREAKPOINTS.LARGE_TABLET) return desktop;
+  if (width >= BREAKPOINTS.TABLET) return tablet;
+  return mobile;
+};
+
 const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
 
-  // Responsive design values
-  const { width, isPhone, isTablet, isDesktop } = useResponsive();
-  
-  // Calculate responsive values
-  const responsiveValues = useMemo(() => {
-    const isPortrait = Dimensions.get('window').height > Dimensions.get('window').width;
-    
-    // Grid columns for venues (like Resident Advisor, Dice, Songkick)
-    let venueColumns = 1;
-    if (width >= BREAKPOINTS.xxl) venueColumns = 4;
-    else if (width >= BREAKPOINTS.xl) venueColumns = 4;
-    else if (width >= BREAKPOINTS.lg) venueColumns = 3;
-    else if (width >= BREAKPOINTS.md) venueColumns = isPortrait ? 2 : 3;
-    else if (width >= BREAKPOINTS.sm) venueColumns = 2;
-    else venueColumns = 1;
-    
-    // Spacing values
-    const paddingHorizontal = isPhone ? 16 : isTablet ? 24 : isDesktop ? 32 : 40;
-    const cardMargin = isPhone ? 12 : isTablet ? 16 : 20;
-    const cardBorderRadius = isPhone ? 14 : isTablet ? 18 : 22;
-    const cardImageHeight = isPhone ? 180 : isTablet ? 220 : 280;
-    const headerPadding = isPhone ? 16 : isTablet ? 20 : 24;
-    const titleFontSize = isPhone ? 20 : isTablet ? 24 : 28;
-    const tabFontSize = isPhone ? 12 : isTablet ? 14 : 15;
-    
-    return {
-      venueColumns,
-      paddingHorizontal,
-      cardMargin,
-      cardBorderRadius,
-      cardImageHeight,
-      headerPadding,
-      titleFontSize,
-      tabFontSize,
-    };
-  }, [width, isPhone, isTablet, isDesktop]);
+  // Get responsive values using hooks
+  const gridColumns = useGridColumns();
+  const layout = useLayoutDimensions();
+  const typography = useTypography();
+  const spacing = useSpacing();
+  const deviceType = useDeviceType();
+
+  // Memoize card dimensions to prevent recalculation on every render
+  const { cardWidth, cardHeight } = useMemo(() => {
+    const width = (layout.width - (spacing.md * (gridColumns + 1))) / gridColumns;
+    const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
+    return { cardWidth: width, cardHeight: height };
+  }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -329,21 +316,19 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     return sorted;
   };
 
-  useEffect(() => {
-    const filtered = getFilteredVenues();
-    setCurrentPage(1);
-    const toDisplay = filtered.slice(0, ITEMS_PER_PAGE);
-    // console.log("\n📱 DISPLAY UPDATE: Showing first", toDisplay.length, "venues out of", filtered.length, "filtered venues")
-    // toDisplay.forEach((venue, idx) => {
-    //   console.log(`  ${idx + 1}. "${venue.name}" - Categories: [${venue.categories?.join(", ") || "None"}]`)
-    // })
-    setDisplayedVenues(toDisplay);
-  }, [venues, activeTab, venueVibeRatings]);
+  // Memoize filtered and sorted venues to prevent recalculation on every render
+  // Only recalculate when venues or activeTab changes, NOT when venueVibeRatings changes
+  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab]);
 
-  const loadMoreVenues = async () => {
-    const filtered = getFilteredVenues();
-    
-    // console.log(`\n📜 SCROLL LOAD MORE: User scrolled - displayed: ${displayedVenues.length}, filtered available: ${filtered.length}, hasMore: ${hasMore}`);
+  useEffect(() => {
+    setCurrentPage(1);
+    const toDisplay = filteredVenues.slice(0, ITEMS_PER_PAGE);
+    setDisplayedVenues(toDisplay);
+  }, [filteredVenues]);
+
+  // Memoize loadMoreVenues to prevent recreation on every render
+  const loadMoreVenues = useCallback(async () => {
+    const filtered = filteredVenues;
     
     // First check if we need to load more from existing filtered venues
     if (displayedVenues.length < filtered.length) {
@@ -412,7 +397,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       }
       return;
     }
-  };
+  }, [filteredVenues, displayedVenues, currentPage, hasMore, lastDoc]);
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
@@ -420,9 +405,18 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     await loadVenues(true, true);
   }, []);
 
-  const renderVenueCard = ({ item }: { item: Venue }) => (
-    <TouchableOpacity style={styles.venueCard} onPress={() => handleVenueSelect(item.id)}>
-      <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
+  // Memoize renderVenueCard to prevent recreation on every render
+  const renderVenueCard = useCallback(({ item }: { item: Venue }) => {
+    return (
+    <TouchableOpacity 
+      style={[styles.venueCard, { width: cardWidth, paddingHorizontal: spacing.md }]}
+      onPress={() => handleVenueSelect(item.id)}
+    >
+      <ImageBackground 
+        source={{ uri: item.backgroundImageUrl }} 
+        style={[styles.venueImage, { width: cardWidth, height: cardHeight }]}
+        resizeMode="cover"
+      >
         <View style={styles.venueGradient}>
           <Text style={styles.venueName}>{item.name}</Text>
           <Text style={styles.venueInfo}>
@@ -444,6 +438,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       </ImageBackground>
     </TouchableOpacity>
   );
+  }, [cardWidth, cardHeight, spacing.md, venueVibeRatings]);
 
   /**
    * handleAddVenue
@@ -479,7 +474,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   };
 
   return (
-    <View style={[styles.container, activeTab === "recreation" && styles.recreationContainer]}>
+    <View style={[
+      styles.container, 
+      activeTab === "recreation" && styles.recreationContainer
+    ]}>
       {/* SEO Metadata for Venues page */}
       <SEOMetadata
         title={venueSeo.title}
@@ -535,7 +533,16 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           data={displayedVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}
-          contentContainerStyle={styles.venuesList}
+          numColumns={gridColumns}
+          getItemLayout={(_: any, index: number) => ({
+            length: cardHeight + spacing.md * 2,
+            offset: (cardHeight + spacing.md * 2) * Math.floor(index / gridColumns),
+            index,
+          })}
+          contentContainerStyle={[
+            styles.venuesList,
+            { paddingHorizontal: spacing.md, paddingRight: spacing.md }
+          ]}
           onEndReached={loadMoreVenues}
           onEndReachedThreshold={0.5}
           refreshControl={
@@ -546,9 +553,11 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
               tintColor="#2196F3"
             />
           }
-          initialNumToRender={5}
-          maxToRenderPerBatch={10}
-          windowSize={10}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={50}
         />
       )}
 
@@ -559,7 +568,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           - Hidden for authenticated 'user' type
       */}
       {(!user || user.userType === "club_owner" || user.userType === "admin") && (
-        <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddVenue}>
+        <TouchableOpacity 
+          style={styles.floatingAddButton}
+          onPress={handleAddVenue}
+        >
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>
       )}
@@ -587,29 +599,30 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
   },
   header: {
-    padding: 16,
+    padding: responsiveSize(12, 20, 24),
     paddingBottom: 0,
   },
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "rgba(20, 25, 35, 0.95)",
-    borderRadius: 25,
-    padding: 4,
+    borderRadius: responsiveSize(20, 28, 32),
+    padding: responsiveSize(3, 6, 8),
     borderWidth: 1,
     borderColor: "rgba(0, 255, 255, 0.2)",
     shadowColor: "#00FFFF",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
+    shadowRadius: responsiveSize(6, 8, 12),
     elevation: 4,
   },
   tab: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    flex: 1,
+    paddingVertical: responsiveSize(8, 12, 14),
+    paddingHorizontal: responsiveSize(8, 14, 18),
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: 18,
-    marginHorizontal: 3,
+    borderRadius: responsiveSize(14, 20, 24),
+    marginHorizontal: responsiveSize(2, 3, 4),
     borderWidth: 1,
     borderColor: "transparent",
     backgroundColor: "transparent",
@@ -619,10 +632,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 210, 255, 0.6)",
   },
   tabText: {
-    fontSize: 13,
+    fontSize: responsiveSize(10, 12, 13),
     color: "rgba(255, 255, 255, 0.5)",
     fontWeight: "500",
-    letterSpacing: 0.8,
+    letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   activeTabText: {
@@ -636,7 +649,8 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#FFFFFF",
-    marginTop: 16,
+    marginTop: responsiveSize(12, 16, 20),
+    fontSize: responsiveSize(14, 16, 18),
   },
   recreationText: {
     color: "#333333",
@@ -645,28 +659,37 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    paddingHorizontal: responsiveSize(16, 20, 24),
   },
   emptyText: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: responsiveSize(16, 20, 24),
     fontWeight: "bold",
+    textAlign: "center",
   },
   emptySubtext: {
     color: "#999999",
-    fontSize: 14,
-    marginTop: 8,
+    fontSize: responsiveSize(12, 14, 16),
+    marginTop: responsiveSize(6, 8, 12),
+    textAlign: "center",
   },
   recreationSubtext: {
     color: "#666666",
   },
   venuesList: {
-    padding: 16,
+    padding: responsiveSize(12, 16, 20),
+    paddingBottom: responsiveSize(100, 120, 140),
   },
   venueCard: {
-    height: 200,
-    marginBottom: 16,
-    borderRadius: 12,
+    height: responsiveSize(160, 200, 240),
+    marginBottom: responsiveSize(12, 16, 20),
+    borderRadius: responsiveSize(10, 14, 16),
     overflow: "hidden",
+    shadowColor: "rgba(0, 212, 255, 0.3)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: responsiveSize(6, 8, 10),
+    elevation: 6,
   },
   venueImage: {
     flex: 1,
@@ -675,60 +698,61 @@ const styles = StyleSheet.create({
   venueGradient: {
     flex: 1,
     justifyContent: "flex-end",
-    padding: 16,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    padding: responsiveSize(12, 14, 16),
+    backgroundColor: "rgba(0,0,0,0.5)",
   },
   venueName: {
-    fontSize: 24,
+    fontSize: responsiveSize(18, 22, 26),
     fontWeight: "bold",
     color: "white",
+    marginBottom: responsiveSize(2, 4, 6),
   },
   venueInfo: {
-    fontSize: 16,
-    color: "rgba(255,255,255,0.8)",
-    marginTop: 4,
+    fontSize: responsiveSize(12, 14, 16),
+    color: "rgba(255,255,255,0.85)",
+    marginTop: responsiveSize(2, 4, 6),
   },
   vibeRatingContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
+    marginTop: responsiveSize(4, 6, 8),
     flexWrap: "wrap",
   },
   vibeRatingLabel: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.8)",
+    fontSize: responsiveSize(11, 13, 14),
+    color: "rgba(255,255,255,0.85)",
   },
   vibeRatingValue: {
-    fontSize: 14,
+    fontSize: responsiveSize(12, 14, 16),
     fontWeight: "bold",
   },
   vibeRatingDescription: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
+    fontSize: responsiveSize(10, 12, 13),
+    color: "rgba(255,255,255,0.75)",
   },
   floatingAddButton: {
     position: "absolute",
-    bottom: 30, // Moved closer to profile icon
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#000000", // Changed to black
+    bottom: responsiveSize(20, 25, 30),
+    right: responsiveSize(15, 20, 25),
+    width: responsiveSize(48, 56, 64),
+    height: responsiveSize(48, 56, 64),
+    borderRadius: responsiveSize(24, 28, 32),
+    backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#00D4FF", // Glowing effect color
+    shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 12,
+    shadowRadius: responsiveSize(8, 12, 16),
     elevation: 12,
-    // Add glowing border effect
     borderWidth: 2,
     borderColor: "rgba(0, 212, 255, 0.6)",
+    transform: [{ translateY: -responsiveSize(48, 56, 64) }],
   },
   floatingPlus: {
     color: "#FFFFFF",
-    fontSize: 28,
-    lineHeight: 28,
+    fontSize: responsiveSize(24, 28, 32),
+    lineHeight: responsiveSize(24, 28, 32),
     fontWeight: "700",
   },
 })

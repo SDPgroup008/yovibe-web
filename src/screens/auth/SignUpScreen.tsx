@@ -12,10 +12,26 @@ import {
   ScrollView,
   ActivityIndicator,
   ImageBackground,
+  Dimensions,
 } from "react-native"
 import { useAuth } from "../../contexts/AuthContext"
 import type { UserType } from "../../models/User"
 import { Ionicons } from "@expo/vector-icons"
+
+// Responsive breakpoints for signup screen
+const { width } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] SignUpScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function for signup screen
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
 
 interface SignUpScreenProps {
   navigation: any
@@ -208,32 +224,32 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 20,
+    padding: responsiveSize(16, 24, 40),
     justifyContent: "center",
   },
   headerContainer: {
     alignItems: "center",
-    marginBottom: 30,
+    marginBottom: responsiveSize(24, 32, 48),
     position: "relative",
   },
   title: {
-    fontSize: 36,
+    fontSize: responsiveSize(28, 36, 44),
     fontWeight: "bold",
     color: "#FFFFFF",
     textShadowColor: "rgba(0,0,0,0.5)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 10,
-    marginBottom: 5,
+    marginBottom: responsiveSize(4, 6, 8),
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     color: "#BBBBBB",
   },
   adminDotsContainer: {
     flexDirection: "row",
     justifyContent: "center",
     width: 20,
-    marginBottom: 5,
+    marginBottom: responsiveSize(4, 6, 8),
   },
   adminDot: {
     width: 4,
@@ -243,58 +259,65 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   formContainer: {
-    backgroundColor: "rgba(30, 30, 30, 0.8)",
-    borderRadius: 15,
-    padding: 25,
+    backgroundColor: "rgba(30, 30, 30, 0.9)",
+    borderRadius: responsiveSize(12, 16, 20),
+    padding: responsiveSize(20, 24, 32),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: responsiveSize(8, 10, 14),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.1)",
+    maxWidth: isLargeScreen ? 500 : "100%",
+    alignSelf: "center",
+    width: "100%",
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 10,
-    marginBottom: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    borderRadius: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
   inputIcon: {
-    padding: 15,
+    padding: responsiveSize(12, 14, 16),
   },
   input: {
     flex: 1,
-    height: 55,
+    height: responsiveSize(48, 52, 56),
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
   },
   visibilityToggle: {
-    paddingHorizontal: 12,
+    paddingHorizontal: responsiveSize(10, 12, 14),
     justifyContent: "center",
     alignItems: "center",
   },
   accountTypeLabel: {
     color: "#FFFFFF",
-    fontSize: 16,
-    marginBottom: 10,
+    fontSize: responsiveSize(14, 15, 16),
+    marginBottom: responsiveSize(10, 12, 14),
+    fontWeight: "500",
   },
   buttonGroup: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: responsiveSize(16, 20, 24),
+    gap: responsiveSize(8, 10, 12),
   },
   typeButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
+    padding: responsiveSize(10, 12, 14),
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.2)",
-    borderRadius: 10,
-    marginHorizontal: 5,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    borderRadius: responsiveSize(8, 10, 12),
+    marginHorizontal: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
   selectedButton: {
     backgroundColor: "#FF3B30",
@@ -302,8 +325,9 @@ const styles = StyleSheet.create({
   },
   typeButtonText: {
     color: "#BBBBBB",
-    fontSize: 14,
-    marginLeft: 5,
+    fontSize: responsiveSize(12, 13, 14),
+    marginLeft: responsiveSize(4, 6, 8),
+    textAlign: "center",
   },
   selectedButtonText: {
     color: "#FFFFFF",
@@ -312,27 +336,32 @@ const styles = StyleSheet.create({
   button: {
     flexDirection: "row",
     backgroundColor: "#FF3B30",
-    height: 55,
-    borderRadius: 10,
+    height: responsiveSize(48, 52, 56),
+    borderRadius: responsiveSize(8, 10, 12),
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: responsiveSize(8, 10, 14),
+    marginBottom: responsiveSize(16, 20, 24),
+    shadowColor: "#FF3B30",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   buttonText: {
     color: "white",
-    fontSize: 18,
+    fontSize: responsiveSize(15, 16, 17),
     fontWeight: "bold",
   },
   buttonIcon: {
-    marginLeft: 10,
+    marginLeft: responsiveSize(8, 10, 12),
   },
   loginButton: {
     alignItems: "center",
+    paddingVertical: responsiveSize(12, 14, 16),
   },
   loginText: {
     color: "#BBBBBB",
-    fontSize: 16,
+    fontSize: responsiveSize(13, 14, 15),
   },
   loginTextBold: {
     color: "#FFFFFF",

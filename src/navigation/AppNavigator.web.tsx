@@ -1,9 +1,12 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
-import { useEffect } from "react"
-import { useNavigation } from "@react-navigation/native"
-import { View, ActivityIndicator } from "react-native"
+import { useEffect, useState, useCallback } from "react"
+import { useNavigation, useNavigationState } from "@react-navigation/native"
+import { View, ActivityIndicator, Dimensions, Platform, useWindowDimensions, TouchableOpacity, Text, StyleSheet } from "react-native"
+
+// Import responsive hooks
+import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from "../utils/ResponsiveDesign"
 
 // Auth Screens
 import LoginScreen from "../screens/auth/LoginScreen"
@@ -45,6 +48,40 @@ import type {
 
 // Auth helper (soft-auth)
 import { useAuth } from "../contexts/AuthContext"
+
+// Responsive helper for navigation dimensions (hook-based for dynamic updates)
+// Uses memoized hooks to prevent re-renders on every dimension change
+const useResponsiveNav = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const componentSizes = useComponentSizes();
+  const spacing = useSpacing();
+  
+  // Use memoized deviceType values
+  const { isLargeScreen, isTablet } = deviceType;
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (isTablet) return medium;
+    return small;
+  };
+  
+  return {
+    isSmallDevice,
+    isTablet,
+    isLargeScreen,
+    width,
+    tabBarHeight: componentSizes.tabBarHeight,
+    iconSize: componentSizes.iconSize,
+    navWidth: isLargeScreen ? 80 : isTablet ? 70 : 60,
+    spacing,
+    responsiveSize: responsiveSizeFn,
+  };
+};
+
+// Log responsiveness initialization (only once at mount)
+console.log("[v0] Navigation responsive system ready");
 
 //
 // Create the navigators
@@ -129,6 +166,17 @@ const AddVenueScreenProtected = withAuth(AddVenueScreen)
 // Auth Navigator
 //
 export const AuthNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <AuthStack.Navigator
       screenOptions={{
@@ -138,7 +186,9 @@ export const AuthNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
         gestureEnabled: false,
       }}
     >
@@ -152,6 +202,17 @@ export const AuthNavigator = () => {
 // Venues Stack Navigator
 //
 export const VenuesStackNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <VenuesStack.Navigator
       screenOptions={{
@@ -161,7 +222,9 @@ export const VenuesStackNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
       }}
     >
       <VenuesStack.Screen name="VenuesList" component={VenuesScreen} options={{ title: "Venues" }} />
@@ -187,6 +250,17 @@ export const VenuesStackNavigator = () => {
 // Events Stack Navigator
 //
 export const EventsStackNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <EventsStack.Navigator
       screenOptions={{
@@ -196,7 +270,9 @@ export const EventsStackNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
       }}
     >
       <EventsStack.Screen name="EventsList" component={EventsScreenWrapper} options={{ title: "Events" }} />
@@ -217,6 +293,17 @@ export const EventsStackNavigator = () => {
 // Map Stack Navigator
 //
 export const MapStackNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <MapStack.Navigator
       screenOptions={{
@@ -226,7 +313,9 @@ export const MapStackNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
       }}
     >
       <MapStack.Screen name="MapView" component={MapScreenWrapper} options={{ title: "Map" }} />
@@ -245,6 +334,17 @@ export const MapStackNavigator = () => {
 // Calendar Stack Navigator
 //
 export const CalendarStackNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <CalendarStack.Navigator
       screenOptions={{
@@ -254,7 +354,9 @@ export const CalendarStackNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
       }}
     >
       <CalendarStack.Screen name="CalendarView" component={EventCalendarScreen} options={{ title: "Calendar" }} />
@@ -273,6 +375,17 @@ export const CalendarStackNavigator = () => {
 // Profile Stack Navigator
 //
 export const ProfileStackNavigator = () => {
+  const { width } = useWindowDimensions();
+  const deviceType = useDeviceType();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const isLargeScreen = deviceType.isLargeScreen;
+  
+  const responsiveSizeFn = (small: number, medium: number, large: number) => {
+    if (isLargeScreen) return large;
+    if (deviceType.isTablet) return medium;
+    return small;
+  };
+  
   return (
     <ProfileStack.Navigator
       screenOptions={{
@@ -282,7 +395,9 @@ export const ProfileStackNavigator = () => {
         headerTintColor: "#FFFFFF",
         headerTitleStyle: {
           fontWeight: "bold",
+          fontSize: responsiveSizeFn(16, 18, 20),
         },
+        headerBackTitleVisible: !isSmallDevice,
       }}
     >
       <ProfileStack.Screen name="ProfileMain" component={ProfileScreenWrapper} options={{ title: "Profile" }} />
@@ -307,49 +422,526 @@ export const ProfileStackNavigator = () => {
 }
 
 //
-// Main Tab Navigator
+// Custom Tab Bar that switches between bottom (mobile) and left (desktop)
+//
+function CustomTabBar({ state, descriptors, navigation }: any) {
+  const { isLargeScreen, iconSize, spacing, navWidth, tabBarHeight, responsiveSize, isTablet } = useResponsiveNav();
+  
+  const getIconName = (routeName: string, focused: boolean): keyof typeof Ionicons.glyphMap => {
+    switch (routeName) {
+      case "Venues": return focused ? "business" : "business-outline";
+      case "Events": return focused ? "calendar" : "calendar-outline";
+      case "Map": return focused ? "map" : "map-outline";
+      case "Calendar": return focused ? "today" : "today-outline";
+      case "Profile": return focused ? "person" : "person-outline";
+      default: return "ellipse";
+    }
+  };
+  
+  // Desktop: Left navigation bar - use flexbox version
+  if (isLargeScreen) {
+    return (
+      <View style={[styles.leftNavBarFlex, { width: navWidth }]}>
+        <View style={styles.leftNavContent}>
+          {/* Logo at top */}
+          <View style={styles.logoContainer}>
+            <Text style={styles.logoText}>YV</Text>
+          </View>
+          
+          {/* Navigation Items */}
+          {state.routes.map((route: any, index: number) => {
+            const { options } = descriptors[route.key];
+            const label = options.tabBarLabel ?? options.title ?? route.name;
+            const isFocused = state.index === index;
+            
+            const onPress = () => {
+              const event = navigation.emit({
+                type: 'tabPress',
+                target: route.key,
+                canPreventDefault: true,
+              });
+              
+              if (!isFocused && !event.defaultPrevented) {
+                navigation.navigate(route.name);
+              }
+            };
+            
+            return (
+              <TouchableOpacity
+                key={route.key}
+                onPress={onPress}
+                style={[
+                  styles.navItem,
+                  isFocused && styles.navItemActive
+                ]}
+                activeOpacity={0.7}
+              >
+                <Ionicons 
+                  name={getIconName(route.name, isFocused)} 
+                  size={iconSize} 
+                  color={isFocused ? "#2196F3" : "rgba(255, 255, 255, 0.5)"} 
+                />
+                <Text 
+                  style={[
+                    styles.navLabel,
+                    isFocused && styles.navLabelActive
+                  ]}
+                  numberOfLines={1}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  }
+  
+  // Mobile/Tablet: Bottom navigation bar
+  return (
+    <View style={[
+      styles.bottomTabBar, 
+      { 
+        height: tabBarHeight,
+        paddingBottom: Platform.OS === 'ios' ? responsiveSize(4, 6, 8) : 0,
+        paddingTop: responsiveSize(6, 8, 10),
+      }
+    ]}>
+      {state.routes.map((route: any, index: number) => {
+        const { options } = descriptors[route.key];
+        const label = options.tabBarLabel ?? options.title ?? route.name;
+        const isFocused = state.index === index;
+        
+        const onPress = () => {
+          const event = navigation.emit({
+            type: 'tabPress',
+            target: route.key,
+            canPreventDefault: true,
+          });
+          
+          if (!isFocused && !event.defaultPrevented) {
+            navigation.navigate(route.name);
+          }
+        };
+        
+        return (
+          <TouchableOpacity
+            key={route.key}
+            onPress={onPress}
+            style={styles.bottomTabItem}
+            activeOpacity={0.7}
+          >
+            <Ionicons 
+              name={getIconName(route.name, isFocused)} 
+              size={iconSize} 
+              color={isFocused ? "#2196F3" : "rgba(255, 255, 255, 0.5)"} 
+            />
+            <Text 
+              style={[
+                styles.bottomTabLabel,
+                isFocused && styles.bottomTabLabelActive
+              ]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
+//
+// Desktop Left Navigation Content Component
+// Renders the left nav items - connected to navigation via props
+//
+function DesktopLeftNav({ navigation, currentIndex }: { navigation: any, currentIndex: number }) {
+  const { iconSize, navWidth } = useResponsiveNav();
+  
+  const routes = [
+    { name: "Events", label: "Events", icon: "calendar", iconOutline: "calendar-outline" },
+    { name: "Venues", label: "Venues", icon: "business", iconOutline: "business-outline" },
+    { name: "Map", label: "Map", icon: "map", iconOutline: "map-outline" },
+    { name: "Calendar", label: "Calendar", icon: "today", iconOutline: "today-outline" },
+    { name: "Profile", label: "Profile", icon: "person", iconOutline: "person-outline" },
+  ];
+  
+  const handleNavigate = (routeName: string, index: number) => {
+    if (index !== currentIndex) {
+      navigation.navigate(routeName);
+    }
+  };
+  
+  return (
+    <View style={[styles.desktopLeftNavContainer, { width: navWidth }]}>
+      <View style={styles.leftNavContent}>
+        {/* Logo at top */}
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>YV</Text>
+        </View>
+        
+        {/* Navigation Items */}
+        {routes.map((route, index) => {
+          const isFocused = index === currentIndex;
+          return (
+            <TouchableOpacity
+              key={route.name}
+              onPress={() => handleNavigate(route.name, index)}
+              style={[
+                styles.navItem,
+                isFocused && styles.navItemActive
+              ]}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={isFocused ? route.icon as any : route.iconOutline as any} 
+                size={iconSize} 
+                color={isFocused ? "#2196F3" : "rgba(255, 255, 255, 0.5)"} 
+              />
+              <Text 
+                style={[
+                  styles.navLabel,
+                  isFocused && styles.navLabelActive
+                ]}
+                numberOfLines={1}
+              >
+                {route.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+//
+// Main Tab Navigator with Desktop Left Navigation
 //
 export const MainTabNavigator = () => {
+  const { isLargeScreen, isTablet, tabBarHeight, iconSize, spacing, responsiveSize, width, navWidth } = useResponsiveNav();
+  const isSmallDevice = width < BREAKPOINTS.MOBILE;
+  const [navState, setNavState] = useState<any>(null);
+  
+  // On desktop, render left nav outside the navigator
+  if (isLargeScreen) {
+    return (
+      <View style={styles.tabContainer}>
+        {/* Left Navigation - rendered outside navigator */}
+        <View style={styles.desktopLeftNav}>
+          <DesktopLeftNavWrapper />
+        </View>
+        
+        {/* Main Navigator Content */}
+        <View style={styles.desktopNavigatorContent}>
+          <MainTab.Navigator
+            tabBar={() => null}
+            screenOptions={{
+              headerStyle: {
+                backgroundColor: "#121212",
+                height: responsiveSize(56, 60, 64),
+              },
+              headerTintColor: "#FFFFFF",
+              headerTitleStyle: {
+                fontWeight: "bold",
+                fontSize: responsiveSize(16, 18, 20),
+              },
+              headerLeft: () => <View style={{ width: 20 }} />,
+            }}
+          >
+            <MainTab.Screen 
+              name="Events" 
+              component={EventsStackNavigator} 
+              options={{ headerShown: false }} 
+            />
+            <MainTab.Screen 
+              name="Venues" 
+              component={VenuesStackNavigator} 
+              options={{ headerShown: false }} 
+            />  
+            <MainTab.Screen 
+              name="Map" 
+              component={MapStackNavigator} 
+              options={{ headerShown: false }} 
+            />
+            <MainTab.Screen 
+              name="Calendar" 
+              component={CalendarStackNavigator} 
+              options={{ headerShown: false }} 
+            />
+            <MainTab.Screen 
+              name="Profile" 
+              component={ProfileStackNavigator} 
+              options={{ headerShown: false }} 
+            />
+          </MainTab.Navigator>
+        </View>
+      </View>
+    );
+  }
+  
+  // Mobile/Tablet: Use bottom tab navigation
   return (
-    <MainTab.Navigator
-      screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof Ionicons.glyphMap = "business"
+    <View style={styles.tabContainer}>
+      <MainTab.Navigator
+        tabBar={(props) => <CustomTabBar {...props} />}
+        screenOptions={({ route }) => ({
+          tabBarIcon: ({ focused, color }) => {
+            let iconName: keyof typeof Ionicons.glyphMap = "business"
 
-          if (route.name === "Venues") {
-            iconName = focused ? "business" : "business-outline"
-          } else if (route.name === "Events") {
-            iconName = focused ? "calendar" : "calendar-outline"
-          } else if (route.name === "Map") {
-            iconName = focused ? "map" : "map-outline"
-          } else if (route.name === "Calendar") {
-            iconName = focused ? "today" : "today-outline"
-          } else if (route.name === "Profile") {
-            iconName = focused ? "person" : "person-outline"
-          }
+            if (route.name === "Venues") {
+              iconName = focused ? "business" : "business-outline"
+            } else if (route.name === "Events") {
+              iconName = focused ? "calendar" : "calendar-outline"
+            } else if (route.name === "Map") {
+              iconName = focused ? "map" : "map-outline"
+            } else if (route.name === "Calendar") {
+              iconName = focused ? "today" : "today-outline"
+            } else if (route.name === "Profile") {
+              iconName = focused ? "person" : "person-outline"
+            }
 
-          return <Ionicons name={iconName} size={size} color={color} />
-        },
-        tabBarActiveTintColor: "#2196F3",
-        tabBarInactiveTintColor: "gray",
-        tabBarStyle: {
-          backgroundColor: "#121212",
-          borderTopColor: "#333",
-        },
-        headerStyle: {
-          backgroundColor: "#121212",
-        },
-        headerTintColor: "#FFFFFF",
-        headerTitleStyle: {
-          fontWeight: "bold",
-        },
-      })}
-    >
-      <MainTab.Screen name="Events" component={EventsStackNavigator} options={{ headerShown: false }} />
-      <MainTab.Screen name="Venues" component={VenuesStackNavigator} options={{ headerShown: false }} />  
-      <MainTab.Screen name="Map" component={MapStackNavigator} options={{ headerShown: false }} />
-      <MainTab.Screen name="Calendar" component={CalendarStackNavigator} options={{ headerShown: false }} />
-      <MainTab.Screen name="Profile" component={ProfileStackNavigator} options={{ headerShown: false }} />
-    </MainTab.Navigator>
-  )
+            return <Ionicons name={iconName} size={iconSize} color={color} />
+          },
+          tabBarVisible: true,
+          tabBarActiveTintColor: "#2196F3",
+          tabBarInactiveTintColor: "rgba(255, 255, 255, 0.5)",
+          tabBarStyle: {
+            backgroundColor: "#121212",
+            borderTopColor: "rgba(0, 212, 255, 0.2)",
+            height: tabBarHeight,
+            paddingBottom: Platform.OS === 'ios' ? responsiveSize(4, 6, 8) : 0,
+            paddingTop: responsiveSize(6, 8, 10),
+          },
+          headerStyle: {
+            backgroundColor: "#121212",
+            height: responsiveSize(56, 60, 64),
+          },
+          headerTintColor: "#FFFFFF",
+          headerTitleStyle: {
+            fontWeight: "bold",
+            fontSize: responsiveSize(16, 18, 20),
+          },
+        })}
+      >
+        <MainTab.Screen 
+          name="Events" 
+          component={EventsStackNavigator} 
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Events',
+          }} 
+        />
+        <MainTab.Screen 
+          name="Venues" 
+          component={VenuesStackNavigator} 
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Venues',
+          }} 
+        />  
+        <MainTab.Screen 
+          name="Map" 
+          component={MapStackNavigator} 
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Map',
+          }} 
+        />
+        <MainTab.Screen 
+          name="Calendar" 
+          component={CalendarStackNavigator} 
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Calendar',
+          }} 
+        />
+        <MainTab.Screen 
+          name="Profile" 
+          component={ProfileStackNavigator} 
+          options={{ 
+            headerShown: false,
+            tabBarLabel: 'Profile',
+          }} 
+        />
+      </MainTab.Navigator>
+    </View>
+  );
 }
+
+// Wrapper to get navigation state for desktop left nav
+function DesktopLeftNavWrapper() {
+  const navigation = useNavigation<any>();
+  const navState = useNavigationState((state) => state);
+  const currentIndex = navState?.index ?? 0;
+  const { iconSize, navWidth } = useResponsiveNav();
+  
+  const handleNavigate = useCallback((routeName: string) => {
+    navigation.navigate(routeName);
+  }, [navigation]);
+  
+  return (
+    <View style={[styles.desktopLeftNavContainer, { width: navWidth }]}>
+      <View style={styles.leftNavContent}>
+        {/* Logo at top */}
+        <View style={styles.logoContainer}>
+          <Text style={styles.logoText}>YV</Text>
+        </View>
+        
+        {/* Navigation Items */}
+        {[
+          { name: "Events", label: "Events", icon: "calendar", iconOutline: "calendar-outline" },
+          { name: "Venues", label: "Venues", icon: "business", iconOutline: "business-outline" },
+          { name: "Map", label: "Map", icon: "map", iconOutline: "map-outline" },
+          { name: "Calendar", label: "Calendar", icon: "today", iconOutline: "today-outline" },
+          { name: "Profile", label: "Profile", icon: "person", iconOutline: "person-outline" },
+        ].map((route, index) => {
+          const isFocused = index === currentIndex;
+          return (
+            <TouchableOpacity
+              key={route.name}
+              onPress={() => handleNavigate(route.name)}
+              style={[
+                styles.navItem,
+                isFocused && styles.navItemActive
+              ]}
+              activeOpacity={0.7}
+            >
+              <Ionicons 
+                name={isFocused ? route.icon as any : route.iconOutline as any} 
+                size={iconSize} 
+                color={isFocused ? "#2196F3" : "rgba(255, 255, 255, 0.5)"} 
+              />
+              <Text 
+                style={[
+                  styles.navLabel,
+                  isFocused && styles.navLabelActive
+                ]}
+                numberOfLines={1}
+              >
+                {route.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// Styles for desktop left navigation
+const styles = StyleSheet.create({
+  tabContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    position: 'relative',
+  },
+  leftNavBar: {
+    backgroundColor: '#121212',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 212, 255, 0.2)',
+    height: '100%',
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    zIndex: 100,
+  },
+  // Desktop left nav using flexbox (not absolute)
+  leftNavBarFlex: {
+    backgroundColor: '#121212',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 212, 255, 0.2)',
+    height: '100%',
+  },
+  // Desktop left nav container (full height, positioned left)
+  desktopLeftNav: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  // Desktop left nav content wrapper
+  desktopLeftNavContainer: {
+    backgroundColor: '#121212',
+    borderRightWidth: 1,
+    borderRightColor: 'rgba(0, 212, 255, 0.2)',
+    height: '100%',
+  },
+  // Desktop navigator content (to the right of left nav)
+  desktopNavigatorContent: {
+    flex: 1,
+    marginLeft: 80, // Offset for left navigation width
+  },
+  leftNavContent: {
+    flex: 1,
+    paddingTop: 20,
+    alignItems: 'center',
+  },
+  logoContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    backgroundColor: '#2196F3',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 30,
+  },
+  logoText: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  navItem: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginVertical: 4,
+    borderRadius: 12,
+    width: '90%',
+  },
+  navItemActive: {
+    backgroundColor: 'rgba(33, 150, 243, 0.15)',
+  },
+  navLabel: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 10,
+    marginTop: 6,
+    textAlign: 'center',
+  },
+  navLabelActive: {
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+  // Bottom tab bar styles (mobile/tablet)
+  bottomTabBar: {
+    flexDirection: 'row',
+    backgroundColor: '#121212',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 212, 255, 0.2)',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
+  bottomTabItem: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  bottomTabLabel: {
+    color: 'rgba(255, 255, 255, 0.5)',
+    fontSize: 10,
+    marginTop: 4,
+  },
+  bottomTabLabelActive: {
+    color: '#2196F3',
+    fontWeight: '600',
+  },
+});

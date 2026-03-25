@@ -14,6 +14,7 @@ import {
   TextInput,
   RefreshControl,
   Dimensions,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "@react-navigation/native";
@@ -24,52 +25,37 @@ import type { Event } from "../models/Event";
 import type { EventsScreenProps } from "../navigation/types";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 
-// Responsive design imports
-import { useResponsive, BREAKPOINTS } from "../utils/responsive";
+// Responsive design hooks
+import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
+
+// Static responsive function for StyleSheet - uses current dimensions
+const responsiveSize = (mobile: number, tablet: number, desktop: number): number => {
+  const { width } = Dimensions.get('window');
+  if (width >= BREAKPOINTS.LARGE_TABLET) return desktop;
+  if (width >= BREAKPOINTS.TABLET) return tablet;
+  return mobile;
+};
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
 
-  // Responsive design values
-  const { width, isPhone, isTablet, isDesktop } = useResponsive();
-  
-  // Calculate responsive values
-  const responsiveValues = useMemo(() => {
-    const isPortrait = Dimensions.get('window').height > Dimensions.get('window').width;
-    
-    // Grid columns based on screen width (like Resident Advisor, Dice, Songkick)
-    let eventColumns = 1;
-    if (width >= BREAKPOINTS.xxl) eventColumns = 4;
-    else if (width >= BREAKPOINTS.xl) eventColumns = 3;
-    else if (width >= BREAKPOINTS.lg) eventColumns = 2;
-    else if (width >= BREAKPOINTS.md && !isPortrait) eventColumns = 2;
-    else eventColumns = 1;
-    
-    // Spacing values
-    const paddingHorizontal = isPhone ? 16 : isTablet ? 24 : isDesktop ? 32 : 40;
-    const paddingVertical = isPhone ? 12 : isTablet ? 16 : 20;
-    const cardMargin = isPhone ? 16 : isTablet ? 20 : 24;
-    const cardBorderRadius = isPhone ? 16 : isTablet ? 20 : 24;
-    const cardImageHeight = isPhone ? 200 : isTablet ? 260 : 320;
-    const headerPaddingTop = Platform.OS === "ios" ? (isPhone ? 50 : 60) : (isPhone ? 30 : 40);
-    const headerFontSize = isPhone ? 24 : isTablet ? 28 : 32;
-    const bodyFontSize = isPhone ? 14 : isTablet ? 16 : 18;
-    const titleFontSize = isPhone ? 18 : isTablet ? 20 : 22;
-    
-    return {
-      eventColumns,
-      paddingHorizontal,
-      paddingVertical,
-      cardMargin,
-      cardBorderRadius,
-      cardImageHeight,
-      headerPaddingTop,
-      headerFontSize,
-      bodyFontSize,
-      titleFontSize,
-    };
-  }, [width, isPhone, isTablet, isDesktop]);
+  // Get responsive values using hooks
+  const gridColumns = useGridColumns();
+  const layout = useLayoutDimensions();
+  const typography = useTypography();
+  const spacing = useSpacing();
+  const deviceType = useDeviceType();
+
+  // Memoize card dimensions to prevent recalculation on every render
+  const { cardWidth, cardHeight } = useMemo(() => {
+    // Account for navbar offset on desktop (80px)
+    const navbarOffset = deviceType.isLargeScreen ? 80 : 0;
+    const availableWidth = layout.width - navbarOffset;
+    const width = (availableWidth - (spacing.md * (gridColumns + 1))) / gridColumns;
+    const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
+    return { cardWidth: width, cardHeight: height };
+  }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -297,7 +283,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     navigation.navigate("EventDetail", { eventId });
   };
 
-  const loadMoreEvents = async () => {
+  // Memoize loadMoreEvents to prevent recreation on every render
+  const loadMoreEvents = useCallback(async () => {
     if (displayedEvents.length >= filteredEvents.length && hasMore) {
       // Need to fetch more from Firebase
       if (!lastDoc || !hasMore) return;
@@ -339,7 +326,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     const endIndex = nextPage * ITEMS_PER_PAGE;
     setDisplayedEvents(filteredEvents.slice(startIndex, endIndex));
     setCurrentPage(nextPage);
-  };
+  }, [displayedEvents, filteredEvents, hasMore, lastDoc, events, currentPage]);
 
   /**
    * handleAddEvent
@@ -392,17 +379,38 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     return `${dayOfWeek} ${formattedDate}`;
   };
 
+  // Check if event is today or tomorrow
+  const getDateLabel = (eventDate: Date): { label: string; isSpecial: boolean } => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const eventDay = new Date(eventDate);
+    eventDay.setHours(0, 0, 0, 0);
+
+    if (eventDay.getTime() === today.getTime()) {
+      return { label: "TODAY", isSpecial: true };
+    } else if (eventDay.getTime() === tomorrow.getTime()) {
+      return { label: "TOMORROW", isSpecial: true };
+    }
+    return { label: formatDateRange(eventDate), isSpecial: false };
+  };
+
   const getAttendeeCount = (event: Event) => {
     return event.attendees ? event.attendees.length : 0;
   };
 
-  const renderEventItem = ({ item }: { item: Event }) => (
-    <TouchableOpacity style={styles.eventCard} onPress={() => handleEventSelect(item.id)}>
-      <ImageBackground source={{ uri: item.posterImageUrl }} style={styles.eventImage}>
+  // Memoize renderEventItem to prevent recreation on every render
+  const renderEventItem = useCallback(({ item }: { item: Event }) => {
+    const dateInfo = getDateLabel(item.date);
+    
+    return (
+    <TouchableOpacity style={[styles.eventCard, { width: cardWidth }]} onPress={() => handleEventSelect(item.id)}>
+      <ImageBackground source={{ uri: item.posterImageUrl }} style={[styles.eventImage, { height: cardHeight }]}>
         <View style={styles.eventOverlay}>
           <View style={styles.eventHeader}>
-            <View style={styles.dateChip}>
-              <Text style={styles.dateChipText}>{formatDateRange(item.date)}</Text>
+            <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
+              <Text style={[styles.dateChipText, dateInfo.isSpecial && styles.dateChipTextSpecial]}>{dateInfo.label}</Text>
             </View>
             <View style={styles.feeChip}>
               <Text style={styles.feeChipText}>
@@ -441,6 +449,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
       </ImageBackground>
     </TouchableOpacity>
   );
+  }, [cardWidth, cardHeight, spacing.md]);
 
   return (
     <View style={styles.container}>
@@ -511,8 +520,22 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           data={displayedEvents}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
+          numColumns={gridColumns}
+          getItemLayout={(_: any, index: number) => ({
+            length: cardHeight + spacing.md * 2,
+            offset: (cardHeight + spacing.md * 2) * Math.floor(index / gridColumns),
+            index,
+          })}
           ListEmptyComponent={<Text style={styles.emptyText}>No upcoming events found</Text>}
-          contentContainerStyle={styles.eventsList}
+          contentContainerStyle={[
+            styles.eventsList,
+            { 
+              paddingHorizontal: spacing.md,
+              paddingLeft: deviceType.isLargeScreen ? 80 : 0,
+              paddingRight: deviceType.isLargeScreen ? 80 : 0,
+              columnGap: gridColumns > 1 ? spacing.md : 0
+            }
+          ]}
           onEndReached={loadMoreEvents}
           onEndReachedThreshold={0.5}
           refreshControl={
@@ -523,9 +546,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
               tintColor="#2196F3"
             />
           }
-          initialNumToRender={5}
-          maxToRenderPerBatch={10}
-          windowSize={10}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          windowSize={5}
+          removeClippedSubviews={true}
+          updateCellsBatchingPeriod={50}
         />
       )}
 
@@ -564,12 +589,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 20,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    padding: responsiveSize(14, 18, 24),
+    paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 60) : responsiveSize(20, 30, 40),
     backgroundColor: "#1A1A2E",
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: responsiveSize(20, 24, 28),
     fontWeight: "800",
     color: "#FFFFFF",
     textShadowColor: "rgba(0, 212, 255, 0.3)",
@@ -577,75 +602,75 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   searchButton: {
-    padding: 12,
+    padding: responsiveSize(8, 12, 14),
     backgroundColor: "rgba(0, 212, 255, 0.2)",
-    borderRadius: 12,
+    borderRadius: responsiveSize(8, 12, 14),
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.3)",
   },
   headerActions: {
     flexDirection: "row",
-    gap: 8,
+    gap: responsiveSize(6, 8, 10),
   },
   notificationButton: {
-    padding: 12,
+    padding: responsiveSize(8, 12, 14),
     backgroundColor: "rgba(0, 212, 255, 0.2)",
-    borderRadius: 12,
+    borderRadius: responsiveSize(8, 12, 14),
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.3)",
     position: "relative",
   },
   notificationBadge: {
     position: "absolute",
-    top: 4,
-    right: 4,
+    top: responsiveSize(2, 3, 4),
+    right: responsiveSize(2, 3, 4),
     backgroundColor: "#FF6B6B",
-    borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    borderRadius: responsiveSize(8, 10, 12),
+    minWidth: responsiveSize(18, 20, 24),
+    height: responsiveSize(18, 20, 24),
     justifyContent: "center",
     alignItems: "center",
-    paddingHorizontal: 6,
+    paddingHorizontal: responsiveSize(4, 6, 8),
     borderWidth: 2,
     borderColor: "#0A0A0A",
   },
   notificationBadgeText: {
     color: "#FFFFFF",
-    fontSize: 10,
+    fontSize: responsiveSize(8, 9, 10),
     fontWeight: "bold",
   },
   searchContainer: {
-    padding: 20,
-    paddingTop: 0,
+    padding: responsiveSize(14, 18, 24),
+    paddingTop: responsiveSize(8, 10, 12),
   },
   searchInput: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: responsiveSize(8, 12, 14),
+    padding: responsiveSize(12, 14, 16),
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     borderWidth: 1,
     borderColor: "#333",
   },
   eventCard: {
-    marginHorizontal: 20,
-    marginBottom: 24,
-    borderRadius: 20,
+    marginHorizontal: responsiveSize(12, 16, 24),
+    marginBottom: responsiveSize(16, 20, 28),
+    borderRadius: responsiveSize(14, 18, 24),
     overflow: "hidden",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 12,
+    shadowRadius: responsiveSize(12, 14, 18),
+    elevation: 10,
   },
   eventImage: {
     width: "100%",
-    height: 280,
+    height: responsiveSize(220, 260, 320),
   },
   eventOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 20,
+    padding: responsiveSize(14, 18, 24),
     justifyContent: "space-between",
   },
   eventHeader: {
@@ -655,24 +680,40 @@ const styles = StyleSheet.create({
   },
   dateChip: {
     backgroundColor: "rgba(0, 212, 255, 0.9)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(4, 5, 6),
+    borderRadius: responsiveSize(14, 16, 20),
   },
   dateChipText: {
     color: "#FFFFFF",
-    fontSize: 12,
+    fontSize: responsiveSize(10, 11, 12),
     fontWeight: "700",
+  },
+  // Special styles for TODAY/TOMORROW date chips
+  dateChipSpecial: {
+    backgroundColor: "rgba(0, 212, 255, 0.95)",
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 6,
+  },
+  dateChipTextSpecial: {
+    color: "#FFFFFF",
+    fontWeight: "800",
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
   feeChip: {
     backgroundColor: "rgba(255, 215, 0, 0.9)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(4, 5, 6),
+    borderRadius: responsiveSize(14, 16, 20),
   },
   feeChipText: {
     color: "#000000",
-    fontSize: 12,
+    fontSize: responsiveSize(10, 11, 12),
     fontWeight: "700",
   },
   eventContent: {
@@ -680,10 +721,10 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   eventName: {
-    fontSize: 24,
+    fontSize: responsiveSize(18, 22, 26),
     fontWeight: "800",
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -691,12 +732,12 @@ const styles = StyleSheet.create({
   eventLocationRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: responsiveSize(8, 10, 12),
   },
   eventLocation: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     color: "#FFFFFF",
-    marginLeft: 6,
+    marginLeft: responsiveSize(4, 6, 8),
     opacity: 0.9,
   },
   eventFooter: {
@@ -708,17 +749,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "rgba(0, 212, 255, 0.2)",
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(3, 4, 5),
+    borderRadius: responsiveSize(8, 10, 12),
     borderWidth: 1,
     borderColor: "rgba(0, 212, 255, 0.3)",
   },
   attendeeText: {
     color: "#00D4FF",
-    fontSize: 12,
+    fontSize: responsiveSize(10, 11, 12),
     fontWeight: "600",
-    marginLeft: 4,
+    marginLeft: responsiveSize(3, 4, 5),
   },
   artistsPreview: {
     flexDirection: "row",
@@ -726,13 +767,13 @@ const styles = StyleSheet.create({
   },
   artistPreviewText: {
     color: "#FFFFFF",
-    fontSize: 12,
-    marginRight: 8,
+    fontSize: responsiveSize(10, 11, 12),
+    marginRight: responsiveSize(6, 8, 10),
     opacity: 0.8,
   },
   moreArtistsText: {
     color: "#00D4FF",
-    fontSize: 12,
+    fontSize: responsiveSize(10, 11, 12),
     fontWeight: "600",
   },
   loadingContainer: {
@@ -743,47 +784,48 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#FFFFFF",
-    marginTop: 16,
-    fontSize: 16,
+    marginTop: responsiveSize(12, 14, 16),
+    fontSize: responsiveSize(14, 15, 16),
   },
   emptyContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 40,
+    padding: responsiveSize(24, 32, 40),
   },
   emptyText: {
     color: "#FFFFFF",
-    fontSize: 20,
+    fontSize: responsiveSize(16, 18, 20),
     fontWeight: "700",
     textAlign: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
   },
   emptySubtext: {
     color: "#999999",
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: responsiveSize(20, 22, 26),
   },
   eventsList: {
-    paddingBottom: 100, // Add padding to account for floating button
+    paddingBottom: responsiveSize(80, 100, 120),
+    alignItems: 'center',
   },
   floatingAddButton: {
     position: "absolute",
-    bottom: 30, // Moved closer to profile icon
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#000000", // Changed to black
+    bottom: responsiveSize(20, 25, 30),
+    right: responsiveSize(15, 20, 25),
+    width: responsiveSize(48, 56, 64),
+    height: responsiveSize(48, 56, 64),
+    borderRadius: responsiveSize(24, 28, 32),
+    backgroundColor: "#000000",
     justifyContent: "center",
     alignItems: "center",
-    shadowColor: "#00D4FF", // Glowing effect color
+    shadowColor: "#00D4FF",
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
-    shadowRadius: 12,
+    shadowRadius: responsiveSize(8, 12, 16),
     elevation: 12,
-    // Add glowing border effect
+    transform: [{ translateY: -responsiveSize(48, 56, 64) }],
     borderWidth: 2,
     borderColor: "rgba(0, 212, 255, 0.6)",
   },

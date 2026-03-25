@@ -14,7 +14,12 @@ import { auth } from "../config/firebase";
 import FirebaseService from "../services/FirebaseService";
 import AnalyticsService from "../services/AnalyticsService";
 import type { User } from "../models/User";
-import { Platform } from "react-native";
+import { Platform, Dimensions } from "react-native";
+
+// Responsive context enhancements
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallDevice = screenWidth < 380;
+const isTablet = screenWidth >= 768;
 
 export type RedirectIntent = {
   routeName: string;

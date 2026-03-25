@@ -12,6 +12,7 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Dimensions,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -20,6 +21,21 @@ import FirebaseService from "../services/FirebaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
 import { VenuesStackParamList, EventsStackParamList } from "../navigation/types"
+
+// Responsive breakpoints for add event screen
+const { width } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] AddEventScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
 
 type AddEventScreenProps =
   | NativeStackScreenProps<VenuesStackParamList, "AddEvent">
@@ -818,142 +834,159 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   form: {
-    padding: 16,
+    padding: responsiveSize(12, 16, 24),
+    maxWidth: isLargeScreen ? 900 : "100%",
+    alignSelf: "center",
+    width: "100%",
+    paddingBottom: responsiveSize(24, 32, 48),
   },
   labelContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
   },
   label: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FFFFFF",
+    fontWeight: "500",
   },
   errorStar: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FF3B30",
     marginLeft: 4,
   },
   errorText: {
-    fontSize: 12,
+    fontSize: responsiveSize(11, 12, 13),
     color: "#FF3B30",
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 14, 16),
   },
   input: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(10, 12, 14),
     color: "#FFFFFF",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    fontSize: responsiveSize(14, 15, 16),
   },
   errorInput: {
     borderColor: "#FF3B30",
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
   },
   textArea: {
-    height: 100,
+    height: responsiveSize(80, 100, 120),
     textAlignVertical: "top",
   },
   datePickerContainer: {
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
   },
   venueToggleContainer: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
+    gap: responsiveSize(8, 10, 12),
   },
   venueToggleButton: {
     flex: 1,
-    padding: 10,
+    padding: responsiveSize(8, 10, 12),
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.2)",
     backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(6, 8, 10),
   },
   venueToggleButtonActive: {
     backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
   },
   venueToggleText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: responsiveSize(12, 13, 14),
   },
   venueSelector: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(10, 12, 14),
+    marginBottom: responsiveSize(8, 10, 12),
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   venueSelectorText: {
     color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
   },
   venueDropdown: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    marginBottom: 16,
+    borderRadius: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
-    borderColor: "#333",
-    maxHeight: 150,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    maxHeight: responsiveSize(120, 150, 200),
   },
   venueList: {
-    padding: 8,
+    padding: responsiveSize(6, 8, 10),
   },
   venueItem: {
-    padding: 12,
+    padding: responsiveSize(10, 12, 14),
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   venueItemText: {
     color: "#FFFFFF",
+    fontSize: responsiveSize(13, 14, 15),
   },
   venueInfo: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(10, 12, 14),
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
   venueText: {
     color: "#FFFFFF",
+    fontSize: responsiveSize(13, 14, 15),
   },
   checkboxContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
   },
   checkbox: {
-    marginRight: 8,
+    marginRight: responsiveSize(8, 10, 12),
   },
   checkboxLabel: {
     color: "#FFFFFF",
+    fontSize: responsiveSize(13, 14, 15),
   },
   imageOptions: {
-    flexDirection: "row",
-    marginBottom: 16,
+    flexDirection: isSmallDevice ? "column" : "row",
+    marginBottom: responsiveSize(14, 16, 18),
+    gap: responsiveSize(8, 10, 12),
   },
   imageButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2196F3",
-    padding: 12,
-    borderRadius: 8,
+    padding: responsiveSize(10, 12, 14),
+    borderRadius: responsiveSize(6, 8, 10),
     flex: 1,
-    marginRight: 8,
+    marginRight: isSmallDevice ? 0 : 0,
+    height: responsiveSize(44, 48, 52),
   },
   imageButtonText: {
     color: "#FFFFFF",
-    marginLeft: 8,
+    marginLeft: responsiveSize(8, 10, 12),
+    fontSize: responsiveSize(13, 14, 15),
   },
   imagePreview: {
-    height: 200,
-    marginBottom: 16,
-    borderRadius: 8,
+    height: responsiveSize(160, 200, 240),
+    marginBottom: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
     overflow: "hidden",
     position: "relative",
   },
@@ -963,89 +996,95 @@ const styles = StyleSheet.create({
   },
   removeImageButton: {
     position: "absolute",
-    top: 8,
-    right: 8,
+    top: responsiveSize(6, 8, 10),
+    right: responsiveSize(6, 8, 10),
     backgroundColor: "rgba(0,0,0,0.6)",
-    borderRadius: 15,
-    padding: 2,
+    borderRadius: responsiveSize(12, 15, 18),
+    padding: responsiveSize(4, 6, 8),
   },
   submitButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2196F3",
-    borderRadius: 8,
-    padding: 16,
-    marginTop: 8,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(14, 16, 18),
+    marginTop: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(24, 32, 40),
+    height: responsiveSize(48, 52, 56),
   },
   disabledButton: {
     opacity: 0.6,
   },
   submitButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(8, 10, 12),
   },
   addButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#2196F3",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    padding: responsiveSize(10, 12, 14),
+    borderRadius: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(14, 16, 18),
+    height: responsiveSize(44, 48, 52),
   },
   addButtonText: {
     color: "#FFFFFF",
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: responsiveSize(13, 14, 15),
+    marginLeft: responsiveSize(8, 10, 12),
   },
   feeContainer: {
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
   },
   feeNameInput: {
     flex: 1,
-    marginBottom: 8,
+    marginBottom: responsiveSize(8, 10, 12),
   },
   feeAmountInput: {
     flex: 1,
-    marginBottom: 8,
+    marginBottom: responsiveSize(8, 10, 12),
   },
   feeItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#1E1E1E",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: responsiveSize(10, 12, 14),
+    borderRadius: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(8, 10, 12),
   },
   feeText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: responsiveSize(13, 14, 15),
   },
   contactContainer: {
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
   },
   contactInput: {
     flex: 1,
-    marginBottom: 8,
+    marginBottom: responsiveSize(8, 10, 12),
   },
   contactTypeContainer: {
-    flexDirection: "row",
+    flexDirection: (isSmallDevice ? "column" : "row") as "column" | "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    marginBottom: responsiveSize(8, 10, 12),
+    gap: responsiveSize(8, 10, 12),
   },
   contactTypeButton: {
     flex: 1,
-    padding: 12,
+    padding: responsiveSize(10, 12, 14),
     alignItems: "center",
     backgroundColor: "#1E1E1E",
-    marginRight: 8,
-    borderRadius: 8,
+    marginRight: 0,
+    borderRadius: responsiveSize(6, 8, 10),
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    height: responsiveSize(44, 48, 52),
+    justifyContent: "center",
   },
   selectedContactTypeButton: {
     backgroundColor: "#2196F3",
@@ -1056,20 +1095,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#1E1E1E",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
+    padding: responsiveSize(10, 12, 14),
+    borderRadius: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(8, 10, 12),
   },
   contactText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: responsiveSize(13, 14, 15),
   },
   locationContainer: {
-    flexDirection: "row",
+    flexDirection: (isSmallDevice ? "column" : "row") as "column" | "row",
     justifyContent: "space-between",
+    gap: responsiveSize(10, 12, 14),
+    marginBottom: responsiveSize(14, 16, 18),
   },
   locationField: {
-    width: "48%",
+    width: isSmallDevice ? "100%" : "48%",
   },
 })
 

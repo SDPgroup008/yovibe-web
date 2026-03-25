@@ -18,11 +18,25 @@ import {
 } from "firebase/firestore"
 import { v4 as uuidv4 } from "uuid";
 import { getStorage, ref, ref as storageRef, uploadString, getDownloadURL, uploadBytes } from "firebase/storage"
+import { Dimensions } from "react-native"
 import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
+
+// Responsive breakpoints for image loading optimization
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallDevice = screenWidth < 380;
+const isTablet = screenWidth >= 768;
+const isLargeScreen = screenWidth >= 1024;
+
+// Determine optimal image size based on device
+const getOptimalImageSize = (): { width: number; quality: number } => {
+  if (isSmallDevice) return { width: 400, quality: 75 };   // Phones: smaller, faster
+  if (isTablet) return { width: 800, quality: 85 };         // Tablets: medium
+  return { width: 1200, quality: 90 };                      // Desktop: high quality
+};
 
 class FirebaseService {
   private static instance: FirebaseService

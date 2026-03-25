@@ -12,9 +12,25 @@ import {
   ActivityIndicator,
   ImageBackground,
   Platform,
+  Dimensions,
 } from "react-native"
 import { useAuth } from "../../contexts/AuthContext"
 import { Ionicons } from "@expo/vector-icons"
+
+// Responsive breakpoints for login screen
+const { width, height } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] LoginScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function for login screen
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
 
 interface LoginScreenProps {
   navigation: any
@@ -202,108 +218,120 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.6)",
-    padding: 20,
+    padding: responsiveSize(16, 24, 40),
     justifyContent: "center",
   },
   logoContainer: {
     alignItems: "center",
-    marginBottom: 40,
+    marginBottom: responsiveSize(30, 40, 60),
   },
   title: {
-    fontSize: 48,
+    fontSize: responsiveSize(36, 48, 56),
     fontWeight: "bold",
     color: "#FFFFFF",
     textShadowColor: "rgba(0,0,0,0.5)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 10,
-    marginBottom: 10,
+    marginBottom: responsiveSize(8, 12, 16),
   },
   titleRed: {
     color: "#FF3B30",
   },
   tagline: {
-    fontSize: 18,
+    fontSize: responsiveSize(14, 16, 18),
     color: "#FFFFFF",
     opacity: 0.8,
   },
   formContainer: {
-    backgroundColor: "rgba(30, 30, 30, 0.8)",
-    borderRadius: 15,
-    padding: 25,
+    backgroundColor: "rgba(30, 30, 30, 0.9)",
+    borderRadius: responsiveSize(12, 16, 20),
+    padding: responsiveSize(20, 24, 32),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
+    shadowRadius: responsiveSize(8, 10, 14),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.1)",
+    maxWidth: isLargeScreen ? 500 : "100%",
+    alignSelf: "center",
+    width: "100%",
   },
   labelContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
   },
   label: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FFFFFF",
+    fontWeight: "500",
   },
   errorStar: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FF3B30",
     marginLeft: 4,
   },
   errorText: {
-    fontSize: 12,
+    fontSize: responsiveSize(11, 12, 13),
     color: "#FF3B30",
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 14, 16),
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 10,
-    marginBottom: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    borderRadius: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
   },
   errorInput: {
     borderColor: "#FF3B30",
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
   },
   inputIcon: {
-    padding: 15,
+    padding: responsiveSize(12, 14, 16),
   },
   input: {
     flex: 1,
-    height: 55,
+    height: responsiveSize(48, 52, 56),
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
   },
   visibilityToggle: {
-    paddingHorizontal: 12,
+    paddingHorizontal: responsiveSize(10, 12, 14),
     justifyContent: "center",
     alignItems: "center",
   },
   button: {
     flexDirection: "row",
     backgroundColor: "#FF3B30",
-    height: 55,
-    borderRadius: 10,
+    height: responsiveSize(48, 52, 56),
+    borderRadius: responsiveSize(8, 10, 12),
     justifyContent: "center",
     alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
+    marginTop: responsiveSize(8, 10, 14),
+    marginBottom: responsiveSize(16, 20, 24),
+    shadowColor: "#FF3B30",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
   buttonText: {
     color: "white",
-    fontSize: 18,
+    fontSize: responsiveSize(15, 16, 17),
     fontWeight: "bold",
   },
   buttonIcon: {
-    marginLeft: 10,
+    marginLeft: responsiveSize(8, 10, 12),
   },
   signupButton: {
     alignItems: "center",
+    paddingVertical: responsiveSize(12, 14, 16),
   },
   signupText: {
     color: "#BBBBBB",
-    fontSize: 16,
+    fontSize: responsiveSize(13, 14, 15),
   },
   signupTextBold: {
     color: "#FFFFFF",

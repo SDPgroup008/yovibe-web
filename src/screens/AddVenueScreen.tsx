@@ -12,12 +12,28 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Dimensions,
 } from "react-native"
 import FirebaseService from "../services/FirebaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
 import ImagePickerService from "../services/ImagePickerService"
 import { Ionicons } from "@expo/vector-icons"
+
+// Responsive breakpoints for add venue screen
+const { width } = Dimensions.get('window');
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] AddVenueScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
 
 interface AddVenueScreenProps {
   navigation: any
@@ -347,57 +363,65 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   form: {
-    padding: 16,
+    padding: responsiveSize(12, 16, 24),
+    maxWidth: isLargeScreen ? 800 : "100%",
+    alignSelf: "center",
+    width: "100%",
+    paddingBottom: responsiveSize(24, 32, 48),
   },
   labelContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
   },
   label: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FFFFFF",
+    fontWeight: "500",
   },
   errorStar: {
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     color: "#FF3B30",
     marginLeft: 4,
   },
   errorText: {
-    fontSize: 12,
+    fontSize: responsiveSize(11, 12, 13),
     color: "#FF3B30",
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 14, 16),
   },
   input: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 12,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(10, 12, 14),
     color: "#FFFFFF",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
     borderWidth: 1,
-    borderColor: "#333",
+    borderColor: "rgba(255, 255, 255, 0.1)",
+    fontSize: responsiveSize(14, 15, 16),
   },
   errorInput: {
     borderColor: "#FF3B30",
+    backgroundColor: "rgba(255, 59, 48, 0.1)",
   },
   textArea: {
-    height: 100,
+    height: responsiveSize(80, 100, 120),
     textAlignVertical: "top",
   },
   venueTypeContainer: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
+    gap: responsiveSize(8, 10, 12),
   },
   venueTypeButton: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
+    padding: responsiveSize(10, 12, 14),
     borderWidth: 1,
-    borderColor: "#333",
-    borderRadius: 8,
-    marginRight: 8,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: responsiveSize(6, 8, 10),
+    marginRight: 0,
     backgroundColor: "#1E1E1E",
   },
   selectedVenueType: {
@@ -406,8 +430,8 @@ const styles = StyleSheet.create({
   },
   venueTypeText: {
     color: "#BBBBBB",
-    fontSize: 14,
-    marginLeft: 8,
+    fontSize: responsiveSize(12, 13, 14),
+    marginLeft: responsiveSize(6, 8, 10),
     textAlign: "center",
   },
   selectedVenueTypeText: {
@@ -415,16 +439,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   locationContainer: {
-    flexDirection: "row",
+    flexDirection: (isSmallDevice ? "column" : "row") as "column" | "row",
     justifyContent: "space-between",
+    gap: responsiveSize(10, 12, 14),
+    marginBottom: responsiveSize(14, 16, 18),
   },
   locationField: {
-    width: "48%",
+    width: isSmallDevice ? "100%" : "48%",
   },
   imagePreview: {
-    height: 200,
-    marginBottom: 16,
-    borderRadius: 8,
+    height: responsiveSize(160, 200, 240),
+    marginBottom: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
     overflow: "hidden",
   },
   previewImage: {
@@ -433,32 +459,36 @@ const styles = StyleSheet.create({
   },
   submitButton: {
     backgroundColor: "#2196F3",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(14, 16, 18),
     alignItems: "center",
+    height: responsiveSize(48, 52, 56),
+    justifyContent: "center",
+    marginBottom: responsiveSize(24, 32, 40),
   },
   disabledButton: {
     opacity: 0.6,
   },
   submitButtonText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
   },
   imagePickerButton: {
     backgroundColor: "#2196F3",
-    borderRadius: 8,
-    padding: 16,
+    borderRadius: responsiveSize(6, 8, 10),
+    padding: responsiveSize(14, 16, 18),
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: 16,
+    marginBottom: responsiveSize(14, 16, 18),
+    height: responsiveSize(48, 52, 56),
   },
   imagePickerText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(8, 10, 12),
   },
 })
 

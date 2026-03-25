@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   View,
   Text,
@@ -14,16 +14,26 @@ import {
   ImageBackground,
   Modal,
   Image,
+  Dimensions,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
-import type { EventDetailScreenProps } from "../navigation/types"  
+import type { EventDetailScreenProps } from "../navigation/types"
+
+// Responsive setup for EventDetailScreen
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallDevice = screenWidth < 380;
+const isTablet = screenWidth >= 768;
+const isLargeScreen = screenWidth >= 1024;
+
+console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
 
 const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
   const { eventId } = route.params
   const { user } = useAuth()
+  
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [isGoing, setIsGoing] = useState(false)
@@ -302,6 +312,13 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   )
 }
 
+// Responsive helper function (uses already-declared breakpoints from line 26-29)
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -315,43 +332,45 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: "#FFFFFF",
-    fontSize: 16,
+    fontSize: responsiveSize(14, 16, 18),
   },
   headerImage: {
     width: "100%",
-    height: 300,
+    height: responsiveSize(240, 300, 360),
   },
   headerOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
     justifyContent: "space-between",
-    padding: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 16,
+    padding: responsiveSize(12, 14, 18),
+    paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 60) : responsiveSize(12, 14, 18),
   },
   backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(0,0,0,0.5)",
+    width: responsiveSize(36, 40, 48),
+    height: responsiveSize(36, 40, 48),
+    borderRadius: responsiveSize(18, 20, 24),
+    backgroundColor: "rgba(0,0,0,0.6)",
     justifyContent: "center",
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
   },
   eventHeaderInfo: {
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 14, 18),
   },
   eventName: {
-    fontSize: 28,
+    fontSize: responsiveSize(22, 26, 32),
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 12),
     textShadowColor: "rgba(0,0,0,0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
   eventLocation: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: responsiveSize(6, 8, 10),
     textShadowColor: "rgba(0,0,0,0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
@@ -359,16 +378,18 @@ const styles = StyleSheet.create({
   eventMeta: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
   },
   attendeeCount: {
     flexDirection: "row",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(4, 6, 8),
   },
   attendeeCountText: {
     color: "#FFFFFF",
-    fontSize: 14,
-    marginLeft: 6,
+    fontSize: responsiveSize(12, 13, 14),
+    marginLeft: responsiveSize(4, 5, 6),
     textShadowColor: "rgba(0,0,0,0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
@@ -376,44 +397,50 @@ const styles = StyleSheet.create({
   entryFee: {
     color: "#FFD700",
     fontWeight: "bold",
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     textShadowColor: "rgba(0,0,0,0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
   },
   fullImageModal: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.9)",
+    backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
     alignItems: "center",
   },
   fullImageCloseButton: {
     position: "absolute",
-    top: 50,
-    right: 20,
+    top: responsiveSize(30, 40, 50),
+    right: responsiveSize(15, 20, 25),
     zIndex: 1,
-    padding: 10,
+    padding: responsiveSize(8, 10, 12),
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderRadius: responsiveSize(20, 24, 28),
   },
   fullImage: {
     width: "100%",
     height: "100%",
   },
   contentContainer: {
-    padding: 16,
+    padding: responsiveSize(12, 16, 24),
+    maxWidth: isLargeScreen ? 900 : "100%",
+    alignSelf: "center",
+    width: "100%",
   },
   actionButtons: {
     flexDirection: "row",
-    marginBottom: 20,
+    marginBottom: responsiveSize(14, 18, 24),
+    gap: responsiveSize(8, 10, 12),
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#1E1E1E",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginRight: 12,
+    paddingVertical: responsiveSize(10, 12, 16),
+    paddingHorizontal: responsiveSize(14, 18, 24),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginRight: 0,
     flex: 1,
   },
   goingButton: {
@@ -422,107 +449,120 @@ const styles = StyleSheet.create({
   actionButtonText: {
     color: "#2196F3",
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
+    fontSize: responsiveSize(12, 14, 15),
   },
   goingButtonText: {
     color: "#FFFFFF",
   },
   ownerControls: {
-    marginBottom: 20,
+    marginBottom: responsiveSize(14, 18, 24),
   },
   ownerButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#4CAF50",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginBottom: 12,
+    paddingVertical: responsiveSize(10, 12, 16),
+    paddingHorizontal: responsiveSize(14, 18, 24),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginBottom: responsiveSize(8, 10, 12),
   },
   ownerButtonText: {
     color: "#FFFFFF",
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
+    fontSize: responsiveSize(13, 14, 15),
   },
   venueContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: responsiveSize(8, 10, 14),
+    paddingVertical: responsiveSize(6, 8, 10),
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    backgroundColor: "rgba(33, 150, 243, 0.1)",
+    borderRadius: responsiveSize(6, 8, 12),
+    borderWidth: 1,
+    borderColor: "rgba(33, 150, 243, 0.2)",
   },
   venueName: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     color: "#2196F3",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
   },
   dateContainer: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: responsiveSize(12, 16, 20),
+    paddingVertical: responsiveSize(6, 8, 10),
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: responsiveSize(6, 8, 12),
   },
   dateText: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 17),
     color: "#FFFFFF",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: responsiveSize(16, 20, 24),
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: responsiveSize(12, 16, 20),
+    marginBottom: responsiveSize(6, 8, 12),
   },
   description: {
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     color: "#DDDDDD",
-    lineHeight: 24,
+    lineHeight: responsiveSize(20, 22, 26),
   },
   artistsContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginTop: 8,
+    marginTop: responsiveSize(6, 8, 12),
+    gap: responsiveSize(6, 8, 10),
   },
   artistTag: {
     backgroundColor: "#2196F3",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 20,
-    marginRight: 8,
-    marginBottom: 8,
+    paddingHorizontal: responsiveSize(10, 12, 16),
+    paddingVertical: responsiveSize(5, 6, 8),
+    borderRadius: responsiveSize(16, 18, 20),
   },
   artistText: {
     color: "#FFFFFF",
-    fontSize: 14,
+    fontSize: responsiveSize(12, 13, 14),
   },
   button: {
     backgroundColor: "#2196F3",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    height: 50,
-    borderRadius: 8,
-    marginTop: 24,
+    height: responsiveSize(44, 48, 54),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginTop: responsiveSize(16, 20, 28),
+    marginBottom: responsiveSize(16, 20, 28),
   },
   buttonText: {
     color: "white",
-    fontSize: 16,
+    fontSize: responsiveSize(13, 15, 16),
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
   },
   deleteButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FF3B30",
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    marginTop: 16,
+    paddingVertical: responsiveSize(10, 12, 16),
+    paddingHorizontal: responsiveSize(14, 18, 24),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginTop: responsiveSize(12, 16, 20),
   },
   deleteButtonText: {
     color: "#FFFFFF",
     fontWeight: "bold",
-    marginLeft: 8,
+    marginLeft: responsiveSize(6, 8, 10),
+    fontSize: responsiveSize(13, 14, 15),
   },
 })
 

@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, useWindowDimensions } from "react-native"
 import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "@react-navigation/native"
@@ -10,6 +10,7 @@ import FirebaseService from "../services/FirebaseService"
 import type { Event } from "../models/Event"
 import type { CalendarScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
+import { BREAKPOINTS, useResponsiveSize } from "../utils/ResponsiveDesign"
 
 type CalendarTheme = {
   backgroundColor?: string
@@ -104,6 +105,13 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   // SEO Metadata for Calendar page
   const calendarSeo = SCREEN_SEO.calendar;
 
+  // Responsive hooks
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= BREAKPOINTS.LARGE_TABLET;
+  const isTablet = width >= BREAKPOINTS.TABLET && width < BREAKPOINTS.LARGE_TABLET;
+  const containerPadding = useResponsiveSize(12, 16, 24);
+  const calendarWidth = useResponsiveSize(width - 32, width * 0.6, width * 0.4);
+
   const isFocused = useIsFocused()
   const [events, setEvents] = useState<Event[]>([])
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
@@ -181,6 +189,107 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
     return fallback || "Time TBD"
   }
 
+  // Desktop/Tablet: Two-column layout
+  if (isLargeScreen || isTablet) {
+    return (
+      <View style={styles.container}>
+        {/* SEO Metadata for Calendar page */}
+        <SEOMetadata
+          title={calendarSeo.title}
+          description={calendarSeo.description}
+          keywords={calendarSeo.keywords}
+          type={calendarSeo.type}
+        />
+        <Text style={styles.srOnly} accessibilityRole="header">
+          {calendarSeo.title}
+        </Text>
+        
+        <View style={styles.twoColumnContainer}>
+          {/* Left Column: Calendar */}
+          <View style={styles.calendarColumn}>
+            <Calendar
+              theme={
+                {
+                  backgroundColor: "#121212",
+                  calendarBackground: "#1E1E1E",
+                  textSectionTitleColor: "#FFFFFF",
+                  selectedDayBackgroundColor: "#2196F3",
+                  selectedDayTextColor: "#FFFFFF",
+                  todayTextColor: "#2196F3",
+                  dayTextColor: "#FFFFFF",
+                  textDisabledColor: "#444444",
+                  dotColor: "#2196F3",
+                  selectedDotColor: "#FFFFFF",
+                  arrowColor: "#2196F3",
+                  monthTextColor: "#FFFFFF",
+                  indicatorColor: "#2196F3",
+                } as CalendarTheme
+              }
+              markedDates={markedDates}
+              onDayPress={handleDateSelect}
+              enableSwipeMonths={true}
+              style={styles.calendarInColumn}
+            />
+          </View>
+          
+          {/* Right Column: Events List */}
+          <View style={styles.eventsColumn}>
+            <View style={styles.dateTitleContainer}>
+              <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+              {!loading && (
+                <View style={styles.eventCountBadge}>
+                  <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
+                </View>
+              )}
+            </View>
+
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#2196F3" />
+                <Text style={styles.loadingText}>Loading events...</Text>
+              </View>
+            ) : filteredEvents.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="calendar-outline" size={64} color="#666666" />
+                <Text style={styles.emptyText}>No events on this date</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredEvents}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.eventCard}
+                    onPress={() => {
+                      navigation.navigate("EventDetail", { eventId: item.id })
+                    }}
+                  >
+                    <View style={styles.eventTimeContainer}>
+                      <Text style={styles.eventTime}>{getEventTime(item)}</Text>
+                    </View>
+                    <View style={styles.eventDetails}>
+                      <Text style={styles.eventName}>{item.name}</Text>
+                      <Text style={styles.eventVenue}>{item.venueName}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={["#2196F3"]}
+                    tintColor="#2196F3"
+                  />
+                }
+              />
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Mobile: Single column layout
   return (
     <View style={styles.container}>
       {/* SEO Metadata for Calendar page */}
@@ -287,6 +396,25 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     opacity: 0.001,
     zIndex: -1,
+  },
+  // Two-column layout for desktop/tablet
+  twoColumnContainer: {
+    flex: 1,
+    flexDirection: "row",
+    padding: 16,
+    gap: 24,
+  },
+  calendarColumn: {
+    flex: 0.4,
+    minWidth: 300,
+  },
+  calendarInColumn: {
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  eventsColumn: {
+    flex: 0.6,
+    minWidth: 300,
   },
   eventsContainer: {
     flex: 1,
