@@ -28,6 +28,17 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
 
+  // Filter events to show only current and upcoming events
+  const upcomingEvents = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    return events.filter(event => {
+      const eventDate = new Date(event.date)
+      eventDate.setHours(0, 0, 0, 0)
+      return eventDate >= now
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  }, [events])
+
   const openInGoogleMaps = async () => {
     if (!venue) return
 
@@ -64,24 +75,38 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
     const loadVenueAndEvents = async () => {
       try {
         setLoading(true)
+        console.log("[VenueDetailScreen] Loading venue details for venueId:", venueId)
+        console.log("[VenueDetailScreen] User logged in:", !!user)
+        
         const venueData = await FirebaseService.getVenueById(venueId)
         setVenue(venueData)
+        console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
-        // Check if current user is the owner or an admin
-        if (user && venueData) {
-          setIsOwner(venueData.ownerId === user.id)
-          setIsAdmin(user.userType === "admin")
-
-          // Check if venue is a custom venue (tied to one event and owned by event creator)
+        // Fetch events regardless of user authentication (events are public data)
+        if (venueData) {
+          console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
           const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+          console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
           setEvents(venueEvents)
+          
+          // Check if venue is a custom venue (tied to one event and owned by event creator)
           if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
             setIsCustomVenue(true)
           } else {
             setIsCustomVenue(false)
           }
+        }
 
-          // Load initial vibe rating for today
+        // Always set owner/admin flags when user is logged in (independent of venue data)
+        if (user) {
+          console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
+          setIsOwner(venueData?.ownerId === user.id)
+          setIsAdmin(user.userType === "admin")
+          console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
+        }
+
+        // Load initial vibe rating for today (only when user is logged in and venue data exists)
+        if (user && venueData) {
           const today = new Date()
           const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
           if (vibeImages.length > 0) {
@@ -148,14 +173,16 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
+      console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId)
+      
       const venueData = await FirebaseService.getVenueById(venueId)
       setVenue(venueData)
       
-      if (user && venueData) {
-        setIsOwner(venueData.ownerId === user.id)
-        setIsAdmin(user.userType === "admin")
-        
+      // Fetch events regardless of user authentication (events are public data)
+      if (venueData) {
+        console.log("[VenueDetailScreen] Refreshing events for venue:", venueId)
         const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+        console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length)
         setEvents(venueEvents)
         
         if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
@@ -163,6 +190,12 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         } else {
           setIsCustomVenue(false)
         }
+      }
+
+      // Only set owner/admin flags if user is logged in
+      if (user && venueData) {
+        setIsOwner(venueData.ownerId === user.id)
+        setIsAdmin(user.userType === "admin")
       }
     } catch (error) {
       console.error("Error refreshing venue details:", error)
@@ -180,30 +213,33 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   }
 
   const handleDeleteVenue = async () => {
-    Alert.alert("Delete Venue", "Are you sure you want to delete this venue? This action cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoading(true)
-            // Delete all events associated with this venue
-            const venueEvents = await FirebaseService.getEventsByVenue(venueId)
-            for (const event of venueEvents) {
-              await FirebaseService.deleteEvent(event.id)
-            }
-            await FirebaseService.deleteVenue(venueId)
-            Alert.alert("Success", "Venue and associated events deleted successfully")
-            navigation.goBack()
-          } catch (error) {
-            console.error("Error deleting venue:", error)
-            Alert.alert("Error", "Failed to delete venue")
-            setLoading(false)
-          }
-        },
-      },
-    ])
+    // Use a simple confirm dialog instead of Alert.alert for web compatibility
+    const confirmed = window.confirm("Are you sure you want to delete this venue? This action cannot be undone.")
+    
+    if (!confirmed) return
+    
+    try {
+      setLoading(true)
+      console.log("[VenueDetailScreen] Deleting venue:", venueId)
+      
+      // Delete all events associated with this venue
+      const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+      console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete")
+      
+      for (const event of venueEvents) {
+        await FirebaseService.deleteEvent(event.id)
+      }
+      
+      await FirebaseService.deleteVenue(venueId)
+      console.log("[VenueDetailScreen] Venue deleted successfully")
+      
+      Alert.alert("Success", "Venue and associated events deleted successfully")
+      navigation.goBack()
+    } catch (error) {
+      console.error("[VenueDetailScreen] Error deleting venue:", error)
+      Alert.alert("Error", "Failed to delete venue")
+      setLoading(false)
+    }
   }
 
   const handleTodaysVibe = () => {
@@ -323,10 +359,15 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           </>
         )}
 
+        {/* Debug info: Show event count */}
         {events.length > 0 && (
+          <Text style={styles.debugText}>Showing {upcomingEvents.length} of {events.length} events</Text>
+        )}
+
+        {upcomingEvents.length > 0 ? (
           <>
             <Text style={styles.sectionTitle}>Upcoming Events</Text>
-            {events.map((event) => (
+            {upcomingEvents.map((event) => (
               <TouchableOpacity
                 key={event.id}
                 style={styles.eventCard}
@@ -347,6 +388,11 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
               </TouchableOpacity>
             ))}
           </>
+        ) : (
+          <View style={styles.emptyEventsContainer}>
+            <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
+            <Text style={styles.emptyEventsSubtext}>Check back later for upcoming events</Text>
+          </View>
         )}
 
         <TouchableOpacity
@@ -594,6 +640,32 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
     marginLeft: responsiveSize(6, 8, 10),
+  },
+  emptyEventsContainer: {
+    alignItems: "center",
+    paddingVertical: responsiveSize(24, 28, 32),
+    paddingHorizontal: responsiveSize(16, 20, 24),
+    backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(12, 16, 20),
+  },
+  emptyEventsText: {
+    color: "#BBBBBB",
+    fontSize: responsiveSize(14, 16, 18),
+    textAlign: "center",
+    marginBottom: responsiveSize(4, 6, 8),
+  },
+  emptyEventsSubtext: {
+    color: "#888888",
+    fontSize: responsiveSize(12, 13, 14),
+    textAlign: "center",
+  },
+  debugText: {
+    color: "#666666",
+    fontSize: responsiveSize(10, 11, 12),
+    textAlign: "center",
+    marginBottom: responsiveSize(8, 10, 12),
+    fontStyle: "italic",
   },
 })
 

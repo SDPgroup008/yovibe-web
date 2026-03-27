@@ -144,6 +144,22 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     return date.toLocaleDateString("en-US", options).toUpperCase()
   }
 
+  // Handle delete event for admin
+  const handleDeleteEvent = async () => {
+    if (!event) return
+    
+    try {
+      console.log("[EventDetailScreen] Deleting event:", event.id)
+      await FirebaseService.deleteEvent(event.id)
+      console.log("[EventDetailScreen] Event deleted successfully")
+      Alert.alert("Success", "Event deleted successfully")
+      navigation.goBack()
+    } catch (error) {
+      console.error("[EventDetailScreen] Error deleting event:", error)
+      Alert.alert("Error", "Failed to delete event")
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -236,23 +252,12 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           <TouchableOpacity
             style={styles.deleteButton}
             onPress={() => {
-              Alert.alert("Delete Event", "Are you sure you want to delete this event? This action cannot be undone.", [
-                { text: "Cancel", style: "cancel" },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: async () => {
-                    try {
-                      await FirebaseService.deleteEvent(event.id)
-                      Alert.alert("Success", "Event deleted successfully")
-                      navigation.goBack()
-                    } catch (error) {
-                      console.error("Error deleting event:", error)
-                      Alert.alert("Error", "Failed to delete event")
-                    }
-                  },
-                },
-              ])
+              // Use a simple confirm dialog instead of Alert.alert for web compatibility
+              const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
+              
+              if (confirmed) {
+                handleDeleteEvent()
+              }
             }}
           >
             <Ionicons name="trash-outline" size={20} color="#FFFFFF" />

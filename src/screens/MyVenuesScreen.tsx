@@ -66,26 +66,26 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
   }
 
   const handleDeleteVenue = async (venueId: string) => {
-    Alert.alert("Delete Venue", "Are you sure you want to delete this venue? This action can be undone by an admin.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          setLoading(true)
-          try {
-            await FirebaseService.deleteVenue(venueId)
-            Alert.alert("Success", "Venue deleted successfully")
-            // Refresh the list
-            loadVenues()
-          } catch (error) {
-            console.error("Error deleting venue:", error)
-            Alert.alert("Error", "Failed to delete venue")
-            setLoading(false)
-          }
-        },
-      },
-    ])
+    // Use a simple confirm dialog instead of Alert.alert for web compatibility
+    const confirmed = window.confirm("Are you sure you want to delete this venue? This action can be undone by an admin.")
+    
+    if (!confirmed) return
+    
+    try {
+      setLoading(true)
+      console.log("[MyVenuesScreen] Deleting venue:", venueId)
+      
+      await FirebaseService.deleteVenue(venueId)
+      console.log("[MyVenuesScreen] Venue deleted successfully")
+      
+      Alert.alert("Success", "Venue deleted successfully")
+      // Refresh the list
+      loadVenues()
+    } catch (error) {
+      console.error("[MyVenuesScreen] Error deleting venue:", error)
+      Alert.alert("Error", "Failed to delete venue")
+      setLoading(false)
+    }
   }
 
   if (loading) {

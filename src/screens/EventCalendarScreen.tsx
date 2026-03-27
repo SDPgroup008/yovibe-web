@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, useWindowDimensions } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, useWindowDimensions, ImageBackground } from "react-native"
 import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "@react-navigation/native"
@@ -264,9 +264,15 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
                       navigation.navigate("EventDetail", { eventId: item.id })
                     }}
                   >
-                    <View style={styles.eventTimeContainer}>
-                      <Text style={styles.eventTime}>{getEventTime(item)}</Text>
-                    </View>
+                    <ImageBackground
+                      source={{ uri: item.posterImageUrl || 'https://via.placeholder.com/80x80' }}
+                      style={styles.eventTimeContainer}
+                      imageStyle={styles.eventTimeBackground}
+                    >
+                      <View style={styles.eventTimeOverlay}>
+                        <Text style={styles.eventTime}>{getEventTime(item)}</Text>
+                      </View>
+                    </ImageBackground>
                     <View style={styles.eventDetails}>
                       <Text style={styles.eventName}>{item.name}</Text>
                       <Text style={styles.eventVenue}>{item.venueName}</Text>
@@ -357,9 +363,15 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
                   navigation.navigate("EventDetail", { eventId: item.id })
                 }}
               >
-                <View style={styles.eventTimeContainer}>
-                  <Text style={styles.eventTime}>{getEventTime(item)}</Text>
-                </View>
+                <ImageBackground
+                  source={{ uri: item.posterImageUrl || 'https://via.placeholder.com/80x80' }}
+                  style={styles.eventTimeContainer}
+                  imageStyle={styles.eventTimeBackground}
+                >
+                  <View style={styles.eventTimeOverlay}>
+                    <Text style={styles.eventTime}>{getEventTime(item)}</Text>
+                  </View>
+                </ImageBackground>
                 <View style={styles.eventDetails}>
                   <Text style={styles.eventName}>{item.name}</Text>
                   <Text style={styles.eventVenue}>{item.venueName}</Text>
@@ -473,8 +485,16 @@ const styles = StyleSheet.create({
   },
   eventTimeContainer: {
     width: 80,
-    padding: 12,
-    backgroundColor: "#2196F3",
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  eventTimeBackground: {
+    resizeMode: "cover",
+  },
+  eventTimeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",
   },

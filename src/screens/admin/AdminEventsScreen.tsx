@@ -38,25 +38,29 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   }
 
   const handleDeleteEvent = (eventId: string) => {
-    Alert.alert("Delete Event", "Are you sure you want to delete this event? This action cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoading(true)
-            await FirebaseService.deleteEvent(eventId)
-            Alert.alert("Success", "Event deleted successfully")
-            loadEvents()
-          } catch (error) {
-            console.error("Error deleting event:", error)
-            Alert.alert("Error", "Failed to delete event")
-            setLoading(false)
-          }
-        },
-      },
-    ])
+    // Use a simple confirm dialog instead of Alert.alert for web compatibility
+    const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
+    
+    if (confirmed) {
+      performDelete(eventId)
+    }
+  }
+
+  const performDelete = async (eventId: string) => {
+    try {
+      setLoading(true)
+      console.log("[AdminEventsScreen] Deleting event:", eventId)
+      
+      await FirebaseService.deleteEvent(eventId)
+      console.log("[AdminEventsScreen] Event deleted successfully")
+      
+      Alert.alert("Success", "Event deleted successfully")
+      loadEvents()
+    } catch (error) {
+      console.error("[AdminEventsScreen] Error deleting event:", error)
+      Alert.alert("Error", "Failed to delete event")
+      setLoading(false)
+    }
   }
 
   const handleToggleFeature = async (eventId: string, isFeatured: boolean) => {

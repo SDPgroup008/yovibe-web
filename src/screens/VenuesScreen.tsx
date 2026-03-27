@@ -2,7 +2,7 @@
 
 import type React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions } from "react-native";
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions, TextInput } from "react-native";
 import { useIsFocused } from "@react-navigation/native";
 import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
@@ -57,7 +57,32 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const [lastDoc, setLastDoc] = useState<any>(null);
   const [hasMore, setHasMore] = useState(true);
   const [dataCache, setDataCache] = useState<{data: Venue[], timestamp: number, version: string} | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced search handler for performance
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchQuery(text);
+    
+    // Debounce: clear previous timeout and set new one
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      // Search is applied in real-time via the memoized filteredVenues
+    }, 300);
+  }, []);
+
+  // Toggle search visibility
+  const toggleSearch = useCallback(() => {
+    setShowSearch(prev => !prev);
+    if (showSearch) {
+      setSearchQuery("");
+    }
+  }, [showSearch]);
   const ITEMS_PER_PAGE = 5;
   const INITIAL_FETCH_SIZE = 10; // Fetch 10 initially to ensure 5 per tab
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
@@ -231,18 +256,30 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   };
 
   const getFilteredVenues = () => {
-    // console.log("\n========== VENUE FILTERING (UI) ==========\nActive Tab:", activeTab.toUpperCase())
-    // console.log("Total venues available for filtering:", venues.length)
+    // Handle search query filtering
+    const searchTerm = searchQuery.toLowerCase().trim();
     
     // Handle "all" tab - return all venues without filtering
     if (activeTab === "all") {
-      // console.log("✅ All tab selected - showing all venues without filtering")
-      const sorted = [...venues].sort((a, b) => {
+      let filtered = venues;
+      
+      // Apply search filter if search term exists
+      if (searchTerm) {
+        filtered = venues.filter((venue) => {
+          const nameMatch = venue.name?.toLowerCase().includes(searchTerm);
+          const locationMatch = venue.location?.toLowerCase().includes(searchTerm);
+          const categoryMatch = venue.categories?.some((cat) => 
+            cat.toLowerCase().includes(searchTerm)
+          );
+          return nameMatch || locationMatch || categoryMatch;
+        });
+      }
+      
+      const sorted = [...filtered].sort((a, b) => {
         const aVibe = venueVibeRatings[a.id] || 0.0;
         const bVibe = venueVibeRatings[b.id] || 0.0;
         return bVibe - aVibe;
       });
-      // console.log("========================================\n")
       return sorted;
     }
     
@@ -258,11 +295,6 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       if (!venue.categories || !Array.isArray(venue.categories) || venue.categories.length === 0) {
         noCategoryCount++
         const included = activeTab === "recreation"
-        // if (included) {
-        //   console.log(`✅ "${venueName}" - Included in ${activeTab.toUpperCase()} (no categories, defaults to "Other")`)
-        // } else {
-        //   console.log(`❌ "${venueName}" - Excluded from ${activeTab.toUpperCase()} (no categories)`)
-        // }
         return included;
       }
       
@@ -272,53 +304,39 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
       
       if (isNightlife) {
         nightlifeCount++
-        // if (activeTab === "nightlife") {
-        //   console.log(`✅ "${venueName}" - Included in NIGHTLIFE - Categories: [${categories.join(", ")}]`)
-        //   return true
-        // } else {
-        //   console.log(`❌ "${venueName}" - Excluded from RECREATION (is nightlife venue) - Categories: [${categories.join(", ")}]`)
-        //   return false
-        // }
         return activeTab === "nightlife";
       } else {
         recreationCount++
-        // if (activeTab === "recreation") {
-        //   console.log(`✅ "${venueName}" - Included in RECREATION - Categories: [${categories.join(", ")}]`)
-        //   return true
-        // } else {
-        //   console.log(`❌ "${venueName}" - Excluded from NIGHTLIFE (is recreation venue) - Categories: [${categories.join(", ")}]`)
-        //   return false
-        // }
         return activeTab === "recreation";
       }
     });
-    
-    // console.log("\n--- FILTERING SUMMARY ---")
-    // console.log("Total venues processed:", venues.length)
-    // console.log("Nightlife venues found:", nightlifeCount)
-    // console.log("Recreation venues found:", recreationCount)
-    // console.log("No category venues found:", noCategoryCount)
-    // console.log("Venues passing filter for", activeTab, "tab:", filtered.length)
 
+    // Apply search filter to the tab-filtered results
+    let searchFiltered = filtered;
+    if (searchTerm) {
+      searchFiltered = filtered.filter((venue) => {
+        const nameMatch = venue.name?.toLowerCase().includes(searchTerm);
+        const locationMatch = venue.location?.toLowerCase().includes(searchTerm);
+        const categoryMatch = venue.categories?.some((cat) => 
+          cat.toLowerCase().includes(searchTerm)
+        );
+        return nameMatch || locationMatch || categoryMatch;
+      });
+    }
+    
     // Sort by current vibe rating (highest first)
-    const sorted = filtered.sort((a, b) => {
+    const sorted = searchFiltered.sort((a, b) => {
       const aVibe = venueVibeRatings[a.id] || 0.0;
       const bVibe = venueVibeRatings[b.id] || 0.0;
       return bVibe - aVibe;
     });
     
-    // console.log("\nAfter sorting by vibe rating (top 3):")
-    // sorted.slice(0, 3).forEach((venue, idx) => {
-    //   console.log(`${idx + 1}. "${venue.name}" - Vibe: ${(venueVibeRatings[venue.id] || 0.0).toFixed(1)}`)
-    // })
-    // console.log("========================================\n")
-    
     return sorted;
   };
 
   // Memoize filtered and sorted venues to prevent recalculation on every render
-  // Only recalculate when venues or activeTab changes, NOT when venueVibeRatings changes
-  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab]);
+  // Only recalculate when venues, activeTab, or searchQuery changes
+  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -495,23 +513,69 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           <TouchableOpacity
             style={[styles.tab, activeTab === "all" && styles.activeTab]}
             onPress={() => setActiveTab("all")}
+            accessibilityRole="button"
+            accessibilityLabel="All venues"
+            accessibilityState={{ selected: activeTab === "all" }}
           >
             <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
             onPress={() => setActiveTab("nightlife")}
+            accessibilityRole="button"
+            accessibilityLabel="Night clubs"
+            accessibilityState={{ selected: activeTab === "nightlife" }}
           >
             <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tab, activeTab === "recreation" && styles.activeTab]}
             onPress={() => setActiveTab("recreation")}
+            accessibilityRole="button"
+            accessibilityLabel="Recreation centers"
+            accessibilityState={{ selected: activeTab === "recreation" }}
           >
             <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centers</Text>
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
+            onPress={toggleSearch}
+            accessibilityRole="button"
+            accessibilityLabel={showSearch ? "Close search" : "Search venues"}
+            accessibilityHint="Double tap to search for venues by name or location"
+          >
+            <Ionicons name={showSearch ? "close" : "search"} size={responsiveSize(18, 20, 22)} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
+          </TouchableOpacity>
         </View>
       </View>
+
+      {showSearch && (
+        <View style={styles.searchContainer}>
+          <TextInput
+            style={[styles.searchInput, activeTab === "recreation" && styles.recreationSearchInput]}
+            placeholder="Search venues by name or location..."
+            placeholderTextColor="#888888"
+            value={searchQuery}
+            onChangeText={handleSearchChange}
+            autoFocus
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            accessibilityLabel="Search input"
+            accessibilityHint="Type venue name or location to filter results"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity 
+              style={styles.searchClearButton}
+              onPress={() => setSearchQuery("")}
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+            >
+              <Ionicons name="close-circle" size={20} color="#666666" />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -641,6 +705,48 @@ const styles = StyleSheet.create({
   activeTabText: {
     color: "#00D4FF",
     fontWeight: "700",
+  },
+  searchButton: {
+    paddingVertical: responsiveSize(8, 12, 14),
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: responsiveSize(2, 4, 6),
+  },
+  searchButtonActive: {
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+    borderRadius: responsiveSize(14, 20, 24),
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    marginHorizontal: responsiveSize(12, 16, 20),
+    marginTop: responsiveSize(8, 12, 16),
+    marginBottom: responsiveSize(4, 8, 12),
+    borderRadius: responsiveSize(12, 16, 20),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+    paddingHorizontal: responsiveSize(12, 14, 16),
+  },
+  recreationSearchContainer: {
+    backgroundColor: "rgba(245, 245, 245, 0.95)",
+    borderColor: "rgba(0, 0, 0, 0.1)",
+  },
+  searchInput: {
+    flex: 1,
+    height: responsiveSize(40, 44, 48),
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    paddingVertical: 0,
+  },
+  recreationSearchInput: {
+    color: "#333333",
+  },
+  searchClearButton: {
+    padding: responsiveSize(4, 6, 8),
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingContainer: {
     flex: 1,

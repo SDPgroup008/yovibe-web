@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useCallback } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl } from "react-native"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
@@ -21,6 +21,31 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showSearch, setShowSearch] = useState(false)
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Debounced search handler for performance
+  const handleSearchChange = useCallback((text: string) => {
+    setSearchQuery(text)
+    
+    // Debounce: clear previous timeout and set new one
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current)
+    }
+    
+    searchTimeoutRef.current = setTimeout(() => {
+      // Search is applied in real-time via the memoized filtered venues
+    }, 300)
+  }, [])
+
+  // Toggle search visibility
+  const toggleSearch = useCallback(() => {
+    setShowSearch(prev => !prev)
+    if (showSearch) {
+      setSearchQuery("")
+    }
+  }, [showSearch])
 
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
@@ -232,13 +257,33 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     Linking.openURL(url)
   }
 
-  const getSortedVenues = () => {
-    return [...venues].sort((a, b) => {
+  // Memoized sorted and filtered venues
+  const filteredAndSortedVenues = useMemo(() => {
+    const searchTerm = searchQuery.toLowerCase().trim()
+    
+    // Filter venues based on search query
+    let filtered = venues
+    if (searchTerm) {
+      filtered = venues.filter((venue) => {
+        const nameMatch = venue.name?.toLowerCase().includes(searchTerm)
+        const locationMatch = venue.location?.toLowerCase().includes(searchTerm)
+        const categoryMatch = venue.categories?.some((cat) => 
+          cat.toLowerCase().includes(searchTerm)
+        )
+        return nameMatch || locationMatch || categoryMatch
+      })
+    }
+    
+    // Sort by vibe rating (highest first)
+    return [...filtered].sort((a, b) => {
       const aVibe = venueVibeRatings[a.id] || 0.0
       const bVibe = venueVibeRatings[b.id] || 0.0
-      return bVibe - aVibe // Sort in descending order (highest vibe first)
+      return bVibe - aVibe
     })
-  }
+  }, [venues, venueVibeRatings, searchQuery])
+
+  // Get venue count for display
+  const venueCount = filteredAndSortedVenues.length
 
   return (
     <View style={styles.container}>
@@ -254,8 +299,53 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         {mapSeo.title}
       </Text>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Venue Locations</Text>
-        <Text style={styles.headerSubtitle}>Here's a list of all our venues, sorted by vibe:</Text>
+        <View style={styles.headerTop}>
+          <View style={styles.headerTextContainer}>
+            <Text style={styles.headerTitle}>Venue Locations</Text>
+            <Text style={styles.headerSubtitle}>
+              {searchQuery 
+                ? `${venueCount} venue${venueCount !== 1 ? 's' : ''} found`
+                : `Here's a list of all our venues, sorted by vibe:`
+              }
+            </Text>
+          </View>
+          <TouchableOpacity 
+            style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
+            onPress={toggleSearch}
+            accessibilityRole="button"
+            accessibilityLabel={showSearch ? "Close search" : "Search venues"}
+            accessibilityHint="Double tap to search for venues by name or location"
+          >
+            <Ionicons name={showSearch ? "close" : "search"} size={22} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
+          </TouchableOpacity>
+        </View>
+        {showSearch && (
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search venues by name or location..."
+              placeholderTextColor="#888888"
+              value={searchQuery}
+              onChangeText={handleSearchChange}
+              autoFocus
+              autoCorrect={false}
+              autoCapitalize="none"
+              returnKeyType="search"
+              accessibilityLabel="Search input"
+              accessibilityHint="Type venue name or location to filter results"
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity 
+                style={styles.searchClearButton}
+                onPress={() => setSearchQuery("")}
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+              >
+                <Ionicons name="close-circle" size={20} color="#666666" />
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       {loading ? (
@@ -279,7 +369,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             />
           }
         >
-          {getSortedVenues().map((venue) => (
+          {filteredAndSortedVenues.map((venue) => (
             <View key={venue.id} style={[styles.venueCard, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
               <View style={styles.venueInfo}>
                 <Text style={styles.venueName}>{venue.name}</Text>
@@ -342,6 +432,15 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  headerTextContainer: {
+    flex: 1,
+    marginRight: 12,
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: "bold",
@@ -351,6 +450,38 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 16,
     color: "#BBBBBB",
+  },
+  searchButton: {
+    padding: 10,
+    justifyContent: "center",
+    alignItems: "center",
+    borderRadius: 20,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  searchButtonActive: {
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+  },
+  searchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(30, 30, 30, 0.95)",
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(33, 150, 243, 0.3)",
+    paddingHorizontal: 12,
+  },
+  searchInput: {
+    flex: 1,
+    height: 44,
+    color: "#FFFFFF",
+    fontSize: 15,
+    paddingVertical: 0,
+  },
+  searchClearButton: {
+    padding: 6,
+    justifyContent: "center",
+    alignItems: "center",
   },
   loadingContainer: {
     flex: 1,

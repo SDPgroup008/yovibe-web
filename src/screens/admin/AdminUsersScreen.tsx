@@ -68,25 +68,29 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   }
 
   const handleDeleteUser = (userId: string) => {
-    Alert.alert("Delete User", "Are you sure you want to delete this user? This action cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            setLoading(true)
-            await FirebaseService.deleteUser(userId)
-            Alert.alert("Success", "User deleted successfully")
-            loadUsers()
-          } catch (error) {
-            console.error("Error deleting user:", error)
-            Alert.alert("Error", "Failed to delete user")
-            setLoading(false)
-          }
-        },
-      },
-    ])
+    // Use a simple confirm dialog instead of Alert.alert for web compatibility
+    const confirmed = window.confirm("Are you sure you want to delete this user? This action cannot be undone.")
+    
+    if (confirmed) {
+      performDelete(userId)
+    }
+  }
+
+  const performDelete = async (userId: string) => {
+    try {
+      setLoading(true)
+      console.log("[AdminUsersScreen] Deleting user:", userId)
+      
+      await FirebaseService.deleteUser(userId)
+      console.log("[AdminUsersScreen] User deleted successfully")
+      
+      Alert.alert("Success", "User deleted successfully")
+      loadUsers()
+    } catch (error) {
+      console.error("[AdminUsersScreen] Error deleting user:", error)
+      Alert.alert("Error", "Failed to delete user")
+      setLoading(false)
+    }
   }
 
   // Get filtered users based on active tab
