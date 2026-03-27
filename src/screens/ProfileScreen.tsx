@@ -14,10 +14,20 @@ import {
   Modal,
   ScrollView,
   Platform,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import FirebaseService from "../services/FirebaseService";
+
+const { width } = Dimensions.get('window');
+
+// Responsive helper function
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (width >= 1024) return large;
+  if (width >= 768) return medium;
+  return small;
+};
 import ImagePickerService from "../services/ImagePickerService";
 import type { ProfileScreenProps } from "../navigation/types";
 
@@ -389,6 +399,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+    paddingBottom: responsiveSize(54, 60, 68), // Match bottom navbar height
   },
   profileHeader: {
     alignItems: "center",

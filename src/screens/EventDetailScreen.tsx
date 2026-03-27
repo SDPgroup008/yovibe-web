@@ -428,6 +428,7 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: responsiveSize(12, 16, 24),
+    paddingBottom: responsiveSize(54, 60, 68), // Match bottom navbar height
     maxWidth: isLargeScreen ? 900 : "100%",
     alignSelf: "center",
     width: "100%",
