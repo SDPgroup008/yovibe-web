@@ -118,8 +118,68 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Tickets collection - public read, authenticated users can create
+    match /YoVibe/data/tickets/{ticketId} {
+      // Public read access for ticket scanning
+      allow read: if true;
+      
+      // Authenticated users can create tickets (purchase)
+      // Unauthenticated users can also create tickets (for guest purchases)
+      allow create: if isAuthenticated() 
+        && request.resource.data.buyerId == request.auth.uid
+        || !isAuthenticated();
+      
+      // Buyers can update their tickets, admins can update all
+      allow update: if isAuthenticated() && (
+        request.auth.uid == resource.data.buyerId
+        || isAdmin(request.auth.uid)
+      );
+      
+      // Only admins can delete tickets
+      allow delete: if isAdmin(request.auth.uid);
+    }
+
+    // Ticket validations collection - admins only
+    match /YoVibe/data/ticketValidations/{validationId} {
+      // Only admins can read ticket validations
+      allow read: if isAdmin(request.auth.uid);
+      
+      // Admins can create ticket validations (scan tickets)
+      allow create: if isAdmin(request.auth.uid);
+      
+      // Admins can update/delete
+      allow update, delete: if isAdmin(request.auth.uid);
+    }
+
+    // Organizer wallets subcollection
+    match /YoVibe/data/organizers/{organizerId}/wallet/{walletId} {
+      // Only the organizer or admins can read/write
+      allow read, write: if isAuthenticated() && (
+        request.auth.uid == organizerId
+        || isAdmin(request.auth.uid)
+      );
+    }
+
+    // Payouts collection
+    match /YoVibe/data/payouts/{payoutId} {
+      // Only the organizer or admins can read
+      allow read: if isAuthenticated() && (
+        request.auth.uid == resource.data.organizerId
+        || isAdmin(request.auth.uid)
+      );
+      
+      // Admins can create payouts (system-initiated)
+      allow create: if isAdmin(request.auth.uid);
+      
+      // Admins can update payouts
+      allow update: if isAdmin(request.auth.uid);
+      
+      // Only admins can delete
+      allow delete: if isAdmin(request.auth.uid);
+    }
 
     
+
     // Reports: users can create reports; only admins can read/update
     match /YoVibe/data/reports/{reportId} {
       allow create: if request.auth != null && request.resource.data.reporterId == request.auth.uid;

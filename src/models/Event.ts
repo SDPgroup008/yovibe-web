@@ -21,6 +21,11 @@ export interface Event {
   entryFees: Array<{ name: string; amount: string }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
   attendees?: string[] // Added to track users who are going
+  // Payment methods from event creation
+  paymentMethods?: {
+    mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
+    bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
+  }
 }
 
 // Add a new interface for Firestore storage

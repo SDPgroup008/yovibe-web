@@ -6,6 +6,7 @@ import {
   getDocs,
   getDoc,
   updateDoc,
+  setDoc,
   doc,
   query,
   where,
@@ -955,6 +956,7 @@ class FirebaseService {
         createdBy: data.createdBy,
         createdByType: data.createdByType,
         isFreeEntry: data.isFreeEntry ?? (data.entryFees?.length === 0),
+        paymentMethods: data.paymentMethods || { mobileMoney: [], bankAccounts: [] },
       }
     } catch (error) {
       // console.error("Error getting event by ID:", error)
@@ -988,6 +990,7 @@ class FirebaseService {
         createdByType: eventData.createdByType,
         isFreeEntry: eventData.isFreeEntry,
         isDeleted: false,
+        paymentMethods: eventData.paymentMethods || { mobileMoney: [], bankAccounts: [] },
       }
 
       const eventRef = await addDoc(collection(db, "YoVibe/data/events"), firestoreEventData)
@@ -1329,6 +1332,308 @@ class FirebaseService {
     } catch (error) {
       // console.error("FirebaseService: Error adding vibe image:", error)
       throw error
+    }
+  }
+
+  // ==================== TICKET METHODS ====================
+
+  async saveTicket(ticket: any): Promise<string> {
+    try {
+      const ticketRef = await addDoc(collection(db, "YoVibe/data/tickets"), {
+        ...ticket,
+        purchaseDate: ticket.purchaseDate ? Timestamp.fromDate(ticket.purchaseDate) : Timestamp.now(),
+        eventStartTime: ticket.eventStartTime ? Timestamp.fromDate(ticket.eventStartTime) : null,
+        purchaseDeadline: ticket.purchaseDeadline ? Timestamp.fromDate(ticket.purchaseDeadline) : null,
+        scannedAt: ticket.scannedAt ? Timestamp.fromDate(ticket.scannedAt) : null,
+        payoutDate: ticket.payoutDate ? Timestamp.fromDate(ticket.payoutDate) : null,
+      })
+      return ticketRef.id
+    } catch (error) {
+      console.error("FirebaseService: Error saving ticket:", error)
+      throw error
+    }
+  }
+
+  async getTicketById(ticketId: string): Promise<any | null> {
+    try {
+      const ticketDoc = await getDoc(doc(db, "YoVibe/data/tickets", ticketId))
+      if (!ticketDoc.exists()) {
+        return null
+      }
+      const data = ticketDoc.data()
+      return {
+        id: ticketDoc.id,
+        ...data,
+        purchaseDate: data.purchaseDate?.toDate(),
+        eventStartTime: data.eventStartTime?.toDate(),
+        purchaseDeadline: data.purchaseDeadline?.toDate(),
+        scannedAt: data.scannedAt?.toDate(),
+        payoutDate: data.payoutDate?.toDate(),
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error getting ticket:", error)
+      return null
+    }
+  }
+
+  async updateTicket(ticketId: string, data: any): Promise<void> {
+    try {
+      const updateData: any = { ...data }
+      
+      // Convert dates to timestamps
+      if (data.purchaseDate) updateData.purchaseDate = Timestamp.fromDate(data.purchaseDate)
+      if (data.eventStartTime) updateData.eventStartTime = Timestamp.fromDate(data.eventStartTime)
+      if (data.purchaseDeadline) updateData.purchaseDeadline = Timestamp.fromDate(data.purchaseDeadline)
+      if (data.scannedAt) updateData.scannedAt = Timestamp.fromDate(data.scannedAt)
+      if (data.payoutDate) updateData.payoutDate = Timestamp.fromDate(data.payoutDate)
+      
+      await updateDoc(doc(db, "YoVibe/data/tickets", ticketId), updateData)
+    } catch (error) {
+      console.error("FirebaseService: Error updating ticket:", error)
+      throw error
+    }
+  }
+
+  async getTicketsByEvent(eventId: string): Promise<any[]> {
+    try {
+      const ticketsRef = collection(db, "YoVibe/data/tickets")
+      const q = query(ticketsRef, where("eventId", "==", eventId))
+      const querySnapshot = await getDocs(q)
+      
+      const tickets: any[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        tickets.push({
+          id: doc.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate(),
+          eventStartTime: data.eventStartTime?.toDate(),
+          purchaseDeadline: data.purchaseDeadline?.toDate(),
+          scannedAt: data.scannedAt?.toDate(),
+          payoutDate: data.payoutDate?.toDate(),
+        })
+      })
+      
+      return tickets
+    } catch (error) {
+      console.error("FirebaseService: Error getting tickets by event:", error)
+      return []
+    }
+  }
+
+  async getTicketsByUser(userId: string): Promise<any[]> {
+    try {
+      const ticketsRef = collection(db, "YoVibe/data/tickets")
+      const q = query(ticketsRef, where("buyerId", "==", userId))
+      const querySnapshot = await getDocs(q)
+      
+      const tickets: any[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        tickets.push({
+          id: doc.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate(),
+          eventStartTime: data.eventStartTime?.toDate(),
+          purchaseDeadline: data.purchaseDeadline?.toDate(),
+          scannedAt: data.scannedAt?.toDate(),
+          payoutDate: data.payoutDate?.toDate(),
+        })
+      })
+      
+      return tickets
+    } catch (error) {
+      console.error("FirebaseService: Error getting tickets by user:", error)
+      return []
+    }
+  }
+
+  async saveTicketValidation(validation: any): Promise<string> {
+    try {
+      const validationRef = await addDoc(collection(db, "YoVibe/data/ticketValidations"), {
+        ...validation,
+        validatedAt: validation.validatedAt ? Timestamp.fromDate(validation.validatedAt) : Timestamp.now(),
+      })
+      return validationRef.id
+    } catch (error) {
+      console.error("FirebaseService: Error saving ticket validation:", error)
+      throw error
+    }
+  }
+
+  // Email record storage for tracking sent emails
+  async saveEmailRecord(record: any): Promise<string> {
+    try {
+      console.log("FirebaseService.saveEmailRecord: Saving email record:", record.type)
+      const emailRef = await addDoc(collection(db, "YoVibe/data/emailRecords"), {
+        ...record,
+        sentAt: record.sentAt ? Timestamp.fromDate(record.sentAt) : Timestamp.now(),
+      })
+      console.log("FirebaseService.saveEmailRecord: Email record saved with ID:", emailRef.id)
+      return emailRef.id
+    } catch (error) {
+      console.error("FirebaseService: Error saving email record:", error)
+      throw error
+    }
+  }
+
+  async getOrganizerWallet(organizerId: string): Promise<any | null> {
+    try {
+      const walletDoc = await getDoc(doc(db, `YoVibe/data/organizers/${organizerId}/wallet`, "main"))
+      if (!walletDoc.exists()) {
+        return null
+      }
+      const data = walletDoc.data()
+      return {
+        id: walletDoc.id,
+        ...data,
+        lastPayoutDate: data.lastPayoutDate?.toDate(),
+        lastUpdated: data.lastUpdated?.toDate(),
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error getting organizer wallet:", error)
+      return null
+    }
+  }
+
+  async createOrUpdateOrganizerWallet(organizerId: string, walletData: any): Promise<void> {
+    try {
+      const walletRef = doc(db, `YoVibe/data/organizers/${organizerId}/wallet`, "main")
+      const walletDoc = await getDoc(walletRef)
+      
+      if (walletDoc.exists()) {
+        await updateDoc(walletRef, {
+          ...walletData,
+          lastUpdated: Timestamp.now(),
+        })
+      } else {
+        await setDoc(walletRef, {
+          ...walletData,
+          organizerId,
+          lastUpdated: Timestamp.now(),
+        })
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error creating/updating organizer wallet:", error)
+      throw error
+    }
+  }
+
+  // ==================== PAYOUT METHODS ====================
+
+  async savePayout(payout: any): Promise<string> {
+    try {
+      const payoutRef = await addDoc(collection(db, "YoVibe/data/payouts"), {
+        ...payout,
+        requestDate: payout.requestDate ? Timestamp.fromDate(payout.requestDate) : Timestamp.now(),
+        processedDate: payout.processedDate ? Timestamp.fromDate(payout.processedDate) : null,
+      })
+      return payoutRef.id
+    } catch (error) {
+      console.error("FirebaseService: Error saving payout:", error)
+      throw error
+    }
+  }
+
+  async getPayoutById(payoutId: string): Promise<any | null> {
+    try {
+      const payoutDoc = await getDoc(doc(db, "YoVibe/data/payouts", payoutId))
+      if (!payoutDoc.exists()) {
+        return null
+      }
+      const data = payoutDoc.data()
+      return {
+        id: payoutDoc.id,
+        ...data,
+        requestDate: data.requestDate?.toDate(),
+        processedDate: data.processedDate?.toDate(),
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error getting payout:", error)
+      return null
+    }
+  }
+
+  async getPayoutsByOrganizer(organizerId: string): Promise<any[]> {
+    try {
+      const payoutsRef = collection(db, "YoVibe/data/payouts")
+      const q = query(payoutsRef, where("organizerId", "==", organizerId))
+      const querySnapshot = await getDocs(q)
+      
+      const payouts: any[] = []
+      querySnapshot.forEach((doc) => {
+        const data = doc.data()
+        payouts.push({
+          id: doc.id,
+          ...data,
+          requestDate: data.requestDate?.toDate(),
+          processedDate: data.processedDate?.toDate(),
+        })
+      })
+      
+      return payouts
+    } catch (error) {
+      console.error("FirebaseService: Error getting payouts by organizer:", error)
+      return []
+    }
+  }
+
+  async updatePayout(payoutId: string, data: any): Promise<void> {
+    try {
+      const updateData: any = { ...data }
+      
+      if (data.requestDate) updateData.requestDate = Timestamp.fromDate(data.requestDate)
+      if (data.processedDate) updateData.processedDate = Timestamp.fromDate(data.processedDate)
+      
+      await updateDoc(doc(db, "YoVibe/data/payouts", payoutId), updateData)
+    } catch (error) {
+      console.error("FirebaseService: Error updating payout:", error)
+      throw error
+    }
+  }
+
+  async getEligibleTicketsForPayout(organizerId: string): Promise<any[]> {
+    try {
+      // Get events for this organizer
+      const eventsRef = collection(db, "YoVibe/data/events")
+      const eventsQuery = query(eventsRef, where("ownerId", "==", organizerId))
+      const eventsSnapshot = await getDocs(eventsQuery)
+      
+      const eventIds: string[] = []
+      eventsSnapshot.forEach((doc) => {
+        eventIds.push(doc.id)
+      })
+
+      if (eventIds.length === 0) {
+        return []
+      }
+
+      // Get eligible tickets (payoutEligible = true and payoutStatus = pending)
+      const ticketsRef = collection(db, "YoVibe/data/tickets")
+      const eligibleQuery = query(
+        ticketsRef,
+        where("eventId", "in", eventIds),
+        where("payoutEligible", "==", true),
+        where("payoutStatus", "==", "pending")
+      )
+      const ticketsSnapshot = await getDocs(eligibleQuery)
+      
+      const tickets: any[] = []
+      ticketsSnapshot.forEach((doc) => {
+        const data = doc.data()
+        tickets.push({
+          id: doc.id,
+          ...data,
+          purchaseDate: data.purchaseDate?.toDate(),
+          eventStartTime: data.eventStartTime?.toDate(),
+          scannedAt: data.scannedAt?.toDate(),
+        })
+      })
+      
+      return tickets
+    } catch (error) {
+      console.error("FirebaseService: Error getting eligible tickets for payout:", error)
+      return []
     }
   }
 }

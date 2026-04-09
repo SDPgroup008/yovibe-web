@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import {
   View,
   Text,
@@ -15,12 +15,14 @@ import {
   Modal,
   Image,
   Dimensions,
+  TextInput,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type { EventDetailScreenProps } from "../navigation/types"
+import TicketService from "../services/TicketService"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -39,6 +41,157 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [isGoing, setIsGoing] = useState(false)
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
+  const [showOrganizerDashboard, setShowOrganizerDashboard] = useState(false)
+  const [activeDashboardTab, setActiveDashboardTab] = useState<'organizer' | 'admin'>('organizer')
+  
+  // Organizer Dashboard State
+  const [allowLatePurchases, setAllowLatePurchases] = useState(true)
+  const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
+  const [ticketSalesLate, setTicketSalesLate] = useState(0)
+  const [scanLogs, setScanLogs] = useState<Array<{ time: string; ticketId: string; status: string }>>([])
+  const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
+  const [walletBalance, setWalletBalance] = useState("UGX 0")
+  const [revenueAnalytics, setRevenueAnalytics] = useState<Array<{ label: string; value: number }>>([])
+
+  // Payment details state
+  const [organizerPaymentDetails, setOrganizerPaymentDetails] = useState<{
+    mobileMoney?: { provider: string; phoneNumber: string; accountName: string }
+    bankAccount?: { bankName: string; accountNumber: string; accountName: string }
+  }>({})
+  const [isEditingPayment, setIsEditingPayment] = useState(false)
+  const [editForm, setEditForm] = useState({
+    mobileProvider: "mtn" as "mtn" | "airtel",
+    mobileNumber: "",
+    mobileName: "",
+    bankName: "",
+    bankNumber: "",
+    bankNameAccount: ""
+  })
+  
+  // Ticket Scanner State
+  const [scanning, setScanning] = useState(false)
+  const [validating, setValidating] = useState(false)
+  
+  // Handle scan ticket
+  const handleScanTicket = async () => {
+    try {
+      console.log("========================================")
+      console.log("📱 ORGANIZER DASHBOARD: TICKET SCANNER")
+      console.log("========================================")
+      console.log("📋 EventDetailScreen.handleScanTicket: Initiating ticket scan")
+      console.log("📋 Event ID:", eventId)
+      console.log("📋 Organizer ID:", user?.id)
+      console.log("📋 Event:", event?.name)
+      
+      setScanning(true)
+      
+      // Use Alert.prompt to simulate QR code scanning
+      const { Alert } = require('react-native')
+      console.log("⏳ Waiting for ticket input...")
+      
+      Alert.prompt(
+        "Scan Ticket",
+        "Enter ticket ID or scan QR code:",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => console.log("📋 Ticket scan cancelled by user") },
+          {
+            text: "Validate",
+            onPress: async (ticketId: string) => {
+              if (ticketId) {
+                console.log("📋 Ticket ID entered:", ticketId)
+                await handleValidateTicket(ticketId)
+              }
+            },
+          },
+        ],
+        "plain-text",
+      )
+    } catch (error) {
+      console.error("❌ Error scanning ticket:", error)
+      Alert.alert("Error", "Failed to scan ticket")
+    } finally {
+      setScanning(false)
+    }
+  }
+  
+  // Handle validate ticket
+  const handleValidateTicket = async (ticketId: string) => {
+    if (!user) {
+      console.log("❌ Validation failed: User not authenticated")
+      Alert.alert("Error", "Please sign in to validate tickets")
+      return
+    }
+
+    try {
+      console.log("--- Organizer validating ticket ---")
+      console.log("📋 Ticket ID:", ticketId)
+      console.log("📋 Validator ID:", user.id)
+      console.log("📋 Validator Name:", user.displayName)
+      
+      setValidating(true)
+      
+      // Use Alert.prompt for confirmation
+      console.log("⏳ Prompting for validation confirmation...")
+      
+      Alert.alert(
+        "Ticket Validation",
+        "Click Validate to verify this ticket.",
+        [
+          { text: "Cancel", style: "cancel", onPress: () => console.log("📋 Validation cancelled by organizer") },
+          {
+            text: "Validate",
+            onPress: async () => {
+              console.log("✅ Organizer confirmed validation")
+              console.log("⏳ Calling TicketService.validateTicket...")
+              
+              try {
+                const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance")
+                
+                console.log("📋 Validation result received:")
+                console.log("   - Success:", result.success)
+                console.log("   - Reason:", result.reason || "N/A")
+                
+                // Add to scan logs
+                const newLog = {
+                  time: new Date().toLocaleTimeString(),
+                  ticketId: ticketId.substring(0, 8) + "...",
+                  status: result.success ? "Valid" : "Invalid"
+                }
+                setScanLogs(prev => [newLog, ...prev].slice(0, 10))
+                console.log("📋 Scan log updated:", newLog)
+                
+                if (result.success) {
+                  console.log("✅ TICKET VALIDATION SUCCESSFUL")
+                  console.log("📋 Ticket ID:", ticketId)
+                  console.log("📋 Entry granted to attendee")
+                  console.log("========================================")
+                  Alert.alert("✅ Entry Granted", "Ticket validated successfully. Entry granted.", [{ text: "OK" }])
+                } else {
+                  console.log("❌ TICKET VALIDATION FAILED")
+                  console.log("📋 Reason:", result.reason)
+                  console.log("========================================")
+                  Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
+                }
+              } catch (error) {
+                console.error("❌ Error during validation:", error)
+                Alert.alert("Error", "Failed to validate ticket")
+              }
+            },
+          },
+        ],
+      )
+    } catch (error) {
+      console.error("❌ Error validating ticket:", error)
+      Alert.alert("Error", "Failed to validate ticket")
+    } finally {
+      setValidating(false)
+    }
+  }
+  // Admin state - for viewing organizer's payment details
+  const [eventCreatorPaymentDetails, setEventCreatorPaymentDetails] = useState<{
+    mobileMoney?: { provider: string; phoneNumber: string; accountName: string }
+    bankAccount?: { bankName: string; accountNumber: string; accountName: string }
+  } | null>(null)
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -100,11 +253,14 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   }
 
   const handleBuyTicket = () => {
-    if (!user) {
-      Alert.alert("Sign In Required", "Please sign in to view ticket contact details.")
-      return
-    }
+    if (!event) return
 
+    // Navigate to TicketPurchaseScreen for actual ticket purchase
+    // Both authenticated and unauthenticated users can access this screen
+    navigation.navigate("TicketPurchase", { event })
+  }
+
+  const handleViewTicketContacts = () => {
     if (!event) return
 
     navigation.navigate("TicketContactScreen", { ticketContacts: event.ticketContacts })
@@ -160,6 +316,156 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     }
   }
 
+  // Load organizer payment details
+  const loadPaymentDetails = async () => {
+    if (!user) return
+    try {
+      const userData = await FirebaseService.getUserProfile(user.uid)
+      if (userData?.paymentDetails) {
+        setOrganizerPaymentDetails(userData.paymentDetails)
+      }
+    } catch (error) {
+      console.error("Error loading payment details:", error)
+    }
+  }
+
+  // Load event creator's payment details (for admin view)
+  const loadEventCreatorPaymentDetails = async (creatorId: string) => {
+    try {
+      const userData = await FirebaseService.getUserProfile(creatorId)
+      return userData?.paymentDetails || null
+    } catch (error) {
+      console.error("Error loading organizer payment details:", error)
+      return null
+    }
+  }
+
+  // Save organizer payment details
+  const handleSavePaymentDetails = async () => {
+    if (!event) return
+    try {
+      // Build mobile money array from form
+      const mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }> = []
+      if (editForm.mobileNumber && editForm.mobileName) {
+        mobileMoney.push({
+          provider: editForm.mobileProvider === "airtel" ? "airtel" : "mtn",
+          number: editForm.mobileNumber,
+          name: editForm.mobileName
+        })
+      }
+      
+      // Build bank accounts array from form
+      const bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }> = []
+      if (editForm.bankName && editForm.bankNumber && editForm.bankNameAccount) {
+        bankAccounts.push({
+          bankName: editForm.bankName,
+          accountNumber: editForm.bankNumber,
+          accountName: editForm.bankNameAccount
+        })
+      }
+      
+      const paymentMethods = { mobileMoney, bankAccounts }
+      
+      // Update the event with new payment methods
+      await FirebaseService.updateEvent(event.id, { paymentMethods })
+      
+      // Update local state
+      setEvent({ ...event, paymentMethods })
+      setIsEditingPayment(false)
+      Alert.alert("Success", "Payment details updated successfully")
+    } catch (error) {
+      console.error("Error saving payment details:", error)
+      Alert.alert("Error", "Failed to save payment details")
+    }
+  }
+
+  // Handle edit button press - populate form with existing values
+  const handleEditPayment = () => {
+    if (event?.paymentMethods) {
+      const mm = event.paymentMethods.mobileMoney?.[0]
+      const bank = event.paymentMethods.bankAccounts?.[0]
+      setEditForm({
+        mobileProvider: mm?.provider || "mtn",
+        mobileNumber: mm?.number || "",
+        mobileName: mm?.name || "",
+        bankName: bank?.bankName || "",
+        bankNumber: bank?.accountNumber || "",
+        bankNameAccount: bank?.accountName || ""
+      })
+    }
+    setIsEditingPayment(true)
+  }
+
+  // Initialize payment details when dashboard opens
+  useEffect(() => {
+    if (showOrganizerDashboard) {
+      loadPaymentDetails()
+      // Load event creator's payment details for admin view
+      if (user?.userType === 'admin' && event?.createdBy) {
+        loadEventCreatorPaymentDetails(event.createdBy)
+      }
+    }
+  }, [showOrganizerDashboard, user, event])
+
+  // Inject JSON-LD structured data for SEO
+  useEffect(() => {
+    if (!event) return
+    
+    const eventJsonLd = {
+      "@context": "https://schema.org",
+      "@type": "Event",
+      "name": event.name,
+      "description": event.description || `Join us at ${event.venueName} for an amazing event`,
+      "startDate": event.date.toISOString(),
+      "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+      "eventStatus": "https://schema.org/EventScheduled",
+      "location": {
+        "@type": "Place",
+        "name": event.venueName,
+        "address": {
+          "@type": "PostalAddress",
+          "addressLocality": event.location || "Kampala",
+          "addressCountry": "UG"
+        }
+      },
+      "image": event.posterImageUrl,
+      "offers": event.isFreeEntry ? {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "UGX",
+        "availability": "https://schema.org/InStock"
+      } : {
+        "@type": "Offer",
+        "price": event.entryFees[0]?.amount || "0",
+        "priceCurrency": "UGX",
+        "availability": "https://schema.org/InStock"
+      },
+      "organizer": {
+        "@type": "Organization",
+        "name": "YoVibe",
+        "url": "https://yovibe.net"
+      }
+    }
+    
+    // Create or update JSON-LD script
+    const scriptId = 'event-json-ld'
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null
+    if (!script) {
+      script = document.createElement('script')
+      script.id = scriptId
+      script.type = 'application/ld+json'
+      document.head.appendChild(script)
+    }
+    script.textContent = JSON.stringify(eventJsonLd)
+    
+    return () => {
+      const existingScript = document.getElementById(scriptId)
+      if (existingScript) {
+        existingScript.remove()
+      }
+    }
+  }, [event])
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -181,7 +487,12 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   return (
     <ScrollView style={styles.container}>
       <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
-        <ImageBackground source={{ uri: event.posterImageUrl }} style={styles.headerImage}>
+        <ImageBackground 
+          source={{ uri: event.posterImageUrl }} 
+          style={styles.headerImage}
+          aria-label={`Event poster for ${event.name}`}
+          accessibilityLabel={`Event poster for ${event.name}`}
+        >
           <View style={styles.headerOverlay}>
             <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -238,16 +549,17 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           </TouchableOpacity>
         </View>
 
-        {/* Event Owner Controls */}
-        {isEventOwner && (
+        {/* Organiser Dashboard - Show for event owners AND admins */}
+        {(isEventOwner || user?.userType === "admin") && (
           <View style={styles.ownerControls}>
-            <TouchableOpacity style={styles.ownerButton} onPress={handleBuyTicket}>
-              <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.ownerButtonText}>View Ticket Contacts</Text>
+            <TouchableOpacity style={styles.ownerButton} onPress={() => setShowOrganizerDashboard(true)}>
+              <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
             </TouchableOpacity>
           </View>
         )}
-
+        
+        {/* Delete Event - Admin only */}
         {user?.userType === "admin" && (
           <TouchableOpacity
             style={styles.deleteButton}
@@ -308,11 +620,380 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           ))}
         </View>
 
+        {/* Ticket Contact Button - Now above Buy Tickets */}
+        <TouchableOpacity style={styles.button} onPress={handleViewTicketContacts}>
+          <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.buttonText}>Ticket Contact</Text>
+        </TouchableOpacity>
+
+        {/* Buy Tickets Button - Only visible to Admins */}
+        {user?.userType === "admin" && (
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
           <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Contact for Tickets</Text>
+          <Text style={styles.buttonText}>Buy Tickets</Text>
         </TouchableOpacity>
+        )}
+
       </View>
+
+      {/* Organizer Dashboard Modal */}
+      <Modal
+        visible={showOrganizerDashboard}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowOrganizerDashboard(false)}
+      >
+        <View style={styles.dashboardContainer}>
+          <View style={styles.dashboardHeader}>
+            <Text style={styles.dashboardTitle}>Dashboard</Text>
+            <TouchableOpacity onPress={() => setShowOrganizerDashboard(false)}>
+              <Ionicons name="close" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          
+          <ScrollView style={styles.dashboardContent}>
+            {/* Dashboard Tabs */}
+            <View style={styles.dashboardTabs}>
+              <TouchableOpacity 
+                style={[styles.dashboardTab, activeDashboardTab === 'organizer' && styles.dashboardTabActive]}
+                onPress={() => setActiveDashboardTab('organizer')}
+              >
+                <Text style={[styles.dashboardTabText, activeDashboardTab === 'organizer' && styles.dashboardTabTextActive]}>Organizer</Text>
+              </TouchableOpacity>
+              {user?.userType === 'admin' && (
+                <TouchableOpacity 
+                  style={[styles.dashboardTab, activeDashboardTab === 'admin' && styles.dashboardTabActive]}
+                  onPress={() => setActiveDashboardTab('admin')}
+                >
+                  <Text style={[styles.dashboardTabText, activeDashboardTab === 'admin' && styles.dashboardTabTextActive]}>Admin</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+            
+            {activeDashboardTab === 'organizer' ? (
+              <>
+                {/* Organizer Dashboard Content */}
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Manage Ticket Sales</Text>
+                  <View style={styles.dashboardCard}>
+                    <View style={styles.dashboardRow}>
+                      <Text style={styles.dashboardLabel}>Allow Late Purchases</Text>
+                      <TouchableOpacity 
+                        style={[styles.toggleSwitch, allowLatePurchases && styles.toggleSwitchActive]}
+                        onPress={() => setAllowLatePurchases(!allowLatePurchases)}
+                      >
+                        <View style={[styles.toggleThumb, allowLatePurchases && styles.toggleThumbActive]} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Ticket Scanner</Text>
+                  <TouchableOpacity 
+                    style={styles.scannerButton}
+                    onPress={handleScanTicket}
+                    disabled={scanning || validating}
+                  >
+                    <Ionicons name="qr-code-outline" size={48} color="#00D4FF" />
+                    <Text style={styles.scannerButtonTitle}>Scan Tickets</Text>
+                    <Text style={styles.scannerButtonText}>
+                      Tap to scan and validate tickets at event entrances
+                    </Text>
+                    <View style={styles.scannerButtonArrow}>
+                      <Ionicons name="chevron-forward" size={24} color="#00D4FF" />
+                    </View>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Ticket Sales</Text>
+                  <View style={styles.statsRow}>
+                    <View style={styles.statCard}>
+                      <Ionicons name="time" size={24} color="#00D4FF" />
+                      <Text style={styles.statValue}>{ticketSalesEarly}</Text>
+                      <Text style={styles.statLabel}>Early</Text>
+                    </View>
+                    <View style={styles.statCard}>
+                      <Ionicons name="alarm" size={24} color="#FF6B6B" />
+                      <Text style={styles.statValue}>{ticketSalesLate}</Text>
+                      <Text style={styles.statLabel}>Late</Text>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Real-time Scan Logs</Text>
+                  <View style={styles.dashboardCard}>
+                    {scanLogs.length > 0 ? (
+                      scanLogs.map((log, index) => (
+                        <View key={index} style={styles.scanLogItem}>
+                          <Text style={styles.scanLogTime}>{log.time}</Text>
+                          <Text style={styles.scanLogTicketId}>{log.ticketId}</Text>
+                          <Text style={[styles.scanLogStatus, log.status === 'Valid' ? styles.scanLogValid : styles.scanLogInvalid]}>{log.status}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.noDataText}>No scan logs available</Text>
+                    )}
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Withdraw Now</Text>
+                  <TouchableOpacity style={styles.withdrawButton}>
+                    <Ionicons name="wallet" size={20} color="#FFFFFF" />
+                    <Text style={styles.withdrawButtonText}>Withdraw Earnings</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Payout History</Text>
+                  <View style={styles.dashboardCard}>
+                    {payoutHistory.length > 0 ? (
+                      payoutHistory.map((payout, index) => (
+                        <View key={index} style={styles.payoutItem}>
+                          <Text style={styles.payoutDate}>{payout.date}</Text>
+                          <Text style={styles.payoutAmount}>{payout.amount}</Text>
+                          <Text style={[styles.payoutStatus, payout.status === 'Completed' ? styles.payoutCompleted : styles.payoutPending]}>{payout.status}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.noDataText}>No payout history</Text>
+                    )}
+                  </View>
+                </View>
+
+                {/* Payment Details Section - Organizer Tab */}
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Payment Details</Text>
+                  <View style={styles.dashboardCard}>
+                    {isEditingPayment ? (
+                      <View>
+                        <Text style={styles.dashboardLabel}>Mobile Money</Text>
+                        <View style={styles.inputContainer}>
+                          <TouchableOpacity 
+                            style={[styles.providerButton, editForm.mobileProvider === 'mtn' && styles.providerButtonActive]}
+                            onPress={() => setEditForm({...editForm, mobileProvider: 'mtn'})}
+                          >
+                            <Text style={styles.providerButtonText}>MTN</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={[styles.providerButton, editForm.mobileProvider === 'airtel' && styles.providerButtonActive]}
+                            onPress={() => setEditForm({...editForm, mobileProvider: 'airtel'})}
+                          >
+                            <Text style={styles.providerButtonText}>Airtel</Text>
+                          </TouchableOpacity>
+                        </View>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Phone Number (e.g., +2567...)"
+                          value={editForm.mobileNumber}
+                          onChangeText={(text) => setEditForm({...editForm, mobileNumber: text})}
+                          placeholderTextColor="#888"
+                          keyboardType="phone-pad"
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Account Name"
+                          value={editForm.mobileName}
+                          onChangeText={(text) => setEditForm({...editForm, mobileName: text})}
+                          placeholderTextColor="#888"
+                        />
+                        <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Bank Name"
+                          value={editForm.bankName}
+                          onChangeText={(text) => setEditForm({...editForm, bankName: text})}
+                          placeholderTextColor="#888"
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Account Number"
+                          value={editForm.bankNumber}
+                          onChangeText={(text) => setEditForm({...editForm, bankNumber: text})}
+                          placeholderTextColor="#888"
+                          keyboardType="numeric"
+                        />
+                        <TextInput
+                          style={styles.input}
+                          placeholder="Account Name"
+                          value={editForm.bankNameAccount}
+                          onChangeText={(text) => setEditForm({...editForm, bankNameAccount: text})}
+                          placeholderTextColor="#888"
+                        />
+                        <View style={styles.buttonRow}>
+                          <TouchableOpacity 
+                            style={[styles.actionButtonSmall, { backgroundColor: '#666' }]}
+                            onPress={() => setIsEditingPayment(false)}
+                          >
+                            <Text style={styles.actionButtonSmallText}>Cancel</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            style={[styles.actionButtonSmall, { backgroundColor: '#00D4FF' }]}
+                            onPress={handleSavePaymentDetails}
+                          >
+                            <Text style={styles.actionButtonSmallText}>Save</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <View>
+                        {event?.paymentMethods ? (
+                          <View>
+                            {event.paymentMethods.mobileMoney && event.paymentMethods.mobileMoney.length > 0 && (
+                              <>
+                                <Text style={styles.dashboardLabel}>Mobile Money</Text>
+                                {event.paymentMethods.mobileMoney.map((mm, index) => (
+                                  <View key={index} style={styles.paymentDetailRow}>
+                                    <Text style={styles.paymentDetailText}>
+                                      {mm.provider.toUpperCase()} - {mm.number}
+                                    </Text>
+                                    <Text style={styles.paymentDetailSubtext}>{mm.name}</Text>
+                                  </View>
+                                ))}
+                              </>
+                            )}
+                            {event.paymentMethods.bankAccounts && event.paymentMethods.bankAccounts.length > 0 && (
+                              <>
+                                <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
+                                {event.paymentMethods.bankAccounts.map((bank, index) => (
+                                  <View key={index} style={styles.paymentDetailRow}>
+                                    <Text style={styles.paymentDetailText}>
+                                      {bank.bankName} - {bank.accountNumber}
+                                    </Text>
+                                    <Text style={styles.paymentDetailSubtext}>{bank.accountName}</Text>
+                                  </View>
+                                ))}
+                              </>
+                            )}
+                          </View>
+                        ) : (
+                          <Text style={styles.noDataText}>No payment methods configured for this event</Text>
+                        )}
+                        <TouchableOpacity 
+                          style={[styles.editButton, { marginTop: 16 }]}
+                          onPress={handleEditPayment}
+                        >
+                          <Text style={styles.editButtonText}>Edit Payment Details</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Admin Dashboard Content */}
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Monitor All Events</Text>
+                  <View style={styles.dashboardCard}>
+                    <View style={styles.dashboardRow}>
+                      <Text style={styles.dashboardLabel}>Total Events</Text>
+                      <Text style={styles.dashboardValue}>24</Text>
+                    </View>
+                    <View style={styles.dashboardRow}>
+                      <Text style={styles.dashboardLabel}>Active Events</Text>
+                      <Text style={styles.dashboardValue}>12</Text>
+                    </View>
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Revenue Analytics</Text>
+                  <View style={styles.dashboardCard}>
+                    {revenueAnalytics.length > 0 ? (
+                      revenueAnalytics.map((item, index) => (
+                        <View key={index} style={styles.dashboardRow}>
+                          <Text style={styles.dashboardLabel}>{item.label}</Text>
+                          <Text style={styles.dashboardValue}>UGX {item.value.toLocaleString()}</Text>
+                        </View>
+                      ))
+                    ) : (
+                      <>
+                        <View style={styles.dashboardRow}>
+                          <Text style={styles.dashboardLabel}>Today's Revenue</Text>
+                          <Text style={styles.dashboardValue}>UGX 0</Text>
+                        </View>
+                        <View style={styles.dashboardRow}>
+                          <Text style={styles.dashboardLabel}>This Week</Text>
+                          <Text style={styles.dashboardValue}>UGX 0</Text>
+                        </View>
+                        <View style={styles.dashboardRow}>
+                          <Text style={styles.dashboardLabel}>This Month</Text>
+                          <Text style={styles.dashboardValue}>UGX 0</Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Wallet Balance</Text>
+                  <View style={styles.walletCard}>
+                    <Ionicons name="wallet-outline" size={32} color="#00D4FF" />
+                    <Text style={styles.walletBalance}>{walletBalance}</Text>
+                    <TouchableOpacity style={styles.manualPayoutButton}>
+                      <Text style={styles.manualPayoutText}>Manual Payout Override</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Fraud Detection Logs</Text>
+                  <View style={styles.dashboardCard}>
+                    <Text style={styles.noDataText}>No fraud alerts detected</Text>
+                  </View>
+                </View>
+
+                {/* Organizer Payment Details - Admin View */}
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Organizer Payment Details</Text>
+                  <View style={styles.dashboardCard}>
+                    {event?.paymentMethods ? (
+                      <View>
+                        <Text style={styles.dashboardLabel}>Event Organizer</Text>
+                        <Text style={styles.dashboardValue}>{event.createdBy}</Text>
+                        
+                        {event.paymentMethods.mobileMoney && event.paymentMethods.mobileMoney.length > 0 && (
+                          <>
+                            <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Mobile Money</Text>
+                            {event.paymentMethods.mobileMoney.map((mm, index) => (
+                              <View key={index} style={styles.paymentDetailRow}>
+                                <Text style={styles.paymentDetailText}>
+                                  {mm.provider.toUpperCase()} - {mm.number}
+                                </Text>
+                                <Text style={styles.paymentDetailSubtext}>{mm.name}</Text>
+                              </View>
+                            ))}
+                          </>
+                        )}
+                        
+                        {event.paymentMethods.bankAccounts && event.paymentMethods.bankAccounts.length > 0 && (
+                          <>
+                            <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
+                            {event.paymentMethods.bankAccounts.map((bank, index) => (
+                              <View key={index} style={styles.paymentDetailRow}>
+                                <Text style={styles.paymentDetailText}>
+                                  {bank.bankName} - {bank.accountNumber}
+                                </Text>
+                                <Text style={styles.paymentDetailSubtext}>{bank.accountName}</Text>
+                              </View>
+                            ))}
+                          </>
+                        )}
+                      </View>
+                    ) : (
+                      <Text style={styles.noDataText}>No payment methods configured for this event</Text>
+                    )}
+                  </View>
+                </View>
+              </>
+            )}
+          </ScrollView>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -480,6 +1161,33 @@ const styles = StyleSheet.create({
     marginLeft: responsiveSize(6, 8, 10),
     fontSize: responsiveSize(13, 14, 15),
   },
+  scannerButton: {
+    alignItems: "center",
+    padding: 20,
+    backgroundColor: "rgba(0, 212, 255, 0.1)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+  },
+  scannerButtonTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginTop: 12,
+  },
+  scannerButtonText: {
+    fontSize: 13,
+    color: "#AAAAAA",
+    textAlign: "center",
+    marginTop: 6,
+    marginBottom: 12,
+  },
+  scannerButtonArrow: {
+    position: "absolute",
+    right: 16,
+    top: "50%",
+    marginTop: -12,
+  },
   venueContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -569,6 +1277,314 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: responsiveSize(6, 8, 10),
     fontSize: responsiveSize(13, 14, 15),
+  },
+  // Dashboard Styles
+  dashboardContainer: {
+    flex: 1,
+    backgroundColor: "#0D0D0D",
+  },
+  dashboardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: responsiveSize(16, 20, 24),
+    paddingTop: responsiveSize(50, 60, 70),
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0, 212, 255, 0.2)",
+  },
+  dashboardTitle: {
+    fontSize: responsiveSize(22, 26, 30),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  dashboardContent: {
+    flex: 1,
+    padding: responsiveSize(16, 20, 24),
+  },
+  dashboardTabs: {
+    flexDirection: "row",
+    marginBottom: responsiveSize(20, 24, 28),
+    backgroundColor: "#1A1A1A",
+    borderRadius: responsiveSize(10, 12, 14),
+    padding: 4,
+  },
+  dashboardTab: {
+    flex: 1,
+    paddingVertical: responsiveSize(10, 12, 14),
+    alignItems: "center",
+    borderRadius: responsiveSize(8, 10, 12),
+  },
+  dashboardTabActive: {
+    backgroundColor: "#00D4FF",
+  },
+  dashboardTabText: {
+    fontSize: responsiveSize(14, 16, 18),
+    fontWeight: "600",
+    color: "#888888",
+  },
+  dashboardTabTextActive: {
+    color: "#0D0D0D",
+  },
+  dashboardSection: {
+    marginBottom: responsiveSize(20, 24, 28),
+  },
+  dashboardSectionTitle: {
+    fontSize: responsiveSize(16, 18, 20),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: responsiveSize(10, 12, 14),
+  },
+  dashboardCard: {
+    backgroundColor: "#1A1A1A",
+    borderRadius: responsiveSize(10, 12, 14),
+    padding: responsiveSize(14, 16, 18),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.15)",
+  },
+  dashboardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: responsiveSize(8, 10, 12),
+  },
+  dashboardLabel: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#CCCCCC",
+  },
+  dashboardValue: {
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    color: "#00D4FF",
+  },
+  toggleSwitch: {
+    width: responsiveSize(48, 52, 56),
+    height: responsiveSize(26, 28, 30),
+    borderRadius: responsiveSize(13, 14, 15),
+    backgroundColor: "#333333",
+    padding: 2,
+    justifyContent: "center",
+  },
+  toggleSwitchActive: {
+    backgroundColor: "#00D4FF",
+  },
+  toggleThumb: {
+    width: responsiveSize(22, 24, 26),
+    height: responsiveSize(22, 24, 26),
+    borderRadius: responsiveSize(11, 12, 13),
+    backgroundColor: "#FFFFFF",
+  },
+  toggleThumbActive: {
+    alignSelf: "flex-end",
+  },
+  statsRow: {
+    flexDirection: "row",
+    gap: responsiveSize(10, 12, 14),
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: "#1A1A1A",
+    borderRadius: responsiveSize(10, 12, 14),
+    padding: responsiveSize(16, 18, 20),
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.15)",
+  },
+  statValue: {
+    fontSize: responsiveSize(24, 28, 32),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginTop: responsiveSize(8, 10, 12),
+  },
+  statLabel: {
+    fontSize: responsiveSize(12, 14, 16),
+    color: "#888888",
+    marginTop: responsiveSize(4, 6, 8),
+  },
+  scanLogItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: responsiveSize(8, 10, 12),
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  scanLogTime: {
+    fontSize: responsiveSize(12, 13, 14),
+    color: "#888888",
+    flex: 1,
+  },
+  scanLogTicketId: {
+    fontSize: responsiveSize(12, 13, 14),
+    color: "#CCCCCC",
+    flex: 1,
+    textAlign: "center",
+  },
+  scanLogStatus: {
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "bold",
+    flex: 1,
+    textAlign: "right",
+  },
+  scanLogValid: {
+    color: "#4CAF50",
+  },
+  scanLogInvalid: {
+    color: "#FF3B30",
+  },
+  noDataText: {
+    fontSize: responsiveSize(13, 14, 15),
+    color: "#666666",
+    textAlign: "center",
+    paddingVertical: responsiveSize(16, 20, 24),
+  },
+  withdrawButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    paddingVertical: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
+  },
+  withdrawButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 17),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
+  },
+  payoutItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: responsiveSize(8, 10, 12),
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  payoutDate: {
+    fontSize: responsiveSize(12, 13, 14),
+    color: "#888888",
+    flex: 1,
+  },
+  payoutAmount: {
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    flex: 1,
+    textAlign: "center",
+  },
+  payoutStatus: {
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "bold",
+    flex: 1,
+    textAlign: "right",
+  },
+  payoutCompleted: {
+    color: "#4CAF50",
+  },
+  payoutPending: {
+    color: "#FF9800",
+  },
+  walletCard: {
+    backgroundColor: "#1A1A1A",
+    borderRadius: responsiveSize(10, 12, 14),
+    padding: responsiveSize(20, 24, 28),
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.15)",
+  },
+  walletBalance: {
+    fontSize: responsiveSize(28, 32, 36),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginTop: responsiveSize(12, 14, 16),
+  },
+  manualPayoutButton: {
+    marginTop: responsiveSize(16, 20, 24),
+    paddingVertical: responsiveSize(10, 12, 14),
+    paddingHorizontal: responsiveSize(16, 20, 24),
+    backgroundColor: "rgba(0, 212, 255, 0.15)",
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+  },
+  manualPayoutText: {
+    color: "#00D4FF",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+  },
+  inputContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  providerButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#333",
+    alignItems: "center",
+  },
+  providerButtonActive: {
+    backgroundColor: "#00D4FF",
+    borderColor: "#00D4FF",
+  },
+  providerButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  input: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    padding: 12,
+    color: "#FFFFFF",
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#333",
+    marginBottom: 12,
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  actionButtonSmall: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  actionButtonSmallText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  paymentDetailRow: {
+    backgroundColor: "#1E1E1E",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  paymentDetailText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  paymentDetailSubtext: {
+    color: "#888888",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  editButton: {
+    backgroundColor: "#00D4FF",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  editButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 })
 

@@ -71,9 +71,14 @@
   <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon.png" />
   <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon.png" />
   
-  <!-- Preconnect to external domains -->
+  <!-- Preconnect to external domains for performance -->
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="dns-prefetch" href="https://fonts.googleapis.com" />
+  <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+  
+  <!-- Preload critical assets -->
+  <link rel="preload" href="/apple-touch-icon.png" as="image" type="image/png" />
   
   <!-- PWA Manifest -->
   <link rel="manifest" href="/manifest.json" />

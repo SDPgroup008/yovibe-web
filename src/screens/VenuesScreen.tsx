@@ -429,11 +429,14 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
     <TouchableOpacity 
       style={[styles.venueCard, { width: cardWidth, paddingHorizontal: spacing.md }]}
       onPress={() => handleVenueSelect(item.id)}
+      accessibilityLabel={`View venue: ${item.name}`}
+      accessibilityRole="button"
     >
       <ImageBackground 
         source={{ uri: item.backgroundImageUrl }} 
         style={[styles.venueImage, { width: cardWidth, height: cardHeight }]}
         resizeMode="cover"
+        accessibilityLabel={`Venue image for ${item.name}`}
       >
         <View style={styles.venueGradient}>
           <Text style={styles.venueName}>{item.name}</Text>

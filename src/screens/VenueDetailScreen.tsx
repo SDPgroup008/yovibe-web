@@ -169,6 +169,58 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
     }
   }, [venueId, user])
 
+  // Inject JSON-LD structured data for SEO
+  useEffect(() => {
+    if (!venue) return
+    
+    const venueJsonLd = {
+      "@context": "https://schema.org",
+      "@type": ["BarOrPub", "NightClub", "EntertainmentBusiness"],
+      "name": venue.name,
+      "description": venue.description || `Visit ${venue.name} - one of the best venues in ${venue.location || 'Kampala'} for nightlife and entertainment`,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": venue.location || "Kampala",
+        "addressCountry": "UG"
+      },
+      "image": venue.backgroundImageUrl,
+      "priceRange": "$$",
+      "telephone": venue.phoneNumber || "+256700000000",
+      "openingHours": "Mo-Su 18:00-02:00",
+      "geo": venue.coordinates ? {
+        "@type": "GeoCoordinates",
+        "latitude": venue.coordinates.latitude,
+        "longitude": venue.coordinates.longitude
+      } : undefined,
+      "amenityFeature": venue.categories?.map(cat => ({
+        "@type": "LocationFeatureSpecification",
+        "name": cat
+      })),
+      "organizer": {
+        "@type": "Organization",
+        "name": "YoVibe",
+        "url": "https://yovibe.net"
+      }
+    }
+    
+    const scriptId = 'venue-json-ld'
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null
+    if (!script) {
+      script = document.createElement('script')
+      script.id = scriptId
+      script.type = 'application/ld+json'
+      document.head.appendChild(script)
+    }
+    script.textContent = JSON.stringify(venueJsonLd)
+    
+    return () => {
+      const existingScript = document.getElementById(scriptId)
+      if (existingScript) {
+        existingScript.remove()
+      }
+    }
+  }, [venue])
+
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -275,7 +327,11 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
         />
       }
     >
-      <Image source={{ uri: venue.backgroundImageUrl }} style={styles.headerImage} />
+      <Image 
+        source={{ uri: venue.backgroundImageUrl }} 
+        style={styles.headerImage}
+        alt={`Venue image for ${venue.name}`}
+      />
 
       <View style={styles.contentContainer}>
         <Text style={styles.venueName}>{venue.name}</Text>

@@ -26,6 +26,8 @@ export type VenuesStackParamList = {
   ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+  TicketPurchase: { event: Event }
+  TicketScanner: undefined
 }
 
 // Events Stack
@@ -36,6 +38,8 @@ export type EventsStackParamList = {
   VenueDetail: { venueId: string }
   Notification: undefined
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+  TicketPurchase: { event: Event }
+  TicketScanner: undefined
 }
 
 // Map Stack
@@ -44,6 +48,8 @@ export type MapStackParamList = {
   VenueDetail: { venueId: string }
   EventDetail: { eventId: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+  TicketPurchase: { event: Event }
+  TicketScanner: undefined
 }
 
 // Calendar Stack
@@ -52,6 +58,8 @@ export type CalendarStackParamList = {
   EventDetail: { eventId: string }
   VenueDetail: { venueId: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+  TicketPurchase: { event: Event }
+  TicketScanner: undefined
 }
 
 // Profile Stack
@@ -69,6 +77,8 @@ export type ProfileStackParamList = {
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
+  TicketScanner: undefined
+  TicketPurchase: { event: Event }
   Auth: { screen: "Login" | "SignUp" } // Added for sign-out navigation
 }
 
@@ -128,6 +138,10 @@ export type TodaysVibeScreenProps = NativeStackScreenProps<
 >
 
 export type AddVibeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AddVibe">
+
+export type TicketScannerScreenProps = NativeStackScreenProps<ProfileStackParamList, "TicketScanner">
+
+export type TicketPurchaseScreenProps = NativeStackScreenProps<ProfileStackParamList, "TicketPurchase">
 
 
 export type CalendarScreenProps = NativeStackScreenProps<CalendarStackParamList, "CalendarView">

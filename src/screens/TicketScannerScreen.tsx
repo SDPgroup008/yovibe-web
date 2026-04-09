@@ -1,18 +1,25 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
-import BiometricService from "../services/BiometricService"
 import type { TicketScannerScreenProps } from "../navigation/types"
 
 const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation }) => {
   const { user } = useAuth()
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
+
+  // Check if user is admin
+  useEffect(() => {
+    if (user && user.userType !== "admin") {
+      Alert.alert("Access Denied", "You don't have permission to access this page")
+      navigation.goBack()
+    }
+  }, [user, navigation])
 
   const handleScanTicket = async () => {
     try {
@@ -51,19 +58,17 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
     try {
       setValidating(true)
 
-      // Capture biometric data for verification
+      // Simple QR code validation
       Alert.alert(
-        "Biometric Verification",
-        "Please ask the ticket holder to look at the camera for biometric verification.",
+        "Ticket Validation",
+        "Click Validate to verify this ticket.",
         [
           { text: "Cancel", style: "cancel" },
           {
-            text: "Scan Biometric",
+            text: "Validate",
             onPress: async () => {
               try {
-                const biometricData = await BiometricService.captureBiometric()
-
-                const result = await TicketService.validateTicket(ticketId, biometricData, user.id, "Event Entrance")
+                const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance")
 
                 if (result.success) {
                   Alert.alert("✅ Entry Granted", "Ticket validated successfully. Entry granted.", [{ text: "OK" }])
@@ -71,7 +76,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
                   Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
                 }
               } catch (error) {
-                Alert.alert("Error", "Failed to capture biometric data")
+                Alert.alert("Error", "Failed to validate ticket")
               }
             },
           },
@@ -103,7 +108,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           <Text style={styles.instructionTitle}>Validation Process:</Text>
           <Text style={styles.instructionText}>
             1. Scan the ticket QR code{"\n"}
-            2. Ask ticket holder for biometric verification{"\n"}
+            2. Click Validate to verify ticket{"\n"}
             3. Grant or deny entry based on validation result
           </Text>
         </View>
@@ -127,11 +132,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           <Text style={styles.statusTitle}>Scanner Status</Text>
           <View style={styles.statusItem}>
             <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.statusText}>Camera Ready</Text>
-          </View>
-          <View style={styles.statusItem}>
-            <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-            <Text style={styles.statusText}>Biometric Scanner Ready</Text>
+            <Text style={styles.statusText}>QR Scanner Ready</Text>
           </View>
           <View style={styles.statusItem}>
             <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />

@@ -71,6 +71,19 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
   const [ticketContacts, setTicketContacts] = useState<Array<{ number: string; type: "call" | "whatsapp" }>>([])
   const [newContactNumber, setNewContactNumber] = useState("")
   const [newContactType, setNewContactType] = useState<"call" | "whatsapp">("call")
+  
+  // Payment reception details (optional)
+  const [showPaymentForm, setShowPaymentForm] = useState(false)
+  const [paymentMethods, setPaymentMethods] = useState<{
+    mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
+    bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
+  }>({ mobileMoney: [], bankAccounts: [] })
+  const [newMobileMoneyProvider, setNewMobileMoneyProvider] = useState<"mtn" | "airtel">("mtn")
+  const [newMobileMoneyNumber, setNewMobileMoneyNumber] = useState("")
+  const [newMobileMoneyName, setNewMobileMoneyName] = useState("")
+  const [newBankName, setNewBankName] = useState("")
+  const [newAccountNumber, setNewAccountNumber] = useState("")
+  const [newAccountName, setNewAccountName] = useState("")
   const [locationPermission, setLocationPermission] = useState(false)
   const [startTime, setStartTime] = useState("21:00")  // Default: 9:00 PM
   const [endTime, setEndTime] = useState("05:00")      // Default: 5:00 AM (next day)
@@ -215,6 +228,61 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
 
   const removeContact = (index: number) => {
     setTicketContacts(ticketContacts.filter((_, i) => i !== index))
+  }
+
+  // Payment method handlers
+  const addMobileMoney = () => {
+    if (!newMobileMoneyNumber.trim()) {
+      Alert.alert("Error", "Please enter a mobile money number")
+      return
+    }
+    if (!newMobileMoneyName.trim()) {
+      Alert.alert("Error", "Please enter the account holder's name")
+      return
+    }
+    if (!/^\+?\d{9,15}$/.test(newMobileMoneyNumber)) {
+      Alert.alert("Error", "Please enter a valid mobile money number")
+      return
+    }
+    setPaymentMethods({
+      ...paymentMethods,
+      mobileMoney: [...paymentMethods.mobileMoney, { provider: newMobileMoneyProvider, number: newMobileMoneyNumber, name: newMobileMoneyName }]
+    })
+    setNewMobileMoneyNumber("")
+    setNewMobileMoneyName("")
+    setNewMobileMoneyProvider("mtn")
+  }
+
+  const removeMobileMoney = (index: number) => {
+    setPaymentMethods({
+      ...paymentMethods,
+      mobileMoney: paymentMethods.mobileMoney.filter((_, i) => i !== index)
+    })
+  }
+
+  const addBankAccount = () => {
+    if (!newBankName.trim() || !newAccountNumber.trim() || !newAccountName.trim()) {
+      Alert.alert("Error", "Please fill in all bank account details")
+      return
+    }
+    if (!/^\d{6,20}$/.test(newAccountNumber)) {
+      Alert.alert("Error", "Please enter a valid account number")
+      return
+    }
+    setPaymentMethods({
+      ...paymentMethods,
+      bankAccounts: [...paymentMethods.bankAccounts, { bankName: newBankName, accountNumber: newAccountNumber, accountName: newAccountName }]
+    })
+    setNewBankName("")
+    setNewAccountNumber("")
+    setNewAccountName("")
+  }
+
+  const removeBankAccount = (index: number) => {
+    setPaymentMethods({
+      ...paymentMethods,
+      bankAccounts: paymentMethods.bankAccounts.filter((_, i) => i !== index)
+    })
   }
 
   const pickImage = async () => {
@@ -382,6 +450,7 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
         isFeatured,
         location: location.toUpperCase(),
         ticketContacts,
+        paymentMethods,
         entryFees: isFreeEntry ? [] : entryFees,
         attendees: [],
         createdBy: user.id,
@@ -771,6 +840,104 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
           </View>
         ))}
 
+        {/* Sell Tickets - Payment Reception Details */}
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setShowPaymentForm(!showPaymentForm)}
+        >
+          <Ionicons name="wallet-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.addButtonText}>Sell Tickets (Optional)</Text>
+        </TouchableOpacity>
+
+        {showPaymentForm && (
+          <View style={styles.paymentFormContainer}>
+            {/* Mobile Money Section */}
+            <Text style={styles.paymentSectionTitle}>Mobile Money</Text>
+            <View style={styles.providerButtons}>
+              <TouchableOpacity
+                style={[styles.providerButton, newMobileMoneyProvider === "mtn" && styles.providerButtonActive]}
+                onPress={() => setNewMobileMoneyProvider("mtn")}
+              >
+                <Text style={[styles.providerButtonText, newMobileMoneyProvider === "mtn" && styles.providerButtonTextActive]}>MTN</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.providerButton, newMobileMoneyProvider === "airtel" && styles.providerButtonActive]}
+                onPress={() => setNewMobileMoneyProvider("airtel")}
+              >
+                <Text style={[styles.providerButtonText, newMobileMoneyProvider === "airtel" && styles.providerButtonTextActive]}>Airtel</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.input}
+              value={newMobileMoneyNumber}
+              onChangeText={setNewMobileMoneyNumber}
+              placeholder="Enter mobile money number"
+              placeholderTextColor="#999"
+              keyboardType="phone-pad"
+            />
+            <TextInput
+              style={styles.input}
+              value={newMobileMoneyName}
+              onChangeText={setNewMobileMoneyName}
+              placeholder="Account holder name"
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addMobileMoney}>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Add Mobile Money</Text>
+            </TouchableOpacity>
+            {paymentMethods.mobileMoney.map((mm, index) => (
+              <View key={index} style={styles.paymentItem}>
+                <Text style={styles.paymentText}>
+                  {mm.provider.toUpperCase()}: {mm.number} ({mm.name})
+                </Text>
+                <TouchableOpacity onPress={() => removeMobileMoney(index)}>
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            {/* Bank Account Section */}
+            <Text style={styles.paymentSectionTitle}>Bank Account</Text>
+            <TextInput
+              style={styles.input}
+              value={newBankName}
+              onChangeText={setNewBankName}
+              placeholder="Bank name (e.g. Stanbic)"
+              placeholderTextColor="#999"
+            />
+            <TextInput
+              style={styles.input}
+              value={newAccountNumber}
+              onChangeText={setNewAccountNumber}
+              placeholder="Account number"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.input}
+              value={newAccountName}
+              onChangeText={setNewAccountName}
+              placeholder="Account name"
+              placeholderTextColor="#999"
+            />
+            <TouchableOpacity style={styles.addButton} onPress={addBankAccount}>
+              <Ionicons name="add" size={20} color="#FFFFFF" />
+              <Text style={styles.addButtonText}>Add Bank Account</Text>
+            </TouchableOpacity>
+            {paymentMethods.bankAccounts.map((bank, index) => (
+              <View key={index} style={styles.paymentItem}>
+                <Text style={styles.paymentText}>
+                  {bank.bankName}: {bank.accountNumber} ({bank.accountName})
+                </Text>
+                <TouchableOpacity onPress={() => removeBankAccount(index)}>
+                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Event Poster *</Text>
           {errors.image && <Text style={styles.errorStar}>*</Text>}
@@ -1102,6 +1269,62 @@ const styles = StyleSheet.create({
   contactText: {
     color: "#FFFFFF",
     fontSize: responsiveSize(13, 14, 15),
+  },
+  // Payment form styles
+  paymentFormContainer: {
+    backgroundColor: "#1A1A1A",
+    padding: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(14, 16, 18),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  paymentSectionTitle: {
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    color: "#00D4FF",
+    marginBottom: responsiveSize(10, 12, 14),
+    marginTop: responsiveSize(8, 10, 12),
+  },
+  providerButtons: {
+    flexDirection: "row",
+    gap: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(10, 12, 14),
+  },
+  providerButton: {
+    flex: 1,
+    padding: responsiveSize(10, 12, 14),
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  providerButtonActive: {
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
+  },
+  providerButtonText: {
+    color: "#888888",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+  },
+  providerButtonTextActive: {
+    color: "#FFFFFF",
+  },
+  paymentItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    padding: responsiveSize(10, 12, 14),
+    borderRadius: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(8, 10, 12),
+  },
+  paymentText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(13, 14, 15),
+    flex: 1,
   },
   locationContainer: {
     flexDirection: (isSmallDevice ? "column" : "row") as "column" | "row",

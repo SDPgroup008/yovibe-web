@@ -27,6 +27,8 @@ import ManageProgramsScreen from "../screens/ManageProgramsScreen"
 import AddVibeScreen from "../screens/AddVibeScreen"
 import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 import TicketContactScreen from "../screens/TicketContactScreen"
+import TicketPurchaseScreen from "../screens/TicketPurchaseScreen"
+import TicketScannerScreen from "../screens/TicketScannerScreen"
 import NotificationScreen from "../screens/NotificationScreen"
 
 // Admin Screens
@@ -97,6 +99,8 @@ const ProfileStack = createNativeStackNavigator<ProfileStackParamList>()
 const ManageProgramsScreenWrapper = (props: any) => <ManageProgramsScreen {...props} />
 const TodaysVibeScreenWrapper = (props: any) => <TodaysVibeScreen {...props} />
 const TicketContactScreenWrapper = (props: any) => <TicketContactScreen {...props} />
+const TicketPurchaseScreenWrapper = (props: any) => <TicketPurchaseScreen {...props} />
+const TicketScannerScreenWrapper = (props: any) => <TicketScannerScreen {...props} />
 const EventsScreenWrapper = (props: any) => <EventsScreen {...props} />
 const MapScreenWrapper = (props: any) => <MapScreen {...props} />
 const ProfileScreenWrapper = (props: any) => <ProfileScreen {...props} />
@@ -242,6 +246,16 @@ export const VenuesStackNavigator = () => {
         component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
+      <VenuesStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreenWrapper}
+        options={{ title: "Buy Tickets" }}
+      />
+      <VenuesStack.Screen
+        name="TicketScanner"
+        component={TicketScannerScreenWrapper}
+        options={{ title: "Scan Ticket" }}
+      />
     </VenuesStack.Navigator>
   )
 }
@@ -285,6 +299,16 @@ export const EventsStackNavigator = () => {
         component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
+      <EventsStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreenWrapper}
+        options={{ title: "Buy Tickets" }}
+      />
+      <EventsStack.Screen
+        name="TicketScanner"
+        component={TicketScannerScreenWrapper}
+        options={{ title: "Scan Ticket" }}
+      />
     </EventsStack.Navigator>
   )
 }
@@ -326,6 +350,16 @@ export const MapStackNavigator = () => {
         component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
       />
+      <MapStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreenWrapper}
+        options={{ title: "Buy Tickets" }}
+      />
+      <MapStack.Screen
+        name="TicketScanner"
+        component={TicketScannerScreenWrapper}
+        options={{ title: "Scan Ticket" }}
+      />
     </MapStack.Navigator>
   )
 }
@@ -366,6 +400,16 @@ export const CalendarStackNavigator = () => {
         name="TicketContactScreen"
         component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
+      />
+      <CalendarStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreenWrapper}
+        options={{ title: "Buy Tickets" }}
+      />
+      <CalendarStack.Screen
+        name="TicketScanner"
+        component={TicketScannerScreenWrapper}
+        options={{ title: "Scan Ticket" }}
       />
     </CalendarStack.Navigator>
   )
@@ -416,6 +460,16 @@ export const ProfileStackNavigator = () => {
         name="TicketContactScreen"
         component={TicketContactScreenWrapper}
         options={{ title: "Contact for Tickets" }}
+      />
+      <ProfileStack.Screen
+        name="TicketPurchase"
+        component={TicketPurchaseScreenWrapper}
+        options={{ title: "Buy Tickets" }}
+      />
+      <ProfileStack.Screen
+        name="TicketScanner"
+        component={TicketScannerScreenWrapper}
+        options={{ title: "Scan Ticket" }}
       />
     </ProfileStack.Navigator>
   )

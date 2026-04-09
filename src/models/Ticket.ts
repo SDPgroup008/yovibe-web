@@ -5,15 +5,38 @@ export interface Ticket {
   buyerId: string
   buyerName: string
   buyerEmail: string
+  buyerPhone?: string
   quantity: number
   totalAmount: number
+  basePrice: number
+  lateFee: number
   venueRevenue: number
   appCommission: number
   purchaseDate: Date
+  eventStartTime: Date
   qrCode: string
-  biometricHash: string
-  status: "active" | "used" | "cancelled"
+  buyerPhotoUrl?: string
+  status: "active" | "used" | "cancelled" | "refunded"
   validationHistory: TicketValidation[]
+  // PesaPal payment details
+  paymentId?: string
+  paymentStatus?: "pending" | "completed" | "failed"
+  paymentReference?: string
+  pesapalTransactionId?: string
+  // Late purchase tracking
+  isLatePurchase: boolean
+  isScanned: boolean
+  purchaseDeadline: Date
+  // Payout tracking
+  payoutEligible: boolean
+  payoutStatus: "pending" | "processing" | "paid" | "failed"
+  payoutDate?: Date
+  scannedAt?: Date
+  // Payment method details
+  paymentMethod?: "mobile_money" | "credit_card" | "bank_transfer"
+  paymentProvider?: string
+  paymentNumber?: string
+  paymentName?: string
 }
 
 export interface TicketValidation {
@@ -21,7 +44,6 @@ export interface TicketValidation {
   ticketId: string
   validatedAt: Date
   validatedBy: string
-  biometricMatch: boolean
   location?: string
   status: "granted" | "denied"
   reason?: string
@@ -37,4 +59,36 @@ export interface PaymentIntent {
   venueRevenue: number
   appCommission: number
   createdAt: Date
+  paymentId?: string
+  paymentReference?: string
+}
+
+export interface OrganizerWallet {
+  id: string
+  organizerId: string
+  availableBalance: number
+  pendingBalance: number
+  totalEarnings: number
+  totalPayouts: number
+  lastPayoutDate?: Date
+  lastUpdated: Date
+}
+
+export interface Payout {
+  id: string
+  organizerId: string
+  ticketIds: string[]
+  amount: number
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled"
+  requestDate: Date
+  processedDate?: Date
+  failureReason?: string
+  transactionReference?: string
+  payoutMethod: "mobile_money" | "bank_transfer"
+  recipientDetails: {
+    name: string
+    accountNumber?: string
+    phoneNumber?: string
+    bankName?: string
+  }
 }

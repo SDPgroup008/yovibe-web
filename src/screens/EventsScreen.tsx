@@ -405,8 +405,17 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
     const dateInfo = getDateLabel(item.date);
     
     return (
-    <TouchableOpacity style={[styles.eventCard, { width: cardWidth }]} onPress={() => handleEventSelect(item.id)}>
-      <ImageBackground source={{ uri: item.posterImageUrl }} style={[styles.eventImage, { height: cardHeight }]}>
+    <TouchableOpacity 
+      style={[styles.eventCard, { width: cardWidth }]} 
+      onPress={() => handleEventSelect(item.id)}
+      accessibilityLabel={`View event: ${item.name}`}
+      accessibilityRole="button"
+    >
+      <ImageBackground 
+        source={{ uri: item.posterImageUrl }} 
+        style={[styles.eventImage, { height: cardHeight }]}
+        accessibilityLabel={`Event poster for ${item.name}`}
+      >
         <View style={styles.eventOverlay}>
           <View style={styles.eventHeader}>
             <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
