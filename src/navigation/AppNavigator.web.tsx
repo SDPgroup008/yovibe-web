@@ -3,7 +3,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
 import { useEffect, useState, useCallback } from "react"
 import { useNavigation, useNavigationState } from "@react-navigation/native"
-import { View, ActivityIndicator, Dimensions, Platform, useWindowDimensions, TouchableOpacity, Text, StyleSheet } from "react-native"
+import { View, ActivityIndicator, Dimensions, Platform, useWindowDimensions, TouchableOpacity, Text, StyleSheet, Image } from "react-native"
 
 // Import responsive hooks
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from "../utils/ResponsiveDesign"
@@ -497,10 +497,13 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
     return (
       <View style={[styles.leftNavBarFlex, { width: navWidth }]}>
         <View style={styles.leftNavContent}>
-          {/* Logo at top */}
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>YV</Text>
-          </View>
+{/* Logo at top */}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={{ width: 30, height: 30, borderRadius: 8 }}
+          />
+        </View>
           
           {/* Navigation Items */}
           {state.routes.map((route: any, index: number) => {
@@ -633,7 +636,10 @@ function DesktopLeftNav({ navigation, currentIndex }: { navigation: any, current
       <View style={styles.leftNavContent}>
         {/* Logo at top */}
         <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>YV</Text>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={{ width: 30, height: 30, borderRadius: 8 }}
+          />
         </View>
         
         {/* Navigation Items */}
@@ -828,9 +834,25 @@ export const MainTabNavigator = () => {
 // Wrapper to get navigation state for desktop left nav
 function DesktopLeftNavWrapper() {
   const navigation = useNavigation<any>();
-  const navState = useNavigationState((state) => state);
-  const currentIndex = navState?.index ?? 0;
+  const [currentRouteName, setCurrentRouteName] = useState("Events");
   const { iconSize, navWidth } = useResponsiveNav();
+  
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('state', (e: any) => {
+      const currentIndex = e.data?.state?.index;
+      if (currentIndex !== undefined && e.data?.state?.routes) {
+        const routeName = e.data.state.routes[currentIndex]?.name || "Events";
+        setCurrentRouteName(routeName);
+      }
+    });
+    
+    const initialState = navigation.getState();
+    if (initialState?.routes && initialState?.index !== undefined) {
+      setCurrentRouteName(initialState.routes[initialState.index]?.name || "Events");
+    }
+    
+    return unsubscribe;
+  }, [navigation]);
   
   const handleNavigate = useCallback((routeName: string) => {
     navigation.navigate(routeName);
@@ -841,7 +863,10 @@ function DesktopLeftNavWrapper() {
       <View style={styles.leftNavContent}>
         {/* Logo at top */}
         <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>YV</Text>
+          <Image
+            source={require("../../assets/icon.png")}
+            style={{ width: 30, height: 30, borderRadius: 8 }}
+          />
         </View>
         
         {/* Navigation Items */}
@@ -852,7 +877,7 @@ function DesktopLeftNavWrapper() {
           { name: "Calendar", label: "Calendar", icon: "today", iconOutline: "today-outline" },
           { name: "Profile", label: "Profile", icon: "person", iconOutline: "person-outline" },
         ].map((route, index) => {
-          const isFocused = index === currentIndex;
+          const isFocused = route.name === currentRouteName;
           return (
             <TouchableOpacity
               key={route.name}
@@ -942,6 +967,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 30,
+    borderWidth: 1.5,
+    borderColor: 'rgba(33, 150, 243, 0.8)',
+    shadowColor: '#2196F3',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 8,
+    elevation: 5,
   },
   logoText: {
     color: '#FFFFFF',

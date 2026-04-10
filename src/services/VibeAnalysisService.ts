@@ -1,10 +1,7 @@
 /**
  * Service for analyzing venue vibe from images
- * Uses TensorFlow.js with heuristic-based image analysis for vibe prediction
+ * Uses heuristic-based image analysis for vibe prediction
  */
-import * as tf from '@tensorflow/tfjs';
-import '@tensorflow/tfjs-converter';
-import '@tensorflow/tfjs-layers';
 
 class VibeAnalysisService {
   private modelLoaded = false
@@ -40,18 +37,8 @@ class VibeAnalysisService {
   }
 
   async loadMLModel(): Promise<void> {
-    try {
-      console.log('VibeAnalysisService: Initializing...');
-      
-      await tf.ready();
-      console.log('TensorFlow.js ready, backend:', tf.getBackend());
-
-      this.modelLoaded = true;
-      console.log('VibeAnalysisService: Ready with heuristic-based analysis');
-    } catch (error) {
-      console.error('VibeAnalysisService: Failed to initialize:', error);
-      this.modelLoaded = false;
-    }
+    this.modelLoaded = true;
+    console.log('VibeAnalysisService: Ready with heuristic-based analysis');
   }
 
   async analyzeVibeImage(imageUri: string): Promise<{
