@@ -167,6 +167,10 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   };
 
+  const navigateToMyTickets = () => {
+    navigation.navigate("MyTickets");
+  };
+
   const handleToggleEditProfile = () => {
     setShowEditProfile(!showEditProfile);
   };
@@ -275,6 +279,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={24} color="#666666" />
           </TouchableOpacity>
         )}
+
+        <TouchableOpacity style={styles.menuItem} onPress={navigateToMyTickets}>
+          <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
+          <Text style={styles.menuText}>My Tickets</Text>
+          <Ionicons name="chevron-forward" size={24} color="#666666" />
+        </TouchableOpacity>
 
         {user?.userType === "admin" && (
           <>

@@ -28,6 +28,7 @@ export type VenuesStackParamList = {
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
   TicketScanner: undefined
+  MyTickets: undefined
 }
 
 // Events Stack
@@ -40,6 +41,7 @@ export type EventsStackParamList = {
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
   TicketScanner: undefined
+  MyTickets: undefined
 }
 
 // Map Stack
@@ -50,6 +52,7 @@ export type MapStackParamList = {
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
   TicketScanner: undefined
+  MyTickets: undefined
 }
 
 // Calendar Stack
@@ -60,6 +63,7 @@ export type CalendarStackParamList = {
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
   TicketScanner: undefined
+  MyTickets: undefined
 }
 
 // Profile Stack
@@ -79,6 +83,7 @@ export type ProfileStackParamList = {
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketScanner: undefined
   TicketPurchase: { event: Event }
+  MyTickets: undefined
   Auth: { screen: "Login" | "SignUp" } // Added for sign-out navigation
 }
 
@@ -143,6 +148,7 @@ export type TicketScannerScreenProps = NativeStackScreenProps<ProfileStackParamL
 
 export type TicketPurchaseScreenProps = NativeStackScreenProps<ProfileStackParamList, "TicketPurchase">
 
+export type MyTicketsScreenProps = NativeStackScreenProps<ProfileStackParamList, "MyTickets">
 
 export type CalendarScreenProps = NativeStackScreenProps<CalendarStackParamList, "CalendarView">
 

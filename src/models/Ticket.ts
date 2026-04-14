@@ -15,6 +15,7 @@ export interface Ticket {
   purchaseDate: Date
   eventStartTime: Date
   qrCode: string
+  qrCodeDataUrl?: string
   buyerPhotoUrl?: string
   status: "active" | "used" | "cancelled" | "refunded"
   validationHistory: TicketValidation[]

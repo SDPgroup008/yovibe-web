@@ -86,27 +86,22 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [scannerInput, setScannerInput] = useState("")
   const [showScannerModal, setShowScannerModal] = useState(false)
   
-  // Handle scan ticket
+  // Handle scan ticket - navigate to dedicated scanner screen
   const handleScanTicket = async () => {
     try {
       console.log("========================================")
       console.log("📱 ORGANIZER DASHBOARD: TICKET SCANNER")
       console.log("========================================")
-      console.log("📋 EventDetailScreen.handleScanTicket: Initiating ticket scan")
+      console.log("📋 EventDetailScreen.handleScanTicket: Navigating to scanner")
       console.log("📋 Event ID:", eventId)
       console.log("📋 Organizer ID:", user?.id)
       console.log("📋 Event:", event?.name)
       
-      setScanning(true)
-      setScannerInput("")
-      setShowScannerModal(true)
-      console.log("⏳ Showing scanner input...")
+      navigation.navigate("TicketScanner")
       
     } catch (error) {
       console.error("❌ Error scanning ticket:", error)
-      Alert.alert("Error", "Failed to scan ticket")
-    } finally {
-      setScanning(false)
+      Alert.alert("Error", "Failed to open scanner")
     }
   }
   
@@ -1204,7 +1199,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         animationType="fade"
         onRequestClose={() => setShowScannerModal(false)}
       >
-        <View style={styles.scannerModalOverlay}>
+        <View style={[styles.scannerModalOverlay, { zIndex: 9999 }]}>
           <View style={styles.scannerModalContent}>
             <Text style={styles.scannerModalTitle}>Scan Ticket</Text>
             <Text style={styles.scannerModalSubtitle}>Enter ticket ID or scan QR code</Text>

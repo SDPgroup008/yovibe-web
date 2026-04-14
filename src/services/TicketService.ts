@@ -2,9 +2,9 @@ import FirebaseService from "./FirebaseService"
 import PaymentService from "./PaymentService"
 import PesaPalService from "./PesaPalService"
 import NotificationService from "./NotificationService"
-import EmailService from "./EmailService"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { Event } from "../models/Event"
+import QRCode from "qrcode"
 
 export class TicketService {
   static async purchaseTicket(
@@ -100,8 +100,8 @@ export class TicketService {
 
       // Step 5: Generate unique QR code
       console.log("--- Step 5: Generating unique QR code ---")
-      const qrCode = this.generateQRCode()
-      console.log("🔒 QR Code generated:", qrCode)
+      const qrCodeResult = await this.generateQRCode()
+      console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
 
       // Step 6: Create ticket object
       console.log("--- Step 6: Creating ticket object ---")
@@ -121,11 +121,12 @@ export class TicketService {
         purchaseDate: new Date(),
         eventStartTime,
         purchaseDeadline,
-        qrCode,
+        qrCode: qrCodeResult.qrCode,
+        qrCodeDataUrl: qrCodeResult.qrCodeDataUrl,
         buyerPhotoUrl,
         status: "active",
         validationHistory: [],
-        entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
+        entryFeeType: (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,
         payoutEligible: false,
@@ -155,17 +156,6 @@ export class TicketService {
       console.log("--- Step 8: Sending notification to event owner ---")
       await NotificationService.notifyTicketPurchase(event, ticket)
       console.log("✅ Notification sent to event owner")
-
-      // Step 9: Send ticket confirmation email to buyer
-      console.log("--- Step 9: Sending ticket confirmation email ---")
-      console.log("📧 Sending ticket to buyer email:", buyerEmail)
-      const emailResult = await EmailService.sendTicketConfirmation(ticket, event)
-      if (emailResult.success) {
-        console.log("✅ Ticket confirmation email sent!")
-        console.log("   - Email Message ID:", emailResult.messageId)
-      } else {
-        console.log("⚠️ Failed to send ticket email:", emailResult.error)
-      }
 
       console.log("========================================")
       console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
@@ -463,9 +453,20 @@ export class TicketService {
     }
   }
 
-  private static generateQRCode(): string {
-    // Generate a unique QR code data string
-    return `YOVIBE_${Date.now()}_${Math.random().toString(36).substr(2, 15)}`
+  private static async generateQRCode(): Promise<{ qrCode: string; qrCodeDataUrl: string }> {
+    const uniqueId = `YOVIBE_${Date.now()}_${Math.random().toString(36).substr(2, 15)}`
+    
+    const qrCodeDataUrl = await QRCode.toDataURL(uniqueId, {
+      width: 300,
+      margin: 2,
+      color: {
+        dark: "#000000",
+        light: "#FFFFFF"
+      },
+      errorCorrectionLevel: "H"
+    })
+    
+    return { qrCode: uniqueId, qrCodeDataUrl }
   }
 
   private static async logValidation(validation: TicketValidation): Promise<void> {

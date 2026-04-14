@@ -187,7 +187,13 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
 
       Alert.alert("Purchase Successful!", `Your ticket has been purchased successfully. Ticket ID: ${ticket.id}`, [
         {
-          text: "OK",
+          text: "View Ticket",
+          onPress: () => {
+            navigation.navigate("MyTickets")
+          },
+        },
+        {
+          text: "Go Back",
           onPress: () => navigation.goBack(),
         },
       ])
