@@ -18,6 +18,8 @@ export interface Ticket {
   buyerPhotoUrl?: string
   status: "active" | "used" | "cancelled" | "refunded"
   validationHistory: TicketValidation[]
+  // Ticket type/entry fee
+  entryFeeType?: string
   // PesaPal payment details
   paymentId?: string
   paymentStatus?: "pending" | "completed" | "failed"

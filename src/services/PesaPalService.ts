@@ -13,10 +13,11 @@ const generateOrderId = (): string => {
   return `YV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-// Encode credentials for Basic Auth
+// Encode credentials for Basic Auth (browser-compatible)
 const getAuthHeader = (): string => {
   const credentials = `${PESAPAL_CONFIG.consumerKey}:${PESAPAL_CONFIG.consumerSecret}`
-  return `Basic ${Buffer.from(credentials).toString("base64")}`
+  // Use btoa for browser-compatible base64 encoding instead of Node.js Buffer
+  return `Basic ${btoa(credentials)}`
 }
 
 export class PesaPalService {

@@ -187,19 +187,24 @@ const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
    * VibeAnalysisService.analyzeVibeImage should accept a data URL or object URL.
    */
   const analyzeVibe = async () => {
+    console.log('AddVibeScreen: analyzeVibe called', { hasImage: !!image, imageType: typeof image })
     if (!image) {
       Alert.alert("Error", "Please capture an image first")
       return
     }
 
     setAnalyzing(true)
+    console.log('AddVibeScreen: setAnalyzing(true) called')
     try {
+      console.log('AddVibeScreen: Calling VibeAnalysisService.analyzeVibeImage...')
       const result = await VibeAnalysisService.analyzeVibeImage(image)
+      console.log('AddVibeScreen: Got result:', result)
       setAnalysisResult(result)
-    } catch (error) {
-      console.error("Error analyzing vibe:", error)
-      Alert.alert("Error", "Failed to analyze vibe")
+    } catch (error: any) {
+      console.error("AddVibeScreen: Error analyzing vibe:", error)
+      Alert.alert("Error", "Failed to analyze vibe: " + (error?.message || error))
     } finally {
+      console.log('AddVibeScreen: Setting analyzing to false')
       setAnalyzing(false)
     }
   }

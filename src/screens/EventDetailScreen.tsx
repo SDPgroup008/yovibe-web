@@ -23,6 +23,8 @@ import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type { EventDetailScreenProps } from "../navigation/types"
 import TicketService from "../services/TicketService"
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
+import { db } from "../config/firebase"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -52,6 +54,16 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [revenueAnalytics, setRevenueAnalytics] = useState<Array<{ label: string; value: number }>>([])
+  
+  // Ticket sales breakdown by entry fee type
+  type TicketSalesByType = {
+    [entryFeeName: string]: {
+      early: { count: number; revenue: number }
+      late: { count: number; revenue: number }
+      scanned: { count: number; revenue: number }
+    }
+  }
+  const [ticketSalesByType, setTicketSalesByType] = useState<TicketSalesByType>({})
 
   // Payment details state
   const [organizerPaymentDetails, setOrganizerPaymentDetails] = useState<{
@@ -71,6 +83,8 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   // Ticket Scanner State
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
+  const [scannerInput, setScannerInput] = useState("")
+  const [showScannerModal, setShowScannerModal] = useState(false)
   
   // Handle scan ticket
   const handleScanTicket = async () => {
@@ -84,34 +98,27 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       console.log("📋 Event:", event?.name)
       
       setScanning(true)
+      setScannerInput("")
+      setShowScannerModal(true)
+      console.log("⏳ Showing scanner input...")
       
-      // Use Alert.prompt to simulate QR code scanning
-      const { Alert } = require('react-native')
-      console.log("⏳ Waiting for ticket input...")
-      
-      Alert.prompt(
-        "Scan Ticket",
-        "Enter ticket ID or scan QR code:",
-        [
-          { text: "Cancel", style: "cancel", onPress: () => console.log("📋 Ticket scan cancelled by user") },
-          {
-            text: "Validate",
-            onPress: async (ticketId: string) => {
-              if (ticketId) {
-                console.log("📋 Ticket ID entered:", ticketId)
-                await handleValidateTicket(ticketId)
-              }
-            },
-          },
-        ],
-        "plain-text",
-      )
     } catch (error) {
       console.error("❌ Error scanning ticket:", error)
       Alert.alert("Error", "Failed to scan ticket")
     } finally {
       setScanning(false)
     }
+  }
+  
+  // Handle scanner submit
+  const handleScannerSubmit = async () => {
+    if (!scannerInput.trim()) return
+    
+    const ticketId = scannerInput.trim()
+    console.log("📋 Ticket ID entered:", ticketId)
+    setShowScannerModal(false)
+    await handleValidateTicket(ticketId)
+    setScannerInput("")
   }
   
   // Handle validate ticket
@@ -406,6 +413,133 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       }
     }
   }, [showOrganizerDashboard, user, event])
+
+  // Real-time ticket sales and validations listener
+  useEffect(() => {
+    if (!showOrganizerDashboard || !eventId) return
+
+    console.log("📡 Setting up real-time listeners for organizer dashboard...")
+
+    // Listen for NEW ticket purchases (removed orderBy to avoid index requirement)
+    const ticketsQuery = query(
+      collection(db, "YoVibe/data/tickets"),
+      where("eventId", "==", eventId)
+    )
+
+    const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
+      console.log("📡 Real-time: Ticket sales updated!")
+      let earlyCount = 0
+      let lateCount = 0
+      let totalRevenue = 0
+      
+      // Initialize sales by entry fee type
+      const salesByType: TicketSalesByType = {}
+      
+      // Initialize with event entry fees if available
+      if (event?.entryFees) {
+        event.entryFees.forEach((fee: { name: string; amount: string }) => {
+          salesByType[fee.name] = {
+            early: { count: 0, revenue: 0 },
+            late: { count: 0, revenue: 0 },
+            scanned: { count: 0, revenue: 0 }
+          }
+        })
+      }
+
+      // Sort tickets by purchaseDate descending (client-side since we removed orderBy)
+      const tickets = []
+      snapshot.forEach((doc) => {
+        tickets.push(doc.data())
+      })
+      tickets.sort((a, b) => {
+        const dateA = a.purchaseDate?.seconds || 0
+        const dateB = b.purchaseDate?.seconds || 0
+        return dateB - dateA
+      })
+
+      tickets.forEach((ticket) => {
+        const ticketType = ticket.entryFeeType || ticket.ticketType || "Standard"
+        const amount = ticket.totalAmount || 0
+        const isLate = ticket.isLatePurchase
+        const isScanned = ticket.isScanned || ticket.status === "used"
+        
+        if (isLate) {
+          lateCount++
+        } else {
+          earlyCount++
+        }
+        totalRevenue += amount
+        
+        // Track by entry fee type
+        if (!salesByType[ticketType]) {
+          salesByType[ticketType] = {
+            early: { count: 0, revenue: 0 },
+            late: { count: 0, revenue: 0 },
+            scanned: { count: 0, revenue: 0 }
+          }
+        }
+        
+        if (isLate) {
+          salesByType[ticketType].late.count++
+          salesByType[ticketType].late.revenue += amount
+        } else {
+          salesByType[ticketType].early.count++
+          salesByType[ticketType].early.revenue += amount
+        }
+        
+        // Track scanned tickets separately
+        if (isScanned) {
+          if (!salesByType[ticketType].scanned) {
+            salesByType[ticketType].scanned = { count: 0, revenue: 0 }
+          }
+          salesByType[ticketType].scanned.count++
+          salesByType[ticketType].scanned.revenue += amount
+        }
+      })
+
+      setTicketSalesEarly(earlyCount)
+      setTicketSalesLate(lateCount)
+      setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
+      setTicketSalesByType(salesByType)
+
+      console.log("📡 Real-time: Early tickets:", earlyCount, "Late tickets:", lateCount, "Revenue:", totalRevenue)
+      console.log("📡 Real-time: Sales by type:", JSON.stringify(salesByType))
+    }, (error) => {
+      console.error("📡 Real-time listener error for tickets:", error)
+    })
+
+    // Listen for ticket validations/scans
+    const validationsQuery = query(
+      collection(db, "YoVibe/data/ticketValidations"),
+      orderBy("validatedAt", "desc")
+    )
+
+    const unsubscribeValidations = onSnapshot(validationsQuery, (snapshot) => {
+      console.log("📡 Real-time: Ticket validations updated!")
+      const logs: Array<{ time: string; ticketId: string; status: string }> = []
+
+      snapshot.forEach((doc) => {
+        const validation = doc.data()
+        logs.push({
+          time: validation.validatedAt ? new Date(validation.validatedAt.seconds * 1000).toLocaleTimeString() : new Date().toLocaleTimeString(),
+          ticketId: validation.ticketId ? validation.ticketId.substring(0, 8) + "..." : "Unknown",
+          status: validation.status === "granted" ? "Valid" : "Invalid"
+        })
+      })
+
+      setScanLogs(logs.slice(0, 10))
+      console.log("📡 Real-time: Scan logs updated, count:", logs.length)
+    }, (error) => {
+      console.error("📡 Real-time listener error for validations:", error)
+    })
+
+    // Cleanup listeners on unmount or when dashboard closes
+    return () => {
+      console.log("📡 Cleaning up real-time listeners...")
+      unsubscribeTickets()
+      unsubscribeValidations()
+    }
+  }, [showOrganizerDashboard, eventId])
 
   // Inject JSON-LD structured data for SEO
   useEffect(() => {
@@ -722,6 +856,74 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
                   </View>
                 </View>
                 
+                {/* Ticket Sales by Entry Fee Type */}
+                <View style={styles.dashboardSection}>
+                  <Text style={styles.dashboardSectionTitle}>Sales by Ticket Type</Text>
+                  <View style={styles.salesTable}>
+                    {/* Table Header */}
+                    <View style={styles.salesTableHeader}>
+                      <Text style={[styles.salesTableHeaderText, styles.salesTableCell1]}>Type</Text>
+                      <Text style={[styles.salesTableHeaderText, styles.salesTableCell2]}>Early</Text>
+                      <Text style={[styles.salesTableHeaderText, styles.salesTableCell2]}>Late</Text>
+                      <Text style={[styles.salesTableHeaderText, styles.salesTableCell2]}>Scanned</Text>
+                    </View>
+                    
+                    {/* Table Rows - Sales by Entry Fee Type */}
+                    {Object.keys(ticketSalesByType).length > 0 ? (
+                      Object.entries(ticketSalesByType).map(([typeName, sales]) => (
+                        <View key={typeName} style={styles.salesTableRow}>
+                          <Text style={[styles.salesTableCellText, styles.salesTableCell1]}>{typeName}</Text>
+                          <View style={styles.salesTableCell2}>
+                            <Text style={styles.salesTableCountText}>{sales.early.count}</Text>
+                            <Text style={styles.salesTableRevenueText}>UGX {sales.early.revenue.toLocaleString()}</Text>
+                          </View>
+                          <View style={styles.salesTableCell2}>
+                            <Text style={styles.salesTableCountText}>{sales.late.count}</Text>
+                            <Text style={styles.salesTableRevenueText}>UGX {sales.late.revenue.toLocaleString()}</Text>
+                          </View>
+                          <View style={styles.salesTableCell2}>
+                            <Text style={styles.salesTableCountText}>{sales.scanned?.count || 0}</Text>
+                            <Text style={styles.salesTableRevenueText}>UGX {(sales.scanned?.revenue || 0).toLocaleString()}</Text>
+                          </View>
+                        </View>
+                      ))
+                    ) : (
+                      <Text style={styles.noDataText}>No ticket sales yet</Text>
+                    )}
+                    
+                    {/* Summary Row */}
+                    {Object.keys(ticketSalesByType).length > 0 && (
+                      <View style={styles.salesTableSummary}>
+                        <Text style={[styles.salesTableSummaryText, styles.salesTableCell1]}>TOTAL</Text>
+                        <View style={styles.salesTableCell2}>
+                          <Text style={styles.salesTableSummaryCount}>
+                            {Object.values(ticketSalesByType).reduce((sum, s) => sum + s.early.count, 0)}
+                          </Text>
+                          <Text style={styles.salesTableSummaryRevenue}>
+                            UGX {Object.values(ticketSalesByType).reduce((sum, s) => sum + s.early.revenue, 0).toLocaleString()}
+                          </Text>
+                        </View>
+                        <View style={styles.salesTableCell2}>
+                          <Text style={styles.salesTableSummaryCount}>
+                            {Object.values(ticketSalesByType).reduce((sum, s) => sum + s.late.count, 0)}
+                          </Text>
+                          <Text style={styles.salesTableSummaryRevenue}>
+                            UGX {Object.values(ticketSalesByType).reduce((sum, s) => sum + s.late.revenue, 0).toLocaleString()}
+                          </Text>
+                        </View>
+                        <View style={styles.salesTableCell2}>
+                          <Text style={styles.salesTableSummaryCount}>
+                            {Object.values(ticketSalesByType).reduce((sum, s) => sum + (s.scanned?.count || 0), 0)}
+                          </Text>
+                          <Text style={styles.salesTableSummaryRevenue}>
+                            UGX {Object.values(ticketSalesByType).reduce((sum, s) => sum + (s.scanned?.revenue || 0), 0).toLocaleString()}
+                          </Text>
+                        </View>
+                      </View>
+                    )}
+                  </View>
+                </View>
+                
                 <View style={styles.dashboardSection}>
                   <Text style={styles.dashboardSectionTitle}>Real-time Scan Logs</Text>
                   <View style={styles.dashboardCard}>
@@ -994,6 +1196,51 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           </ScrollView>
         </View>
       </Modal>
+      
+      {/* Scanner Input Modal */}
+      <Modal
+        visible={showScannerModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowScannerModal(false)}
+      >
+        <View style={styles.scannerModalOverlay}>
+          <View style={styles.scannerModalContent}>
+            <Text style={styles.scannerModalTitle}>Scan Ticket</Text>
+            <Text style={styles.scannerModalSubtitle}>Enter ticket ID or scan QR code</Text>
+            
+            <TextInput
+              style={styles.scannerModalInput}
+              value={scannerInput}
+              onChangeText={setScannerInput}
+              placeholder="Enter ticket ID..."
+              placeholderTextColor="#666"
+              autoFocus
+              onSubmitEditing={handleScannerSubmit}
+            />
+            
+            <View style={styles.scannerModalButtons}>
+              <TouchableOpacity 
+                style={styles.scannerModalCancelButton}
+                onPress={() => {
+                  setShowScannerModal(false)
+                  setScannerInput("")
+                }}
+              >
+                <Text style={styles.scannerModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.scannerModalValidateButton}
+                onPress={handleScannerSubmit}
+                disabled={!scannerInput.trim()}
+              >
+                <Text style={styles.scannerModalValidateText}>Validate</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -1102,6 +1349,69 @@ const styles = StyleSheet.create({
     padding: responsiveSize(8, 10, 12),
     backgroundColor: "rgba(0, 0, 0, 0.6)",
     borderRadius: responsiveSize(20, 24, 28),
+  },
+  // Scanner Modal Styles
+  scannerModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  scannerModalContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+  },
+  scannerModalTitle: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  scannerModalSubtitle: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  scannerModalInput: {
+    backgroundColor: "#333333",
+    color: "#FFFFFF",
+    padding: 16,
+    borderRadius: 8,
+    fontSize: 16,
+    marginBottom: 20,
+  },
+  scannerModalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  scannerModalCancelButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: "#333333",
+    alignItems: "center",
+  },
+  scannerModalCancelText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  scannerModalValidateButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 8,
+    backgroundColor: "#00D4FF",
+    alignItems: "center",
+  },
+  scannerModalValidateText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
   },
   fullImage: {
     width: "100%",
@@ -1435,6 +1745,80 @@ const styles = StyleSheet.create({
     color: "#666666",
     textAlign: "center",
     paddingVertical: responsiveSize(16, 20, 24),
+  },
+  // Sales Table Styles
+  salesTable: {
+    backgroundColor: "#252525",
+    borderRadius: 8,
+    overflow: "hidden",
+  },
+  salesTableHeader: {
+    flexDirection: "row",
+    backgroundColor: "#333333",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#444444",
+  },
+  salesTableHeaderText: {
+    color: "#888888",
+    fontSize: 11,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  salesTableCell1: {
+    flex: 1.5,
+    textAlign: "left",
+  },
+  salesTableCell2: {
+    flex: 1,
+    alignItems: "center",
+  },
+  salesTableRow: {
+    flexDirection: "row",
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  salesTableCellText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+  },
+  salesTableCountText: {
+    color: "#00D4FF",
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  salesTableRevenueText: {
+    color: "#888888",
+    fontSize: 10,
+    marginTop: 2,
+  },
+  salesTableSummary: {
+    flexDirection: "row",
+    backgroundColor: "#444444",
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderBottomWidth: 0,
+  },
+  salesTableSummaryText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  salesTableSummaryCount: {
+    color: "#00FF9F",
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
+  },
+  salesTableSummaryRevenue: {
+    color: "#00FF9F",
+    fontSize: 11,
+    fontWeight: "bold",
+    marginTop: 2,
+    textAlign: "center",
   },
   withdrawButton: {
     flexDirection: "row",

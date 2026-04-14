@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useMemo } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
@@ -29,6 +29,13 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState("")
   const [securityPhotoEnabled, setSecurityPhotoEnabled] = useState(false)
   
+  // Ticket type selection state
+  const [selectedTicketType, setSelectedTicketType] = useState<{ name: string; amount: string } | null>(null)
+  const [showTicketTypeModal, setShowTicketTypeModal] = useState(false)
+  
+  // Get ticket types from event entry fees
+  const ticketTypes = event.entryFees && event.entryFees.length > 0 ? event.entryFees : []
+  
   // Visitor info for unauthenticated users
   const [visitorName, setVisitorName] = useState("")
   const [visitorEmail, setVisitorEmail] = useState("")
@@ -45,10 +52,15 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const [bankAccountNumber, setBankAccountNumber] = useState("")
   const [bankAccountName, setBankAccountName] = useState("")
 
-  // Get base price from event entry fees
-  const basePrice = event.entryFees && event.entryFees.length > 0 
-    ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
-    : 0
+  // Get base price from selected ticket type or event entry fees
+  const basePrice = selectedTicketType 
+    ? Number.parseInt(selectedTicketType.amount?.replace(/[^0-9]/g, "") || "0")
+    : event.entryFees && event.entryFees.length > 0 
+      ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
+      : 0
+
+  // Get the selected ticket type name
+  const selectedTicketTypeName = selectedTicketType?.name || (ticketTypes.length > 0 ? ticketTypes[0].name : "Standard")
 
   // Calculate prices with late fee using useMemo for efficiency
   const pricing = useMemo(() => {
@@ -145,6 +157,12 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       }
     }
 
+    // Validate ticket type selection
+    if (!selectedTicketType && ticketTypes.length > 0) {
+      Alert.alert("Ticket Type Required", "Please select a ticket type")
+      return
+    }
+
     try {
       setLoading(true)
 
@@ -153,6 +171,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         ...(paymentMethod === "mobile_money" && { provider: mobileMoneyProvider, number: mobileMoneyNumber, name: mobileMoneyName }),
         ...(paymentMethod === "credit_card" && { cardNumber: cardNumber.slice(-4), expiry: cardExpiry }),
         ...(paymentMethod === "bank_transfer" && { bankName, accountNumber: bankAccountNumber, accountName: bankAccountName }),
+        ticketType: selectedTicketTypeName,
       }
 
       const ticket = await TicketService.purchaseTicket(
@@ -222,7 +241,30 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       )}
 
       <View style={styles.ticketSection}>
-        <Text style={styles.sectionTitle}>Ticket Details</Text>
+        <Text style={styles.sectionTitle}>Select Ticket Type</Text>
+
+        {/* Ticket Type Selector */}
+        {ticketTypes.length > 0 ? (
+          <TouchableOpacity 
+            style={styles.ticketTypeSelector}
+            onPress={() => setShowTicketTypeModal(true)}
+          >
+            <View style={styles.ticketTypeSelectorContent}>
+              <Ionicons name="ticket" size={24} color="#00D4FF" />
+              <View style={styles.ticketTypeSelectorText}>
+                <Text style={styles.ticketTypeSelectorLabel}>
+                  {selectedTicketTypeName}
+                </Text>
+                <Text style={styles.ticketTypeSelectorPrice}>
+                  UGX {basePrice.toLocaleString()}
+                </Text>
+              </View>
+            </View>
+            <Ionicons name="chevron-down" size={24} color="#888888" />
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.noTicketsText}>No ticket types available</Text>
+        )}
 
         <View style={styles.priceRow}>
           <Text style={styles.priceLabel}>Price per ticket:</Text>
@@ -465,6 +507,61 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
           </>
         )}
       </TouchableOpacity>
+
+      {/* Ticket Type Selection Modal */}
+      <Modal
+        visible={showTicketTypeModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTicketTypeModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Ticket Type</Text>
+              <TouchableOpacity 
+                style={styles.modalCloseButton}
+                onPress={() => setShowTicketTypeModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            
+            <FlatList
+              data={ticketTypes}
+              keyExtractor={(item, index) => `${item.name}_${index}`}
+              renderItem={({ item }) => {
+                const isSelected = selectedTicketType?.name === item.name
+                const itemPrice = Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0")
+                
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.ticketTypeItem,
+                      isSelected && styles.ticketTypeItemSelected
+                    ]}
+                    onPress={() => {
+                      setSelectedTicketType(item)
+                      setShowTicketTypeModal(false)
+                    }}
+                  >
+                    <View style={styles.ticketTypeItemContent}>
+                      <Text style={styles.ticketTypeItemName}>{item.name}</Text>
+                      <Text style={styles.ticketTypeItemPrice}>
+                        UGX {itemPrice.toLocaleString()}
+                      </Text>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={24} style={styles.ticketTypeItemCheck} />
+                    )}
+                  </TouchableOpacity>
+                )
+              }}
+              showsVerticalScrollIndicator={false}
+            />
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   )
 }
@@ -809,6 +906,101 @@ const styles = StyleSheet.create({
   },
   cardHalfInput: {
     flex: 1,
+  },
+  ticketTypeSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#00D4FF",
+  },
+  ticketTypeSelectorContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  ticketTypeSelectorText: {
+    flexDirection: "column",
+  },
+  ticketTypeSelectorLabel: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ticketTypeSelectorPrice: {
+    color: "#00D4FF",
+    fontSize: 14,
+    marginTop: 2,
+  },
+  noTicketsText: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    padding: 16,
+    marginBottom: 16,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    width: "85%",
+    maxHeight: "70%",
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  modalTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  modalCloseButton: {
+    padding: 5,
+  },
+  ticketTypeItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  ticketTypeItemSelected: {
+    borderWidth: 2,
+    borderColor: "#00D4FF",
+  },
+  ticketTypeItemContent: {
+    flexDirection: "column",
+  },
+  ticketTypeItemName: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ticketTypeItemPrice: {
+    color: "#00D4FF",
+    fontSize: 14,
+    marginTop: 4,
+  },
+  ticketTypeItemCheck: {
+    color: "#00FF9F",
   },
 })
 

@@ -125,6 +125,7 @@ export class TicketService {
         buyerPhotoUrl,
         status: "active",
         validationHistory: [],
+        entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,
         payoutEligible: false,
