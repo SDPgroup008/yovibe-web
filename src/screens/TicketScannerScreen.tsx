@@ -52,11 +52,23 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
     if (!scanning) return
     
-    console.log("📱 QR Code scanned:", data)
+    console.log("📱 QR Code raw data:", data)
     setScanning(false)
     setCameraActive(false)
     
-    await handleValidateTicket(data)
+    // Parse QR data - could be JSON (new format) or plain string (legacy)
+    let ticketData: { id?: string; eventId?: string } = {}
+    let ticketId = data
+    
+    try {
+      ticketData = JSON.parse(data)
+      ticketId = ticketData.id || data
+      console.log("📱 Parsed QR data - ID:", ticketId, "Event:", ticketData.eventId)
+    } catch {
+      console.log("📱 Could not parse as JSON, using raw data as ticket ID")
+    }
+    
+    await handleValidateTicket(ticketId)
   }
 
   const stopCamera = () => {

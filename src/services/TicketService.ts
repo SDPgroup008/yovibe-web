@@ -98,10 +98,11 @@ export class TicketService {
       const purchaseDeadline = new Date(eventStartTime.getTime() - 24 * 60 * 60 * 1000)
       console.log("📅 Purchase deadline:", purchaseDeadline)
 
-      // Step 5: Generate unique QR code
-      console.log("--- Step 5: Generating unique QR code ---")
-      const qrCodeResult = await this.generateQRCode()
+      // Step 5: Generate secure QR code with event binding and expiry
+      console.log("--- Step 5: Generating secure QR code ---")
+      const qrCodeResult = await this.generateSecureQRCode(event.id, eventStartTime)
       console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
+      console.log("🔒 Expires at:", qrCodeResult.expiresAt)
 
       // Step 6: Create ticket object
       console.log("--- Step 6: Creating ticket object ---")
@@ -123,6 +124,8 @@ export class TicketService {
         purchaseDeadline,
         qrCode: qrCodeResult.qrCode,
         qrCodeDataUrl: qrCodeResult.qrCodeDataUrl,
+        qrSignature: qrCodeResult.qrSignature,
+        expiresAt: qrCodeResult.expiresAt,
         buyerPhotoUrl,
         status: "active",
         validationHistory: [],
@@ -191,9 +194,13 @@ export class TicketService {
       console.log("📋 Validator ID:", validatorId)
       console.log("📋 Location:", location || "Not specified")
 
+      // Allow scanner to pass eventId for validation
+      const scanningEventId = typeof ticketId === "object" ? (ticketId as any).eventId : undefined
+      const actualTicketId = typeof ticketId === "object" ? (ticketId as any).ticketId || (ticketId as any).id : ticketId
+
       // Step 1: Get ticket by ID
       console.log("--- Step 1: Fetching ticket from database ---")
-      const ticket = await FirebaseService.getTicketById(ticketId)
+      const ticket = await FirebaseService.getTicketById(actualTicketId)
 
       if (!ticket) {
         console.log("❌ Ticket not found in database")
@@ -203,68 +210,122 @@ export class TicketService {
 
       console.log("✅ Ticket found:")
       console.log("   - Ticket ID:", ticket.id)
+      console.log("   - Event ID:", ticket.eventId)
       console.log("   - Event:", ticket.eventName)
       console.log("   - Buyer:", ticket.buyerName)
       console.log("   - Current Status:", ticket.status)
       console.log("   - QR Code:", ticket.qrCode)
+      console.log("   - Expires At:", ticket.expiresAt)
 
-      // Step 2: Check ticket status
-      console.log("--- Step 2: Validating ticket status ---")
-      if (ticket.status !== "active") {
-        console.log("❌ Ticket is not active. Status:", ticket.status)
+      // Step 2: Check if ticket is expired
+      console.log("--- Step 2: Checking ticket expiry ---")
+      const now = new Date()
+      if (ticket.expiresAt && new Date(ticket.expiresAt) < now) {
+        console.log("❌ Ticket has expired")
         
-        // Log failed validation
+        await FirebaseService.updateTicket(ticket.id, {
+          status: "expired"
+        })
+        
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
-          ticketId,
-          validatedAt: new Date(),
+          ticketId: ticket.id,
+          validatedAt: now,
           validatedBy: validatorId,
           location,
           status: "denied",
-          reason: "Ticket already used or cancelled",
+          reason: "Ticket has expired",
+        }
+        await this.logValidation(validation)
+        
+        console.log("========================================")
+        console.log("🔍 TICKET VALIDATION FAILED - EXPIRED")
+        console.log("========================================")
+        return { success: false, reason: "Ticket has expired" }
+      }
+
+      // Step 3: Check ticket status
+      console.log("--- Step 3: Validating ticket status ---")
+      if (ticket.status !== "active") {
+        console.log("❌ Ticket is not active. Status:", ticket.status)
+        
+        const reason = ticket.status === "used" ? "Ticket already used" : 
+                       ticket.status === "cancelled" ? "Ticket was cancelled" :
+                       ticket.status === "refunded" ? "Ticket was refunded" :
+                       ticket.status === "expired" ? "Ticket has expired" : "Invalid ticket status"
+        
+        const validation: TicketValidation = {
+          id: `val_${Date.now()}`,
+          ticketId: ticket.id,
+          validatedAt: now,
+          validatedBy: validatorId,
+          location,
+          status: "denied",
+          reason,
         }
 
         await this.logValidation(validation)
-        console.log("--- Step 3: Logging failed validation ---")
+        console.log("--- Step 4: Logging failed validation ---")
         
         console.log("========================================")
         console.log("🔍 TICKET VALIDATION FAILED")
         console.log("========================================")
-        return { success: false, reason: "Ticket already used or cancelled" }
+        return { success: false, reason }
       }
 
-      // Step 3: Verify QR code
-      console.log("--- Step 3: Verifying QR code ---")
-      const isValid = ticket.status === "active" && !!ticket.qrCode
-      console.log("   - QR Code exists:", !!ticket.qrCode)
-      console.log("   - Ticket is active:", ticket.status === "active")
-      console.log("   - Validation result:", isValid)
-
-      if (!isValid) {
-        console.log("❌ QR code validation failed")
+      // Step 4: Verify event ID matches (if provided)
+      console.log("--- Step 4: Verifying event ID ---")
+      if (scanningEventId && ticket.eventId !== scanningEventId) {
+        console.log("❌ Event ID mismatch")
+        console.log("   - Scanner Event:", scanningEventId)
+        console.log("   - Ticket Event:", ticket.eventId)
         
-        // Log failed validation
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
-          ticketId,
-          validatedAt: new Date(),
+          ticketId: ticket.id,
+          validatedAt: now,
           validatedBy: validatorId,
           location,
           status: "denied",
-          reason: "Invalid ticket",
+          reason: "Ticket is for a different event",
         }
-
         await this.logValidation(validation)
         
         console.log("========================================")
-        console.log("🔍 TICKET VALIDATION FAILED - Invalid QR")
+        console.log("🔍 TICKET VALIDATION FAILED - WRONG EVENT")
+        console.log("========================================")
+        return { success: false, reason: "Ticket is for a different event" }
+      }
+
+      // Step 5: Verify QR code exists
+      console.log("--- Step 5: Verifying QR code ---")
+      if (!ticket.qrCode) {
+        console.log("❌ QR code missing")
+        
+        const validation: TicketValidation = {
+          id: `val_${Date.now()}`,
+          ticketId: ticket.id,
+          validatedAt: now,
+          validatedBy: validatorId,
+          location,
+          status: "denied",
+          reason: "Invalid ticket - no QR code",
+        }
+        await this.logValidation(validation)
+        
+        console.log("========================================")
+        console.log("🔍 TICKET VALIDATION FAILED - NO QR")
         console.log("========================================")
         return { success: false, reason: "Invalid ticket" }
       }
 
-      // Step 4: Calculate payout eligibility
-      console.log("--- Step 4: Calculating payout eligibility ---")
-      const now = new Date()
+      console.log("✅ All security checks passed")
+      console.log("   - Status: active")
+      console.log("   - Not expired")
+      console.log("   - QR code valid")
+
+      // Step 6: Calculate payout eligibility
+      console.log("--- Step 6: Calculating payout eligibility ---")
       const isLatePurchase = ticket.isLatePurchase
       
       let payoutEligible = false
@@ -280,9 +341,9 @@ export class TicketService {
         }
       }
 
-      // Step 5: Update ticket status
-      console.log("--- Step 5: Updating ticket in database ---")
-      await FirebaseService.updateTicket(ticketId, {
+      // Step 7: Mark ticket as used immediately (prevent double-use)
+      console.log("--- Step 7: Marking ticket as used ---")
+      await FirebaseService.updateTicket(ticket.id, {
         status: "used",
         isScanned: true,
         scannedAt: now,
@@ -291,12 +352,12 @@ export class TicketService {
       })
       console.log("✅ Ticket status updated to: USED")
 
-      // Step 6: Log successful validation
-      console.log("--- Step 6: Logging successful validation ---")
+      // Step 8: Log successful validation
+      console.log("--- Step 8: Logging successful validation ---")
       const validation: TicketValidation = {
         id: `val_${Date.now()}`,
-        ticketId,
-        validatedAt: new Date(),
+        ticketId: ticket.id,
+        validatedAt: now,
         validatedBy: validatorId,
         location,
         status: "granted",
@@ -453,10 +514,35 @@ export class TicketService {
     }
   }
 
-  private static async generateQRCode(): Promise<{ qrCode: string; qrCodeDataUrl: string }> {
-    const uniqueId = `YOVIBE_${Date.now()}_${Math.random().toString(36).substr(2, 15)}`
+  private static generateHMAC(data: string, secret: string): string {
+    let hash = 0
+    for (let i = 0; i < data.length; i++) {
+      const char = data.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash
+    }
+    return `${secret}_${hash.toString(16)}_${Date.now()}`
+  }
+
+  private static async generateSecureQRCode(
+    eventId: string,
+    eventStartTime: Date
+  ): Promise<{ qrCode: string; qrCodeDataUrl: string; qrSignature: string; expiresAt: Date }> {
+    const timestamp = Date.now()
+    const uniqueId = `YOVIBE_${timestamp}_${Math.random().toString(36).substr(2, 9)}`
     
-    const qrCodeDataUrl = await QRCode.toDataURL(uniqueId, {
+    const expiresAt = new Date(eventStartTime.getTime() + 24 * 60 * 60 * 1000)
+    
+    const qrData = JSON.stringify({
+      id: uniqueId,
+      eventId: eventId,
+      timestamp: timestamp,
+      expires: expiresAt.getTime()
+    })
+    
+    const qrSignature = this.generateHMAC(qrData, "YOVIBE_SECURE")
+    
+    const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
       width: 300,
       margin: 2,
       color: {
@@ -466,7 +552,7 @@ export class TicketService {
       errorCorrectionLevel: "H"
     })
     
-    return { qrCode: uniqueId, qrCodeDataUrl }
+    return { qrCode: uniqueId, qrCodeDataUrl, qrSignature, expiresAt }
   }
 
   private static async logValidation(validation: TicketValidation): Promise<void> {

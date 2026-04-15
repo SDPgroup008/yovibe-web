@@ -17,7 +17,7 @@ export interface Ticket {
   qrCode: string
   qrCodeDataUrl?: string
   buyerPhotoUrl?: string
-  status: "active" | "used" | "cancelled" | "refunded"
+  status: "active" | "used" | "cancelled" | "refunded" | "expired"
   validationHistory: TicketValidation[]
   // Ticket type/entry fee
   entryFeeType?: string
@@ -30,6 +30,8 @@ export interface Ticket {
   isLatePurchase: boolean
   isScanned: boolean
   purchaseDeadline: Date
+  // Expiry - tickets expire day after event
+  expiresAt: Date
   // Payout tracking
   payoutEligible: boolean
   payoutStatus: "pending" | "processing" | "paid" | "failed"
@@ -40,6 +42,8 @@ export interface Ticket {
   paymentProvider?: string
   paymentNumber?: string
   paymentName?: string
+  // Security: QR signature
+  qrSignature?: string
 }
 
 export interface TicketValidation {
