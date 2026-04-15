@@ -9,6 +9,11 @@ import FirebaseService from "../services/FirebaseService"
 import type { Ticket } from "../models/Ticket"
 import type { MyTicketsScreenProps } from "../navigation/types"
 
+
+
+
+
+
 const MyTicketsScreen: React.FC<MyTicketsScreenProps> = ({ route, navigation }) => {
   const { user } = useAuth()
   const [tickets, setTickets] = useState<Ticket[]>([])
