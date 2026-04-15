@@ -1369,9 +1369,39 @@ class FirebaseService {
         purchaseDeadline: data.purchaseDeadline?.toDate(),
         scannedAt: data.scannedAt?.toDate(),
         payoutDate: data.payoutDate?.toDate(),
+        expiresAt: data.expiresAt?.toDate(),
       }
     } catch (error) {
       console.error("FirebaseService: Error getting ticket:", error)
+      return null
+    }
+  }
+
+  async getTicketByQRCode(qrCode: string): Promise<any | null> {
+    try {
+      const ticketsRef = collection(db, "YoVibe/data/tickets")
+      const q = query(ticketsRef, where("qrCode", "==", qrCode))
+      const querySnapshot = await getDocs(q)
+      
+      if (querySnapshot.empty) {
+        console.log("FirebaseService: No ticket found with QR code:", qrCode)
+        return null
+      }
+      
+      const doc = querySnapshot.docs[0]
+      const data = doc.data()
+      return {
+        id: doc.id,
+        ...data,
+        purchaseDate: data.purchaseDate?.toDate(),
+        eventStartTime: data.eventStartTime?.toDate(),
+        purchaseDeadline: data.purchaseDeadline?.toDate(),
+        scannedAt: data.scannedAt?.toDate(),
+        payoutDate: data.payoutDate?.toDate(),
+        expiresAt: data.expiresAt?.toDate(),
+      }
+    } catch (error) {
+      console.error("FirebaseService: Error getting ticket by QR code:", error)
       return null
     }
   }

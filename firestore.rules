@@ -144,15 +144,15 @@ service cloud.firestore {
       allow delete: if isAdmin(request.auth.uid);
     }
 
-    // Ticket validations collection - admins only
+    // Ticket validations collection - for tracking ticket scans
     match /YoVibe/data/ticketValidations/{validationId} {
-      // Only admins can read ticket validations
-      allow read: if isAdmin(request.auth.uid);
+      // Anyone authenticated can read ticket validations (for organizer dashboard)
+      allow read: if request.auth != null;
       
-      // Admins can create ticket validations (scan tickets)
-      allow create: if isAdmin(request.auth.uid);
+      // Authenticated users can create ticket validations (scanners at events)
+      allow create: if request.auth != null;
       
-      // Admins can update/delete
+      // Only admins can update/delete
       allow update, delete: if isAdmin(request.auth.uid);
     }
 

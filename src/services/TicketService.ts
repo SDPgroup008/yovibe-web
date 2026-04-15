@@ -194,13 +194,29 @@ export class TicketService {
       console.log("📋 Validator ID:", validatorId)
       console.log("📋 Location:", location || "Not specified")
 
-      // Allow scanner to pass eventId for validation
-      const scanningEventId = typeof ticketId === "object" ? (ticketId as any).eventId : undefined
-      const actualTicketId = typeof ticketId === "object" ? (ticketId as any).ticketId || (ticketId as any).id : ticketId
+      // Parse ticket data - could be JSON (new format) or plain string (legacy QR or ticket ID)
+      let ticketData: { id?: string; eventId?: string } = {}
+      let actualTicketId = ticketId
+      let scanningEventId: string | undefined
+      
+      try {
+        ticketData = JSON.parse(ticketId)
+        actualTicketId = ticketData.id || ticketId
+        scanningEventId = ticketData.eventId
+        console.log("📋 Parsed QR data - ID:", actualTicketId, "Event:", scanningEventId)
+      } catch {
+        console.log("📋 Using raw ticket ID:", actualTicketId)
+      }
 
-      // Step 1: Get ticket by ID
+      // Step 1: Get ticket by ID (or by QR code if it looks like a QR)
       console.log("--- Step 1: Fetching ticket from database ---")
-      const ticket = await FirebaseService.getTicketById(actualTicketId)
+      let ticket = await FirebaseService.getTicketById(actualTicketId)
+      
+      // If not found by ID, try by QR code
+      if (!ticket) {
+        console.log("📋 Trying to find by QR code:", actualTicketId)
+        ticket = await FirebaseService.getTicketByQRCode(actualTicketId)
+      }
 
       if (!ticket) {
         console.log("❌ Ticket not found in database")
