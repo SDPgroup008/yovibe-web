@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
 import { CameraView } from "expo-camera"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
@@ -92,7 +92,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
         <View style={{ width: 24 }} />
       </View>
 
-      <View style={styles.content}>
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         {/* Scanner Preview Area */}
         <View style={styles.scannerArea}>
           {scanning ? (
@@ -196,7 +196,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
             <Text style={styles.statusText}>Validation Service Active</Text>
           </View>
         </View>
-      </View>
+      </ScrollView>
     </View>
   )
 }
@@ -230,6 +230,9 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 16,
+  },
+  contentContainer: {
+    paddingBottom: 40,
   },
   scannerArea: {
     alignItems: "center",
