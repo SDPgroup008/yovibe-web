@@ -2,24 +2,19 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal, Platform } from "react-native"
-import { CameraView, useCameraPermissions } from "expo-camera"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
+import { CameraView } from "expo-camera"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import type { TicketScannerScreenProps } from "../navigation/types"
 
-const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation }) => {
+const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, route }) => {
   const { user } = useAuth()
+  const { eventId, eventName } = route.params || {}
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
-  const [manualInput, setManualInput] = useState("")
-  const [showManualModal, setShowManualModal] = useState(false)
-  const [cameraActive, setCameraActive] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string }>>([])
-  
-  const videoRef = useRef<any>(null)
-  const streamRef = useRef<MediaStream | null>(null)
 
   // Check if user is admin or club_owner
   useEffect(() => {
@@ -29,80 +24,20 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
     }
   }, [user, navigation])
 
-  // Cleanup camera on unmount
-  useEffect(() => {
-    return () => {
-      stopCamera()
-    }
-  }, [])
-
-  const startCamera = async () => {
-    try {
-      console.log("📷 Starting camera for QR scanning...")
-      setScanning(true)
-      setCameraActive(true)
-    } catch (error) {
-      console.error("Error starting camera:", error)
-      Alert.alert("Error", "Failed to start camera. Please use manual entry.")
-      setScanning(false)
-      setCameraActive(false)
-    }
-  }
-
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
     if (!scanning) return
     
     console.log("📱 QR Code raw data:", data)
     setScanning(false)
-    setCameraActive(false)
     
-    // Parse QR data - could be JSON (new format) or plain string (legacy)
-    let ticketData: { id?: string; eventId?: string } = {}
-    let ticketId = data
-    
-    try {
-      ticketData = JSON.parse(data)
-      ticketId = ticketData.id || data
-      console.log("📱 Parsed QR data - ID:", ticketId, "Event:", ticketData.eventId)
-    } catch {
-      console.log("📱 Could not parse as JSON, using raw data as ticket ID")
-    }
-    
-    await handleValidateTicket(ticketId)
-  }
-
-  const stopCamera = () => {
-    try {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track: any) => track.stop())
-        streamRef.current = null
-      }
-    } catch (error) {
-      console.error("Error stopping camera:", error)
-    }
-    setCameraActive(false)
-    setScanning(false)
+    await handleValidateTicket(data)
   }
 
   const handleScanTicket = async () => {
-    // Start camera scanning - set scanning state to true
-    // The CameraView component will handle QR code detection
     setScanning(true)
-    setCameraActive(true)
   }
 
-  const handleManualSubmit = async () => {
-    if (!manualInput.trim()) {
-      Alert.alert("Error", "Please enter a ticket ID")
-      return
-    }
-    
-    setShowManualModal(false)
-    await handleValidateTicket(manualInput.trim())
-    setManualInput("")
-  }
-
-  const handleValidateTicket = async (ticketId: string) => {
+  const handleValidateTicket = async (qrCodeData: string) => {
     if (!user) {
       Alert.alert("Error", "Please sign in to validate tickets")
       return
@@ -110,13 +45,15 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
 
     try {
       setValidating(true)
-      console.log("Validating ticket:", ticketId)
+      console.log("Validating ticket with QR:", qrCodeData)
+      console.log("Event ID:", eventId)
+      console.log("Event Name:", eventName)
 
-      const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance")
+      const result = await TicketService.validateTicket(qrCodeData, user.id, eventName || "Event Entrance")
       
       // Add to scan history
       setScanHistory((prev) => [{
-        ticketId: ticketId.substring(0, 12) + "...",
+        ticketId: qrCodeData.substring(0, 12) + "...",
         status: result.success ? "Valid" : "Invalid",
         time: new Date().toLocaleTimeString()
       }, ...prev].slice(0, 10))
@@ -124,7 +61,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
       if (result.success) {
         Alert.alert(
           "✅ Entry Granted",
-          `Ticket ${ticketId} is valid. Entry granted.`,
+          `Ticket is valid for ${eventName}. Entry granted.`,
           [{ text: "OK" }]
         )
       } else {
@@ -148,20 +85,24 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ticket Scanner</Text>
+        <View style={styles.headerTextContainer}>
+          <Text style={styles.headerTitle}>Ticket Scanner</Text>
+          {eventName && <Text style={styles.headerSubtitle}>{eventName}</Text>}
+        </View>
+        <View style={{ width: 24 }} />
       </View>
 
       <View style={styles.content}>
         {/* Scanner Preview Area */}
         <View style={styles.scannerArea}>
-          {cameraActive ? (
+          {scanning ? (
             <CameraView
               style={styles.cameraView}
               facing="back"
               barcodeScannerSettings={{
                 barcodeTypes: ["qr"],
               }}
-              onBarcodeScanned={scanning ? handleBarCodeScanned : undefined}
+              onBarcodeScanned={handleBarCodeScanned}
             >
               <View style={styles.cameraOverlay}>
                 <View style={styles.scanFrame}>
@@ -170,7 +111,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
                 <Text style={styles.scanText}>Point camera at QR code</Text>
                 <TouchableOpacity 
                   style={styles.stopCameraButton}
-                  onPress={stopCamera}
+                  onPress={() => setScanning(false)}
                 >
                   <Text style={styles.stopCameraButtonText}>Stop Scanning</Text>
                 </TouchableOpacity>
@@ -180,7 +121,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
             <>
               <Ionicons name="qr-code-outline" size={120} color="#2196F3" />
               <Text style={styles.scannerText}>
-                Scan ticket QR code or enter ticket ID manually
+                Point camera at ticket QR code to validate
               </Text>
             </>
           )}
@@ -190,9 +131,9 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
         <View style={styles.instructions}>
           <Text style={styles.instructionTitle}>How to Validate:</Text>
           <Text style={styles.instructionText}>
-            1. Point camera at ticket QR code{"\n"}
-            2. Or enter ticket ID manually{"\n"}
-            3. Click Validate to verify{"\n"}
+            1. Tap Scan QR to activate camera{"\n"}
+            2. Point camera at ticket QR code{"\n"}
+            3. System automatically validates{"\n"}
             4. Grant or deny entry based on result
           </Text>
         </View>
@@ -212,15 +153,6 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
                 <Text style={styles.scanButtonText}>Scan QR</Text>
               </>
             )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.manualButton}
-            onPress={() => setShowManualModal(true)}
-            disabled={validating}
-          >
-            <Ionicons name="keypad" size={24} color="#FFFFFF" />
-            <Text style={styles.scanButtonText}>Enter ID</Text>
           </TouchableOpacity>
         </View>
 
@@ -265,62 +197,6 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation })
           </View>
         </View>
       </View>
-
-      {/* Manual Entry Modal */}
-      <Modal
-        visible={showManualModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowManualModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Enter Ticket ID</Text>
-              <TouchableOpacity onPress={() => setShowManualModal(false)}>
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-            
-            <TextInput
-              style={styles.modalInput}
-              value={manualInput}
-              onChangeText={setManualInput}
-              placeholder="Enter ticket ID (e.g., ticket_123...)"
-              placeholderTextColor="#666"
-              autoFocus
-            />
-            
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalCancelButton}
-                onPress={() => {
-                  setShowManualModal(false)
-                  setManualInput("")
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.modalValidateButton}
-                onPress={handleManualSubmit}
-                disabled={!manualInput.trim() || validating}
-              >
-                {validating ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalValidateText}>Validate</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalHelper}>
-              Tip: You can find the ticket ID in the ticket details or QR code text
-            </Text>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
@@ -333,14 +209,23 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     padding: 16,
     paddingTop: 50,
+  },
+  headerTextContainer: {
+    flex: 1,
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginLeft: 16,
+  },
+  headerSubtitle: {
+    fontSize: 14,
+    color: "#00D4FF",
+    marginTop: 2,
   },
   content: {
     flex: 1,

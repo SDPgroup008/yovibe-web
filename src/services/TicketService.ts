@@ -194,34 +194,30 @@ export class TicketService {
       console.log("📋 Validator ID:", validatorId)
       console.log("📋 Location:", location || "Not specified")
 
-      // Parse ticket data - could be JSON (new format) or plain string (legacy QR or ticket ID)
+      // Parse ticket data from QR code - QR contains JSON with id and eventId
       let ticketData: { id?: string; eventId?: string } = {}
-      let actualTicketId = ticketId
+      let qrCodeValue = ticketId
       let scanningEventId: string | undefined
       
       try {
         ticketData = JSON.parse(ticketId)
-        actualTicketId = ticketData.id || ticketId
+        qrCodeValue = ticketData.id || ticketId
         scanningEventId = ticketData.eventId
-        console.log("📋 Parsed QR data - ID:", actualTicketId, "Event:", scanningEventId)
+        console.log("📋 Parsed QR data - QR Code:", qrCodeValue, "Event:", scanningEventId)
       } catch {
-        console.log("📋 Using raw ticket ID:", actualTicketId)
+        // If not JSON, treat as plain QR code string
+        qrCodeValue = ticketId
+        console.log("📋 Using raw QR code:", qrCodeValue)
       }
 
-      // Step 1: Get ticket by ID (or by QR code if it looks like a QR)
-      console.log("--- Step 1: Fetching ticket from database ---")
-      let ticket = await FirebaseService.getTicketById(actualTicketId)
-      
-      // If not found by ID, try by QR code
-      if (!ticket) {
-        console.log("📋 Trying to find by QR code:", actualTicketId)
-        ticket = await FirebaseService.getTicketByQRCode(actualTicketId)
-      }
+      // Step 1: Get ticket directly by QR code
+      console.log("--- Step 1: Fetching ticket by QR code ---")
+      const ticket = await FirebaseService.getTicketByQRCode(qrCodeValue)
 
       if (!ticket) {
-        console.log("❌ Ticket not found in database")
+        console.log("❌ Ticket not found with QR code:", qrCodeValue)
         console.log("========================================")
-        return { success: false, reason: "Ticket not found" }
+        return { success: false, reason: "Invalid QR code - ticket not found" }
       }
 
       console.log("✅ Ticket found:")

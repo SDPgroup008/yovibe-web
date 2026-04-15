@@ -27,7 +27,7 @@ export type VenuesStackParamList = {
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string; eventName: string }
   MyTickets: undefined
 }
 
@@ -40,7 +40,7 @@ export type EventsStackParamList = {
   Notification: undefined
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string; eventName: string }
   MyTickets: undefined
 }
 
@@ -51,7 +51,7 @@ export type MapStackParamList = {
   EventDetail: { eventId: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string; eventName: string }
   MyTickets: undefined
 }
 
@@ -62,7 +62,7 @@ export type CalendarStackParamList = {
   VenueDetail: { venueId: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string; eventName: string }
   MyTickets: undefined
 }
 
@@ -81,7 +81,7 @@ export type ProfileStackParamList = {
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
-  TicketScanner: undefined
+  TicketScanner: { eventId: string; eventName: string }
   TicketPurchase: { event: Event }
   MyTickets: undefined
   Auth: { screen: "Login" | "SignUp" } // Added for sign-out navigation

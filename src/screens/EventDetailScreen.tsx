@@ -86,7 +86,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [scannerInput, setScannerInput] = useState("")
   const [showScannerModal, setShowScannerModal] = useState(false)
   
-  // Handle scan ticket - navigate to dedicated scanner screen
+  // Handle scan ticket - navigate to scanner with event info
   const handleScanTicket = async () => {
     try {
       console.log("========================================")
@@ -97,7 +97,10 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       console.log("📋 Organizer ID:", user?.id)
       console.log("📋 Event:", event?.name)
       
-      navigation.navigate("TicketScanner")
+      navigation.navigate("TicketScanner", { 
+        eventId: eventId, 
+        eventName: event?.name || "Event" 
+      })
       
     } catch (error) {
       console.error("❌ Error scanning ticket:", error)
