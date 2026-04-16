@@ -38,6 +38,32 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/YoVibe/data/venues/$(venueId)).data.ownerId == userId;
     }
     
+    // Helper function: check if user is event organizer (via event's ownerId)
+    // This works for both club_owners and regular users who create events
+    function isEventOrganizer(eventId, userId) {
+      let event = get(/databases/$(database)/documents/YoVibe/data/events/$(eventId));
+      return event != null && event.data.ownerId == userId;
+    }
+    
+    // Helper function: check if user is venue owner (club_owner who owns the venue)
+    function isVenueOwnerOfEvent(eventId, userId) {
+      let event = get(/databases/$(database)/documents/YoVibe/data/events/$(eventId));
+      if (event != null && event.data.venueId != null) {
+        let venue = get(/databases/$(database)/documents/YoVibe/data/venues/$(event.data.venueId));
+        return venue != null && venue.data.ownerId == userId;
+      }
+      return false;
+    }
+    
+    // Helper function: check if only validation fields are being updated
+    function onlyUpdatingValidationFields() {
+      let affectedKeys = request.resource.data.diff(resource.data).affectedKeys();
+      return affectedKeys.hasOnly([
+        'status', 'isScanned', 'scannedAt', 'validationHistory',
+        'payoutEligible', 'payoutStatus', 'payoutDate'
+      ]);
+    }
+    
     // YoVibe data collection - default deny
     match /YoVibe/data/{document=**} {
       allow read, write: if false;
@@ -134,10 +160,16 @@ service cloud.firestore {
       // Unauthenticated users can also create tickets (for guest purchases)
       allow create: if request.auth != null || request.auth == null;
       
-      // Buyers can update their tickets, admins can update all
+      // Update rules:
+      // - Admins can update everything
+      // - Event organizers (who created the event) can update tickets for their events
+      // - Venue owners (club_owners) can update tickets for events at their venues
+      // - Buyers can update their own tickets
       allow update: if isAuthenticated() && (
-        request.auth.uid == resource.data.buyerId
-        || isAdmin(request.auth.uid)
+        isAdmin(request.auth.uid)
+        || (isEventOrganizer(resource.data.eventId, request.auth.uid) && onlyUpdatingValidationFields())
+        || (isVenueOwnerOfEvent(resource.data.eventId, request.auth.uid) && onlyUpdatingValidationFields())
+        || request.auth.uid == resource.data.buyerId
       );
       
       // Only admins can delete tickets
