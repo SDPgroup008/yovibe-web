@@ -48,11 +48,8 @@ service cloud.firestore {
     // Helper function: check if user is venue owner (club_owner who owns the venue)
     function isVenueOwnerOfEvent(eventId, userId) {
       let event = get(/databases/$(database)/documents/YoVibe/data/events/$(eventId));
-      if (event != null && event.data.venueId != null) {
-        let venue = get(/databases/$(database)/documents/YoVibe/data/venues/$(event.data.venueId));
-        return venue != null && venue.data.ownerId == userId;
-      }
-      return false;
+      let venue = get(/databases/$(database)/documents/YoVibe/data/venues/$(event.data.venueId));
+      return event != null && event.data.venueId != null && venue != null && venue.data.ownerId == userId;
     }
     
     // Helper function: check if only validation fields are being updated
