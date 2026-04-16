@@ -200,14 +200,15 @@ export class TicketService {
       let scanningEventId: string | undefined
       
       try {
+        // Try to parse as JSON first (new QR format)
         ticketData = JSON.parse(ticketId)
         qrCodeValue = ticketData.id || ticketId
         scanningEventId = ticketData.eventId
-        console.log("📋 Parsed QR data - QR Code:", qrCodeValue, "Event:", scanningEventId)
+        console.log("📋 Parsed QR JSON - ID:", qrCodeValue, "Event:", scanningEventId)
       } catch {
-        // If not JSON, treat as plain QR code string
+        // Not JSON - treat as plain QR code string (might be legacy format or just the ID)
         qrCodeValue = ticketId
-        console.log("📋 Using raw QR code:", qrCodeValue)
+        console.log("📋 Raw QR code string:", qrCodeValue)
       }
 
       // Step 1: Get ticket directly by QR code

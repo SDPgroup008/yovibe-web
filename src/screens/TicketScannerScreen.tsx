@@ -14,7 +14,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
   const { eventId, eventName } = route.params || {}
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
-  const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string }>>([])
+  const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
 
   // Check if user is admin or club_owner
   useEffect(() => {
@@ -55,7 +55,8 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
       setScanHistory((prev) => [{
         ticketId: qrCodeData.substring(0, 12) + "...",
         status: result.success ? "Valid" : "Invalid",
-        time: new Date().toLocaleTimeString()
+        time: new Date().toLocaleTimeString(),
+        reason: result.reason
       }, ...prev].slice(0, 10))
 
       if (result.success) {
@@ -175,6 +176,9 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
                     {scan.status}
                   </Text>
                 </View>
+                {scan.reason && scan.status === "Invalid" && (
+                  <Text style={styles.historyReason}>{scan.reason}</Text>
+                )}
               </View>
             ))}
           </View>
@@ -394,6 +398,12 @@ const styles = StyleSheet.create({
   },
   historyInvalidText: {
     color: "#FF6B6B",
+  },
+  historyReason: {
+    fontSize: 11,
+    color: "#FF6B6B",
+    marginTop: 4,
+    fontStyle: "italic",
   },
   statusSection: {
     backgroundColor: "#1E1E1E",

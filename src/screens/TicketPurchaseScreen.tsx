@@ -238,6 +238,11 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       resetForm()
       setPurchaseStatus("success")
       setStatusMessage("Purchase successful. Your ticket can be found in MyTickets.")
+      
+      // Navigate to MyTickets after a brief delay to show banner
+      setTimeout(() => {
+        navigation.navigate("MyTickets")
+      }, 1500)
     } catch (error: any) {
       console.error("Purchase error:", error)
       const errorMessage = error?.message || "Failed to purchase ticket. Please try again."
