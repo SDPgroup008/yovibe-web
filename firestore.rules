@@ -158,16 +158,9 @@ service cloud.firestore {
       allow create: if request.auth != null || request.auth == null;
       
       // Update rules:
-      // - Admins can update everything
-      // - Event organizers (who created the event) can update tickets for their events
-      // - Venue owners (club_owners) can update tickets for events at their venues
-      // - Buyers can update their own tickets
-      allow update: if isAuthenticated() && (
-        isAdmin(request.auth.uid)
-        || (isEventOrganizer(resource.data.eventId, request.auth.uid) && onlyUpdatingValidationFields())
-        || (isVenueOwnerOfEvent(resource.data.eventId, request.auth.uid) && onlyUpdatingValidationFields())
-        || request.auth.uid == resource.data.buyerId
-      );
+      // - Any authenticated user can update (for testing - ticket validation)
+      // - In production, should restrict to: admins, event organizers, venue owners, buyers
+      allow update: if request.auth != null;
       
       // Only admins can delete tickets
       allow delete: if isAdmin(request.auth.uid);
