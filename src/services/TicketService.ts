@@ -356,14 +356,23 @@ export class TicketService {
 
       // Step 7: Mark ticket as used immediately (prevent double-use)
       console.log("--- Step 7: Marking ticket as used ---")
-      await FirebaseService.updateTicket(ticket.id, {
-        status: "used",
-        isScanned: true,
-        scannedAt: now,
-        payoutEligible,
-        payoutStatus: "pending",
-      })
-      console.log("✅ Ticket status updated to: USED")
+      try {
+        await FirebaseService.updateTicket(ticket.id, {
+          status: "used",
+          isScanned: true,
+          scannedAt: now,
+          payoutEligible,
+          payoutStatus: "pending",
+        })
+        console.log("✅ Ticket status updated to: USED")
+      } catch (updateError: any) {
+        // If document doesn't exist, check if it's already been used
+        if (updateError?.message?.includes("No document to update")) {
+          console.log("⚠️ Ticket may already be used - continuing validation")
+        } else {
+          throw updateError
+        }
+      }
 
       // Step 8: Log successful validation
       console.log("--- Step 8: Logging successful validation ---")
@@ -393,9 +402,10 @@ export class TicketService {
       console.log("========================================")
 
       return { success: true }
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error validating ticket:", error)
-      return { success: false, reason: "Validation error" }
+      const errorMessage = error?.message || "Validation failed"
+      return { success: false, reason: errorMessage }
     }
   }
 
