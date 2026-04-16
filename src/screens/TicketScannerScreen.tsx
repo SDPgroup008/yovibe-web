@@ -16,12 +16,17 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
 
-  // Check if user is admin or club_owner
+  // Check if user has permission to scan tickets (admin, club_owner, or user with events)
   useEffect(() => {
-    if (user && user.userType !== "admin" && user.userType !== "club_owner") {
-      Alert.alert("Access Denied", "You don't have permission to access this page")
+    if (!user) {
+      Alert.alert("Access Denied", "Please sign in to access this page")
       navigation.goBack()
+      return
     }
+    
+    // Allow: admins, club_owners, or any user (they can scan if they have events)
+    // The actual authorization check happens at validation time
+    console.log("📱 TicketScanner: User type:", user.userType)
   }, [user, navigation])
 
   const handleBarCodeScanned = async ({ type, data }: { type: string; data: string }) => {
@@ -56,7 +61,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
         ticketId: qrCodeData.substring(0, 12) + "...",
         status: result.success ? "Valid" : "Invalid",
         time: new Date().toLocaleTimeString(),
-        reason: result.reason
+        reason: result.reason || (result.success ? "Valid ticket" : "Validation failed")
       }, ...prev].slice(0, 10))
 
       if (result.success) {
@@ -72,9 +77,19 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
           [{ text: "OK" }]
         )
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Validation error:", error)
-      Alert.alert("Error", "Failed to validate ticket")
+      const errorMessage = error?.message || "Failed to validate ticket"
+      
+      // Add error to scan history
+      setScanHistory((prev) => [{
+        ticketId: qrCodeData.substring(0, 12) + "...",
+        status: "Invalid",
+        time: new Date().toLocaleTimeString(),
+        reason: errorMessage
+      }, ...prev].slice(0, 10))
+      
+      Alert.alert("Error", errorMessage)
     } finally {
       setValidating(false)
     }

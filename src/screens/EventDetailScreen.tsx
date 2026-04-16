@@ -24,6 +24,7 @@ import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type { EventDetailScreenProps } from "../navigation/types"
 import TicketService from "../services/TicketService"
+import PesaPalService from "../services/PesaPalService"
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
 import { db } from "../config/firebase"
 
@@ -388,12 +389,102 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         return
       }
 
-      // For now, we'll simulate a successful payout
-      // In production, this would call PesaPalService.processPayout()
-      console.log("💰 Processing payout via PesaPal...")
+      // Get organizer's payment details from user profile
+      const userData = await FirebaseService.getUserProfile(user.uid)
+      const userPaymentDetails = userData?.paymentDetails
       
-      // Simulate payout processing
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Also check event's payment methods as fallback
+      const eventData = await FirebaseService.getEventById(eventId)
+      const eventPaymentMethods = eventData?.paymentMethods
+
+      // Use user payment details if available, otherwise try event's
+      const hasMobileMoney = userPaymentDetails?.mobileMoney?.phoneNumber
+      const hasBankAccount = userPaymentDetails?.bankAccount?.bankName && userPaymentDetails?.bankAccount?.accountNumber
+      const hasEventMobileMoney = eventPaymentMethods?.mobileMoney && eventPaymentMethods.mobileMoney.length > 0
+      const hasEventBankAccount = eventPaymentMethods?.bankAccounts && eventPaymentMethods.bankAccounts.length > 0
+
+      if (!hasMobileMoney && !hasBankAccount && !hasEventMobileMoney && !hasEventBankAccount) {
+        Alert.alert(
+          "No Payment Details", 
+          "Please configure your payment details to receive payouts.\n\nGo to Profile > Payment Details to add mobile money or bank account.",
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Configure", onPress: () => {
+              setShowWithdrawModal(false)
+              navigation.goBack()
+            }}
+          ]
+        )
+        setWithdrawLoading(false)
+        return
+      }
+
+      // Determine payout method and recipient details
+      let payoutMethod: "mobile_money" | "bank_transfer"
+      let recipientDetails: { name: string; phoneNumber?: string; accountNumber?: string; bankName?: string }
+
+      if (hasMobileMoney && userPaymentDetails?.mobileMoney) {
+        payoutMethod = "mobile_money"
+        recipientDetails = {
+          name: userPaymentDetails.mobileMoney.accountName,
+          phoneNumber: userPaymentDetails.mobileMoney.phoneNumber,
+        }
+      } else if (hasBankAccount && userPaymentDetails?.bankAccount) {
+        payoutMethod = "bank_transfer"
+        recipientDetails = {
+          name: userPaymentDetails.bankAccount.accountName,
+          accountNumber: userPaymentDetails.bankAccount.accountNumber,
+          bankName: userPaymentDetails.bankAccount.bankName,
+        }
+      } else if (hasEventMobileMoney && eventPaymentMethods?.mobileMoney && eventPaymentMethods.mobileMoney.length > 0) {
+        payoutMethod = "mobile_money"
+        const mobile = eventPaymentMethods.mobileMoney[0]
+        recipientDetails = {
+          name: mobile.name,
+          phoneNumber: mobile.number,
+        }
+      } else if (hasEventBankAccount && eventPaymentMethods?.bankAccounts && eventPaymentMethods.bankAccounts.length > 0) {
+        payoutMethod = "bank_transfer"
+        const bank = eventPaymentMethods.bankAccounts[0]
+        recipientDetails = {
+          name: bank.accountName,
+          accountNumber: bank.accountNumber,
+          bankName: bank.bankName,
+        }
+      } else {
+        Alert.alert("Error", "Unable to determine payment method")
+        setWithdrawLoading(false)
+        return
+      }
+
+      console.log("💰 Processing payout via PesaPal...")
+      console.log("   - Method:", payoutMethod)
+      console.log("   - Recipient:", recipientDetails)
+
+      // Show processing message to user
+      Alert.alert(
+        "Processing Payout",
+        `Initiating payout of UGX ${amount.toLocaleString()} to your ${payoutMethod === 'mobile_money' ? 'mobile money' : 'bank account'}...\n\nThis may take a few moments.`,
+        [{ text: "OK" }]
+      )
+
+      // Process payout via PesaPal
+      const payoutResult = await PesaPalService.processPayout(
+        user.id,
+        amount,
+        payoutMethod,
+        recipientDetails
+      )
+
+      if (!payoutResult.success) {
+        Alert.alert("Error", payoutResult.error || "Failed to process payout")
+        setWithdrawLoading(false)
+        return
+      }
+
+      console.log("✅ Payout processed successfully!")
+      console.log("   - Payout ID:", payoutResult.payoutId)
+      console.log("   - Transaction Ref:", payoutResult.transactionReference)
 
       // Add to payout history
       const payoutRecord = {
@@ -406,8 +497,17 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       // Update eligible total
       setEligiblePayoutTotal(prev => prev - amount)
 
-      // Show success
-      Alert.alert("Success", `Successfully withdrew UGX ${amount.toLocaleString()}`)
+      // Show success with transaction details
+      Alert.alert(
+        "✅ Payout Successful!",
+        `Your payout of UGX ${amount.toLocaleString()} has been processed.\n\n` +
+        `Payout ID: ${payoutResult.payoutId}\n` +
+        `Transaction Ref: ${payoutResult.transactionReference}\n\n` +
+        `The funds have been sent to your ${payoutMethod === 'mobile_money' ? 'mobile money account' : 'bank account'}. ` +
+        `Please allow 1-2 business days for the funds to reflect.`,
+        [{ text: "OK" }]
+      )
+      
       setShowWithdrawModal(false)
       setWithdrawAmount("")
 
@@ -520,7 +620,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       }
 
       // Sort tickets by purchaseDate descending (client-side since we removed orderBy)
-      const tickets = []
+      const tickets: any[] = []
       snapshot.forEach((doc) => {
         tickets.push(doc.data())
       })
@@ -696,7 +796,8 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     )
   }
 
-  const isEventOwner = user && event.createdBy === user.id
+  const isEventOwner = user && event && (event.createdBy === user.id)
+  const canManageEvent = isEventOwner || user?.userType === "admin"
 
   return (
     <ScrollView style={styles.container}>
@@ -809,7 +910,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         </View>
 
         {/* Organiser Dashboard - Show for event owners AND admins */}
-        {(isEventOwner || user?.userType === "admin") && (
+        {canManageEvent && (
           <View style={styles.ownerControls}>
             <TouchableOpacity style={styles.ownerButton} onPress={() => setShowOrganizerDashboard(true)}>
               <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
