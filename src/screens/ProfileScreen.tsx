@@ -2,7 +2,7 @@
 
 
 import type React from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -16,6 +16,7 @@ import {
   ScrollView,
   Platform,
   Dimensions,
+  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
@@ -51,6 +52,35 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
   const [editProfileLoading, setEditProfileLoading] = useState(false);
+
+  // Banner state
+  const [bannerStatus, setBannerStatus] = useState<"success" | "error" | null>(null);
+  const [bannerMessage, setBannerMessage] = useState("");
+  const bannerOpacity = useRef(new Animated.Value(0)).current;
+
+  // Auto-hide banner after 3 seconds
+  useEffect(() => {
+    if (bannerStatus !== null) {
+      Animated.timing(bannerOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
+
+      const timeout = setTimeout(() => {
+        Animated.timing(bannerOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          setBannerStatus(null);
+          setBannerMessage("");
+        });
+      }, 3000);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [bannerStatus]);
 
   // Load user data on mount
   useEffect(() => {
@@ -187,9 +217,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       });
 
       setShowEditProfile(false);
-      Alert.alert("Success", "Profile updated successfully");
+      setBannerStatus("success");
+      setBannerMessage("Profile updated successfully");
     } catch (error) {
-      Alert.alert("Error", "Failed to update profile");
+      setBannerStatus("error");
+      setBannerMessage("Failed to update profile");
     } finally {
       setEditProfileLoading(false);
     }
@@ -219,9 +251,11 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             // Upload image and get URL
             const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri);
             await updateProfile({ photoURL: uploadedUrl });
-            Alert.alert("Success", "Profile image updated successfully");
+            setBannerStatus("success");
+            setBannerMessage("Profile image updated successfully");
           } catch (error) {
-            Alert.alert("Error", "Failed to update profile image");
+            setBannerStatus("error");
+            setBannerMessage("Failed to update profile image");
           } finally {
             setEditProfileLoading(false);
           }
@@ -229,7 +263,8 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
       }
     } catch (error) {
       console.error("Error picking image:", error);
-      Alert.alert("Error", "Failed to pick image");
+      setBannerStatus("error");
+      setBannerMessage("Failed to pick image");
     }
   };
 
@@ -265,6 +300,19 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
           {user?.userType === "user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : user?.userType === "admin" ? "Admin" : "Vibe Master"}
         </Text>
       </View>
+
+      {/* Banner */}
+      {bannerStatus !== null && (
+        <Animated.View 
+          style={[
+            styles.banner, 
+            bannerStatus === "success" ? styles.bannerSuccess : styles.bannerError,
+            { opacity: bannerOpacity }
+          ]}
+        >
+          <Text style={styles.bannerText}>{bannerMessage}</Text>
+        </Animated.View>
+      )}
 
       <ScrollView style={styles.menuContainer}>
         <TouchableOpacity style={styles.menuItem} onPress={handleToggleEditProfile}>
@@ -596,6 +644,28 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+  banner: {
+    position: "absolute",
+    top: 50,
+    left: 16,
+    right: 16,
+    padding: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    zIndex: 999,
+  },
+  bannerSuccess: {
+    backgroundColor: "#28a745",
+  },
+  bannerError: {
+    backgroundColor: "#dc3545",
+  },
+  bannerText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
   },
 })
 
