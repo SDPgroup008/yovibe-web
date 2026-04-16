@@ -1391,14 +1391,40 @@ class FirebaseService {
       const doc = querySnapshot.docs[0]
       const data = doc.data()
       return {
-        id: doc.id,
-        ...data,
+        id: doc.id,  // Use Firestore document ID, not the ticket's id field
+        documentId: doc.id,
+        qrCode: data.qrCode,
+        eventId: data.eventId,
+        eventName: data.eventName,
+        buyerId: data.buyerId,
+        buyerName: data.buyerName,
+        buyerEmail: data.buyerEmail,
+        quantity: data.quantity,
+        totalAmount: data.totalAmount,
+        basePrice: data.basePrice,
+        lateFee: data.lateFee,
+        venueRevenue: data.venueRevenue,
+        appCommission: data.appCommission,
         purchaseDate: data.purchaseDate?.toDate(),
         eventStartTime: data.eventStartTime?.toDate(),
         purchaseDeadline: data.purchaseDeadline?.toDate(),
         scannedAt: data.scannedAt?.toDate(),
         payoutDate: data.payoutDate?.toDate(),
         expiresAt: data.expiresAt?.toDate(),
+        status: data.status,
+        entryFeeType: data.entryFeeType,
+        paymentId: data.paymentId,
+        paymentStatus: data.paymentStatus,
+        pesapalTransactionId: data.pesapalTransactionId,
+        isLatePurchase: data.isLatePurchase,
+        isScanned: data.isScanned,
+        payoutEligible: data.payoutEligible,
+        payoutStatus: data.payoutStatus,
+        paymentMethod: data.paymentMethod,
+        paymentProvider: data.paymentProvider,
+        paymentNumber: data.paymentNumber,
+        paymentName: data.paymentName,
+        validationHistory: data.validationHistory || [],
       }
     } catch (error) {
       console.error("FirebaseService: Error getting ticket by QR code:", error)
