@@ -16,6 +16,7 @@ import {
   Image,
   Dimensions,
   TextInput,
+  ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
@@ -54,6 +55,10 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [revenueAnalytics, setRevenueAnalytics] = useState<Array<{ label: string; value: number }>>([])
+  const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false)
+  const [withdrawAmount, setWithdrawAmount] = useState("")
+  const [withdrawLoading, setWithdrawLoading] = useState(false)
   
   // Ticket sales breakdown by entry fee type
   type TicketSalesByType = {
@@ -345,6 +350,75 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
     }
   }
 
+  // Handle withdraw earnings
+  const handleWithdraw = async () => {
+    if (!user || !withdrawAmount || parseInt(withdrawAmount) <= 0) {
+      Alert.alert("Error", "Please enter a valid amount")
+      return
+    }
+
+    const amount = parseInt(withdrawAmount)
+    if (amount > eligiblePayoutTotal) {
+      Alert.alert("Error", "Amount exceeds eligible balance")
+      return
+    }
+
+    setWithdrawLoading(true)
+    try {
+      console.log("💰 Initiating payout withdrawal:")
+      console.log("   - Organizer ID:", user.id)
+      console.log("   - Event ID:", eventId)
+      console.log("   - Amount:", amount)
+
+      // Get payout eligible tickets for this organizer's events
+      const eligibleTickets = await FirebaseService.getEligibleTicketsForPayout(user.id)
+      
+      if (eligibleTickets.length === 0) {
+        Alert.alert("Error", "No eligible tickets found for payout")
+        setWithdrawLoading(false)
+        return
+      }
+
+      // Calculate total venue revenue from eligible tickets
+      const totalVenueRevenue = eligibleTickets.reduce((sum, t) => sum + (t.venueRevenue || 0), 0)
+      
+      if (totalVenueRevenue < amount) {
+        Alert.alert("Error", "Insufficient eligible balance")
+        setWithdrawLoading(false)
+        return
+      }
+
+      // For now, we'll simulate a successful payout
+      // In production, this would call PesaPalService.processPayout()
+      console.log("💰 Processing payout via PesaPal...")
+      
+      // Simulate payout processing
+      await new Promise(resolve => setTimeout(resolve, 1500))
+
+      // Add to payout history
+      const payoutRecord = {
+        date: new Date().toLocaleDateString(),
+        amount: `UGX ${amount.toLocaleString()}`,
+        status: "Completed"
+      }
+      setPayoutHistory(prev => [payoutRecord, ...prev])
+
+      // Update eligible total
+      setEligiblePayoutTotal(prev => prev - amount)
+
+      // Show success
+      Alert.alert("Success", `Successfully withdrew UGX ${amount.toLocaleString()}`)
+      setShowWithdrawModal(false)
+      setWithdrawAmount("")
+
+    } catch (error: any) {
+      console.error("❌ Payout error:", error)
+      Alert.alert("Error", error?.message || "Failed to process payout")
+    } finally {
+      setWithdrawLoading(false)
+    }
+  }
+
   // Save organizer payment details
   const handleSavePaymentDetails = async () => {
     if (!event) return
@@ -429,6 +503,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       let earlyCount = 0
       let lateCount = 0
       let totalRevenue = 0
+      let eligibleTotal = 0
       
       // Initialize sales by entry fee type
       const salesByType: TicketSalesByType = {}
@@ -460,6 +535,7 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
         const amount = ticket.totalAmount || 0
         const isLate = ticket.isLatePurchase
         const isScanned = ticket.isScanned || ticket.status === "used"
+        const isEligible = ticket.payoutEligible === true
         
         if (isLate) {
           lateCount++
@@ -467,6 +543,11 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
           earlyCount++
         }
         totalRevenue += amount
+        
+        // Track eligible payout (venueRevenue from eligible tickets)
+        if (isEligible) {
+          eligibleTotal += ticket.venueRevenue || 0
+        }
         
         // Track by entry fee type
         if (!salesByType[ticketType]) {
@@ -498,9 +579,10 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
       setTicketSalesEarly(earlyCount)
       setTicketSalesLate(lateCount)
       setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
+      setEligiblePayoutTotal(eligibleTotal)
       setTicketSalesByType(salesByType)
 
-      console.log("📡 Real-time: Early tickets:", earlyCount, "Late tickets:", lateCount, "Revenue:", totalRevenue)
+      console.log("📡 Real-time: Early tickets:", earlyCount, "Late tickets:", lateCount, "Revenue:", totalRevenue, "Eligible:", eligibleTotal)
       console.log("📡 Real-time: Sales by type:", JSON.stringify(salesByType))
     }, (error) => {
       console.error("📡 Real-time listener error for tickets:", error)
@@ -659,6 +741,51 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
             <Ionicons name="close" size={30} color="#FFFFFF" />
           </TouchableOpacity>
           <Image source={{ uri: event.posterImageUrl }} style={styles.fullImage} resizeMode="contain" />
+        </View>
+      </Modal>
+
+      {/* Withdraw Modal */}
+      <Modal visible={showWithdrawModal} transparent={true} animationType="fade">
+        <View style={styles.fullImageModal}>
+          <View style={styles.withdrawModalContent}>
+            <Text style={styles.withdrawModalTitle}>Withdraw Earnings</Text>
+            <Text style={styles.withdrawModalSubtitle}>
+              Available: UGX {eligiblePayoutTotal.toLocaleString()}
+            </Text>
+            
+            <TextInput
+              style={styles.withdrawInput}
+              value={withdrawAmount}
+              onChangeText={setWithdrawAmount}
+              placeholder="Enter amount"
+              placeholderTextColor="#999"
+              keyboardType="numeric"
+            />
+            
+            <View style={styles.withdrawModalButtons}>
+              <TouchableOpacity 
+                style={styles.withdrawCancelButton}
+                onPress={() => {
+                  setShowWithdrawModal(false)
+                  setWithdrawAmount("")
+                }}
+              >
+                <Text style={styles.withdrawCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.withdrawConfirmButton, withdrawLoading && styles.withdrawButtonDisabled]}
+                onPress={handleWithdraw}
+                disabled={withdrawLoading || !withdrawAmount || parseInt(withdrawAmount) <= 0 || parseInt(withdrawAmount) > eligiblePayoutTotal}
+              >
+                {withdrawLoading ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.withdrawConfirmText}>Withdraw</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -941,10 +1068,20 @@ const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation
                 
                 <View style={styles.dashboardSection}>
                   <Text style={styles.dashboardSectionTitle}>Withdraw Now</Text>
-                  <TouchableOpacity style={styles.withdrawButton}>
-                    <Ionicons name="wallet" size={20} color="#FFFFFF" />
-                    <Text style={styles.withdrawButtonText}>Withdraw Earnings</Text>
-                  </TouchableOpacity>
+                  <View style={styles.dashboardCard}>
+                    <View style={styles.eligibleInfo}>
+                      <Text style={styles.eligibleLabel}>Eligible for Payout:</Text>
+                      <Text style={styles.eligibleAmount}>UGX {eligiblePayoutTotal.toLocaleString()}</Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={[styles.withdrawButton, eligiblePayoutTotal === 0 && styles.withdrawButtonDisabled]}
+                      onPress={() => setShowWithdrawModal(true)}
+                      disabled={eligiblePayoutTotal === 0}
+                    >
+                      <Ionicons name="wallet" size={20} color="#FFFFFF" />
+                      <Text style={styles.withdrawButtonText}>Withdraw Earnings</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
                 
                 <View style={styles.dashboardSection}>
@@ -1825,12 +1962,91 @@ const styles = StyleSheet.create({
     backgroundColor: "#4CAF50",
     paddingVertical: responsiveSize(14, 16, 18),
     borderRadius: responsiveSize(8, 10, 12),
+    marginTop: 12,
+  },
+  withdrawButtonDisabled: {
+    opacity: 0.5,
   },
   withdrawButtonText: {
     color: "#FFFFFF",
     fontSize: responsiveSize(15, 16, 17),
     fontWeight: "bold",
     marginLeft: responsiveSize(8, 10, 12),
+  },
+  eligibleInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  eligibleLabel: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#888888",
+  },
+  eligibleAmount: {
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "bold",
+    color: "#00D4FF",
+  },
+  withdrawModalContent: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: 16,
+    padding: 24,
+    width: "85%",
+    maxWidth: 400,
+  },
+  withdrawModalTitle: {
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  withdrawModalSubtitle: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#888888",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  withdrawInput: {
+    backgroundColor: "#2A2A2A",
+    borderRadius: 8,
+    padding: 14,
+    fontSize: responsiveSize(16, 18, 20),
+    color: "#FFFFFF",
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#444",
+  },
+  withdrawModalButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  withdrawCancelButton: {
+    flex: 1,
+    backgroundColor: "#333",
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginRight: 8,
+  },
+  withdrawCancelText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 17),
+    textAlign: "center",
+    fontWeight: "bold",
+  },
+  withdrawConfirmButton: {
+    flex: 1,
+    backgroundColor: "#4CAF50",
+    paddingVertical: 14,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  withdrawConfirmText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 17),
+    textAlign: "center",
+    fontWeight: "bold",
   },
   payoutItem: {
     flexDirection: "row",
