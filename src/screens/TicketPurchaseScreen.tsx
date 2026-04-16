@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useMemo } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList } from "react-native"
+import { useState, useMemo, useEffect, useRef } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Animated } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
@@ -51,6 +51,56 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const [bankName, setBankName] = useState("")
   const [bankAccountNumber, setBankAccountNumber] = useState("")
   const [bankAccountName, setBankAccountName] = useState("")
+
+  // Purchase status for banner
+  const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
+  const [statusMessage, setStatusMessage] = useState("")
+  const bannerOpacity = useRef(new Animated.Value(0)).current
+
+  // Auto-hide banner after 3 seconds
+  useEffect(() => {
+    if (purchaseStatus !== null) {
+      Animated.timing(bannerOpacity, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start()
+
+      const timeout = setTimeout(() => {
+        Animated.timing(bannerOpacity, {
+          toValue: 0,
+          duration: 300,
+          useNativeDriver: true,
+        }).start(() => {
+          setPurchaseStatus(null)
+          setStatusMessage("")
+        })
+      }, 3000)
+
+      return () => clearTimeout(timeout)
+    }
+  }, [purchaseStatus])
+
+  // Reset all form fields to initial state
+  const resetForm = () => {
+    setQuantity(1)
+    setSelectedTicketType(null)
+    setVisitorName("")
+    setVisitorEmail("")
+    setPaymentMethod(null)
+    setMobileMoneyProvider("mtn")
+    setMobileMoneyNumber("")
+    setMobileMoneyName("")
+    setCardNumber("")
+    setCardExpiry("")
+    setCardCvv("")
+    setBankName("")
+    setBankAccountNumber("")
+    setBankAccountName("")
+    setPhotoCaptured(false)
+    setBuyerPhotoUrl("")
+    setSecurityPhotoEnabled(false)
+  }
 
   // Get base price from selected ticket type or event entry fees
   const basePrice = selectedTicketType 
@@ -185,21 +235,14 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         paymentDetails,
       )
 
-      Alert.alert("Purchase Successful!", `Your ticket has been purchased successfully. Ticket ID: ${ticket.id}`, [
-        {
-          text: "View Ticket",
-          onPress: () => {
-            navigation.navigate("MyTickets")
-          },
-        },
-        {
-          text: "Go Back",
-          onPress: () => navigation.goBack(),
-        },
-      ])
-    } catch (error) {
+      resetForm()
+      setPurchaseStatus("success")
+      setStatusMessage("Purchase successful. Your ticket can be found in MyTickets.")
+    } catch (error: any) {
       console.error("Purchase error:", error)
-      Alert.alert("Purchase Failed", "Failed to purchase ticket. Please try again.")
+      const errorMessage = error?.message || "Failed to purchase ticket. Please try again."
+      setPurchaseStatus("error")
+      setStatusMessage(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -219,6 +262,19 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         <Text style={styles.eventVenue}>{event.venueName}</Text>
         <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
       </View>
+
+      {/* Purchase Status Banner */}
+      {purchaseStatus !== null && (
+        <Animated.View 
+          style={[
+            styles.banner, 
+            purchaseStatus === "success" ? styles.bannerSuccess : styles.bannerError,
+            { opacity: bannerOpacity }
+          ]}
+        >
+          <Text style={styles.bannerText}>{statusMessage}</Text>
+        </Animated.View>
+      )}
 
       {/* Show visitor info form for unauthenticated users */}
       {!user && (
@@ -1007,6 +1063,25 @@ const styles = StyleSheet.create({
   },
   ticketTypeItemCheck: {
     color: "#00FF9F",
+  },
+  banner: {
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  bannerSuccess: {
+    backgroundColor: "#28a745",
+  },
+  bannerError: {
+    backgroundColor: "#dc3545",
+  },
+  bannerText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    textAlign: "center",
   },
 })
 
