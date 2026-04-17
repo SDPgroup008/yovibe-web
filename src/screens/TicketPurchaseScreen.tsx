@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Animated } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Animated, Platform, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
@@ -51,8 +51,10 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const [bankName, setBankName] = useState("")
   const [bankAccountNumber, setBankAccountNumber] = useState("")
   const [bankAccountName, setBankAccountName] = useState("")
-
-  // Purchase status for banner
+  const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
+  const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
   const bannerOpacity = useRef(new Animated.Value(0)).current
@@ -81,25 +83,85 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
     }
   }, [purchaseStatus])
 
-  // Reset all form fields to initial state
-  const resetForm = () => {
-    setQuantity(1)
-    setSelectedTicketType(null)
-    setVisitorName("")
-    setVisitorEmail("")
-    setPaymentMethod(null)
-    setMobileMoneyProvider("mtn")
-    setMobileMoneyNumber("")
-    setMobileMoneyName("")
-    setCardNumber("")
-    setCardExpiry("")
-    setCardCvv("")
-    setBankName("")
-    setBankAccountNumber("")
-    setBankAccountName("")
-    setPhotoCaptured(false)
-    setBuyerPhotoUrl("")
-    setSecurityPhotoEnabled(false)
+  const handlePaymentComplete = async () => {
+    if (!paymentOrderId) return
+
+    try {
+      setLoading(true)
+      setShowPaymentModal(false)
+
+      // Verify payment with PesaPal
+      console.log("🔍 Verifying payment with PesaPal...")
+      const verification = await PesaPalService.verifyPayment(paymentOrderId)
+
+      if (verification.status === "completed") {
+        console.log("✅ Payment verified, creating ticket...")
+
+        // Determine buyer details
+        let buyerId: string
+        let buyerName: string
+        let buyerEmail: string
+
+        if (user) {
+          buyerId = user.id
+          buyerName = user.displayName || user.email || "Unknown"
+          buyerEmail = user.email || ""
+        } else {
+          buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+          buyerName = visitorName.trim()
+          buyerEmail = visitorEmail.trim()
+        }
+
+        const includePhoto = securityPhotoEnabled && photoCaptured
+
+        // Create ticket with verified payment
+        const ticket = await TicketService.purchaseTicket(
+          event,
+          buyerId,
+          buyerName,
+          buyerEmail,
+          quantity,
+          includePhoto ? buyerPhotoUrl : "",
+          total,
+          {
+            method: paymentMethod || "mobile_money",
+            provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
+            number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
+            name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
+            expiry: paymentMethod === "credit_card" ? cardExpiry : undefined,
+            cardNumber: paymentMethod === "credit_card" ? cardNumber.slice(-4) : undefined,
+            bankName: paymentMethod === "bank_transfer" ? bankName : undefined,
+            accountNumber: paymentMethod === "bank_transfer" ? bankAccountNumber : undefined,
+            accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
+            ticketType: selectedTicketTypeName,
+            paymentReference: paymentOrderId || undefined,
+            pesapalTransactionId: verification.transactionId,
+          }
+        )
+
+        setPurchaseStatus("success")
+        setStatusMessage("Purchase successful. Your ticket can be found in MyTickets.")
+
+        // Navigate to MyTickets after showing success message
+        setTimeout(() => {
+          navigation.navigate("MyTickets")
+        }, 1500)
+
+      } else if (verification.status === "failed") {
+        setPurchaseStatus("error")
+        setStatusMessage("Payment failed. Please try again.")
+      } else {
+        setPurchaseStatus("error")
+        setStatusMessage("Payment is still processing. Please check back later.")
+      }
+
+    } catch (error: any) {
+      console.error("Payment completion error:", error)
+      setPurchaseStatus("error")
+      setStatusMessage("Failed to complete purchase. Please contact support.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   // Get base price from selected ticket type or event entry fees
@@ -183,69 +245,63 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       buyerEmail = visitorEmail.trim()
     }
 
-    // Validate payment details - security photo is now optional
-    const includePhoto = securityPhotoEnabled && photoCaptured
-    
-    if (securityPhotoEnabled && !photoCaptured) {
-      Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
-      return
-    }
-    if (paymentMethod === "mobile_money") {
-      if (!mobileMoneyNumber.trim() || !mobileMoneyName.trim()) {
-        Alert.alert("Error", "Please enter your mobile money details")
-        return
-      }
-    } else if (paymentMethod === "credit_card") {
-      if (!cardNumber.trim() || !cardExpiry.trim() || !cardCvv.trim()) {
-        Alert.alert("Error", "Please enter your card details")
-        return
-      }
-    } else if (paymentMethod === "bank_transfer") {
-      if (!bankName.trim() || !bankAccountNumber.trim() || !bankAccountName.trim()) {
-        Alert.alert("Error", "Please enter your bank transfer details")
-        return
-      }
-    }
-
     // Validate ticket type selection
     if (!selectedTicketType && ticketTypes.length > 0) {
       Alert.alert("Ticket Type Required", "Please select a ticket type")
       return
     }
 
+    // Validate security photo if enabled
+    const includePhoto = securityPhotoEnabled && photoCaptured
+    if (securityPhotoEnabled && !photoCaptured) {
+      Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
+      return
+    }
+
     try {
       setLoading(true)
 
-      const paymentDetails = {
-        method: paymentMethod!,
-        ...(paymentMethod === "mobile_money" && { provider: mobileMoneyProvider, number: mobileMoneyNumber, name: mobileMoneyName }),
-        ...(paymentMethod === "credit_card" && { cardNumber: cardNumber.slice(-4), expiry: cardExpiry }),
-        ...(paymentMethod === "bank_transfer" && { bankName, accountNumber: bankAccountNumber, accountName: bankAccountName }),
-        ticketType: selectedTicketTypeName,
-      }
+      // Step 1: Submit order to PesaPal and get payment URL
+      const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event.name}`
+      const callbackUrl = `${window.location.origin}`
 
-      const ticket = await TicketService.purchaseTicket(
-        event,
-        buyerId,
-        buyerName,
-        buyerEmail,
-        quantity,
-        includePhoto ? buyerPhotoUrl : "",
+      console.log("💳 Submitting order to PesaPal...")
+      const orderResult = await PesaPalService.submitOrder(
         total,
-        paymentDetails,
+        description,
+        buyerEmail,
+        user?.paymentDetails?.mobileMoney?.phoneNumber || "",
+        callbackUrl
       )
 
-      resetForm()
-      setPurchaseStatus("success")
-      setStatusMessage("Purchase successful. Your ticket can be found in MyTickets.")
-      
-      // Navigate to MyTickets after a brief delay to show banner
-      setTimeout(() => {
-        navigation.navigate("MyTickets")
-      }, 1500)
+      if (!orderResult.success || !orderResult.paymentUrl) {
+        throw new Error(orderResult.error || "Failed to initialize payment")
+      }
+
+      console.log("✅ PesaPal order created:", orderResult.orderId)
+      console.log("💳 Payment URL:", orderResult.paymentUrl)
+
+      const paymentUrl = orderResult.paymentUrl
+      const orderId = orderResult.orderId!
+
+      if (Platform.OS === "web") {
+        const paymentWindow = window.open("", "_blank")
+        if (paymentWindow) {
+          paymentWindow.location.href = paymentUrl
+        } else {
+          window.location.href = paymentUrl
+        }
+      } else {
+        await Linking.openURL(paymentUrl)
+      }
+
+      setPaymentUrl(paymentUrl)
+      setPaymentOrderId(orderId)
+      setShowPaymentModal(true)
+
     } catch (error: any) {
       console.error("Purchase error:", error)
-      const errorMessage = error?.message || "Failed to purchase ticket. Please try again."
+      const errorMessage = error?.message || "Failed to initialize payment. Please try again."
       setPurchaseStatus("error")
       setStatusMessage(errorMessage)
     } finally {
@@ -626,6 +682,49 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
               }}
               showsVerticalScrollIndicator={false}
             />
+          </View>
+        </View>
+      </Modal>
+
+      {/* Payment Modal */}
+      <Modal
+        visible={showPaymentModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowPaymentModal(false)}
+      >
+        <View style={styles.paymentModalOverlay}>
+          <View style={styles.paymentModalContent}>
+            <View style={styles.paymentModalHeader}>
+              <Text style={styles.paymentModalTitle}>Complete Payment</Text>
+              <TouchableOpacity
+                style={styles.paymentModalCloseButton}
+                onPress={() => setShowPaymentModal(false)}
+              >
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.paymentModalSubtitle}>
+              Complete your payment of UGX {total.toLocaleString()} for {quantity}x ticket(s)
+            </Text>
+
+            {paymentUrl && (
+              <View style={styles.paymentIframeContainer}>
+                <Text style={styles.paymentIframeText}>
+                  Processing payment with PesaPal...
+                </Text>
+                {/* For web, we'll use a WebView or redirect */}
+                <TouchableOpacity
+                  style={styles.paymentCompleteButton}
+                  onPress={handlePaymentComplete}
+                >
+                  <Text style={styles.paymentCompleteButtonText}>
+                    I've Completed Payment
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1087,6 +1186,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "bold",
     textAlign: "center",
+  },
+  paymentModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  paymentModalContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    width: "90%",
+    maxWidth: 400,
+    padding: 20,
+  },
+  paymentModalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  paymentModalTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+  },
+  paymentModalCloseButton: {
+    padding: 5,
+  },
+  paymentModalSubtitle: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  paymentIframeContainer: {
+    alignItems: "center",
+    padding: 20,
+  },
+  paymentIframeText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  paymentCompleteButton: {
+    backgroundColor: "#00D4FF",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  paymentCompleteButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 })
 

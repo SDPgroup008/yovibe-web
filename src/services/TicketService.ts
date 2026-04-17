@@ -25,6 +25,9 @@ export class TicketService {
       bankName?: string
       accountNumber?: string
       accountName?: string
+      ticketType?: string
+      paymentReference?: string
+      pesapalTransactionId?: string
     },
   ): Promise<Ticket> {
     try {
@@ -78,20 +81,18 @@ export class TicketService {
       console.log("   - App Commission (8%):", appCommission)
       console.log("   - Venue Revenue:", venueRevenue)
 
-      // Step 2: Create payment intent
+      // Step 2: Create payment intent for internal tracking (payment already verified)
       console.log("--- Step 2: Creating payment intent ---")
       const paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
       console.log("💳 Payment intent created:")
       console.log("   - Payment ID:", paymentIntent.id)
       console.log("   - Amount:", paymentIntent.amount)
       console.log("   - Currency:", paymentIntent.currency)
-      console.log("   - Status:", paymentIntent.status)
+      console.log("   - Status: completed (verified via PesaPal)")
 
-      // Step 3: Process payment via PesaPal
-      console.log("--- Step 3: Processing payment via PesaPal ---")
-      console.log("⏳ Processing payment...")
-      await PaymentService.processPayment(paymentIntent.id)
-      console.log("✅ Payment processed successfully!")
+      // Step 3: Mark payment as completed since it was verified with PesaPal
+      console.log("--- Step 3: Payment already verified with PesaPal ---")
+      console.log("✅ Payment verified successfully via PesaPal!")
 
       // Step 4: Calculate purchase deadline
       console.log("--- Step 4: Calculating purchase deadline ---")
@@ -132,10 +133,10 @@ export class TicketService {
         entryFeeType: (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,
-        payoutEligible: false,
+        payoutEligible: true, // Mark as eligible for payout since payment is verified
         payoutStatus: "pending",
         paymentId: paymentIntent.id,
-        paymentStatus: "completed",
+        paymentStatus: "completed", // Payment already verified
         paymentReference: paymentIntent.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         pesapalTransactionId: paymentIntent.paymentId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         paymentMethod: paymentDetails?.method,

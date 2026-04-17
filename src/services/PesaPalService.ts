@@ -4,8 +4,9 @@ import type { PaymentIntent } from "../models/Ticket"
 const PESAPAL_CONFIG = {
   consumerKey: "cwdmMvKme+BJrq76S2VxPi/zrHSa1she",
   consumerSecret: "a+f99Q3TQTRaqZU2Xb6kuGoq3KE=",
-  baseUrl: "https://pay.pesapal.com",
-  apiUrl: "https://pay.pesapal.com/api",
+  sandbox: true,
+  baseUrl: "https://cybqa.pesapal.com",
+  apiUrl: "https://cybqa.pesapal.com/api",
 }
 
 // Generate unique order ID

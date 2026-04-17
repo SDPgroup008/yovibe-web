@@ -31,12 +31,14 @@ import TicketPurchaseScreen from "../screens/TicketPurchaseScreen"
 import TicketScannerScreen from "../screens/TicketScannerScreen"
 import MyTicketsScreen from "../screens/MyTicketsScreen"
 import NotificationScreen from "../screens/NotificationScreen"
+import PaymentCallbackScreen from "../screens/PaymentCallbackScreen"
 
 // Admin Screens
 import AdminUsersScreen from "../screens/admin/AdminUsersScreen"
 import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen"
 import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
 import AdminDashboardScreen from "../screens/admin/AdminDashboardScreen"
+import OrganiserDashboardScreen from "../screens/OrganiserDashboardScreen"
 
 // Types
 import type {
@@ -259,6 +261,11 @@ export const VenuesStackNavigator = () => {
         options={{ title: "Scan Ticket" }}
       />
       <VenuesStack.Screen
+        name="OrganiserDashboard"
+        component={OrganiserDashboardScreen}
+        options={{ title: "Organiser Dashboard" }}
+      />
+      <VenuesStack.Screen
         name="MyTickets"
         component={MyTicketsScreenWrapper}
         options={{ title: "My Tickets" }}
@@ -317,6 +324,16 @@ export const EventsStackNavigator = () => {
         options={{ title: "Scan Ticket" }}
       />
       <EventsStack.Screen
+        name="OrganiserDashboard"
+        component={OrganiserDashboardScreen}
+        options={{ title: "Organiser Dashboard" }}
+      />
+      <EventsStack.Screen
+        name="PaymentCallback"
+        component={PaymentCallbackScreen}
+        options={{ title: "Payment Status" }}
+      />
+      <EventsStack.Screen
         name="MyTickets"
         component={MyTicketsScreenWrapper}
         options={{ title: "My Tickets" }}
@@ -373,6 +390,11 @@ export const MapStackNavigator = () => {
         options={{ title: "Scan Ticket" }}
       />
       <MapStack.Screen
+        name="OrganiserDashboard"
+        component={OrganiserDashboardScreen}
+        options={{ title: "Organiser Dashboard" }}
+      />
+      <MapStack.Screen
         name="MyTickets"
         component={MyTicketsScreenWrapper}
         options={{ title: "My Tickets" }}
@@ -427,6 +449,11 @@ export const CalendarStackNavigator = () => {
         name="TicketScanner"
         component={TicketScannerScreenWrapper}
         options={{ title: "Scan Ticket" }}
+      />
+      <CalendarStack.Screen
+        name="OrganiserDashboard"
+        component={OrganiserDashboardScreen}
+        options={{ title: "Organiser Dashboard" }}
       />
       <CalendarStack.Screen
         name="MyTickets"
@@ -492,6 +519,11 @@ export const ProfileStackNavigator = () => {
         name="TicketScanner"
         component={TicketScannerScreenWrapper}
         options={{ title: "Scan Ticket" }}
+      />
+      <ProfileStack.Screen
+        name="OrganiserDashboard"
+        component={OrganiserDashboardScreen}
+        options={{ title: "Organiser Dashboard" }}
       />
       <ProfileStack.Screen
         name="MyTickets"
