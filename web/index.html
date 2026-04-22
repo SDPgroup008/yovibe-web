@@ -483,47 +483,102 @@
     (function() {
       // Store original console methods
       var originalError = console.error;
+      var originalWarn = console.warn;
+      var originalLog = console.log;
       
       // Error tracking
       var errorCount = 0;
-      var MAX_ERRORS = 5;
+      var MAX_ERRORS = 10;
       
-      // Show error screen
-      function showErrorScreen(message) {
+      // Development mode - show all errors
+      var isDevMode = true; // Set to false in production
+      
+      // Show error screen with details
+      function showErrorScreen(message, errorObj) {
         var root = document.getElementById('root');
+        var details = '';
+        
+        if (isDevMode && errorObj) {
+          details = '<div style="margin-top:20px;padding:15px;background:#1a1a1a;border-radius:8px;text-align:left;max-width:100%;overflow:auto;">' +
+            '<h3 style="color:#ff6b6b;margin-top:0;">Error Details:</h3>' +
+            '<pre style="white-space:pre-wrap;word-wrap:break-word;color:#ccc;font-size:12px;">' + 
+            (errorObj.stack || message) + 
+            '</pre>' +
+          '</div>';
+        }
+        
         if (root) {
           var errorHtml = '<div class="error-screen">' +
             '<h1 class="error-title">Oops! Something went wrong</h1>' +
             '<p class="error-message">' + message + '</p>' +
-            '<button class="retry-button" onclick="window.location.reload()">Tap to Retry</button>' +
+            details +
+            '<button class="retry-button" onclick="window.location.reload()" style="margin-top:20px;">Tap to Retry</button>' +
           '</div>';
           root.innerHTML = errorHtml;
         }
       }
       
-      // Log errors but suppress React warnings that might cause confusion
+      // Enhanced console logging
+      console.log = function() {
+        originalLog.apply(console, arguments);
+      };
+      
+      console.warn = function() {
+        var args = Array.prototype.slice.call(arguments);
+        if (isDevMode) {
+          originalWarn.apply(console, args);
+        }
+      };
+      
+      // Log errors and show detailed info in dev mode
       console.error = function() {
         var args = Array.prototype.slice.call(arguments);
-        // Check if this is a critical error that should show the error screen
         var errorStr = args.join(' ');
         
-        // Critical errors that indicate app failure
-        if (
-          errorStr.indexOf('Cannot read property') !== -1 ||
-          errorStr.indexOf('undefined is not an object') !== -1 ||
-          errorStr.indexOf('is not defined') !== -1 ||
-          errorStr.indexOf('Failed to compile') !== -1 ||
-          errorStr.indexOf('Module not found') !== -1
-        ) {
+        // Always log to console
+        originalError.apply(console, args);
+        
+        if (isDevMode) {
+          // In dev mode, show errors on screen but keep app running
           errorCount++;
-          originalError.apply(console, args);
           
-          if (errorCount >= MAX_ERRORS) {
-            showErrorScreen('The app encountered an error. Please refresh the page.');
+          // Only show error screen for critical failures
+          if (
+            errorStr.indexOf('Cannot read property') !== -1 ||
+            errorStr.indexOf('undefined is not an object') !== -1 ||
+            errorStr.indexOf('is not defined') !== -1 ||
+            errorStr.indexOf('Failed to compile') !== -1 ||
+            errorStr.indexOf('Module not found') !== -1 ||
+            errorStr.indexOf('is not a function') !== -1
+          ) {
+            // Create error banner instead of full screen
+            var root = document.getElementById('root');
+            if (root && errorCount <= 3) {
+              var banner = document.createElement('div');
+              banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#ff5252;color:white;padding:10px;z-index:9999;font-size:12px;text-align:center;';
+              banner.textContent = 'Error: ' + errorStr.substring(0, 100);
+              document.body.insertBefore(banner, document.body.firstChild);
+              
+              // Auto-remove after 10 seconds
+              setTimeout(function() {
+                banner.remove();
+              }, 10000);
+            }
           }
         } else {
-          // Pass through non-critical errors
-          originalError.apply(console, args);
+          // Production mode
+          if (
+            errorStr.indexOf('Cannot read property') !== -1 ||
+            errorStr.indexOf('undefined is not an object') !== -1 ||
+            errorStr.indexOf('is not defined') !== -1 ||
+            errorStr.indexOf('Failed to compile') !== -1 ||
+            errorStr.indexOf('Module not found') !== -1
+          ) {
+            errorCount++;
+            if (errorCount >= MAX_ERRORS) {
+              showErrorScreen('The app encountered multiple errors. Please refresh the page.', null);
+            }
+          }
         }
       };
       

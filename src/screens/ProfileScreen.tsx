@@ -192,6 +192,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   };
 
+  const navigateToAdminOwnershipRequests = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminOwnershipRequests");
+    }
+  };
+
   const navigateToAdminDashboard = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminDashboard");
@@ -358,6 +364,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminEvents}>
               <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
               <Text style={styles.menuText}>Manage Events</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminOwnershipRequests}>
+              <Ionicons name="swap-horizontal-outline" size={24} color="#FFFFFF" />
+              <Text style={styles.menuText}>Ownership Requests</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
           </>

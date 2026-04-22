@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Dimensions,
   Platform,
+  Image,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -87,6 +88,13 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
   const [validating, setValidating] = useState(false)
   const [scannerInput, setScannerInput] = useState("")
   const [showScannerModal, setShowScannerModal] = useState(false)
+  
+  // Photo verification state
+  const [showPhotoVerification, setShowPhotoVerification] = useState(false)
+  const [pendingTicketDocId, setPendingTicketDocId] = useState<string | null>(null)
+  const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
+  const [buyerName, setBuyerName] = useState<string>("")
+  
   const [eventCreatorPaymentDetails, setEventCreatorPaymentDetails] = useState<{
     mobileMoney?: { provider: string; phoneNumber: string; accountName: string }
     bankAccount?: { bankName: string; accountNumber: string; accountName: string }
@@ -113,6 +121,32 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
     }
 
     loadEvent()
+  }, [eventId])
+
+  // Load scan/validation logs for this specific event
+  useEffect(() => {
+    const loadScanLogs = async () => {
+      if (!eventId) return
+      
+      try {
+        console.log("Loading scan logs for event:", eventId)
+        const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+        
+        // Convert to scanLogs format
+        const logs = validations.map((v) => ({
+          time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+          ticketId: v.ticketId || "",
+          status: v.status === "granted" ? "Valid" : "Invalid",
+        }))
+        
+        setScanLogs(logs)
+        console.log("Loaded", logs.length, "scan logs for event:", eventId)
+      } catch (error) {
+        console.error("Error loading scan logs:", error)
+      }
+    }
+
+    loadScanLogs()
   }, [eventId])
 
   useEffect(() => {
@@ -168,7 +202,11 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
         const amount = ticket.totalAmount || 0
         const isLate = ticket.isLatePurchase
         const isScanned = ticket.isScanned || ticket.status === "used"
-        const isEligible = ticket.payoutEligible === true
+        
+        // Ticket is eligible if:
+        // 1. payoutEligible is true AND
+        // 2. payoutStatus is "pending" (not already paid out)
+        const isEligible = ticket.payoutEligible === true && ticket.payoutStatus === "pending"
 
         if (isLate) {
           lateCount++
@@ -179,6 +217,7 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
 
         if (isEligible) {
           eligibleTotal += ticket.venueRevenue || 0
+          console.log("   - Eligible ticket:", ticket.id?.substring(0, 8), "venueRevenue:", ticket.venueRevenue)
         }
 
         if (!salesByType[ticketType]) {
@@ -209,6 +248,7 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
       setTicketSalesEarly(earlyCount)
       setTicketSalesLate(lateCount)
       setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
+      console.log("📊 Setting eligible payout total:", eligibleTotal)
       setEligiblePayoutTotal(eligibleTotal)
       setTicketSalesByType(salesByType)
     }, (error) => {
@@ -281,17 +321,41 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
             onPress: async () => {
               try {
                 const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance")
-                const newLog = {
-                  time: new Date().toLocaleTimeString(),
-                  ticketId: ticketId.substring(0, 8) + "...",
-                  status: result.success ? "Valid" : "Invalid",
-                }
-                setScanLogs((prev) => [newLog, ...prev].slice(0, 10))
 
                 if (result.success) {
+                  // Check if this ticket needs photo verification
+                  if (result.needsPhotoVerification && result.buyerPhotoUrl && result.ticketDocId) {
+                    console.log("📸 Ticket requires photo verification in OrganiserDashboard")
+                    setPendingTicketDocId(result.ticketDocId)
+                    setBuyerPhotoUrl(result.buyerPhotoUrl)
+                    setBuyerName(result.buyerName || "Ticket Buyer")
+                    setShowPhotoVerification(true)
+                    setValidating(false)
+                    return
+                  }
+                  
+                  // For tickets without photo, grant entry immediately and refresh logs from Firestore
                   Alert.alert("✅ Entry Granted", "Ticket validated successfully. Entry granted.", [{ text: "OK" }])
+                  
+                  // Refresh scan logs from database
+                  const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+                  const logs = validations.map((v) => ({
+                    time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+                    ticketId: v.ticketId || "",
+                    status: v.status === "granted" ? "Valid" : "Invalid",
+                  }))
+                  setScanLogs(logs)
                 } else {
                   Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
+                  
+                  // Refresh scan logs from database
+                  const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+                  const logs = validations.map((v) => ({
+                    time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+                    ticketId: v.ticketId || "",
+                    status: v.status === "granted" ? "Valid" : "Invalid",
+                  }))
+                  setScanLogs(logs)
                 }
               } catch (error) {
                 console.error("Error during validation:", error)
@@ -306,6 +370,81 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
       Alert.alert("Error", "Failed to validate ticket")
     } finally {
       setValidating(false)
+    }
+  }
+
+  // Handle photo verification confirmation in OrganiserDashboard
+  const handlePhotoConfirm = async (confirmed: boolean) => {
+    if (!user || !pendingTicketDocId) {
+      setShowPhotoVerification(false)
+      return
+    }
+
+    setShowPhotoVerification(false)
+    setValidating(true)
+
+    try {
+      if (confirmed) {
+        console.log("📸 Photo verified - confirming ticket usage in OrganiserDashboard")
+        
+        const result = await TicketService.confirmTicketUsage(
+          pendingTicketDocId,
+          user.id,
+          "Event Entrance",
+          eventId
+        )
+
+        if (result.success) {
+          Alert.alert(
+            "✅ Entry Granted",
+            `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`,
+            [{ text: "OK" }]
+          )
+          
+          // Reload scan logs after confirmation
+          const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+          const logs = validations.map((v) => ({
+            time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+            ticketId: v.ticketId || "",
+            status: v.status === "granted" ? "Valid" : "Invalid",
+          }))
+          setScanLogs(logs)
+          Alert.alert(
+            "✅ Entry Granted",
+            `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`,
+            [{ text: "OK" }]
+          )
+        } else {
+          Alert.alert(
+            "❌ Entry Denied",
+            `Failed to confirm ticket: ${result.reason}`,
+            [{ text: "OK" }]
+          )
+        }
+      } else {
+        // Photo verification denied
+        console.log("📸 Photo verification denied - entry denied")
+        
+        const newLog = {
+          time: new Date().toLocaleTimeString(),
+          ticketId: pendingTicketDocId.substring(0, 8) + "...",
+          status: "Invalid",
+        }
+        setScanLogs((prev) => [newLog, ...prev].slice(0, 10))
+
+        Alert.alert(
+          "❌ Entry Denied",
+          "The person presenting the ticket does not match the photo on file.",
+          [{ text: "OK" }]
+        )
+      }
+    } catch (error) {
+      console.error("Photo verification error:", error)
+      Alert.alert("Error", "Failed to process photo verification")
+    } finally {
+      setPendingTicketDocId(null)
+      setBuyerPhotoUrl("")
+      setBuyerName("")
     }
   }
 
@@ -380,33 +519,54 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
   }
 
   const handleWithdraw = async () => {
-    if (!user || !withdrawAmount || parseInt(withdrawAmount) <= 0) {
-      Alert.alert("Error", "Please enter a valid amount")
-      return
-    }
-
-    const amount = parseInt(withdrawAmount)
-    if (amount > eligiblePayoutTotal) {
-      Alert.alert("Error", "Amount exceeds eligible balance")
-      return
-    }
-
-    setWithdrawLoading(true)
+    console.log("🔍 handleWithdraw called - starting withdrawal process")
+    console.log("   - user:", user)
+    console.log("   - user.id:", user?.id)
+    console.log("   - user.uid:", user?.uid)
+    console.log("   - withdrawAmount:", withdrawAmount)
+    console.log("   - eligiblePayoutTotal:", eligiblePayoutTotal)
+    
     try {
-      const eligibleTickets = await FirebaseService.getEligibleTicketsForPayout(user.id)
+      // Add a small delay to ensure state is set
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      if (!user) {
+        Alert.alert("Error", "You must be logged in to withdraw")
+        console.log("   - ERROR: User is null")
+        return
+      }
+      
+      if (!withdrawAmount || parseInt(withdrawAmount) <= 0) {
+        Alert.alert("Error", "Please enter a valid amount")
+        console.log("   - ERROR: Invalid withdraw amount")
+        return
+      }
+
+      const amount = parseInt(withdrawAmount)
+      if (amount > eligiblePayoutTotal) {
+        Alert.alert("Error", "Amount exceeds eligible balance")
+        return
+      }
+
+      console.log("   - Validation passed, starting payout process...")
+      setWithdrawLoading(true)
+      
+      console.log("📋 Processing withdrawal of UGX", amount)
+      console.log("   - Eligible balance:", eligiblePayoutTotal, "UGX")
+
+      // Fetch eligible tickets for this specific event to update their payout status after successful payout
+      console.log("📋 Fetching eligible tickets for payout update...")
+      console.log("   - Event ID:", eventId)
+      const eligibleTickets = await FirebaseService.getEligibleTicketsForEvent(eventId)
+      console.log("   - Found eligible tickets:", eligibleTickets.length)
+      
       if (eligibleTickets.length === 0) {
         Alert.alert("Error", "No eligible tickets found for payout")
         setWithdrawLoading(false)
         return
       }
 
-      const totalVenueRevenue = eligibleTickets.reduce((sum, t) => sum + (t.venueRevenue || 0), 0)
-      if (totalVenueRevenue < amount) {
-        Alert.alert("Error", "Insufficient eligible balance")
-        setWithdrawLoading(false)
-        return
-      }
-
+      // Get user and event payment details
       const userData = await FirebaseService.getUserProfile(user.uid)
       const userPaymentDetails = userData?.paymentDetails
       const eventData = await FirebaseService.getEventById(eventId)
@@ -467,6 +627,10 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
         return
       }
 
+      console.log("📋 Initiating PesaPal payout...")
+      console.log("   - Method:", payoutMethod)
+      console.log("   - Recipient:", recipientDetails.name)
+      
       const payoutResult = await PesaPalService.processPayout(
         user.id,
         amount,
@@ -479,6 +643,46 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
         setWithdrawLoading(false)
         return
       }
+
+      console.log("✅ Payout processed successfully")
+      console.log("   - Payout ID:", payoutResult.payoutId)
+      console.log("   - Transaction Ref:", payoutResult.transactionReference)
+
+      // Sort tickets by date (oldest first) and select enough to cover the withdrawal amount
+      const sortedTickets = [...eligibleTickets].sort((a, b) => 
+        (a.purchaseDate?.getTime() || 0) - (b.purchaseDate?.getTime() || 0)
+      )
+      
+      let remainingAmount = amount
+      const ticketsToPayout: typeof eligibleTickets = []
+      
+      for (const ticket of sortedTickets) {
+        if (remainingAmount <= 0) break
+        ticketsToPayout.push(ticket)
+        remainingAmount -= (ticket.venueRevenue || 0)
+      }
+
+      console.log("📋 Updating payout status for selected tickets...")
+      console.log("   - Selected tickets:", ticketsToPayout.length)
+      
+      // Update payout status for selected tickets
+      let totalUpdated = 0
+      for (const ticket of ticketsToPayout) {
+        try {
+          console.log("   - Updating ticket:", ticket.id)
+          await FirebaseService.updateTicket(ticket.id, {
+            payoutStatus: "paid",
+            payoutDate: new Date(),
+          })
+          totalUpdated++
+          console.log("   - Successfully updated:", ticket.id)
+        } catch (updateError: any) {
+          console.error("Error updating ticket payout status:", ticket.id, updateError?.message || updateError)
+          // Continue with other tickets even if one fails
+        }
+      }
+      
+      console.log(`✅ Updated ${totalUpdated} tickets with payout status: paid`)
 
       const payoutRecord = {
         date: new Date().toLocaleDateString(),
@@ -916,8 +1120,8 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
         )}
       </ScrollView>
 
-      <Modal visible={showWithdrawModal} transparent={true} animationType="fade">
-        <View style={styles.fullImageModal}>
+      <Modal visible={showWithdrawModal} transparent={true} animationType="fade" onRequestClose={() => setShowWithdrawModal(false)}>
+        <View style={[styles.fullImageModal, { zIndex: 9999 }]}>
           <View style={styles.withdrawModalContent}>
             <Text style={styles.withdrawModalTitle}>Withdraw Earnings</Text>
             <Text style={styles.withdrawModalSubtitle}>Available: UGX {eligiblePayoutTotal.toLocaleString()}</Text>
@@ -988,6 +1192,68 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
                 <Text style={styles.scannerModalValidateText}>Validate</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Photo Verification Modal */}
+      <Modal
+        visible={showPhotoVerification}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPhotoVerification(false)}
+      >
+        <View style={styles.photoVerificationOverlay}>
+          <View style={styles.photoVerificationContent}>
+            <Text style={styles.photoVerificationTitle}>Photo Verification Required</Text>
+            <Text style={styles.photoVerificationSubtitle}>
+              Compare the photo below with the person presenting the ticket
+            </Text>
+            
+            {/* Buyer Photo */}
+            <View style={styles.photoContainer}>
+              {buyerPhotoUrl ? (
+                <Image 
+                  source={{ uri: buyerPhotoUrl }} 
+                  style={styles.buyerPhoto}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="person" size={60} color="#666" />
+                </View>
+              )}
+              <Text style={styles.buyerNameText}>{buyerName}</Text>
+              <Text style={styles.buyerLabel}>Ticket Buyer</Text>
+            </View>
+
+            {/* Verification Question */}
+            <Text style={styles.verificationQuestion}>
+              Does the person presenting the ticket match this photo?
+            </Text>
+
+            {/* Verification Buttons */}
+            <View style={styles.verificationButtons}>
+              <TouchableOpacity 
+                style={styles.denyButton}
+                onPress={() => handlePhotoConfirm(false)}
+              >
+                <Ionicons name="close-circle" size={24} color="#FFFFFF" />
+                <Text style={styles.denyButtonText}>No - Deny Entry</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.confirmButton}
+                onPress={() => handlePhotoConfirm(true)}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+                <Text style={styles.confirmButtonText}>Yes - Grant Entry</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.verificationNote}>
+              Entry will only be granted after photo confirmation
+            </Text>
           </View>
         </View>
       </Modal>
@@ -1563,6 +1829,118 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  // Photo Verification Styles
+  photoVerificationOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  photoVerificationContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+  },
+  photoVerificationTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  photoVerificationSubtitle: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  photoContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  buyerPhoto: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 3,
+    borderColor: "#00D4FF",
+    marginBottom: 12,
+  },
+  photoPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "#333",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#666",
+    marginBottom: 12,
+  },
+  buyerNameText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  buyerLabel: {
+    color: "#888888",
+    fontSize: 12,
+  },
+  verificationQuestion: {
+    color: "#FFD700",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  verificationButtons: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 16,
+  },
+  denyButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF4444",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  denyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+  confirmButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  confirmButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+  verificationNote: {
+    color: "#666666",
+    fontSize: 12,
+    textAlign: "center",
+    fontStyle: "italic",
   },
 })
 

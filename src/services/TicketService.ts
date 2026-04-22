@@ -185,7 +185,14 @@ export class TicketService {
     ticketId: string,
     validatorId: string,
     location?: string,
-  ): Promise<{ success: boolean; reason?: string }> {
+  ): Promise<{ 
+    success: boolean; 
+    reason?: string;
+    needsPhotoVerification?: boolean;
+    buyerPhotoUrl?: string;
+    buyerName?: string;
+    ticketDocId?: string;
+  }> {
     try {
       console.log("========================================")
       console.log("🔍 TICKET VALIDATION FLOW STARTED")
@@ -227,6 +234,7 @@ export class TicketService {
       console.log("   - Event ID:", ticket.eventId)
       console.log("   - Event:", ticket.eventName)
       console.log("   - Buyer:", ticket.buyerName)
+      console.log("   - Buyer Photo URL:", ticket.buyerPhotoUrl || "None")
       console.log("   - Current Status:", ticket.status)
       console.log("   - QR Code:", ticket.qrCode)
       console.log("   - Expires At:", ticket.expiresAt)
@@ -244,6 +252,7 @@ export class TicketService {
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
           ticketId: ticket.id,
+          eventId: ticket.eventId,
           validatedAt: now,
           validatedBy: validatorId,
           location,
@@ -271,6 +280,7 @@ export class TicketService {
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
           ticketId: ticket.id,
+          eventId: ticket.eventId,
           validatedAt: now,
           validatedBy: validatorId,
           location,
@@ -297,6 +307,7 @@ export class TicketService {
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
           ticketId: ticket.id,
+          eventId: ticket.eventId,
           validatedAt: now,
           validatedBy: validatorId,
           location,
@@ -319,6 +330,7 @@ export class TicketService {
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
           ticketId: ticket.id,
+          eventId: ticket.eventId,
           validatedAt: now,
           validatedBy: validatorId,
           location,
@@ -337,6 +349,30 @@ export class TicketService {
       console.log("   - Status: active")
       console.log("   - Not expired")
       console.log("   - QR code valid")
+      
+      // Check if this ticket has a buyer photo - if so, need photo verification
+      const needsPhotoVerification = !!ticket.buyerPhotoUrl
+      console.log("--- Step 6: Photo verification check ---")
+      console.log("   - Has buyer photo:", needsPhotoVerification)
+      
+      // Store ticket document ID for later use when marking as used
+      const ticketDocId = ticket.id
+
+      // If ticket has buyer photo, DON'T mark as used yet - need photo verification first
+      if (needsPhotoVerification) {
+        console.log("   - Ticket needs photo verification - returning for confirmation")
+        console.log("========================================")
+        console.log("🔍 TICKET VALIDATION - PHOTO VERIFICATION REQUIRED")
+        console.log("========================================")
+        
+        return { 
+          success: true, 
+          needsPhotoVerification: true,
+          buyerPhotoUrl: ticket.buyerPhotoUrl,
+          buyerName: ticket.buyerName,
+          ticketDocId: ticketDocId,
+        }
+      }
 
       // Step 6: Calculate payout eligibility
       console.log("--- Step 6: Calculating payout eligibility ---")
@@ -380,6 +416,7 @@ export class TicketService {
       const validation: TicketValidation = {
         id: `val_${Date.now()}`,
         ticketId: ticket.id,
+        eventId: ticket.eventId,
         validatedAt: now,
         validatedBy: validatorId,
         location,
@@ -406,6 +443,95 @@ export class TicketService {
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error)
       const errorMessage = error?.message || "Validation failed"
+      return { success: false, reason: errorMessage }
+    }
+  }
+
+  /**
+   * Confirm ticket usage after photo verification
+   * This is called when the scanner verifies the buyer matches the photo
+   */
+  static async confirmTicketUsage(
+    ticketDocId: string,
+    validatorId: string,
+    location?: string,
+    eventId?: string,
+  ): Promise<{ success: boolean; reason?: string }> {
+    try {
+      console.log("========================================")
+      console.log("✅ PHOTO VERIFICATION CONFIRMATION")
+      console.log("========================================")
+      console.log("📋 TicketService.confirmTicketUsage: Confirming ticket after photo verification")
+      console.log("📋 Ticket Doc ID:", ticketDocId)
+      console.log("📋 Validator ID:", validatorId)
+      console.log("📋 Event ID:", eventId)
+
+      const now = new Date()
+
+      // Get the ticket first
+      const ticket = await FirebaseService.getTicketById(ticketDocId)
+      if (!ticket) {
+        console.log("❌ Ticket not found:", ticketDocId)
+        return { success: false, reason: "Ticket not found" }
+      }
+
+      // Check if already used
+      if (ticket.status === "used") {
+        console.log("❌ Ticket already used")
+        return { success: false, reason: "Ticket already used" }
+      }
+
+      // Calculate payout eligibility
+      const isLatePurchase = ticket.isLatePurchase
+      let payoutEligible = false
+      
+      if (!isLatePurchase) {
+        payoutEligible = true
+      } else {
+        if (ticket.eventStartTime) {
+          const hoursSinceEventStart = (now.getTime() - ticket.eventStartTime.getTime()) / (1000 * 60 * 60)
+          payoutEligible = hoursSinceEventStart >= 24
+        }
+      }
+
+      // Mark ticket as used
+      console.log("--- Marking ticket as used ---")
+      await FirebaseService.updateTicket(ticketDocId, {
+        status: "used",
+        isScanned: true,
+        scannedAt: now,
+        payoutEligible,
+        payoutStatus: "pending",
+      })
+      console.log("✅ Ticket status updated to: USED")
+
+      // Log successful validation
+      const validation: TicketValidation = {
+        id: `val_${Date.now()}`,
+        ticketId: ticketDocId,
+        eventId: eventId || ticket.eventId,
+        validatedAt: now,
+        validatedBy: validatorId,
+        location,
+        status: "granted",
+        reason: "Photo verification confirmed - entry granted",
+      }
+
+      await this.logValidation(validation)
+      console.log("✅ Validation logged to database")
+
+      console.log("========================================")
+      console.log("✅ PHOTO VERIFICATION CONFIRMED - ENTRY GRANTED")
+      console.log("========================================")
+      console.log("📋 Ticket ID:", ticketDocId)
+      console.log("📋 Buyer:", ticket.buyerName)
+      console.log("📋 Event:", ticket.eventName)
+      console.log("========================================")
+
+      return { success: true }
+    } catch (error: any) {
+      console.error("❌ Error confirming ticket usage:", error)
+      const errorMessage = error?.message || "Failed to confirm ticket usage"
       return { success: false, reason: errorMessage }
     }
   }

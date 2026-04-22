@@ -49,6 +49,7 @@ export interface Ticket {
 export interface TicketValidation {
   id: string
   ticketId: string
+  eventId: string
   validatedAt: Date
   validatedBy: string
   location?: string

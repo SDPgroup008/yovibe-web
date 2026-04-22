@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
-import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions } from "react-native"
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "@react-navigation/native"
 import FirebaseService from "../services/FirebaseService"
@@ -27,6 +27,15 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
+  const [showOwnershipModal, setShowOwnershipModal] = useState(false)
+  const [ownershipRequest, setOwnershipRequest] = useState<{
+    userPhone: string
+    reason: string
+    experience: string
+  }>({ userPhone: "", reason: "", experience: "" })
+  const [submittingRequest, setSubmittingRequest] = useState(false)
+  const [existingRequestStatus, setExistingRequestStatus] = useState<string | null>(null)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
 
   // Filter events to show only current and upcoming events
   const upcomingEvents = useMemo(() => {
@@ -103,6 +112,14 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           setIsOwner(venueData?.ownerId === user.id)
           setIsAdmin(user.userType === "admin")
           console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
+
+          // Check if user has existing ownership request for this venue
+          if (venueData) {
+            const existingRequest = await FirebaseService.getUserOwnershipRequest(venueId, user.id)
+            if (existingRequest) {
+              setExistingRequestStatus(existingRequest.status)
+            }
+          }
         }
 
         // Load initial vibe rating for today (only when user is logged in and venue data exists)
@@ -298,6 +315,69 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
     (navigation as any).navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
   }
 
+  const handleOpenOwnershipModal = () => {
+    if (!user) {
+      Alert.alert("Login Required", "Please login to request ownership of this venue")
+      return
+    }
+    setShowOwnershipModal(true)
+  }
+
+  const handleSubmitOwnershipRequest = async () => {
+    if (!user || !venue) return
+
+    if (!ownershipRequest.userPhone.trim()) {
+      Alert.alert("Error", "Please enter your phone number")
+      return
+    }
+    if (!ownershipRequest.reason.trim()) {
+      Alert.alert("Error", "Please tell us why you want to own this venue")
+      return
+    }
+    if (!ownershipRequest.experience.trim()) {
+      Alert.alert("Error", "Please share your experience in managing venues")
+      return
+    }
+
+    setSubmittingRequest(true)
+    try {
+      await FirebaseService.submitOwnershipRequest({
+        venueId: venue.id,
+        venueName: venue.name,
+        userId: user.id,
+        userName: user.displayName || user.email.split("@")[0],
+        userEmail: user.email,
+        userPhone: ownershipRequest.userPhone,
+        reason: ownershipRequest.reason,
+        experience: ownershipRequest.experience,
+      })
+
+      setShowOwnershipModal(false)
+      setExistingRequestStatus("pending")
+      Alert.alert("Request Submitted", "Your ownership request has been submitted. You'll be notified once an admin reviews it.")
+    } catch (error) {
+      console.error("[VenueDetailScreen] Error submitting ownership request:", error)
+      Alert.alert("Error", "Failed to submit ownership request. Please try again.")
+    } finally {
+      setSubmittingRequest(false)
+    }
+  }
+
+  const showOwnButton = user && !isOwner && !isAdmin && !isCustomVenue && !existingRequestStatus
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity 
+          style={styles.headerMoreButton}
+          onPress={() => setShowMoreMenu(!showMoreMenu)}
+        >
+          <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      ),
+    })
+  }, [navigation, showMoreMenu])
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -344,6 +424,70 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
             </View>
           ))}
         </View>
+
+        {showMoreMenu && (
+          <View style={styles.moreMenuOverlay}>
+            <TouchableOpacity 
+              style={styles.moreMenuOverlayBg} 
+              onPress={() => setShowMoreMenu(false)}
+            />
+            <View style={styles.moreMenu}>
+              {showOwnButton && (
+                <TouchableOpacity 
+                  style={styles.moreMenuItem} 
+                  onPress={() => {
+                    setShowMoreMenu(false)
+                    handleOpenOwnershipModal()
+                  }}
+                >
+                  <Ionicons name="business-outline" size={20} color="#00D4AA" />
+                  <Text style={styles.moreMenuItemText}>Own This Venue</Text>
+                </TouchableOpacity>
+              )}
+              {existingRequestStatus === "pending" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="time-outline" size={20} color="#FFA500" />
+                  <Text style={[styles.moreMenuItemText, { color: "#FFA500" }]}>Request Pending</Text>
+                </View>
+              )}
+              {existingRequestStatus === "approved" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                  <Text style={[styles.moreMenuItemText, { color: "#4CAF50" }]}>You Own This Venue</Text>
+                </View>
+              )}
+              {existingRequestStatus === "rejected" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                  <Text style={[styles.moreMenuItemText, { color: "#FF3B30" }]}>Request Rejected</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {existingRequestStatus && (
+          <View style={styles.requestStatusContainer}>
+            {existingRequestStatus === "pending" && (
+              <View style={styles.pendingStatusBadge}>
+                <Ionicons name="time-outline" size={16} color="#FFA500" />
+                <Text style={styles.pendingStatusText}>Ownership Request Pending</Text>
+              </View>
+            )}
+            {existingRequestStatus === "approved" && (
+              <View style={styles.approvedStatusBadge}>
+                <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
+                <Text style={styles.approvedStatusText}>You Own This Venue</Text>
+              </View>
+            )}
+            {existingRequestStatus === "rejected" && (
+              <View style={styles.rejectedStatusBadge}>
+                <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                <Text style={styles.rejectedStatusText}>Request Rejected</Text>
+              </View>
+            )}
+          </View>
+        )}
 
         {(isOwner || isAdmin) && (
           <View style={styles.actionButtonsContainer}>
@@ -459,6 +603,82 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           <Text style={styles.directionsButtonText}>Get Directions</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={showOwnershipModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowOwnershipModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Request Ownership</Text>
+              <TouchableOpacity onPress={() => setShowOwnershipModal(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.modalSubtitle}>
+                You're requesting to own <Text style={styles.venueNameHighlight}>{venue?.name}</Text>
+              </Text>
+
+              <Text style={styles.inputLabel}>Phone Number *</Text>
+              <TextInput
+                style={styles.input}
+                value={ownershipRequest.userPhone}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, userPhone: text })}
+                placeholder="Enter your phone number"
+                placeholderTextColor="#666666"
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.inputLabel}>Why do you want to own this venue? *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={ownershipRequest.reason}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, reason: text })}
+                placeholder="Tell us why you're interested in owning this venue"
+                placeholderTextColor="#666666"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <Text style={styles.inputLabel}>What's your experience in managing venues? *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={ownershipRequest.experience}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, experience: text })}
+                placeholder="Share your relevant experience"
+                placeholderTextColor="#666666"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.submitButton, submittingRequest && styles.submitButtonDisabled]}
+                onPress={handleSubmitOwnershipRequest}
+                disabled={submittingRequest}
+              >
+                {submittingRequest ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="send-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.submitButtonText}>Submit Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </ScrollView>
   )
 }
@@ -723,6 +943,199 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: responsiveSize(8, 10, 12),
     fontStyle: "italic",
+  },
+  ownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00D4AA",
+    paddingVertical: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(12, 14, 16),
+    marginBottom: responsiveSize(8, 10, 12),
+  },
+  ownButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 18),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
+  },
+  requestStatusContainer: {
+    marginTop: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(8, 10, 12),
+  },
+  pendingStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 165, 0, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#FFA500",
+  },
+  pendingStatusText: {
+    color: "#FFA500",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  approvedStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  approvedStatusText: {
+    color: "#4CAF50",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  rejectedStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#FF3B30",
+  },
+  rejectedStatusText: {
+    color: "#FF3B30",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#1E1E1E",
+    borderTopLeftRadius: responsiveSize(20, 24, 28),
+    borderTopRightRadius: responsiveSize(20, 24, 28),
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: responsiveSize(16, 18, 20),
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  modalTitle: {
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  modalBody: {
+    padding: responsiveSize(16, 18, 20),
+  },
+  modalSubtitle: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#BBBBBB",
+    marginBottom: responsiveSize(16, 18, 20),
+    lineHeight: responsiveSize(20, 22, 24),
+  },
+  venueNameHighlight: {
+    color: "#00D4AA",
+    fontWeight: "bold",
+  },
+  inputLabel: {
+    fontSize: responsiveSize(13, 14, 15),
+    color: "#DDDDDD",
+    marginBottom: responsiveSize(6, 8, 10),
+    marginTop: responsiveSize(12, 14, 16),
+  },
+  input: {
+    backgroundColor: "#2A2A2A",
+    borderRadius: responsiveSize(6, 8, 10),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    paddingVertical: responsiveSize(10, 12, 14),
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    borderWidth: 1,
+    borderColor: "#444444",
+  },
+  textArea: {
+    minHeight: responsiveSize(80, 90, 100),
+    textAlignVertical: "top",
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00D4AA",
+    paddingVertical: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(20, 24, 28),
+    marginBottom: responsiveSize(20, 24, 28),
+  },
+  submitButtonDisabled: {
+    backgroundColor: "#666666",
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 18),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
+  },
+  headerMoreButton: {
+    padding: 8,
+  },
+  moreMenuOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  moreMenuOverlayBg: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  moreMenu: {
+    position: "absolute",
+    top: 60,
+    right: 16,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    paddingVertical: 8,
+    minWidth: 180,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
+  },
+  moreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  moreMenuItemText: {
+    color: "#00D4AA",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 12,
   },
 })
 

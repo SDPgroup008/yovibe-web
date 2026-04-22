@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal } from "react-native"
 import { CameraView } from "expo-camera"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
@@ -15,6 +15,12 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
+  
+  // Photo verification state
+  const [showPhotoVerification, setShowPhotoVerification] = useState(false)
+  const [pendingTicketDocId, setPendingTicketDocId] = useState<string | null>(null)
+  const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
+  const [buyerName, setBuyerName] = useState<string>("")
 
   // Check if user has permission to scan tickets (admin, club_owner, or user with events)
   useEffect(() => {
@@ -65,6 +71,22 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
       }, ...prev].slice(0, 10))
 
       if (result.success) {
+        // Check if this ticket needs photo verification
+        if (result.needsPhotoVerification && result.buyerPhotoUrl && result.ticketDocId) {
+          console.log("📸 Ticket requires photo verification")
+          console.log("   - Buyer Photo:", result.buyerPhotoUrl)
+          console.log("   - Buyer Name:", result.buyerName)
+          
+          // Show photo verification modal
+          setPendingTicketDocId(result.ticketDocId)
+          setBuyerPhotoUrl(result.buyerPhotoUrl)
+          setBuyerName(result.buyerName || "Ticket Buyer")
+          setShowPhotoVerification(true)
+          setValidating(false)
+          return
+        }
+        
+        // For tickets without photo, grant entry immediately
         Alert.alert(
           "✅ Entry Granted",
           `Ticket is valid for ${eventName}. Entry granted.`,
@@ -91,6 +113,69 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
       
       Alert.alert("Error", errorMessage)
     } finally {
+      setValidating(false)
+    }
+  }
+
+  // Handle photo verification confirmation
+  const handlePhotoConfirm = async (confirmed: boolean) => {
+    if (!user || !pendingTicketDocId) {
+      setShowPhotoVerification(false)
+      return
+    }
+
+    setShowPhotoVerification(false)
+    setValidating(true)
+
+    try {
+      if (confirmed) {
+        console.log("📸 Photo verified - confirming ticket usage")
+        
+        const result = await TicketService.confirmTicketUsage(
+          pendingTicketDocId,
+          user.id,
+          eventName || "Event Entrance",
+          eventId
+        )
+
+        if (result.success) {
+          Alert.alert(
+            "✅ Entry Granted",
+            `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`,
+            [{ text: "OK" }]
+          )
+        } else {
+          Alert.alert(
+            "❌ Entry Denied",
+            `Failed to confirm ticket: ${result.reason}`,
+            [{ text: "OK" }]
+          )
+        }
+      } else {
+        // Photo verification denied
+        console.log("📸 Photo verification denied - entry denied")
+        
+        // Add to scan history
+        setScanHistory((prev) => [{
+          ticketId: pendingTicketDocId.substring(0, 12) + "...",
+          status: "Invalid",
+          time: new Date().toLocaleTimeString(),
+          reason: "Photo verification denied - buyer does not match photo"
+        }, ...prev].slice(0, 10))
+
+        Alert.alert(
+          "❌ Entry Denied",
+          "The person presenting the ticket does not match the photo on file.",
+          [{ text: "OK" }]
+        )
+      }
+    } catch (error: any) {
+      console.error("Photo verification error:", error)
+      Alert.alert("Error", "Failed to process photo verification")
+    } finally {
+      setPendingTicketDocId(null)
+      setBuyerPhotoUrl("")
+      setBuyerName("")
       setValidating(false)
     }
   }
@@ -216,6 +301,68 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
           </View>
         </View>
       </ScrollView>
+
+      {/* Photo Verification Modal */}
+      <Modal
+        visible={showPhotoVerification}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowPhotoVerification(false)}
+      >
+        <View style={styles.photoVerificationOverlay}>
+          <View style={styles.photoVerificationContent}>
+            <Text style={styles.photoVerificationTitle}>Photo Verification Required</Text>
+            <Text style={styles.photoVerificationSubtitle}>
+              Compare the photo below with the person presenting the ticket
+            </Text>
+            
+            {/* Buyer Photo */}
+            <View style={styles.photoContainer}>
+              {buyerPhotoUrl ? (
+                <Image 
+                  source={{ uri: buyerPhotoUrl }} 
+                  style={styles.buyerPhoto}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.photoPlaceholder}>
+                  <Ionicons name="person" size={60} color="#666" />
+                </View>
+              )}
+              <Text style={styles.buyerNameText}>{buyerName}</Text>
+              <Text style={styles.buyerLabel}>Ticket Buyer</Text>
+            </View>
+
+            {/* Verification Question */}
+            <Text style={styles.verificationQuestion}>
+              Does the person presenting the ticket match this photo?
+            </Text>
+
+            {/* Verification Buttons */}
+            <View style={styles.verificationButtons}>
+              <TouchableOpacity 
+                style={styles.denyButton}
+                onPress={() => handlePhotoConfirm(false)}
+              >
+                <Ionicons name="close-circle" size={24} color="#FFFFFF" />
+                <Text style={styles.denyButtonText}>No - Deny Entry</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.confirmButton}
+                onPress={() => handlePhotoConfirm(true)}
+              >
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+                <Text style={styles.confirmButtonText}>Yes - Grant Entry</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.verificationNote}>
+              Entry will only be granted after photo confirmation
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -508,6 +655,118 @@ const styles = StyleSheet.create({
     fontSize: 12,
     textAlign: "center",
     marginTop: 16,
+  },
+  // Photo Verification Styles
+  photoVerificationOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  photoVerificationContent: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 16,
+    padding: 24,
+    width: "100%",
+    maxWidth: 400,
+    alignItems: "center",
+  },
+  photoVerificationTitle: {
+    color: "#FFFFFF",
+    fontSize: 22,
+    fontWeight: "bold",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+  photoVerificationSubtitle: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  photoContainer: {
+    alignItems: "center",
+    marginBottom: 20,
+  },
+  buyerPhoto: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    borderWidth: 3,
+    borderColor: "#00D4FF",
+    marginBottom: 12,
+  },
+  photoPlaceholder: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "#333",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 3,
+    borderColor: "#666",
+    marginBottom: 12,
+  },
+  buyerNameText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  buyerLabel: {
+    color: "#888888",
+    fontSize: 12,
+  },
+  verificationQuestion: {
+    color: "#FFD700",
+    fontSize: 16,
+    fontWeight: "600",
+    textAlign: "center",
+    marginBottom: 20,
+  },
+  verificationButtons: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: 16,
+  },
+  denyButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#FF4444",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  denyButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+  confirmButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4CAF50",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+  },
+  confirmButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+    marginLeft: 6,
+  },
+  verificationNote: {
+    color: "#666666",
+    fontSize: 12,
+    textAlign: "center",
+    fontStyle: "italic",
   },
 })
 
