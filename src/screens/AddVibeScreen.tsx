@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
+import { blobToDataURL } from "../utils/expoHelpers"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
@@ -209,44 +210,47 @@ const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }
 
-  /**
-   * Upload the vibe image. If we have a Blob from the file processing step, use it.
-   * Otherwise, convert the data URL to a Blob before uploading.
-   */
-  const uploadVibe = async () => {
-    if (!image || !analysisResult || !user) {
-      Alert.alert("Error", "Please analyze the image first")
-      return
-    }
+   /**
+    * Upload the vibe image as a data URL string, similar to event poster upload.
+    */
+   const uploadVibe = async () => {
+     if (!image || !analysisResult || !user) {
+       Alert.alert("Error", "Please analyze the image first")
+       return
+     }
 
-    setUploading(true)
-    try {
-      let uploadTarget: Blob | string = image
+     setUploading(true)
+     try {
+       // Ensure we have a data URL string to pass to uploadVibeImage
+       let imageDataUrl: string = image
 
-      // Prefer the blob we created earlier (if available)
-      if (lastBlobRef.current) {
-        uploadTarget = lastBlobRef.current
-      } else if (typeof image === "string" && image.startsWith("data:")) {
-        uploadTarget = dataURLToBlob(image)
-      } else if (typeof image === "string" && image.startsWith("blob:")) {
-        // fetch object URL to blob
-        const resp = await fetch(image)
-        uploadTarget = await resp.blob()
-      }
+       // If we have a stored blob, convert it to data URL
+       if (lastBlobRef.current) {
+         // Convert Blob to data URL
+         imageDataUrl = await blobToDataURL(lastBlobRef.current)
+       } 
+       // If image is a blob URL, fetch it and convert to data URL
+       else if (typeof image === "string" && image.startsWith("blob:")) {
+         const resp = await fetch(image)
+         const blob = await resp.blob()
+         imageDataUrl = await blobToDataURL(blob)
+       }
+       // If image is already a data URL string, use it directly
+       // (else assume it's already a data URL string)
 
-      // FirebaseService.uploadVibeImage should accept Blob | string (web branch handles both)
-      const imageUrl = await FirebaseService.uploadVibeImage(uploadTarget, venueId)
+       // FirebaseService.uploadVibeImage now accepts data URL string like uploadEventImage
+       const imageUrl = await FirebaseService.uploadVibeImage(imageDataUrl, venueId)
 
-      const vibeImageData: Omit<VibeImage, "id"> = {
-        venueId,
-        imageUrl,
-        vibeRating: analysisResult.vibeRating,
-        uploadedAt: new Date(),
-        uploadedBy: user.id,
-        analysisData: analysisResult.analysisData,
-      }
+       const vibeImageData: Omit<VibeImage, "id"> = {
+         venueId,
+         imageUrl,
+         vibeRating: analysisResult.vibeRating,
+         uploadedAt: new Date(),
+         uploadedBy: user.id,
+         analysisData: analysisResult.analysisData,
+       }
 
-      await FirebaseService.addVibeImage(vibeImageData)
+       await FirebaseService.addVibeImage(vibeImageData)
 
       Alert.alert("Success", "Vibe image uploaded successfully!", [
         {

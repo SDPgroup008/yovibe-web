@@ -1477,6 +1477,7 @@ class FirebaseService {
     }
   }
 
+  /*
   async uploadVibeImage(fileOrUrl: Blob | string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
     try {
       // console.log("FirebaseService: Uploading vibe image for venue", venueId);
@@ -1516,6 +1517,25 @@ class FirebaseService {
     } catch (error) {
       // console.error("FirebaseService: Error uploading vibe image:", error);
       throw error;
+    }
+  }
+  */
+
+  async uploadVibeImage(imageUri: string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
+    try {
+      // console.log("FirebaseService: Uploading vibe image for venue", venueId);
+      const storage = getStorage();
+      const storageRef = ref(storage, `vibeImages/${venueId}/vibe.jpg`);
+      // console.log("Current user UID:", auth.currentUser?.uid);
+      // console.log("Auth token exists:", !!await auth.currentUser?.getIdToken());
+
+      await uploadString(storageRef, imageUri, "data_url");
+      const downloadURL = await getDownloadURL(storageRef);
+      // console.log("FirebaseService: Vibe image uploaded, URL:", downloadURL);
+      return downloadURL;
+    } catch (error) {
+      // console.error("FirebaseService: Error uploading vibe image:", error);
+      throw error
     }
   }
 
