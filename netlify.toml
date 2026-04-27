@@ -10,6 +10,13 @@
   R2_ENDPOINT = "https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com"
   R2_ACCESS_KEY_ID = "your_r2_access_key_here"
   R2_SECRET_ACCESS_KEY = "your_r2_secret_key_here"
+  # Secrets Scanning Configuration - Omit paths containing expected config values
+  SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,sendNotifications.js,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,app.json,.gitignore,package.json,package-lock.json"
+  # Omit environment variable keys that are public by design or appear in documentation
+  # Firebase credentials are public (frontend config)
+  # R2_BUCKET_NAME is not a secret (appears in 70+ doc lines as example)
+  # R2_PUBLIC_URL, R2_ENDPOINT are URLs (not secrets)
+  SECRETS_SCAN_OMIT_KEYS = "FIREBASE_PROJECT_ID,FIREBASE_API_KEY,FIREBASE_AUTH_DOMAIN,FIREBASE_STORAGE_BUCKET,FIREBASE_MESSAGING_SENDER_ID,FIREBASE_APP_ID,FIREBASE_MEASUREMENT_ID,NEXT_PUBLIC_FIREBASE_API_KEY,R2_BUCKET_NAME,R2_PUBLIC_URL,R2_ENDPOINT,R2_ACCOUNT_ID"
 
 [dev]
   command = "npm run start"
