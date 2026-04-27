@@ -4,6 +4,7 @@
   "description": "Netlify functions for YoVibe backend",
   "main": "save-token.js",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.0.0",
     "firebase-admin": "^12.0.0"
   }
 }
