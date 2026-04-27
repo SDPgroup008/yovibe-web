@@ -39,6 +39,7 @@ const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
     vibeRating: number
     analysisData: any
   } | null>(null)
+  const [modelLoaded, setModelLoaded] = useState(false)
 
   // hidden file input ref (used to open camera on mobile)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -278,10 +279,31 @@ const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
     }
   }, [])
 
+  // Monitor ML model loading status
+  useEffect(() => {
+    const checkModelStatus = async () => {
+      const loaded = await VibeAnalysisService.ensureModelLoaded()
+      setModelLoaded(loaded)
+    }
+
+    // Check immediately
+    checkModelStatus()
+
+    // Set up interval to check model status
+    const interval = setInterval(checkModelStatus, 1000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Add Today's Vibe</Text>
+        <View style={styles.headerTop}>
+          <Text style={styles.headerTitle}>Add Today's Vibe</Text>
+          <View style={[styles.modelStatusIndicator, { backgroundColor: modelLoaded ? '#4CAF50' : '#FF3B30' }]}>
+            <Text style={styles.modelStatusText}>{modelLoaded ? '✓' : '○'}</Text>
+          </View>
+        </View>
         <Text style={styles.headerSubtitle}>{venueName}</Text>
         <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
       </View>
@@ -433,11 +455,28 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
+  headerTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
   headerTitle: {
     fontSize: 24,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 4,
+  },
+  modelStatusIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modelStatusText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#FFFFFF",
   },
   headerSubtitle: {
     fontSize: 18,

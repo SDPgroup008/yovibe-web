@@ -27,6 +27,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
+  const [currentVibeImage, setCurrentVibeImage] = useState<string | null>(null)
   const [showOwnershipModal, setShowOwnershipModal] = useState(false)
   const [ownershipRequest, setOwnershipRequest] = useState<{
     userPhone: string
@@ -131,13 +132,16 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
               return image.uploadedAt > latest.uploadedAt ? image : latest
             })
             setVibeRating(latestVibe.vibeRating || 0.0)
+            setCurrentVibeImage(latestVibe.imageUrl)
           } else {
             setVibeRating(0.0)
+            setCurrentVibeImage(null)
           }
         }
       } catch (error) {
         console.error("Error loading venue details:", error)
         setVibeRating(0.0) // Default to 0.0 on error
+        setCurrentVibeImage(null)
       } finally {
         setLoading(false)
       }
@@ -169,14 +173,18 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
             const data = change.doc.data()
             const rating = data.rating || 0.0
             setVibeRating(rating)
+            // Note: Real-time listener only gets rating data, not image URL
+            // Image URL is loaded separately in the initial load
           } else if (change.type === "removed") {
             setVibeRating(0.0) // Default to 0.0 if rating is removed
+            setCurrentVibeImage(null)
           }
         })
       },
       (error) => {
         console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
         setVibeRating(0.0) // Default to 0.0 on error
+        setCurrentVibeImage(null)
       }
     )
 
@@ -524,6 +532,12 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
           </View>
 
           <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
+
+          {currentVibeImage && (
+            <View style={styles.vibeImageContainer}>
+              <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+            </View>
+          )}
 
           <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
             <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
@@ -903,6 +917,16 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginBottom: responsiveSize(10, 12, 16),
     textAlign: "center",
+  },
+  vibeImageContainer: {
+    alignItems: "center",
+    marginBottom: responsiveSize(10, 12, 16),
+  },
+  vibeImage: {
+    width: responsiveSize(200, 250, 300),
+    height: responsiveSize(150, 180, 220),
+    borderRadius: responsiveSize(8, 10, 12),
+    resizeMode: "cover",
   },
   todaysVibeButton: {
     flexDirection: "row",
