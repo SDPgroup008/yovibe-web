@@ -102,7 +102,7 @@ async function uploadToR2Browser(
   filename: string
 ): Promise<{ url: string; key: string }> {
   let fileData: string | Buffer;
-  
+
   if (typeof body === 'string') {
     fileData = body; // data URL or base64
   } else if (body instanceof Blob) {
@@ -128,7 +128,22 @@ async function uploadToR2Browser(
   });
 
   if (!response.ok) {
-    const errorData = await response.json();
+    const errorData = await response.json().catch(() => ({ error: response.statusText }));
+
+    // Provide helpful error message for configuration issues
+    if (errorData.error?.includes('R2 storage not configured')) {
+      throw new Error(
+        'R2 storage is not configured. Please set up Cloudflare R2 credentials in your Netlify environment variables:\n' +
+        '- R2_ACCESS_KEY_ID\n' +
+        '- R2_SECRET_ACCESS_KEY\n' +
+        '- R2_ACCOUNT_ID\n' +
+        '- R2_BUCKET_NAME\n' +
+        '- R2_ENDPOINT\n' +
+        '- R2_PUBLIC_URL\n\n' +
+        'See: https://developers.cloudflare.com/r2/api/s3/tokens/'
+      );
+    }
+
     throw new Error(`Upload failed: ${errorData.error || response.statusText}`);
   }
 

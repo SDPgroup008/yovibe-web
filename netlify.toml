@@ -2,6 +2,15 @@
   command = "expo export --platform web"
   publish = "dist"
 
+[build.environment]
+  # Cloudflare R2 Configuration
+  R2_ACCOUNT_ID = "your_account_id_here"
+  R2_BUCKET_NAME = "yovibe"
+  R2_PUBLIC_URL = "https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev"
+  R2_ENDPOINT = "https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com"
+  R2_ACCESS_KEY_ID = "your_r2_access_key_here"
+  R2_SECRET_ACCESS_KEY = "your_r2_secret_key_here"
+
 [dev]
   command = "npm run start"
 

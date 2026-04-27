@@ -1,15 +1,29 @@
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-require('dotenv').config();
 
-// Initialize R2 client
-const r2 = new S3Client({
-  region: 'auto',
-  endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+// Check if R2 credentials are configured
+const accessKeyId = process.env.R2_ACCESS_KEY_ID;
+const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
+
+if (!accessKeyId || !secretAccessKey ||
+    accessKeyId === 'your_r2_access_key_here' ||
+    secretAccessKey === 'your_r2_secret_key_here') {
+  console.error('[R2 Function] R2 credentials not properly configured');
+}
+
+// Initialize R2 client only if credentials are available
+let r2 = null;
+if (accessKeyId && secretAccessKey &&
+    accessKeyId !== 'your_r2_access_key_here' &&
+    secretAccessKey !== 'your_r2_secret_key_here') {
+  r2 = new S3Client({
+    region: 'auto',
+    endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
+    credentials: {
+      accessKeyId: accessKeyId,
+      secretAccessKey: secretAccessKey,
+    },
+  });
+}
 
 const BUCKET = process.env.R2_BUCKET_NAME || 'yovibe';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
@@ -37,6 +51,18 @@ exports.handler = async (event) => {
       statusCode: 405,
       headers,
       body: JSON.stringify({ error: 'Method Not Allowed' }),
+    };
+  }
+
+  // Check if R2 is configured
+  if (!r2) {
+    console.error('[R2 Function] R2 client not initialized - credentials not configured');
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'R2 storage not configured. Please set R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY environment variables.'
+      }),
     };
   }
 
