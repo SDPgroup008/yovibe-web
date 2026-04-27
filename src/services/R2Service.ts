@@ -1,0 +1,152 @@
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+
+// Initialize R2 client - using auto-detect endpoint
+const r2Client = new S3Client({
+  region: 'auto',
+  endpoint: process.env.R2_ENDPOINT || process.env.NEXT_PUBLIC_R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
+  credentials: {
+    accessKeyId: process.env.R2_ACCESS_KEY_ID || process.env.NEXT_PUBLIC_R2_ACCESS_KEY_ID || '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || process.env.NEXT_PUBLIC_R2_SECRET_ACCESS_KEY || '',
+  },
+  forcePathStyle: true,
+});
+
+const BUCKET = process.env.R2_BUCKET_NAME || 'yovibe';
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
+
+export interface UploadOptions {
+  contentType: string;
+  path: string;
+  filename: string;
+  body: Buffer | Blob | string;
+}
+
+/**
+ * Upload file to R2 and return public URL
+ */
+export async function uploadToR2(options: UploadOptions): Promise<{ url: string; key: string }> {
+  try {
+    const { contentType, path, filename, body } = options;
+    const key = `${path}/${filename}`;
+
+    let uploadBody: Buffer | Uint8Array | string;
+    if (typeof body === 'string') {
+      // Handle data URLs
+      if (body.startsWith('data:')) {
+        const base64Data = body.replace(/^data:[\w\/\-]+;base64,/, '');
+        uploadBody = Buffer.from(base64Data, 'base64');
+      } else {
+        uploadBody = body;
+      }
+    } else if (body instanceof Blob) {
+      const arrayBuffer = await body.arrayBuffer();
+      uploadBody = Buffer.from(arrayBuffer);
+    } else {
+      uploadBody = body;
+    }
+
+    const command = new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: uploadBody,
+      ContentType: contentType,
+      ACL: 'public-read',
+    });
+
+    await r2Client.send(command);
+    const url = `${PUBLIC_URL}/${key}`;
+
+    return { url, key };
+  } catch (error) {
+    console.error('[R2Service] Upload error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete file from R2
+ */
+export async function deleteFromR2(key: string): Promise<void> {
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+    });
+    await r2Client.send(command);
+  } catch (error) {
+    console.error('[R2Service] Delete error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get public URL for R2 key
+ */
+export function getR2PublicUrl(key: string): string {
+  return `${PUBLIC_URL}/${key}`;
+}
+
+/**
+ * Upload QR code data URL to R2
+ */
+export async function uploadQRCode(
+  qrCodeDataUrl: string,
+  ticketId: string
+): Promise<{ url: string; key: string }> {
+  try {
+    return await uploadToR2({
+      path: 'qr-codes',
+      filename: `${ticketId}.png`,
+      contentType: 'image/png',
+      body: qrCodeDataUrl,
+    });
+  } catch (error) {
+    console.error('[R2Service] QR Code upload error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Upload buyer photo to R2
+ */
+export async function uploadBuyerPhoto(
+  photoUri: string,
+  ticketId: string
+): Promise<{ url: string; key: string }> {
+  try {
+    return await uploadToR2({
+      path: 'buyer-photos',
+      filename: `${ticketId}.jpg`,
+      contentType: 'image/jpeg',
+      body: photoUri,
+    });
+  } catch (error) {
+    console.error('[R2Service] Buyer photo upload error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Batch upload multiple files to R2
+ */
+export async function uploadBatch(
+  files: Array<{
+    body: Buffer | Blob | string;
+    contentType: string;
+    path: string;
+    filename: string;
+  }>
+): Promise<Array<{ url: string; key: string; success: boolean }>> {
+  const results = await Promise.allSettled(
+    files.map(file => uploadToR2(file))
+  );
+  
+  return results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return { ...result.value, success: true };
+    } else {
+      console.error(`[R2Service] Batch upload failed for ${files[index].filename}:`, result.reason);
+      return { url: '', key: files[index].filename, success: false };
+    }
+  });
+}

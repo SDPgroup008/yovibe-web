@@ -18,7 +18,7 @@ import {
   DocumentSnapshot,
 } from "firebase/firestore"
 import { v4 as uuidv4 } from "uuid";
-import { getStorage, ref, ref as storageRef, uploadString, getDownloadURL, uploadBytes } from "firebase/storage"
+
 import { Dimensions } from "react-native"
 import { auth, db } from "../config/firebase"
 import type { User, UserType } from "../models/User"
@@ -550,14 +550,18 @@ class FirebaseService {
 
   async uploadVenueImage(imageUri: string, venueId: string = `venue-${Date.now()}`): Promise<string> {
     try {
-      // console.log("FirebaseService: Uploading venue background image for venue", venueId)
-      const storage = getStorage()
-      const storageRef = ref(storage, `venues/${venueId}/background.jpg`)
-
-      await uploadString(storageRef, imageUri, "data_url")
-      const downloadURL = await getDownloadURL(storageRef)
-      // console.log("FirebaseService: Venue image uploaded, URL:", downloadURL)
-      return downloadURL
+      // Use R2 for storage instead of Firebase Storage
+      const { uploadToR2 } = await import('./R2Service')
+      
+      const filename = `background-${Date.now()}.jpg`
+      const result = await uploadToR2({
+        path: `venues/${venueId}`,
+        filename: filename,
+        contentType: 'image/jpeg',
+        body: imageUri,
+      })
+      
+      return result.url
     } catch (error) {
       // console.error("FirebaseService: Error uploading venue image:", error)
       throw error
@@ -1523,16 +1527,18 @@ class FirebaseService {
 
   async uploadVibeImage(imageUri: string, venueId: string = `vibe-${Date.now()}`): Promise<string> {
     try {
-      // console.log("FirebaseService: Uploading vibe image for venue", venueId);
-      const storage = getStorage();
-      const storageRef = ref(storage, `vibeImages/${venueId}/vibe.jpg`);
-      // console.log("Current user UID:", auth.currentUser?.uid);
-      // console.log("Auth token exists:", !!await auth.currentUser?.getIdToken());
-
-      await uploadString(storageRef, imageUri, "data_url");
-      const downloadURL = await getDownloadURL(storageRef);
-      // console.log("FirebaseService: Vibe image uploaded, URL:", downloadURL);
-      return downloadURL;
+      // Use R2 for storage instead of Firebase Storage
+      const { uploadToR2 } = await import('./R2Service')
+      
+      const filename = `vibe-${Date.now()}.jpg`
+      const result = await uploadToR2({
+        path: `vibeImages/${venueId}`,
+        filename: filename,
+        contentType: 'image/jpeg',
+        body: imageUri,
+      })
+      
+      return result.url
     } catch (error) {
       // console.error("FirebaseService: Error uploading vibe image:", error);
       throw error
@@ -1541,23 +1547,25 @@ class FirebaseService {
 
 
 
-  async uploadEventImage(imageUri: string, eventId: string = `event-${Date.now()}`): Promise<string> {
-    try {
-      // console.log("FirebaseService: Uploading event poster image for event", eventId)
-      const storage = getStorage()
-      const storageRef = ref(storage, `events/${eventId}/poster.jpg`)
-      // console.log("Current user UID:", auth.currentUser?.uid)
-      // console.log("Auth token exists:", !!await auth.currentUser?.getIdToken())
-
-      await uploadString(storageRef, imageUri, "data_url")
-      const downloadURL = await getDownloadURL(storageRef)
-      // console.log("FirebaseService: Event image uploaded, URL:", downloadURL)
-      return downloadURL
-    } catch (error) {
-      // console.error("FirebaseService: Error uploading event image:", error)
-      throw error
-    }
-  }
+   async uploadEventImage(imageUri: string, eventId: string = `event-${Date.now()}`): Promise<string> {
+     try {
+       // Use R2 for storage instead of Firebase Storage
+       const { uploadToR2 } = await import('./R2Service')
+       
+       const filename = `poster-${Date.now()}.jpg`
+       const result = await uploadToR2({
+         path: `events/${eventId}`,
+         filename: filename,
+         contentType: 'image/jpeg',
+         body: imageUri,
+       })
+       
+       return result.url
+     } catch (error) {
+       // console.error("FirebaseService: Error uploading event image:", error);
+       throw error
+     }
+   }
 
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {
     try {

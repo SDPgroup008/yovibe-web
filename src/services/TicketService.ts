@@ -2,6 +2,7 @@ import FirebaseService from "./FirebaseService"
 import PaymentService from "./PaymentService"
 import PesaPalService from "./PesaPalService"
 import NotificationService from "./NotificationService"
+import { uploadQRCode, uploadBuyerPhoto } from "./R2Service"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { Event } from "../models/Event"
 import QRCode from "qrcode"
@@ -150,14 +151,30 @@ export class TicketService {
       console.log("   - Status:", ticket.status)
       console.log("   - QR Code:", ticket.qrCode)
 
-      // Step 7: Save ticket to database
-      console.log("--- Step 7: Saving ticket to Firebase ---")
+      // Step 7: Upload QR code and buyer photo to R2
+      console.log("--- Step 7: Uploading files to R2 ---")
+      if (ticket.qrCodeDataUrl) {
+        console.log("📤 Uploading QR code to R2...")
+        const qrUploadResult = await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
+        ticket.qrCodeDataUrl = qrUploadResult.url
+        console.log("✅ QR code uploaded to R2:", qrUploadResult.url)
+      }
+
+      if (ticket.buyerPhotoUrl) {
+        console.log("📤 Uploading buyer photo to R2...")
+        const photoUploadResult = await uploadBuyerPhoto(ticket.buyerPhotoUrl, ticket.id)
+        ticket.buyerPhotoUrl = photoUploadResult.url
+        console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url)
+      }
+
+      // Step 8: Save ticket to database
+      console.log("--- Step 8: Saving ticket to Firebase ---")
       const ticketId = await FirebaseService.saveTicket(ticket)
       console.log("✅ Ticket saved to database!")
       console.log("   - Firestore Document ID:", ticketId)
 
-      // Step 8: Send notification to event owner
-      console.log("--- Step 8: Sending notification to event owner ---")
+      // Step 9: Send notification to event owner
+      console.log("--- Step 9: Sending notification to event owner ---")
       await NotificationService.notifyTicketPurchase(event, ticket)
       console.log("✅ Notification sent to event owner")
 
