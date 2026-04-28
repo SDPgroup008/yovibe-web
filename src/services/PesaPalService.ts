@@ -1,12 +1,11 @@
 import type { PaymentIntent } from "../models/Ticket"
 
 // PesaPal Configuration
+// NOTE: Consumer keys are NOT used in frontend - they are only in Netlify Functions
 const PESAPAL_CONFIG = {
-  consumerKey: "cwdmMvKme+BJrq76S2VxPi/zrHSa1she",
-  consumerSecret: "a+f99Q3TQTRaqZU2Xb6kuGoq3KE=",
-  sandbox: true,
   baseUrl: "https://cybqa.pesapal.com",
   apiUrl: "https://cybqa.pesapal.com/api",
+  sandbox: true,
 }
 
 // Generate unique order ID
@@ -14,67 +13,11 @@ const generateOrderId = (): string => {
   return `YV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 }
 
-// Encode credentials for Basic Auth (browser-compatible)
-const getAuthHeader = (): string => {
-  const credentials = `${PESAPAL_CONFIG.consumerKey}:${PESAPAL_CONFIG.consumerSecret}`
-  // Use btoa for browser-compatible base64 encoding instead of Node.js Buffer
-  return `Basic ${btoa(credentials)}`
-}
-
 export class PesaPalService {
   private static APP_COMMISSION_RATE = 0.08 // 8%
   private static LATE_FEE_PERCENTAGE = 0.15 // 15%
-  private static oauthToken: string | null = null
-  private static tokenExpiry: number = 0
 
-  /**
-   * Get OAuth token from PesaPal
-   */
-  private static async getOAuthToken(): Promise<string> {
-    console.log("🔑 PesaPalService.getOAuthToken: Getting OAuth token...")
-    
-    // Check if we have a valid token
-    if (this.oauthToken && Date.now() < this.tokenExpiry) {
-      console.log("✅ Using cached OAuth token")
-      return this.oauthToken
-    }
 
-    try {
-      const authHeader = getAuthHeader()
-      
-      const response = await fetch(`${PESAPAL_CONFIG.apiUrl}/PostOAuthJson`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": authHeader,
-        },
-        body: JSON.stringify({
-          consumer_key: PESAPAL_CONFIG.consumerKey,
-          consumer_secret: PESAPAL_CONFIG.consumerSecret,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to get OAuth token: ${response.status}`)
-      }
-
-      const data = await response.json()
-      
-      if (data.token) {
-        this.oauthToken = data.token
-        // Token typically expires in 5 minutes, set expiry to 4 minutes
-        this.tokenExpiry = Date.now() + 4 * 60 * 1000
-        console.log("✅ OAuth token obtained successfully")
-        console.log("   - Token:", this.oauthToken?.substring(0, 20) + "...")
-        return this.oauthToken!
-      } else {
-        throw new Error("No token in response")
-      }
-    } catch (error) {
-      console.error("❌ Error getting OAuth token:", error)
-      throw error
-    }
-  }
 
   /**
    * Calculate ticket price with optional late fee
@@ -128,7 +71,7 @@ export class PesaPalService {
 
   /**
    * Initialize PesaPal checkout
-   * Submits order and returns iframe URL for payment
+   * Submits order and returns iframe URL for payment (via Netlify Functions)
    */
   static async initializeCheckout(
     amount: number,
@@ -138,7 +81,7 @@ export class PesaPalService {
     buyerPhone?: string
   ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string }> {
     console.log("========================================")
-    console.log("💳 PESAPAL CHECKOUT INITIALIZATION")
+    console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)")
     console.log("========================================")
     console.log("📋 PesaPalService.initializeCheckout: Starting checkout")
     console.log("   - Amount:", amount, "UGX")
@@ -150,74 +93,48 @@ export class PesaPalService {
     const merchantReference = orderId
 
     try {
-      // Get OAuth token
-      const token = await this.getOAuthToken()
+      console.log("📤 Submitting order via Netlify Function...")
 
-      // Prepare order request
-      const orderRequest = {
-        consumer_key: PESAPAL_CONFIG.consumerKey,
-        consumer_secret: PESAPAL_CONFIG.consumerSecret,
-        command: "RegisterIPN",
-        description: description,
-        reference_id: merchantReference,
-        amount: amount,
-        currency: "UGX",
-        callback_url: callbackUrl,
-        redirect_mode: "ParentWindow",
-        // Billing address (optional but recommended)
-        billing_address: {
-          email_address: buyerEmail,
-          phone_number: buyerPhone,
-        },
-      }
-
-      console.log("📤 Submitting order to PesaPal...")
-
-      const response = await fetch(`${PESAPAL_CONFIG.apiUrl}/PostPesapalDirectOrderV4`, {
-        method: "POST",
+      const response = await fetch('/.netlify/functions/create-pesapal-order', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(orderRequest),
+        body: JSON.stringify({
+          amount,
+          description,
+          buyerEmail,
+          buyerPhone,
+          callbackUrl,
+        }),
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to submit order: ${response.status}`)
-      }
 
       const data = await response.json()
 
-      console.log("📥 PesaPal response:")
-      console.log("   - Status:", data.status)
-      console.log("   - Order ID:", data.order_id || orderId)
-      console.log("   - Merchant Reference:", data.merchant_reference || merchantReference)
-      console.log("   - Iframe URL:", data.iframe_url ? data.iframe_url.substring(0, 50) + "..." : "Not provided")
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to create order: ${response.status}`)
+      }
 
-      if (data.iframe_url) {
-        console.log("✅ Checkout initialized successfully")
+      console.log("📥 Netlify Function response:")
+      console.log("   - Status: success")
+      console.log("   - Order ID:", data.orderId)
+      console.log("   - Merchant Reference:", data.merchantReference)
+      console.log("   - Iframe URL:", data.iframeUrl ? data.iframeUrl.substring(0, 50) + "..." : "Not provided")
+
+      if (data.iframeUrl) {
+        console.log("✅ Checkout initialized successfully via Netlify Functions")
         console.log("========================================")
-        
         return {
-          iframeUrl: data.iframe_url,
-          orderId: data.order_id || orderId,
-          merchantReference: data.merchant_reference || merchantReference,
+          iframeUrl: data.iframeUrl,
+          orderId: data.orderId,
+          merchantReference: data.merchantReference,
         }
-      } else if (data.status === "FAILED") {
-        console.log("❌ PesaPal order registration failed:", data.error)
-        throw new Error(data.error || "Failed to register order with PesaPal")
       } else {
-        // Handle pending status
-        console.log("⚠️ Order status:", data.status)
-        return {
-          iframeUrl: data.iframe_url || `${PESAPAL_CONFIG.baseUrl}/iframe?merchant_reference=${merchantReference}`,
-          orderId: data.order_id || orderId,
-          merchantReference: data.merchant_reference || merchantReference,
-        }
+        console.log("⚠️ No iframe URL in response, using fallback")
+        throw new Error("No iframe URL received")
       }
     } catch (error) {
       console.error("❌ Error initializing checkout:", error)
-      // Fallback to mock URL for testing if API fails
       console.log("⚠️ Using fallback mock iframe URL for testing")
       const mockIframeUrl = `${PESAPAL_CONFIG.baseUrl}/iframe?amount=${amount}&description=${encodeURIComponent(description)}&orderId=${orderId}&email=${encodeURIComponent(buyerEmail)}`
       
@@ -230,7 +147,7 @@ export class PesaPalService {
   }
 
   /**
-   * Verify payment status with PesaPal
+   * Verify payment status with PesaPal (via Netlify Functions)
    */
   static async verifyPayment(orderId: string): Promise<{
     status: "completed" | "failed" | "pending"
@@ -238,46 +155,29 @@ export class PesaPalService {
     amount?: number
   }> {
     console.log("========================================")
-    console.log("🔍 PESAPAL PAYMENT VERIFICATION")
+    console.log("🔍 PESAPAL PAYMENT VERIFICATION (Netlify Functions)")
     console.log("========================================")
     console.log("📋 PesaPalService.verifyPayment: Checking payment status")
     console.log("   - Order ID:", orderId)
 
     try {
-      // Get OAuth token
-      const token = await this.getOAuthToken()
+      console.log("📤 Querying Netlify Function for payment status...")
 
-      const queryParams = new URLSearchParams({
-        oauth_token: token,
-        pesapal_merchant_reference: orderId,
-      })
-
-      console.log("📤 Querying PesaPal for payment status...")
-
-      const response = await fetch(
-        `${PESAPAL_CONFIG.apiUrl}/PesapalGetTransactionStatus?${queryParams}`,
-        {
-          method: "GET",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-          },
-        }
-      )
-
-      if (!response.ok) {
-        throw new Error(`Failed to verify payment: ${response.status}`)
-      }
-
+      const response = await fetch(`/.netlify/functions/verify-pesapal-payment?orderId=${encodeURIComponent(orderId)}`)
       const data = await response.json()
 
-      console.log("📥 PesaPal verification response:")
+      if (!response.ok) {
+        throw new Error(data.error || `Failed to verify payment: ${response.status}`)
+      }
+
+      console.log("📥 Netlify Function verification response:")
       console.log("   - Status:", data.status)
-      console.log("   - Payment Method:", data.payment_method)
-      console.log("   - Transaction ID:", data.transaction_id)
+      console.log("   - Payment Method:", data.paymentMethod)
+      console.log("   - Transaction ID:", data.transactionId)
       console.log("   - Amount:", data.amount)
 
-      const status = data.status === "COMPLETED" ? "completed" 
-        : data.status === "FAILED" ? "failed" 
+      const status = data.status === "completed" ? "completed" 
+        : data.status === "failed" ? "failed" 
         : "pending"
 
       if (status === "completed") {
@@ -292,8 +192,8 @@ export class PesaPalService {
 
       return {
         status,
-        transactionId: data.transaction_id,
-        amount: parseFloat(data.amount),
+        transactionId: data.transactionId,
+        amount: data.amount,
       }
     } catch (error) {
       console.error("❌ Error verifying payment:", error)
@@ -437,7 +337,7 @@ export class PesaPalService {
 
   /**
    * Process payout to organizer (money withdraw)
-   * Uses PesaPal's API to process disbursements
+   * Uses PesaPal's API via Netlify Functions
    */
   static async processPayout(
     organizerId: string,
@@ -451,7 +351,7 @@ export class PesaPalService {
     }
   ): Promise<{ success: boolean; payoutId?: string; transactionReference?: string; error?: string }> {
     console.log("========================================")
-    console.log("💰 PESAPAL PAYOUT FLOW STARTED")
+    console.log("💰 PESAPAL PAYOUT FLOW STARTED (Netlify Functions)")
     console.log("========================================")
     console.log("📋 PesaPalService.processPayout: Processing payout")
     console.log("   - Organizer ID:", organizerId)
@@ -466,87 +366,60 @@ export class PesaPalService {
       console.log("   - Account Number:", recipientDetails.accountNumber)
     }
 
-    // Try to call PesaPal API for actual payout
     try {
-      console.log("⏳ Getting OAuth token for payout...")
-      const token = await this.getOAuthToken()
-      
-      console.log("📤 Submitting payout request to PesaPal API...")
-      
-      // Prepare disbursement request
-      const disbursementRequest = {
-        oauth_token: token,
-        pesapal_merchant_reference: `PAYOUT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        currency: "UGX",
-        amount: amount,
-        description: `YoVibe Organizer Payout - ${organizerId}`,
-        payment_method: payoutMethod === "mobile_money" ? "MOBILE" : "BANK",
-        recipient: {
-          name: recipientDetails.name,
-          phone_number: payoutMethod === "mobile_money" ? recipientDetails.phoneNumber : undefined,
-          account_number: payoutMethod === "bank_transfer" ? recipientDetails.accountNumber : undefined,
-          bank: payoutMethod === "bank_transfer" ? recipientDetails.bankName : undefined,
-        },
-        callback_url: `${PESAPAL_CONFIG.baseUrl}/disbursementcallback`,
-      }
+      console.log("📤 Submitting payout request via Netlify Function...")
 
-      console.log("   - Disbursement Request:", JSON.stringify(disbursementRequest, null, 2))
-
-      // Make API call to PesaPal disbursement endpoint
-      const response = await fetch(`${PESAPAL_CONFIG.apiUrl}/SubmitDisbursementOrder`, {
-        method: "POST",
+      const response = await fetch('/.netlify/functions/process-pesapal-payout', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(disbursementRequest),
+        body: JSON.stringify({
+          organizerId,
+          amount,
+          payoutMethod,
+          recipientDetails,
+        }),
       })
 
+      const data = await response.json()
+
       if (!response.ok) {
-        const errorText = await response.text()
-        console.log("⚠️ PesaPal disbursement API error:", response.status, errorText)
-        throw new Error(`PesaPal API error: ${response.status}`)
+        throw new Error(data.error || `Failed to process payout: ${response.status}`)
       }
 
-      const data = await response.json()
-      console.log("📥 PesaPal disbursement response:", data)
+      console.log("📥 Netlify Function payout response:")
+      console.log("   - Payout ID:", data.payoutId)
+      console.log("   - Transaction Ref:", data.transactionReference)
+      console.log("   - Status:", data.status)
 
-      if (data.status === "SUCCESS" || data.status === "PENDING") {
-        console.log("✅ PesaPalService.processPayout: Payout request submitted successfully!")
-        console.log("   - Payout ID:", data.pesapal_transaction_tracking_id || data.order_id)
-        console.log("   - Status:", data.status)
-        
+      if (data.success) {
+        console.log("✅ PesaPalService.processPayout: Payout processed successfully!")
         console.log("========================================")
         console.log("💰 PESAPAL PAYOUT COMPLETED")
         console.log("========================================")
         console.log("📋 Payout Details:")
-        console.log("   - Payout ID:", data.pesapal_transaction_tracking_id || data.order_id)
+        console.log("   - Payout ID:", data.payoutId)
         console.log("   - Amount:", amount, "UGX")
         console.log("   - Method:", payoutMethod)
         console.log("   - Recipient:", recipientDetails.name)
-        console.log("   - Transaction Ref:", data.pesapal_merchant_reference)
+        console.log("   - Transaction Ref:", data.transactionReference)
         console.log("   - Status:", data.status)
         console.log("========================================")
         
         return {
           success: true,
-          payoutId: data.pesapal_transaction_tracking_id || data.order_id,
-          transactionReference: data.pesapal_merchant_reference,
+          payoutId: data.payoutId,
+          transactionReference: data.transactionReference,
         }
-      } else if (data.error) {
-        console.log("❌ PesaPal disbursement failed:", data.error)
-        throw new Error(data.error)
       } else {
-        console.log("⚠️ PesaPal disbursement status:", data.status)
-        throw new Error("Payout status unclear")
+        throw new Error(data.error || 'Payout failed')
       }
-
     } catch (error: any) {
       console.error("❌ Error processing PesaPal payout:", error.message)
       console.log("⚠️ Falling back to simulated payout for demo/testing...")
       
       // Fallback: Simulate successful payout for demo/testing purposes
-      // In production, this would be handled by the actual API response
       return new Promise((resolve) => {
         setTimeout(() => {
           const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`

@@ -13,7 +13,8 @@
     "clean": "expo start --clear",
     "reset": "expo install --fix && npm install",
     "clear-cache": "expo start --clear --web",
-    "predeploy": "npm run build"
+    "predeploy": "npm run build",
+    "netlify:dev": "netlify dev"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
