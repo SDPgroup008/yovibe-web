@@ -20,10 +20,8 @@ exports.handler = async (event) => {
     const { amount, description, buyerEmail, buyerPhone, callbackUrl } = JSON.parse(event.body);
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    // Use v3 API path
     const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
     const pesapalBaseUrl = process.env.PESAPAL_BASE_URL || 'https://cybqa.pesapal.com';
-    const baseUrl = process.env.PESAPAL_BASE_URL || 'https://cybqa.pesapal.com';
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
@@ -73,60 +71,23 @@ exports.handler = async (event) => {
 
     // Step 2: Prepare order request for v3 API
     const orderRequest = {
-      id: orderId, // Required: unique merchant order ID
+      id: orderId,
       amount: amount,
       currency: 'UGX',
-      description: description.substring(0, 100), // Max 100 chars per API spec
+      description: description.substring(0, 100),
       callback_url: callbackUrl,
-      notification_id: notificationId, // Required for v3
+      notification_id: notificationId,
       buyer: {
         email_address: buyerEmail,
         phone_number: buyerPhone || '',
       },
     };
 
+    // Step 3: Submit order
     const response = await fetch(`${apiUrl}/Transactions/SubmitOrderRequest`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(orderRequest),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${errorText}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    const token = tokenData.token;
-
-    if (!token) {
-      throw new Error('No token received from PesaPal');
-    }
-
-    // Step 2: Submit order with Bearer token
-    const orderRequest = {
-      consumer_key: consumerKey,
-      consumer_secret: consumerSecret,
-      command: 'RegisterIPN',
-      description: description,
-      reference_id: orderId,
-      amount: amount,
-      currency: 'UGX',
-      callback_url: callbackUrl,
-      redirect_mode: 'ParentWindow',
-      billing_address: {
-        email_address: buyerEmail,
-        phone_number: buyerPhone || '',
-      },
-    };
-
-    const response = await fetch(`${apiUrl}/PostPesapalDirectOrderV4`, {
-      method: 'POST',
-      headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
@@ -149,7 +110,7 @@ exports.handler = async (event) => {
           success: true,
           iframeUrl: data.redirect_url,
           orderId: data.order_tracking_id || orderId,
-          merchantReference: data.reference || orderId,
+          merchantReference: data.merchant_reference || orderId,
         }),
       };
     } else if (data.status === 'FAILED' || data.status === 'Error') {
