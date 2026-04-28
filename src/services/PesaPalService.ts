@@ -94,6 +94,7 @@ export class PesaPalService {
 
     try {
       console.log("📤 Submitting order via Netlify Function...")
+      console.log("   - Function URL:", '/.netlify/functions/create-pesapal-order')
 
       const response = await fetch('/.netlify/functions/create-pesapal-order', {
         method: 'POST',
@@ -111,15 +112,13 @@ export class PesaPalService {
 
       const data = await response.json()
 
+      console.log("📥 Netlify Function response:")
+      console.log("   - Status Code:", response.status)
+      console.log("   - Response:", data)
+
       if (!response.ok) {
         throw new Error(data.error || `Failed to create order: ${response.status}`)
       }
-
-      console.log("📥 Netlify Function response:")
-      console.log("   - Status: success")
-      console.log("   - Order ID:", data.orderId)
-      console.log("   - Merchant Reference:", data.merchantReference)
-      console.log("   - Iframe URL:", data.iframeUrl ? data.iframeUrl.substring(0, 50) + "..." : "Not provided")
 
       if (data.iframeUrl) {
         console.log("✅ Checkout initialized successfully via Netlify Functions")
@@ -133,8 +132,10 @@ export class PesaPalService {
         console.log("⚠️ No iframe URL in response, using fallback")
         throw new Error("No iframe URL received")
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("❌ Error initializing checkout:", error)
+      console.error("   - Error name:", error.name)
+      console.error("   - Error message:", error.message)
       console.log("⚠️ Using fallback mock iframe URL for testing")
       const mockIframeUrl = `${PESAPAL_CONFIG.baseUrl}/iframe?amount=${amount}&description=${encodeURIComponent(description)}&orderId=${orderId}&email=${encodeURIComponent(buyerEmail)}`
       

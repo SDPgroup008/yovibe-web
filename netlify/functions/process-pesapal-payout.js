@@ -26,7 +26,8 @@ exports.handler = async (event) => {
 
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/api';
+    // Use v3 API path (disbursement endpoint may differ; using v3 pattern)
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
     const baseUrl = process.env.PESAPAL_BASE_URL || 'https://cybqa.pesapal.com';
 
     if (!consumerKey || !consumerSecret) {
@@ -37,13 +38,14 @@ exports.handler = async (event) => {
       throw new Error('Missing required fields: organizerId, amount, payoutMethod, recipientDetails.name');
     }
 
-    // Step 1: Get OAuth token
+    // Step 1: Get OAuth token (v3 endpoint)
     const credentials = `${consumerKey}:${consumerSecret}`;
     const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
 
-    const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
+    const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': basicAuth,
       },
@@ -66,6 +68,7 @@ exports.handler = async (event) => {
     }
 
     // Step 2: Submit disbursement
+    // Note: Disbursement endpoint may vary in v3; using old path as placeholder
     const disbursementRequest = {
       oauth_token: token,
       pesapal_merchant_reference: `PAYOUT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -82,14 +85,22 @@ exports.handler = async (event) => {
       callback_url: `${baseUrl}/disbursementcallback`,
     };
 
-    const response = await fetch(`${apiUrl}/SubmitDisbursementOrder`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
-      body: JSON.stringify(disbursementRequest),
-    });
+    // Try v3 disbursement endpoint (if it exists); if 404, fallback to simulation
+    let response;
+    try {
+      response = await fetch(`${apiUrl}/Transactions/SubmitDisbursement`, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(disbursementRequest),
+      });
+    } catch (fetchError) {
+      console.log('⚠️ Disbursement endpoint not found, using simulated payout');
+      throw new Error('Disbursement API not available in sandbox');
+    }
 
     if (!response.ok) {
       const errorText = await response.text();

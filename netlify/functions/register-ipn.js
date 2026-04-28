@@ -4,7 +4,7 @@ exports.handler = async (event) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
     'Content-Type': 'application/json',
   };
 
@@ -12,30 +12,24 @@ exports.handler = async (event) => {
     return { statusCode: 204, headers, body: '' };
   }
 
-  if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
+  if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
   try {
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
+    // Your site's base URL where Netlify Functions are hosted
+    const siteUrl = process.env.SITE_URL || 'http://localhost:8888';
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
     }
 
-    let orderId;
-    if (event.httpMethod === 'GET') {
-      orderId = event.queryStringParameters?.orderId || event.queryStringParameters?.orderTrackingId;
-    } else {
-      const body = JSON.parse(event.body);
-      orderId = body.orderId || body.orderTrackingId;
-    }
-
-    if (!orderId) {
-      throw new Error('Missing orderId parameter');
-    }
+    // The IPN URL that PesaPal will call with payment notifications
+    // This should point to your IPN Netlify Function
+    const ipnUrl = `${siteUrl}/.netlify/functions/pesapal-ipn`;
 
     // Step 1: Get OAuth token
     const credentials = `${consumerKey}:${consumerSecret}`;
@@ -66,50 +60,54 @@ exports.handler = async (event) => {
       throw new Error('No token received from PesaPal');
     }
 
-    // Step 2: Query payment status with Bearer token (v3 endpoint)
-    const queryParams = new URLSearchParams({
-      orderTrackingId: orderId,
-    });
+    // Step 2: Register IPN URL
+    const ipnRequest = {
+      url: ipnUrl,
+      ipn_notification_type: 'GET', // or 'POST' - GET simpler for testing
+    };
 
-    const response = await fetch(`${apiUrl}/Transactions/GetTransactionStatus?${queryParams}`, {
-      method: 'GET',
+    const response = await fetch(`${apiUrl}/URLSetup/RegisterIPN`, {
+      method: 'POST',
       headers: {
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
+      body: JSON.stringify(ipnRequest),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`PesaPal verification error: ${response.status} - ${errorText}`);
+      throw new Error(`PesaPal IPN registration error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
 
-    // v3 API response format
-    const status = data.status === 'COMPLETED' ? 'completed'
-      : data.status === 'FAILED' ? 'failed'
-      : 'pending';
+    const ipnId = data.ipn_id;
+
+    if (!ipnId) {
+      throw new Error('No IPN ID received from PesaPal');
+    }
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
-        status,
-        transactionId: data.order_tracking_id || data.transaction_id,
-        amount: parseFloat(data.amount) || 0,
-        paymentMethod: data.payment_method,
-        rawStatus: data.status,
+        success: true,
+        ipnId: ipnId,
+        url: data.url,
+        ipn_status: data.ipn_status_description,
+        message: 'IPN URL registered successfully. Add this ID to your Netlify environment variables as PESAPAL_NOTIFICATION_ID.',
       }),
     };
   } catch (error) {
-    console.error('Error verifying PesaPal payment:', error);
+    console.error('Error registering IPN:', error);
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
+        success: false,
         error: error.message,
-        status: 'pending',
         ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
       }),
     };
