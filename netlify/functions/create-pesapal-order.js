@@ -20,9 +20,8 @@ exports.handler = async (event) => {
     const { amount, description, buyerEmail, buyerPhone, callbackUrl } = JSON.parse(event.body);
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    // v3 API base
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
-    const baseUrl = process.env.PESAPAL_BASE_URL || 'https://pay.pesapal.com';
+    // v2 API base (no /v3)
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/api';
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
@@ -34,21 +33,13 @@ exports.handler = async (event) => {
 
     const orderId = `YV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Get notification_id from environment
-    const notificationId = process.env.PESAPAL_NOTIFICATION_ID;
-
-    if (!notificationId || notificationId === 'your_ipn_notification_id_here') {
-      throw new Error('PesaPal notification_id not configured. Set PESAPAL_NOTIFICATION_ID environment variable (from your registered IPN ID).');
-    }
-
-    // Step 1: Get OAuth token (v3)
+    // Step 1: Get OAuth token (v2 endpoint)
     const credentials = `${consumerKey}:${consumerSecret}`;
     const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
 
-    const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
+    const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': basicAuth,
       },
@@ -70,24 +61,26 @@ exports.handler = async (event) => {
       throw new Error('No token received from PesaPal');
     }
 
-    // Step 2: Submit order (v3)
+    // Step 2: Submit order (v2 endpoint) – v2 requires consumer keys in body
     const orderRequest = {
-      id: orderId,
+      consumer_key: consumerKey,
+      consumer_secret: consumerSecret,
+      command: 'RegisterIPN',
       amount: amount,
       currency: 'UGX',
       description: description.substring(0, 100),
+      reference_id: orderId,
       callback_url: callbackUrl,
-      notification_id: notificationId,
-      buyer: {
+      redirect_mode: 'ParentWindow',
+      billing_address: {
         email_address: buyerEmail,
         phone_number: buyerPhone || '',
       },
     };
 
-    const response = await fetch(`${apiUrl}/Transactions/SubmitOrderRequest`, {
+    const response = await fetch(`${apiUrl}/PostPesapalDirectOrderV4`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
@@ -101,14 +94,15 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    if (data.redirect_url) {
+    // v2 response: { iframe_url, order_id, merchant_reference, status }
+    if (data.iframe_url) {
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
-          iframeUrl: data.redirect_url,
-          orderId: data.order_tracking_id || orderId,
+          iframeUrl: data.iframe_url,
+          orderId: data.order_id || orderId,
           merchantReference: data.merchant_reference || orderId,
         }),
       };
@@ -118,7 +112,7 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           success: false,
-          error: data.message || data.error || 'Failed to register order with PesaPal',
+          error: data.error || data.message || 'Failed to register order with PesaPal',
         }),
       };
     } else {
@@ -127,8 +121,8 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           success: true,
-          iframeUrl: `${baseUrl}/iframe?merchant_reference=${orderId}`,
-          orderId: data.order_tracking_id || orderId,
+          iframeUrl: data.iframe_url || `${apiUrl}/iframe?merchant_reference=${orderId}`,
+          orderId: data.order_id || orderId,
           merchantReference: data.merchant_reference || orderId,
         }),
       };

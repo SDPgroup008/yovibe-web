@@ -17,7 +17,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/api';
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
 
@@ -27,24 +27,23 @@ exports.handler = async (event) => {
 
     let orderId;
     if (event.httpMethod === 'GET') {
-      orderId = event.queryStringParameters?.orderId || event.queryStringParameters?.orderTrackingId;
+      orderId = event.queryStringParameters?.orderId || event.queryStringParameters?.pesapal_merchant_reference;
     } else {
       const body = JSON.parse(event.body);
-      orderId = body.orderId || body.orderTrackingId;
+      orderId = body.orderId || body.pesapal_merchant_reference;
     }
 
     if (!orderId) {
       throw new Error('Missing orderId parameter');
     }
 
-    // Step 1: Get OAuth token (v3)
+    // Step 1: Get OAuth token (v2)
     const credentials = `${consumerKey}:${consumerSecret}`;
     const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
 
-    const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
+    const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
       method: 'POST',
       headers: {
-        'Accept': 'application/json',
         'Content-Type': 'application/json',
         'Authorization': basicAuth,
       },
@@ -66,17 +65,16 @@ exports.handler = async (event) => {
       throw new Error('No token received from PesaPal');
     }
 
-    // Step 2: Query payment status using v3 endpoint
+    // Step 2: Query payment status using v2 endpoint
+    // v2 uses query parameters: oauth_token and pesapal_merchant_reference
     const queryParams = new URLSearchParams({
-      orderTrackingId: orderId,
+      oauth_token: token,
+      pesapal_merchant_reference: orderId,
     });
 
-    const response = await fetch(`${apiUrl}/Transactions/GetTransactionStatus?${queryParams}`, {
+    const response = await fetch(`${apiUrl}/PesapalGetTransactionStatus?${queryParams}`, {
       method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+      // No Authorization header needed; token in query
     });
 
     if (!response.ok) {
@@ -86,19 +84,30 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    const status = data.status === 'COMPLETED' ? 'completed'
-      : data.status === 'FAILED' ? 'failed'
-      : 'pending';
+    // v2 response format: pesapal_response_data = "PENDING|COMPLETED|FAILED|INVALID"
+    // Often returned as { status: "COMPLETED", ... } or as raw string
+    let status = 'pending';
+    if (typeof data === 'string') {
+      // Raw response like "COMPLETED" or "PENDING"
+      status = data.toLowerCase();
+    } else if (data.status) {
+      status = data.status === 'COMPLETED' ? 'completed'
+        : data.status === 'FAILED' ? 'failed'
+        : data.status === 'INVALID' ? 'failed'
+        : 'pending';
+    } else if (data.pesapal_response_data) {
+      status = data.pesapal_response_data.toLowerCase();
+    }
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         status,
-        transactionId: data.order_tracking_id || data.transaction_id,
+        transactionId: data.transaction_id || data.pesapal_transaction_tracking_id || orderId,
         amount: parseFloat(data.amount) || 0,
         paymentMethod: data.payment_method,
-        rawStatus: data.status,
+        rawStatus: data.status || data,
       }),
     };
   } catch (error) {
