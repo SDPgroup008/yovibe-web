@@ -10,10 +10,11 @@ exports.handler = async (event) => {
 
   const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
   const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-  const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/api';
+  // Use v3 API base
+  const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
 
-  // Step 1: Get OAuth token
-  const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
+  // Step 1: Get OAuth token (v3)
+  const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
     method: 'POST',
     headers: {
       'Accept': 'application/json',
@@ -55,7 +56,7 @@ exports.handler = async (event) => {
     };
   }
 
-  // Step 2: Get IPN List
+  // Step 2: Get IPN List (v3)
   const ipnListUrl = `${apiUrl}/URLSetup/GetIpnList`;
   const ipnListResponse = await fetch(ipnListUrl, {
     method: 'GET',
@@ -81,7 +82,7 @@ exports.handler = async (event) => {
     headers,
     body: JSON.stringify({
       oauthStatus: tokenResponse.status,
-      oauthBody: tokenResponse.ok ? { token, expiry: 'obfuscated' } : tokenText,
+      oauthBody: { token: token.substring(0, 20) + '...', expiry: 'obfuscated' },
       ipnListStatus: ipnListResponse.status,
       ipnList: ipnList,
       apiUrl,
