@@ -20,8 +20,15 @@ exports.handler = async (event) => {
     const { amount, description, buyerEmail, buyerPhone, callbackUrl } = JSON.parse(event.body);
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    // v2 API base (no /v3)
     const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/api';
+
+    console.log('Env vars:', {
+      consumerKeySet: !!consumerKey,
+      consumerSecretSet: !!consumerSecret,
+      consumerKeyLength: consumerKey?.length,
+      consumerSecretLength: consumerSecret?.length,
+      apiUrl,
+    });
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
