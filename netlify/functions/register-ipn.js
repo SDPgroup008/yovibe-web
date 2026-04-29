@@ -33,16 +33,13 @@ exports.handler = async (event) => {
     console.log('  ipnUrl:', ipnUrl);
     console.log('  siteUrl:', siteUrl);
 
-    // Step 1: Get OAuth token
-    const credentials = `${consumerKey}:${consumerSecret}`;
-    const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
-
+    // Step 1: Get OAuth token (v3) - credentials in body, NO Authorization header
     const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
         'Content-Type': 'application/json',
-        'Authorization': basicAuth,
+        // NO Authorization header - credentials go in body
       },
       body: JSON.stringify({
         consumer_key: consumerKey,
