@@ -49,12 +49,15 @@ exports.handler = async (event) => {
       }),
     });
 
+    const tokenText = await tokenResponse.text();
+    console.log('PesaPal OAuth response status:', tokenResponse.status);
+    console.log('PesaPal OAuth response body:', tokenText);
+
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${errorText}`);
+      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${tokenText}`);
     }
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = JSON.parse(tokenText);
     const token = tokenData.token;
 
     if (!token) {
@@ -87,12 +90,20 @@ exports.handler = async (event) => {
       body: JSON.stringify(orderRequest),
     });
 
+    const responseText = await response.text();
+    console.log('PesaPal order response status:', response.status);
+    console.log('PesaPal order response body:', responseText);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`PesaPal order error: ${response.status} - ${errorText}`);
+      throw new Error(`PesaPal order error: ${response.status} - ${responseText}`);
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Invalid JSON response from PesaPal: ${responseText.substring(0, 200)}`);
+    }
 
     // v2 response: { iframe_url, order_id, merchant_reference, status }
     if (data.iframe_url) {
