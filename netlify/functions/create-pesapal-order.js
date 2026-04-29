@@ -33,15 +33,11 @@ exports.handler = async (event) => {
 
     const orderId = `YV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Step 1: Get OAuth token (v2 endpoint)
-    const credentials = `${consumerKey}:${consumerSecret}`;
-    const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
-
+    // Step 1: Get OAuth token (v2 endpoint) – send credentials in JSON body only (no Basic Auth header)
     const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': basicAuth,
       },
       body: JSON.stringify({
         consumer_key: consumerKey,
@@ -57,7 +53,12 @@ exports.handler = async (event) => {
       throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${tokenText}`);
     }
 
-    const tokenData = JSON.parse(tokenText);
+    let tokenData;
+    try {
+      tokenData = JSON.parse(tokenText);
+    } catch (e) {
+      throw new Error(`Invalid JSON from OAuth: ${tokenText.substring(0, 200)}`);
+    }
     const token = tokenData.token;
 
     if (!token) {
