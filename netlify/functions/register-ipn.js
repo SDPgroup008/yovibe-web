@@ -19,17 +19,19 @@ exports.handler = async (event) => {
   try {
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
-    // Your site's base URL where Netlify Functions are hosted
-    const siteUrl = process.env.SITE_URL || 'http://localhost:8888';
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+    const siteUrl = process.env.SITE_URL || 'https://yovibe.net';
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
     }
 
-    // The IPN URL that PesaPal will call with payment notifications
-    // This should point to your IPN Netlify Function
     const ipnUrl = `${siteUrl}/.netlify/functions/pesapal-ipn`;
+
+    console.log('RegisterIPN: Starting');
+    console.log('  apiUrl:', apiUrl);
+    console.log('  ipnUrl:', ipnUrl);
+    console.log('  siteUrl:', siteUrl);
 
     // Step 1: Get OAuth token
     const credentials = `${consumerKey}:${consumerSecret}`;
@@ -48,12 +50,15 @@ exports.handler = async (event) => {
       }),
     });
 
+    const tokenText = await tokenResponse.text();
+    console.log('OAuth response status:', tokenResponse.status);
+    console.log('OAuth response body (truncated):', tokenText.substring(0, 200));
+
     if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${errorText}`);
+      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${tokenText.substring(0, 200)}`);
     }
 
-    const tokenData = await tokenResponse.json();
+    const tokenData = JSON.parse(tokenText);
     const token = tokenData.token;
 
     if (!token) {
@@ -63,8 +68,10 @@ exports.handler = async (event) => {
     // Step 2: Register IPN URL
     const ipnRequest = {
       url: ipnUrl,
-      ipn_notification_type: 'GET', // or 'POST' - GET simpler for testing
+      ipn_notification_type: 'GET',
     };
+
+    console.log('RegisterIPN request payload:', JSON.stringify(ipnRequest));
 
     const response = await fetch(`${apiUrl}/URLSetup/RegisterIPN`, {
       method: 'POST',
@@ -76,13 +83,15 @@ exports.handler = async (event) => {
       body: JSON.stringify(ipnRequest),
     });
 
+    const responseText = await response.text();
+    console.log('RegisterIPN response status:', response.status);
+    console.log('RegisterIPN response body:', responseText);
+
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`PesaPal IPN registration error: ${response.status} - ${errorText}`);
+      throw new Error(`PesaPal IPN registration error: ${response.status} - ${responseText.substring(0, 200)}`);
     }
 
-    const data = await response.json();
-
+    const data = JSON.parse(responseText);
     const ipnId = data.ipn_id;
 
     if (!ipnId) {
