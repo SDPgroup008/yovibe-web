@@ -17,7 +17,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
 
@@ -37,7 +37,7 @@ exports.handler = async (event) => {
       throw new Error('Missing orderId parameter');
     }
 
-    // Step 1: Get OAuth token
+    // Step 1: Get OAuth token (v3)
     const credentials = `${consumerKey}:${consumerSecret}`;
     const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
 
@@ -66,7 +66,7 @@ exports.handler = async (event) => {
       throw new Error('No token received from PesaPal');
     }
 
-    // Step 2: Query payment status with Bearer token (v3 endpoint)
+    // Step 2: Query payment status using v3 endpoint
     const queryParams = new URLSearchParams({
       orderTrackingId: orderId,
     });
@@ -86,7 +86,6 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    // v3 API response format
     const status = data.status === 'COMPLETED' ? 'completed'
       : data.status === 'FAILED' ? 'failed'
       : 'pending';

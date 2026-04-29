@@ -20,8 +20,9 @@ exports.handler = async (event) => {
     const { amount, description, buyerEmail, buyerPhone, callbackUrl } = JSON.parse(event.body);
     const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
     const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
-    const pesapalBaseUrl = process.env.PESAPAL_BASE_URL || 'https://cybqa.pesapal.com';
+    // v3 API base
+    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+    const baseUrl = process.env.PESAPAL_BASE_URL || 'https://pay.pesapal.com';
 
     if (!consumerKey || !consumerSecret) {
       throw new Error('PesaPal credentials not configured');
@@ -33,14 +34,14 @@ exports.handler = async (event) => {
 
     const orderId = `YV-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-    // Get notification_id from environment (must be set after IPN registration)
+    // Get notification_id from environment
     const notificationId = process.env.PESAPAL_NOTIFICATION_ID;
 
     if (!notificationId || notificationId === 'your_ipn_notification_id_here') {
-      throw new Error('PesaPal notification_id not configured. Run the register-ipn function first to get an IPN ID, then set PESAPAL_NOTIFICATION_ID environment variable.');
+      throw new Error('PesaPal notification_id not configured. Set PESAPAL_NOTIFICATION_ID environment variable (from your registered IPN ID).');
     }
 
-    // Step 1: Get OAuth token (v3 endpoint)
+    // Step 1: Get OAuth token (v3)
     const credentials = `${consumerKey}:${consumerSecret}`;
     const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
 
@@ -69,7 +70,7 @@ exports.handler = async (event) => {
       throw new Error('No token received from PesaPal');
     }
 
-    // Step 2: Prepare order request for v3 API
+    // Step 2: Submit order (v3)
     const orderRequest = {
       id: orderId,
       amount: amount,
@@ -83,7 +84,6 @@ exports.handler = async (event) => {
       },
     };
 
-    // Step 3: Submit order
     const response = await fetch(`${apiUrl}/Transactions/SubmitOrderRequest`, {
       method: 'POST',
       headers: {
@@ -101,7 +101,6 @@ exports.handler = async (event) => {
 
     const data = await response.json();
 
-    // v3 API response format: { status, message, order_tracking_id, redirect_url, ... }
     if (data.redirect_url) {
       return {
         statusCode: 200,
@@ -128,7 +127,7 @@ exports.handler = async (event) => {
         headers,
         body: JSON.stringify({
           success: true,
-          iframeUrl: `${pesapalBaseUrl}/iframe?merchant_reference=${orderId}`,
+          iframeUrl: `${baseUrl}/iframe?merchant_reference=${orderId}`,
           orderId: data.order_tracking_id || orderId,
           merchantReference: data.merchant_reference || orderId,
         }),
