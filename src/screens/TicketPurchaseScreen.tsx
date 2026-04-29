@@ -39,6 +39,7 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   // Visitor info for unauthenticated users
   const [visitorName, setVisitorName] = useState("")
   const [visitorEmail, setVisitorEmail] = useState("")
+  const [visitorPhone, setVisitorPhone] = useState("")
   
   // Payment method state
   const [paymentMethod, setPaymentMethod] = useState<"mobile_money" | "credit_card" | "bank_transfer" | null>(null)
@@ -218,18 +219,21 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   }
 
   const handlePurchase = async () => {
-    // Determine buyer ID, name, and email based on auth status
+    // Determine buyer ID, name, email, and phone based on auth status
     let buyerId: string
     let buyerName: string
     let buyerEmail: string
+    let buyerPhone: string
     
     if (user) {
       // Authenticated user - use their registered details
       buyerId = user.id
       buyerName = user.displayName || user.email || "Unknown"
       buyerEmail = user.email || ""
+      // Try to get phone from payment details or leave empty
+      buyerPhone = user?.paymentDetails?.mobileMoney?.phoneNumber || ""
     } else {
-      // Unauthenticated user - require name and email
+      // Unauthenticated user - require name, email, and phone
       if (!visitorName.trim()) {
         Alert.alert("Name Required", "Please enter your name")
         return
@@ -238,11 +242,16 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         Alert.alert("Email Required", "Please enter your email address")
         return
       }
+      if (!visitorPhone.trim()) {
+        Alert.alert("Phone Required", "Please enter your phone number for payment")
+        return
+      }
       
       // Generate unique visitor ID
       buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       buyerName = visitorName.trim()
       buyerEmail = visitorEmail.trim()
+      buyerPhone = visitorPhone.trim()
     }
 
     // Validate ticket type selection
@@ -265,14 +274,15 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
       const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event.name}`
       const callbackUrl = `${window.location.origin}`
 
-      console.log("💳 Submitting order to PesaPal...")
-      const orderResult = await PesaPalService.submitOrder(
-        total,
-        description,
-        buyerEmail,
-        user?.paymentDetails?.mobileMoney?.phoneNumber || "",
-        callbackUrl
-      )
+       console.log("💳 Submitting order to PesaPal...")
+       const orderResult = await PesaPalService.submitOrder(
+         total,
+         description,
+         buyerEmail,
+         buyerPhone,  // use the collected buyer phone
+         callbackUrl,
+         buyerName   // pass buyer name to pre-fill form
+       )
 
       if (!orderResult.success || !orderResult.paymentUrl) {
         throw new Error(orderResult.error || "Failed to initialize payment")
@@ -337,31 +347,39 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
         </Animated.View>
       )}
 
-      {/* Show visitor info form for unauthenticated users */}
-      {!user && (
-        <View style={styles.visitorSection}>
-          <Text style={styles.sectionTitle}>Your Information</Text>
-          <Text style={styles.visitorInfo}>
-            Please provide your details for ticket purchase
-          </Text>
-          <TextInput
-            style={styles.input}
-            value={visitorName}
-            onChangeText={setVisitorName}
-            placeholder="Full Name"
-            placeholderTextColor="#999"
-          />
-          <TextInput
-            style={styles.input}
-            value={visitorEmail}
-            onChangeText={setVisitorEmail}
-            placeholder="Email Address"
-            placeholderTextColor="#999"
-            keyboardType="email-address"
-            autoCapitalize="none"
-          />
-        </View>
-      )}
+       {/* Show visitor info form for unauthenticated users */}
+       {!user && (
+         <View style={styles.visitorSection}>
+           <Text style={styles.sectionTitle}>Your Information</Text>
+           <Text style={styles.visitorInfo}>
+             Please provide your details for ticket purchase
+           </Text>
+           <TextInput
+             style={styles.input}
+             value={visitorName}
+             onChangeText={setVisitorName}
+             placeholder="Full Name"
+             placeholderTextColor="#999"
+           />
+           <TextInput
+             style={styles.input}
+             value={visitorEmail}
+             onChangeText={setVisitorEmail}
+             placeholder="Email Address"
+             placeholderTextColor="#999"
+             keyboardType="email-address"
+             autoCapitalize="none"
+           />
+           <TextInput
+             style={styles.input}
+             value={visitorPhone}
+             onChangeText={setVisitorPhone}
+             placeholder="Phone Number (e.g., 0705928046)"
+             placeholderTextColor="#999"
+             keyboardType="phone-pad"
+           />
+         </View>
+       )}
 
       <View style={styles.ticketSection}>
         <Text style={styles.sectionTitle}>Select Ticket Type</Text>

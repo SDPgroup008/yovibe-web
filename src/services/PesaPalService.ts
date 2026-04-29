@@ -78,7 +78,8 @@ export class PesaPalService {
     description: string,
     callbackUrl: string,
     buyerEmail: string,
-    buyerPhone?: string
+    buyerPhone?: string,
+    buyerName?: string
   ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string }> {
     console.log("========================================")
     console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)")
@@ -88,6 +89,7 @@ export class PesaPalService {
     console.log("   - Description:", description)
     console.log("   - Buyer Email:", buyerEmail)
     console.log("   - Buyer Phone:", buyerPhone || "Not provided")
+    console.log("   - Buyer Name:", buyerName || "Not provided")
 
     const orderId = generateOrderId()
     const merchantReference = orderId
@@ -107,6 +109,7 @@ export class PesaPalService {
           buyerEmail,
           buyerPhone,
           callbackUrl,
+          buyerName,
         }),
       })
 
@@ -298,7 +301,8 @@ export class PesaPalService {
     description: string,
     buyerEmail: string,
     buyerPhone: string,
-    callbackUrl: string
+    callbackUrl: string,
+    buyerName?: string
   ): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> {
     console.log("========================================")
     console.log("📝 PESAPAL ORDER SUBMISSION")
@@ -307,6 +311,8 @@ export class PesaPalService {
     console.log("   - Amount:", amount)
     console.log("   - Description:", description)
     console.log("   - Email:", buyerEmail)
+    console.log("   - Phone:", buyerPhone || "Not provided")
+    console.log("   - Name:", buyerName || "Not provided")
 
     try {
       const checkout = await this.initializeCheckout(
@@ -314,7 +320,8 @@ export class PesaPalService {
         description,
         callbackUrl,
         buyerEmail,
-        buyerPhone
+        buyerPhone,
+        buyerName
       )
 
       console.log("✅ Order submitted successfully!")
