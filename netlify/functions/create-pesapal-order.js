@@ -37,7 +37,9 @@ exports.handler = async (event) => {
     const tokenResponse = await fetch(`${apiUrl}/PostOAuthJson`, {
       method: 'POST',
       headers: {
+        'Accept': 'application/json',
         'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       body: JSON.stringify({
         consumer_key: consumerKey,
@@ -47,10 +49,15 @@ exports.handler = async (event) => {
 
     const tokenText = await tokenResponse.text();
     console.log('PesaPal OAuth response status:', tokenResponse.status);
+    console.log('PesaPal OAuth response headers:', Object.fromEntries(tokenResponse.headers.entries()));
     console.log('PesaPal OAuth response body:', tokenText);
 
     if (!tokenResponse.ok) {
       throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${tokenText}`);
+    }
+
+    if (!tokenText || tokenText.trim().length === 0) {
+      throw new Error('PesaPal OAuth returned empty body. Check credentials and endpoint URL.');
     }
 
     let tokenData;
