@@ -40,7 +40,7 @@
   from = "/*"
   to = "/index.html"
   status = 200
-  conditions = {Method = [GET], Path = [!]**}
+  conditions = {Method = ["GET"], Path = ["!:/**"]}
 
 [[prerender]]
   crawl = true
