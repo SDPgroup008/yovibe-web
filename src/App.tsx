@@ -137,6 +137,49 @@ function AppContent() {
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
 
+  // Handle deep links on app startup
+  useEffect(() => {
+    if (!loading && navigationRef.current) {
+      try {
+        // Check if we have a deep link URL to handle
+        const currentUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+        if (currentUrl && currentUrl !== '/' && currentUrl !== '/login' && currentUrl !== '/signup') {
+          // Parse the URL to determine what screen to navigate to
+          const urlParts = currentUrl.split('/').filter(part => part);
+          console.log('Deep link detected:', currentUrl, 'URL parts:', urlParts);
+
+          setTimeout(() => {
+            try {
+              // Handle event deep links: /events/{eventId}
+              if (urlParts[0] === 'events' && urlParts[1] && urlParts[1] !== 'add' && urlParts[1] !== 'notifications') {
+                const eventId = urlParts[1];
+                console.log('Navigating to event:', eventId);
+                navigationRef.current?.navigate('Events', {
+                  screen: 'EventDetail',
+                  params: { eventId }
+                });
+              }
+              // Handle venue deep links: /venues/{venueId}
+              else if (urlParts[0] === 'venues' && urlParts[1]) {
+                const venueId = urlParts[1];
+                console.log('Navigating to venue:', venueId);
+                navigationRef.current?.navigate('Venues', {
+                  screen: 'VenueDetail',
+                  params: { venueId }
+                });
+              }
+              // Handle other deep links as needed...
+            } catch (deepLinkErr) {
+              console.warn('Deep link navigation error:', deepLinkErr);
+            }
+          }, 200); // Slightly longer delay to ensure navigation is fully ready
+        }
+      } catch (err) {
+        console.warn('Deep link detection error:', err);
+      }
+    }
+  }, [loading]);
+
   useEffect(() => {
     if (!loading) {
       setInitializing(false);
