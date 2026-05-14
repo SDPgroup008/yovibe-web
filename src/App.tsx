@@ -178,7 +178,6 @@ function AppContent() {
                         routes: [{
                           name: 'events',
                           state: {
-                            index: 0,
                             routes: [{
                               name: 'EventDetail',
                               params: { eventId }
@@ -186,7 +185,7 @@ function AppContent() {
                           }
                         }]
                       }
-                    }
+                    }]
                   });
                 }
                 // Handle venue deep links: /venues/{venueId}
@@ -203,7 +202,6 @@ function AppContent() {
                         routes: [{
                           name: 'venues',
                           state: {
-                            index: 0,
                             routes: [{
                               name: 'VenueDetail',
                               params: { venueId }
@@ -211,7 +209,7 @@ function AppContent() {
                           }
                         }]
                       }
-                    }
+                    }]
                   });
                 }
                 // Handle map deep links: /map/venues/{venueId} or /map/events/{eventId}
