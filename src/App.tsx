@@ -361,15 +361,17 @@ export default function App() {
             // Events tab
             Events: {
               screens: {
-                EventsList: 'events',
+                // More specific routes first (with parameters)
                 EventDetail: 'events/:eventId',
-                AddEvent: 'events/add',
                 VenueDetail: 'events/venues/:venueId',
-                Notification: 'events/notifications',
-                TicketContactScreen: 'events/ticket-contacts',
                 TicketPurchase: 'events/tickets/:eventId',
                 TicketScanner: 'events/scanner/:eventId',
                 OrganiserDashboard: 'events/organiser/:eventId',
+                // Static routes after (no parameters)
+                EventsList: 'events',
+                AddEvent: 'events/add',
+                Notification: 'events/notifications',
+                TicketContactScreen: 'events/ticket-contacts',
                 PaymentCallback: 'events/payment-callback',
                 MyTickets: 'events/my-tickets',
               },
@@ -377,65 +379,73 @@ export default function App() {
             // Venues tab
             Venues: {
               screens: {
-                VenuesList: 'venues',
+                // More specific routes first (with parameters)
                 VenueDetail: 'venues/:venueId',
                 AddEvent: 'venues/:venueId/add-event',
                 EventDetail: 'venues/events/:eventId',
                 ManagePrograms: 'venues/:venueId/programs',
                 TodaysVibe: 'venues/:venueId/vibe',
-                TicketContactScreen: 'venues/ticket-contacts',
                 TicketPurchase: 'venues/tickets/:eventId',
                 TicketScanner: 'venues/scanner/:eventId',
                 OrganiserDashboard: 'venues/organiser/:eventId',
+                // Static routes after (no parameters)
+                VenuesList: 'venues',
+                TicketContactScreen: 'venues/ticket-contacts',
                 MyTickets: 'venues/my-tickets',
               },
             },
             // Map tab
             Map: {
               screens: {
-                MapView: 'map',
+                // More specific routes first (with parameters)
                 VenueDetail: 'map/venues/:venueId',
                 EventDetail: 'map/events/:eventId',
-                TicketContactScreen: 'map/ticket-contacts',
                 TicketPurchase: 'map/tickets/:eventId',
                 TicketScanner: 'map/scanner/:eventId',
                 OrganiserDashboard: 'map/organiser/:eventId',
+                // Static routes after (no parameters)
+                MapView: 'map',
+                TicketContactScreen: 'map/ticket-contacts',
                 MyTickets: 'map/my-tickets',
               },
             },
             // Calendar tab
             Calendar: {
               screens: {
-                CalendarView: 'calendar',
+                // More specific routes first (with parameters)
                 EventDetail: 'calendar/events/:eventId',
                 VenueDetail: 'calendar/venues/:venueId',
-                TicketContactScreen: 'calendar/ticket-contacts',
                 TicketPurchase: 'calendar/tickets/:eventId',
                 TicketScanner: 'calendar/scanner/:eventId',
                 OrganiserDashboard: 'calendar/organiser/:eventId',
+                // Static routes after (no parameters)
+                CalendarView: 'calendar',
+                TicketContactScreen: 'calendar/ticket-contacts',
                 MyTickets: 'calendar/my-tickets',
               },
             },
             // Profile tab
             Profile: {
               screens: {
+                // More specific routes first (with parameters)
+                VenueDetail: 'profile/venues/:venueId',
+                EventDetail: 'profile/events/:eventId',
+                AddVibe: 'profile/add-vibe/:venueId',
+                TodaysVibe: 'profile/todays-vibe/:venueId',
+                TicketPurchase: 'profile/tickets/:eventId',
+                TicketScanner: 'profile/scanner/:eventId',
+                OrganiserDashboard: 'profile/organiser/:eventId',
+                // Static routes after (no parameters)
                 ProfileMain: 'profile',
                 MyVenues: 'profile/my-venues',
                 AddVenue: 'profile/add-venue',
-                VenueDetail: 'profile/venues/:venueId',
-                EventDetail: 'profile/events/:eventId',
                 Notification: 'profile/notifications',
                 AdminDashboard: 'profile/admin/dashboard',
                 AdminUsers: 'profile/admin/users',
                 AdminVenues: 'profile/admin/venues',
                 AdminEvents: 'profile/admin/events',
                 AdminOwnershipRequests: 'profile/admin/ownership-requests',
-                AddVibe: 'profile/add-vibe/:venueId',
-                TodaysVibe: 'profile/todays-vibe/:venueId',
                 TicketContactScreen: 'profile/ticket-contacts',
-                TicketPurchase: 'profile/tickets/:eventId',
-                TicketScanner: 'profile/scanner/:eventId',
-                OrganiserDashboard: 'profile/organiser/:eventId',
                 MyTickets: 'profile/my-tickets',
                 Auth: 'profile/auth',
               },
