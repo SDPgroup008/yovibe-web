@@ -233,7 +233,7 @@ function AppContent() {
                             }
                           }]
                         }
-                      }
+                      }]
                     });
                   } else if (urlParts[1] === 'events' && urlParts[2]) {
                     const eventId = urlParts[2];
@@ -254,7 +254,7 @@ function AppContent() {
                             }
                           }]
                         }
-                      }
+                      }]
                     });
                   }
                 }
@@ -279,7 +279,7 @@ function AppContent() {
                             }
                           }]
                         }
-                      }
+                      }]
                     });
                   } else if (urlParts[1] === 'events' && urlParts[2]) {
                     const eventId = urlParts[2];
@@ -300,7 +300,7 @@ function AppContent() {
                             }
                           }]
                         }
-                      }
+                      }]
                     });
                   }
                 }
