@@ -1,0 +1,521 @@
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useCallback } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, useWindowDimensions, ImageBackground } from "react-native"
+import { Calendar } from "react-native-calendars"
+import { Ionicons } from "@expo/vector-icons"
+import { useIsFocused } from "@react-navigation/native"
+import FirebaseService from "../services/FirebaseService"
+import type { Event } from "../models/Event"
+import type { CalendarScreenProps } from "../navigation/types"
+import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
+import { BREAKPOINTS, useResponsiveSize } from "../utils/ResponsiveDesign"
+
+type CalendarTheme = {
+  backgroundColor?: string
+  calendarBackground?: string
+  textSectionTitleColor?: string
+  selectedDayBackgroundColor?: string
+  selectedDayTextColor?: string
+  todayTextColor?: string
+  dayTextColor?: string
+  textDisabledColor?: string
+  dotColor?: string
+  selectedDotColor?: string
+  arrowColor?: string
+  monthTextColor?: string
+  indicatorColor?: string
+}
+
+/** Convert Firestore Timestamp-like values or ISO strings to Date */
+const toDateIfTimestamp = (value: any): Date | null => {
+  if (!value) return null
+  if (typeof value === "object" && typeof value.toDate === "function") {
+    try {
+      return value.toDate()
+    } catch {
+      return null
+    }
+  }
+  if (typeof value === "string") {
+    const d = new Date(value)
+    if (!isNaN(d.getTime())) return d
+    return null
+  }
+  if (value instanceof Date) return value
+  if (typeof value === "number") {
+    if (value > 1e12) return new Date(value)
+    return new Date(value * 1000)
+  }
+  return null
+}
+
+/** Format Date to short time like "09:00 PM" */
+const formatTime = (d: Date) => {
+  if (!d || !(d instanceof Date) || isNaN(d.getTime())) return ""
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+}
+
+/** Build time range from start/end if they exist */
+const buildTimeRange = (startRaw: any, endRaw: any): string | null => {
+  const start = toDateIfTimestamp(startRaw)
+  const end = toDateIfTimestamp(endRaw)
+
+  if (start && end) {
+    return `${formatTime(start)} - ${formatTime(end)}`
+  }
+  if (start) return formatTime(start)
+  if (end) return formatTime(end)
+  return null
+}
+
+/** Normalize event but preserve existing string time if present */
+const normalizeEvent = (raw: any): Event => {
+  const e = { ...(raw as any) } as any
+
+  // Normalize date to Date object if possible
+  let dateObj: Date | null = null
+  if (e.date) dateObj = toDateIfTimestamp(e.date)
+  if (!dateObj && (e.startTime || e.start)) dateObj = toDateIfTimestamp(e.startTime || e.start)
+  if (!dateObj && e.createdAt) dateObj = toDateIfTimestamp(e.createdAt)
+  if (!dateObj) dateObj = new Date()
+  e.date = dateObj
+
+  // Preserve existing string time exactly as stored in Firestore
+  if (typeof e.time === "string" && e.time.trim() !== "") {
+    // keep it as-is (e.g., "21:00 - 05:00")
+  } else {
+    // If no string time, try to build from start/end fields
+    const timeRange = buildTimeRange(e.startTime || e.start, e.endTime || e.end)
+    if (timeRange) {
+      e.time = timeRange
+    } else {
+      // If time is a Timestamp-like single value, convert to formatted string
+      const singleTime = toDateIfTimestamp(e.time)
+      if (singleTime) e.time = formatTime(singleTime)
+      else e.time = e.time || "" // keep empty string if nothing available
+    }
+  }
+
+  return e as Event
+}
+
+const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
+  // SEO Metadata for Calendar page
+  const calendarSeo = SCREEN_SEO.calendar;
+
+  // Responsive hooks
+  const { width } = useWindowDimensions();
+  const isLargeScreen = width >= BREAKPOINTS.LARGE_TABLET;
+  const isTablet = width >= BREAKPOINTS.TABLET && width < BREAKPOINTS.LARGE_TABLET;
+  const containerPadding = useResponsiveSize(12, 16, 24);
+  const calendarWidth = useResponsiveSize(width - 32, width * 0.6, width * 0.4);
+
+  const isFocused = useIsFocused()
+  const [events, setEvents] = useState<Event[]>([])
+  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
+  const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+
+  // Initial data load only
+  useEffect(() => {
+    if (events.length === 0) {
+      loadEvents()
+    }
+  }, [])
+
+  const loadEvents = async (isRefresh: boolean = false) => {
+    try {
+      if (!isRefresh) {
+        setLoading(true)
+      }
+      const rawEvents = await FirebaseService.getEvents()
+      const normalized: Event[] = (rawEvents || []).map((ev: any) => normalizeEvent(ev))
+      setEvents(normalized)
+
+      const marked: Record<string, any> = {}
+      normalized.forEach((event) => {
+        const dateStr = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
+        marked[dateStr] = {
+          marked: true,
+          dotColor: "#2196F3",
+          selectedColor: dateStr === selectedDate ? "#2196F3" : undefined,
+          selected: dateStr === selectedDate,
+        }
+      })
+
+      if (!marked[selectedDate]) {
+        marked[selectedDate] = { selected: true, selectedColor: "#2196F3" }
+      }
+
+      setMarkedDates(marked)
+    } catch (error) {
+      console.error("Error loading events for calendar:", error)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    await loadEvents(true)
+  }, [])
+
+  const handleDateSelect = (day: any) => {
+    const newSelectedDate = day.dateString
+    setSelectedDate(newSelectedDate)
+
+    const newMarkedDates = { ...markedDates }
+    if (markedDates[selectedDate]) {
+      newMarkedDates[selectedDate] = { ...markedDates[selectedDate], selected: false }
+    }
+    newMarkedDates[newSelectedDate] = { ...(markedDates[newSelectedDate] || {}), selected: true, selectedColor: "#2196F3" }
+    setMarkedDates(newMarkedDates)
+  }
+
+  const filteredEvents = events.filter((event) => {
+    const eventDate = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
+    return eventDate === selectedDate
+  })
+
+  const getEventTime = (event: Event): string => {
+    if (event.time && typeof event.time === "string" && event.time.trim() !== "") {
+      return event.time // will return "21:00 - 05:00" if stored that way
+    }
+    const fallback = buildTimeRange((event as any).startTime || (event as any).start, (event as any).endTime || (event as any).end)
+    return fallback || "Time TBD"
+  }
+
+  // Desktop/Tablet: Two-column layout
+  if (isLargeScreen || isTablet) {
+    return (
+      <View style={styles.container}>
+        {/* SEO Metadata for Calendar page */}
+        <SEOMetadata
+          title={calendarSeo.title}
+          description={calendarSeo.description}
+          keywords={calendarSeo.keywords}
+          type={calendarSeo.type}
+        />
+        <Text style={styles.srOnly} accessibilityRole="header">
+          {calendarSeo.title}
+        </Text>
+        
+        <View style={styles.twoColumnContainer}>
+          {/* Left Column: Calendar */}
+          <View style={styles.calendarColumn}>
+            <Calendar
+              theme={
+                {
+                  backgroundColor: "#121212",
+                  calendarBackground: "#1E1E1E",
+                  textSectionTitleColor: "#FFFFFF",
+                  selectedDayBackgroundColor: "#2196F3",
+                  selectedDayTextColor: "#FFFFFF",
+                  todayTextColor: "#2196F3",
+                  dayTextColor: "#FFFFFF",
+                  textDisabledColor: "#444444",
+                  dotColor: "#2196F3",
+                  selectedDotColor: "#FFFFFF",
+                  arrowColor: "#2196F3",
+                  monthTextColor: "#FFFFFF",
+                  indicatorColor: "#2196F3",
+                } as CalendarTheme
+              }
+              markedDates={markedDates}
+              onDayPress={handleDateSelect}
+              enableSwipeMonths={true}
+              style={styles.calendarInColumn}
+            />
+          </View>
+          
+          {/* Right Column: Events List */}
+          <View style={styles.eventsColumn}>
+            <View style={styles.dateTitleContainer}>
+              <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+              {!loading && (
+                <View style={styles.eventCountBadge}>
+                  <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
+                </View>
+              )}
+            </View>
+
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#2196F3" />
+                <Text style={styles.loadingText}>Loading events...</Text>
+              </View>
+            ) : filteredEvents.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="calendar-outline" size={64} color="#666666" />
+                <Text style={styles.emptyText}>No events on this date</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={filteredEvents}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.eventCard}
+                    onPress={() => {
+                      navigation.navigate("EventDetail", { eventId: item.id })
+                    }}
+                  >
+                    <ImageBackground
+                      source={{ uri: item.posterImageUrl || 'https://via.placeholder.com/80x80' }}
+                      style={styles.eventTimeContainer}
+                      imageStyle={styles.eventTimeBackground}
+                    >
+                      <View style={styles.eventTimeOverlay}>
+                        <Text style={styles.eventTime}>{getEventTime(item)}</Text>
+                      </View>
+                    </ImageBackground>
+                    <View style={styles.eventDetails}>
+                      <Text style={styles.eventName}>{item.name}</Text>
+                      <Text style={styles.eventVenue}>{item.venueName}</Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={["#2196F3"]}
+                    tintColor="#2196F3"
+                  />
+                }
+              />
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  // Mobile: Single column layout
+  return (
+    <View style={styles.container}>
+      {/* SEO Metadata for Calendar page */}
+      <SEOMetadata
+        title={calendarSeo.title}
+        description={calendarSeo.description}
+        keywords={calendarSeo.keywords}
+        type={calendarSeo.type}
+      />
+      {/* Screen reader only heading for SEO */}
+      <Text style={styles.srOnly} accessibilityRole="header">
+        {calendarSeo.title}
+      </Text>
+      <Calendar
+        theme={
+          {
+            backgroundColor: "#121212",
+            calendarBackground: "#1E1E1E",
+            textSectionTitleColor: "#FFFFFF",
+            selectedDayBackgroundColor: "#2196F3",
+            selectedDayTextColor: "#FFFFFF",
+            todayTextColor: "#2196F3",
+            dayTextColor: "#FFFFFF",
+            textDisabledColor: "#444444",
+            dotColor: "#2196F3",
+            selectedDotColor: "#FFFFFF",
+            arrowColor: "#2196F3",
+            monthTextColor: "#FFFFFF",
+            indicatorColor: "#2196F3",
+          } as CalendarTheme
+        }
+        markedDates={markedDates}
+        onDayPress={handleDateSelect}
+        enableSwipeMonths={true}
+      />
+
+      <View style={styles.eventsContainer}>
+        <View style={styles.dateTitleContainer}>
+          <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
+          {!loading && (
+            <View style={styles.eventCountBadge}>
+              <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
+            </View>
+          )}
+        </View>
+
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#2196F3" />
+            <Text style={styles.loadingText}>Loading events...</Text>
+          </View>
+        ) : filteredEvents.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="calendar-outline" size={64} color="#666666" />
+            <Text style={styles.emptyText}>No events on this date</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredEvents}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.eventCard}
+                onPress={() => {
+                  navigation.navigate("EventDetail", { eventId: item.id })
+                }}
+              >
+                <ImageBackground
+                  source={{ uri: item.posterImageUrl || 'https://via.placeholder.com/80x80' }}
+                  style={styles.eventTimeContainer}
+                  imageStyle={styles.eventTimeBackground}
+                >
+                  <View style={styles.eventTimeOverlay}>
+                    <Text style={styles.eventTime}>{getEventTime(item)}</Text>
+                  </View>
+                </ImageBackground>
+                <View style={styles.eventDetails}>
+                  <Text style={styles.eventName}>{item.name}</Text>
+                  <Text style={styles.eventVenue}>{item.venueName}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                colors={["#2196F3"]}
+                tintColor="#2196F3"
+              />
+            }
+          />
+        )}
+      </View>
+    </View>
+  )
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
+  // Screen reader only style for SEO
+  srOnly: {
+    position: "absolute",
+    width: 1,
+    height: 1,
+    padding: 0,
+    margin: -1,
+    overflow: "hidden",
+    opacity: 0.001,
+    zIndex: -1,
+  },
+  // Two-column layout for desktop/tablet
+  twoColumnContainer: {
+    flex: 1,
+    flexDirection: "row",
+    padding: 16,
+    gap: 24,
+  },
+  calendarColumn: {
+    flex: 0.4,
+    minWidth: 300,
+  },
+  calendarInColumn: {
+    borderRadius: 12,
+    overflow: "hidden",
+  },
+  eventsColumn: {
+    flex: 0.6,
+    minWidth: 300,
+  },
+  eventsContainer: {
+    flex: 1,
+    padding: 16,
+  },
+  dateTitleContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 12,
+  },
+  dateTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  eventCountBadge: {
+    backgroundColor: "#2196F3",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minWidth: 32,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  eventCountText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    color: "#FFFFFF",
+    marginTop: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    marginTop: 16,
+  },
+  eventCard: {
+    flexDirection: "row",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 8,
+    overflow: "hidden",
+    marginBottom: 12,
+  },
+  eventTimeContainer: {
+    width: 80,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  eventTimeBackground: {
+    resizeMode: "cover",
+  },
+  eventTimeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  eventTime: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+  },
+  eventDetails: {
+    flex: 1,
+    padding: 12,
+  },
+  eventName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  eventVenue: {
+    fontSize: 14,
+    color: "#BBBBBB",
+    marginTop: 4,
+  },
+})
+
+export default EventCalendarScreen

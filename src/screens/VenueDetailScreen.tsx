@@ -1,0 +1,1166 @@
+"use client"
+
+import type React from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native"
+import { Ionicons } from "@expo/vector-icons"
+import { useIsFocused } from "@react-navigation/native"
+import FirebaseService from "../services/FirebaseService"
+import { useAuth } from "../contexts/AuthContext"
+import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
+import { db } from "../config/firebase"
+import type { Venue } from "../models/Venue"
+import type { Event } from "../models/Event"
+import type { VenueDetailScreenProps } from "../navigation/types"
+import VibeAnalysisService from "../services/VibeAnalysisService"
+const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation }) => {
+  const { venueId } = route.params
+  const { user } = useAuth()
+  const isFocused = useIsFocused()
+  const scrollViewRef = useRef<ScrollView>(null)
+  
+  const [venue, setVenue] = useState<Venue | null>(null)
+  const [events, setEvents] = useState<Event[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [isOwner, setIsOwner] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isCustomVenue, setIsCustomVenue] = useState(false)
+  const [vibeRating, setVibeRating] = useState<number>(0.0)
+  const [currentVibeImage, setCurrentVibeImage] = useState<string | null>(null)
+  const [showOwnershipModal, setShowOwnershipModal] = useState(false)
+  const [ownershipRequest, setOwnershipRequest] = useState<{
+    userPhone: string
+    reason: string
+    experience: string
+  }>({ userPhone: "", reason: "", experience: "" })
+  const [submittingRequest, setSubmittingRequest] = useState(false)
+  const [existingRequestStatus, setExistingRequestStatus] = useState<string | null>(null)
+  const [showMoreMenu, setShowMoreMenu] = useState(false)
+
+  // Filter events to show only current and upcoming events
+  const upcomingEvents = useMemo(() => {
+    const now = new Date()
+    now.setHours(0, 0, 0, 0)
+    return events.filter(event => {
+      const eventDate = new Date(event.date)
+      eventDate.setHours(0, 0, 0, 0)
+      return eventDate >= now
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+  }, [events])
+
+  const openInGoogleMaps = async () => {
+    if (!venue) return
+
+    try {
+      // Encode venue name for URL
+      const venueName = encodeURIComponent(venue.name)
+      
+      // Use Google Maps URL scheme (works on both iOS and Android)
+      const url = `https://www.google.com/maps/search/?api=1&query=${venueName}`
+      
+      // Check if the URL can be opened
+      const supported = await Linking.canOpenURL(url)
+      
+      if (supported) {
+        await Linking.openURL(url)
+      } else {
+        Alert.alert(
+          "Cannot Open Maps",
+          "Unable to open Google Maps. Please ensure you have Google Maps installed.",
+          [{ text: "OK" }]
+        )
+      }
+    } catch (error) {
+      console.error("Error opening Google Maps:", error)
+      Alert.alert(
+        "Error",
+        "Failed to open Google Maps. Please try again.",
+        [{ text: "OK" }]
+      )
+    }
+  }
+
+  useEffect(() => {
+    const loadVenueAndEvents = async () => {
+      try {
+        setLoading(true)
+        console.log("[VenueDetailScreen] Loading venue details for venueId:", venueId)
+        console.log("[VenueDetailScreen] User logged in:", !!user)
+        
+        const venueData = await FirebaseService.getVenueById(venueId)
+        setVenue(venueData)
+        console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
+
+        // Fetch events regardless of user authentication (events are public data)
+        if (venueData) {
+          console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
+          const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+          console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
+          setEvents(venueEvents)
+          
+          // Check if venue is a custom venue (tied to one event and owned by event creator)
+          if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
+            setIsCustomVenue(true)
+          } else {
+            setIsCustomVenue(false)
+          }
+        }
+
+        // Always set owner/admin flags when user is logged in (independent of venue data)
+        if (user) {
+          console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
+          setIsOwner(venueData?.ownerId === user.id)
+          setIsAdmin(user.userType === "admin")
+          console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
+
+          // Check if user has existing ownership request for this venue
+          if (venueData) {
+            const existingRequest = await FirebaseService.getUserOwnershipRequest(venueId, user.id)
+            if (existingRequest) {
+              setExistingRequestStatus(existingRequest.status)
+            }
+          }
+        }
+
+        // Load initial vibe rating for today (only when user is logged in and venue data exists)
+        if (user && venueData) {
+          const today = new Date()
+          const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+          if (vibeImages.length > 0) {
+            const latestVibe = vibeImages.reduce((latest, image) => {
+              return image.uploadedAt > latest.uploadedAt ? image : latest
+            })
+            setVibeRating(latestVibe.vibeRating || 0.0)
+            setCurrentVibeImage(latestVibe.imageUrl)
+          } else {
+            setVibeRating(0.0)
+            setCurrentVibeImage(null)
+          }
+        }
+      } catch (error) {
+        console.error("Error loading venue details:", error)
+        setVibeRating(0.0) // Default to 0.0 on error
+        setCurrentVibeImage(null)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadVenueAndEvents()
+
+    // Set up real-time listener for vibe ratings
+    const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const tomorrow = new Date(today)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+
+    const q = query(
+      vibeRatingsRef,
+      where("venueId", "==", venueId),
+      where("createdAt", ">=", today),
+      where("createdAt", "<", tomorrow),
+      orderBy("createdAt", "desc"),
+      limit(1)
+    )
+
+    const unsubscribeVibe = onSnapshot(
+      q,
+      (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added" || change.type === "modified") {
+            const data = change.doc.data()
+            const rating = data.rating || 0.0
+            setVibeRating(rating)
+            // Note: Real-time listener only gets rating data, not image URL
+            // Image URL is loaded separately in the initial load
+          } else if (change.type === "removed") {
+            setVibeRating(0.0) // Default to 0.0 if rating is removed
+            setCurrentVibeImage(null)
+          }
+        })
+      },
+      (error) => {
+        console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
+        setVibeRating(0.0) // Default to 0.0 on error
+        setCurrentVibeImage(null)
+      }
+    )
+
+    // Cleanup listeners on unmount
+    return () => {
+      unsubscribeVibe()
+    }
+  }, [venueId, user])
+
+  // Inject JSON-LD structured data for SEO
+  useEffect(() => {
+    if (!venue) return
+    
+    const venueJsonLd = {
+      "@context": "https://schema.org",
+      "@type": ["BarOrPub", "NightClub", "EntertainmentBusiness"],
+      "name": venue.name,
+      "description": venue.description || `Visit ${venue.name} - one of the best venues in ${venue.location || 'Kampala'} for nightlife and entertainment`,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": venue.location || "Kampala",
+        "addressCountry": "UG"
+      },
+      "image": venue.backgroundImageUrl,
+      "priceRange": "$$",
+      "telephone": venue.phoneNumber || "+256700000000",
+      "openingHours": "Mo-Su 18:00-02:00",
+      "geo": venue.coordinates ? {
+        "@type": "GeoCoordinates",
+        "latitude": venue.coordinates.latitude,
+        "longitude": venue.coordinates.longitude
+      } : undefined,
+      "amenityFeature": venue.categories?.map(cat => ({
+        "@type": "LocationFeatureSpecification",
+        "name": cat
+      })),
+      "organizer": {
+        "@type": "Organization",
+        "name": "YoVibe",
+        "url": "https://yovibe.net"
+      }
+    }
+    
+    const scriptId = 'venue-json-ld'
+    let script = document.getElementById(scriptId) as HTMLScriptElement | null
+    if (!script) {
+      script = document.createElement('script')
+      script.id = scriptId
+      script.type = 'application/ld+json'
+      document.head.appendChild(script)
+    }
+    script.textContent = JSON.stringify(venueJsonLd)
+    
+    return () => {
+      const existingScript = document.getElementById(scriptId)
+      if (existingScript) {
+        existingScript.remove()
+      }
+    }
+  }, [venue])
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId)
+      
+      const venueData = await FirebaseService.getVenueById(venueId)
+      setVenue(venueData)
+      
+      // Fetch events regardless of user authentication (events are public data)
+      if (venueData) {
+        console.log("[VenueDetailScreen] Refreshing events for venue:", venueId)
+        const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+        console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length)
+        setEvents(venueEvents)
+        
+        if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
+          setIsCustomVenue(true)
+        } else {
+          setIsCustomVenue(false)
+        }
+      }
+
+      // Only set owner/admin flags if user is logged in
+      if (user && venueData) {
+        setIsOwner(venueData.ownerId === user.id)
+        setIsAdmin(user.userType === "admin")
+      }
+    } catch (error) {
+      console.error("Error refreshing venue details:", error)
+    } finally {
+      setRefreshing(false)
+    }
+  }, [venueId, user])
+
+  const handleManagePrograms = () => {
+    (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
+  }
+
+  const handleAddEvent = () => {
+    (navigation as any).navigate("AddEvent", { venueId, venueName: venue?.name || "" })
+  }
+
+  const handleDeleteVenue = async () => {
+    // Use a simple confirm dialog instead of Alert.alert for web compatibility
+    const confirmed = window.confirm("Are you sure you want to delete this venue? This action cannot be undone.")
+    
+    if (!confirmed) return
+    
+    try {
+      setLoading(true)
+      console.log("[VenueDetailScreen] Deleting venue:", venueId)
+      
+      // Delete all events associated with this venue
+      const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+      console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete")
+      
+      for (const event of venueEvents) {
+        await FirebaseService.deleteEvent(event.id)
+      }
+      
+      await FirebaseService.deleteVenue(venueId)
+      console.log("[VenueDetailScreen] Venue deleted successfully")
+      
+      Alert.alert("Success", "Venue and associated events deleted successfully")
+      navigation.goBack()
+    } catch (error) {
+      console.error("[VenueDetailScreen] Error deleting venue:", error)
+      Alert.alert("Error", "Failed to delete venue")
+      setLoading(false)
+    }
+  }
+
+  const handleTodaysVibe = () => {
+    (navigation as any).navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
+  }
+
+  const handleOpenOwnershipModal = () => {
+    if (!user) {
+      Alert.alert("Login Required", "Please login to request ownership of this venue")
+      return
+    }
+    setShowOwnershipModal(true)
+  }
+
+  const handleSubmitOwnershipRequest = async () => {
+    if (!user || !venue) return
+
+    if (!ownershipRequest.userPhone.trim()) {
+      Alert.alert("Error", "Please enter your phone number")
+      return
+    }
+    if (!ownershipRequest.reason.trim()) {
+      Alert.alert("Error", "Please tell us why you want to own this venue")
+      return
+    }
+    if (!ownershipRequest.experience.trim()) {
+      Alert.alert("Error", "Please share your experience in managing venues")
+      return
+    }
+
+    setSubmittingRequest(true)
+    try {
+      await FirebaseService.submitOwnershipRequest({
+        venueId: venue.id,
+        venueName: venue.name,
+        userId: user.id,
+        userName: user.displayName || user.email.split("@")[0],
+        userEmail: user.email,
+        userPhone: ownershipRequest.userPhone,
+        reason: ownershipRequest.reason,
+        experience: ownershipRequest.experience,
+      })
+
+      setShowOwnershipModal(false)
+      setExistingRequestStatus("pending")
+      Alert.alert("Request Submitted", "Your ownership request has been submitted. You'll be notified once an admin reviews it.")
+    } catch (error) {
+      console.error("[VenueDetailScreen] Error submitting ownership request:", error)
+      Alert.alert("Error", "Failed to submit ownership request. Please try again.")
+    } finally {
+      setSubmittingRequest(false)
+    }
+  }
+
+  const showOwnButton = user && !isOwner && !isAdmin && !isCustomVenue && !existingRequestStatus
+
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity 
+          style={styles.headerMoreButton}
+          onPress={() => setShowMoreMenu(!showMoreMenu)}
+        >
+          <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
+        </TouchableOpacity>
+      ),
+    })
+  }, [navigation, showMoreMenu])
+
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Loading venue details...</Text>
+      </View>
+    )
+  }
+
+  if (!venue) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Venue not found</Text>
+      </View>
+    )
+  }
+
+  return (
+    <ScrollView
+      ref={scrollViewRef}
+      style={styles.container}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          colors={["#2196F3"]}
+          tintColor="#2196F3"
+        />
+      }
+    >
+      <Image 
+        source={{ uri: venue.backgroundImageUrl }} 
+        style={styles.headerImage}
+        alt={`Venue image for ${venue.name}`}
+      />
+
+      <View style={styles.contentContainer}>
+        <Text style={styles.venueName}>{venue.name}</Text>
+        <Text style={styles.venueLocation}>{venue.location}</Text>
+
+        <View style={styles.categoriesContainer}>
+          {venue.categories.map((category, index) => (
+            <View key={index} style={styles.categoryTag}>
+              <Text style={styles.categoryText}>{category}</Text>
+            </View>
+          ))}
+        </View>
+
+        {showMoreMenu && (
+          <View style={styles.moreMenuOverlay}>
+            <TouchableOpacity 
+              style={styles.moreMenuOverlayBg} 
+              onPress={() => setShowMoreMenu(false)}
+            />
+            <View style={styles.moreMenu}>
+              {showOwnButton && (
+                <TouchableOpacity 
+                  style={styles.moreMenuItem} 
+                  onPress={() => {
+                    setShowMoreMenu(false)
+                    handleOpenOwnershipModal()
+                  }}
+                >
+                  <Ionicons name="business-outline" size={20} color="#00D4AA" />
+                  <Text style={styles.moreMenuItemText}>Own This Venue</Text>
+                </TouchableOpacity>
+              )}
+              {existingRequestStatus === "pending" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="time-outline" size={20} color="#FFA500" />
+                  <Text style={[styles.moreMenuItemText, { color: "#FFA500" }]}>Request Pending</Text>
+                </View>
+              )}
+              {existingRequestStatus === "approved" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                  <Text style={[styles.moreMenuItemText, { color: "#4CAF50" }]}>You Own This Venue</Text>
+                </View>
+              )}
+              {existingRequestStatus === "rejected" && (
+                <View style={styles.moreMenuItem}>
+                  <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                  <Text style={[styles.moreMenuItemText, { color: "#FF3B30" }]}>Request Rejected</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        )}
+
+        {existingRequestStatus && (
+          <View style={styles.requestStatusContainer}>
+            {existingRequestStatus === "pending" && (
+              <View style={styles.pendingStatusBadge}>
+                <Ionicons name="time-outline" size={16} color="#FFA500" />
+                <Text style={styles.pendingStatusText}>Ownership Request Pending</Text>
+              </View>
+            )}
+            {existingRequestStatus === "approved" && (
+              <View style={styles.approvedStatusBadge}>
+                <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
+                <Text style={styles.approvedStatusText}>You Own This Venue</Text>
+              </View>
+            )}
+            {existingRequestStatus === "rejected" && (
+              <View style={styles.rejectedStatusBadge}>
+                <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                <Text style={styles.rejectedStatusText}>Request Rejected</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {(isOwner || isAdmin) && (
+          <View style={styles.actionButtonsContainer}>
+            {isOwner && !isCustomVenue && (
+              <>
+                <TouchableOpacity style={styles.actionButton} onPress={handleManagePrograms}>
+                  <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Manage Programs</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={handleAddEvent}>
+                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Add Event</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            {isAdmin && (
+              <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
+                <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Delete Venue</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+
+        <View style={styles.vibeSection}>
+          <View style={styles.vibeSectionHeader}>
+            <Text style={styles.vibeSectionTitle}>Current Vibe: </Text>
+            <View style={styles.currentVibeRating}>
+              <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(vibeRating) }]}>
+                {vibeRating.toFixed(1)}
+              </Text>
+              <Text style={styles.vibeRatingLabel}>/5.0</Text>
+            </View>
+          </View>
+
+          <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
+
+          {currentVibeImage && (
+            <View style={styles.vibeImageContainer}>
+              <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
+            <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.todaysVibeButtonText}>See Today's Vibe</Text>
+          </TouchableOpacity>
+        </View>
+
+        <Text style={styles.sectionTitle}>About</Text>
+        <Text style={styles.description}>{venue.description}</Text>
+
+        {venue.todayImages && venue.todayImages.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Today at {venue.name}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+              {venue.todayImages.map((image, index) => (
+                <Image key={index} source={{ uri: image }} style={styles.todayImage} />
+              ))}
+            </ScrollView>
+          </>
+        )}
+
+        {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>Weekly Program</Text>
+            <View style={styles.programContainer}>
+              {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
+                <View key={day} style={styles.programItem}>
+                  <Text style={styles.programDay}>{day}</Text>
+                  <Text style={styles.programDescription}>{program}</Text>
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* Debug info: Show event count */}
+        {events.length > 0 && (
+          <Text style={styles.debugText}>Showing {upcomingEvents.length} of {events.length} events</Text>
+        )}
+
+        {upcomingEvents.length > 0 ? (
+          <>
+            <Text style={styles.sectionTitle}>Upcoming Events</Text>
+            {upcomingEvents.map((event) => (
+              <TouchableOpacity
+                key={event.id}
+                style={styles.eventCard}
+                onPress={() => {
+                  navigation.navigate("EventDetail", { eventId: event.id })
+                }}
+              >
+                <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+                <View style={styles.eventInfo}>
+                  <Text style={styles.eventName}>{event.name}</Text>
+                  <Text style={styles.eventDate}>
+                    {event.date && typeof (event.date as any).toDate === "function"
+                      ? (event.date as any).toDate().toDateString()
+                      : new Date(event.date).toDateString()}
+                  </Text>
+                  <Text style={styles.eventArtists}>{event.artists.join(", ")}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : (
+          <View style={styles.emptyEventsContainer}>
+            <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
+            <Text style={styles.emptyEventsSubtext}>Check back later for upcoming events</Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.directionsButton}
+          onPress={openInGoogleMaps}
+        >
+          <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.directionsButtonText}>Get Directions</Text>
+        </TouchableOpacity>
+      </View>
+
+      <Modal
+        visible={showOwnershipModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowOwnershipModal(false)}
+      >
+        <KeyboardAvoidingView 
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Request Ownership</Text>
+              <TouchableOpacity onPress={() => setShowOwnershipModal(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={styles.modalSubtitle}>
+                You're requesting to own <Text style={styles.venueNameHighlight}>{venue?.name}</Text>
+              </Text>
+
+              <Text style={styles.inputLabel}>Phone Number *</Text>
+              <TextInput
+                style={styles.input}
+                value={ownershipRequest.userPhone}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, userPhone: text })}
+                placeholder="Enter your phone number"
+                placeholderTextColor="#666666"
+                keyboardType="phone-pad"
+              />
+
+              <Text style={styles.inputLabel}>Why do you want to own this venue? *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={ownershipRequest.reason}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, reason: text })}
+                placeholder="Tell us why you're interested in owning this venue"
+                placeholderTextColor="#666666"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <Text style={styles.inputLabel}>What's your experience in managing venues? *</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={ownershipRequest.experience}
+                onChangeText={(text) => setOwnershipRequest({ ...ownershipRequest, experience: text })}
+                placeholder="Share your relevant experience"
+                placeholderTextColor="#666666"
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+
+              <TouchableOpacity
+                style={[styles.submitButton, submittingRequest && styles.submitButtonDisabled]}
+                onPress={handleSubmitOwnershipRequest}
+                disabled={submittingRequest}
+              >
+                {submittingRequest ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Ionicons name="send-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.submitButtonText}>Submit Request</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+    </ScrollView>
+  )
+}
+
+const { width, height } = Dimensions.get('window');
+
+// Responsive breakpoints
+const isSmallDevice = width < 380;
+const isTablet = width >= 768;
+const isLargeScreen = width >= 1024;
+
+console.log("[v0] VenueDetailScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+
+// Responsive helper function
+const responsiveSize = (small: number, medium: number, large: number) => {
+  if (isLargeScreen) return large;
+  if (isTablet) return medium;
+  return small;
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#121212",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#121212",
+  },
+  loadingText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 16, 18),
+  },
+  headerImage: {
+    width: "100%",
+    height: responsiveSize(180, 240, 300),
+  },
+  contentContainer: {
+    padding: responsiveSize(12, 16, 24),
+    paddingBottom: responsiveSize(54, 60, 68), // Match bottom navbar height
+    maxWidth: isLargeScreen ? 900 : "100%",
+    alignSelf: "center",
+    width: "100%",
+  },
+  venueName: {
+    fontSize: responsiveSize(22, 26, 32),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: responsiveSize(4, 6, 8),
+  },
+  venueLocation: {
+    fontSize: responsiveSize(13, 15, 17),
+    color: "#BBBBBB",
+    marginBottom: responsiveSize(10, 12, 16),
+  },
+  categoriesContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: responsiveSize(12, 14, 18),
+  },
+  categoryTag: {
+    backgroundColor: "#2196F3",
+    paddingHorizontal: responsiveSize(6, 8, 12),
+    paddingVertical: responsiveSize(3, 4, 6),
+    borderRadius: responsiveSize(3, 4, 6),
+    marginRight: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(6, 8, 10),
+  },
+  categoryText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(10, 12, 14),
+  },
+  actionButtonsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginVertical: responsiveSize(12, 16, 20),
+    gap: responsiveSize(6, 8, 10),
+  },
+  actionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2196F3",
+    paddingHorizontal: responsiveSize(10, 12, 16),
+    paddingVertical: responsiveSize(6, 8, 12),
+    borderRadius: responsiveSize(4, 6, 8),
+    marginRight: 0,
+    marginBottom: 0,
+    flex: isTablet ? 0.48 : undefined,
+  },
+  deleteButton: {
+    backgroundColor: "#FF3B30",
+  },
+  actionButtonText: {
+    color: "#FFFFFF",
+    marginLeft: responsiveSize(6, 8, 10),
+    fontSize: responsiveSize(12, 14, 16),
+  },
+  sectionTitle: {
+    fontSize: responsiveSize(16, 20, 24),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginTop: responsiveSize(12, 16, 20),
+    marginBottom: responsiveSize(6, 8, 12),
+  },
+  description: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#DDDDDD",
+    lineHeight: responsiveSize(20, 22, 26),
+  },
+  imagesContainer: {
+    flexDirection: "row",
+    marginVertical: responsiveSize(8, 12, 16),
+  },
+  todayImage: {
+    width: responsiveSize(120, 150, 180),
+    height: responsiveSize(120, 150, 180),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginRight: responsiveSize(8, 10, 12),
+  },
+  programContainer: {
+    marginTop: responsiveSize(6, 8, 12),
+  },
+  programItem: {
+    flexDirection: "row" as const,
+    paddingVertical: responsiveSize(6, 8, 12),
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  programDay: {
+    width: responsiveSize(80, 100, 120),
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  programDescription: {
+    flex: 1,
+    fontSize: responsiveSize(13, 15, 16),
+    color: "#DDDDDD",
+  },
+  eventCard: {
+    flexDirection: "row",
+    backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(6, 8, 12),
+    overflow: "hidden",
+    marginBottom: responsiveSize(10, 12, 16),
+  },
+  eventImage: {
+    width: responsiveSize(60, 80, 100),
+    height: responsiveSize(60, 80, 100),
+  },
+  eventInfo: {
+    flex: 1,
+    padding: responsiveSize(8, 10, 12),
+  },
+  eventName: {
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  eventDate: {
+    fontSize: responsiveSize(12, 13, 14),
+    color: "#BBBBBB",
+    marginTop: responsiveSize(2, 3, 4),
+  },
+  eventArtists: {
+    fontSize: responsiveSize(12, 13, 14),
+    color: "#2196F3",
+    marginTop: responsiveSize(2, 3, 4),
+  },
+  directionsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    paddingVertical: responsiveSize(10, 12, 16),
+    borderRadius: responsiveSize(6, 8, 12),
+    marginTop: responsiveSize(16, 20, 28),
+    marginBottom: responsiveSize(16, 20, 28),
+  },
+  directionsButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  vibeSection: {
+    backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(10, 12, 16),
+    padding: responsiveSize(12, 14, 18),
+    marginVertical: responsiveSize(12, 14, 18),
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  vibeSectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: responsiveSize(6, 8, 12),
+  },
+  vibeSectionTitle: {
+    fontSize: responsiveSize(16, 18, 20),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  currentVibeRating: {
+    flexDirection: "row",
+    alignItems: "baseline",
+  },
+  vibeRatingText: {
+    fontSize: responsiveSize(20, 24, 28),
+    fontWeight: "bold",
+  },
+  vibeRatingLabel: {
+    fontSize: responsiveSize(12, 14, 16),
+    color: "#666666",
+    marginLeft: 2,
+  },
+  vibeDescription: {
+    fontSize: responsiveSize(13, 15, 16),
+    color: "#FFFFFF",
+    marginBottom: responsiveSize(10, 12, 16),
+    textAlign: "center",
+  },
+  vibeImageContainer: {
+    alignItems: "center",
+    marginBottom: responsiveSize(10, 12, 16),
+  },
+  vibeImage: {
+    width: responsiveSize(200, 250, 300),
+    height: responsiveSize(150, 180, 220),
+    borderRadius: responsiveSize(8, 10, 12),
+    resizeMode: "cover",
+  },
+  todaysVibeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    paddingVertical: responsiveSize(10, 12, 16),
+    borderRadius: responsiveSize(6, 8, 12),
+  },
+  todaysVibeButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  emptyEventsContainer: {
+    alignItems: "center",
+    paddingVertical: responsiveSize(24, 28, 32),
+    paddingHorizontal: responsiveSize(16, 20, 24),
+    backgroundColor: "#1E1E1E",
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(12, 16, 20),
+  },
+  emptyEventsText: {
+    color: "#BBBBBB",
+    fontSize: responsiveSize(14, 16, 18),
+    textAlign: "center",
+    marginBottom: responsiveSize(4, 6, 8),
+  },
+  emptyEventsSubtext: {
+    color: "#888888",
+    fontSize: responsiveSize(12, 13, 14),
+    textAlign: "center",
+  },
+  debugText: {
+    color: "#666666",
+    fontSize: responsiveSize(10, 11, 12),
+    textAlign: "center",
+    marginBottom: responsiveSize(8, 10, 12),
+    fontStyle: "italic",
+  },
+  ownButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00D4AA",
+    paddingVertical: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(12, 14, 16),
+    marginBottom: responsiveSize(8, 10, 12),
+  },
+  ownButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 18),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
+  },
+  requestStatusContainer: {
+    marginTop: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(8, 10, 12),
+  },
+  pendingStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 165, 0, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#FFA500",
+  },
+  pendingStatusText: {
+    color: "#FFA500",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  approvedStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(76, 175, 80, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+  },
+  approvedStatusText: {
+    color: "#4CAF50",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  rejectedStatusBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 59, 48, 0.15)",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    borderColor: "#FF3B30",
+  },
+  rejectedStatusText: {
+    color: "#FF3B30",
+    fontSize: responsiveSize(13, 14, 15),
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    justifyContent: "flex-end",
+  },
+  modalContent: {
+    backgroundColor: "#1E1E1E",
+    borderTopLeftRadius: responsiveSize(20, 24, 28),
+    borderTopRightRadius: responsiveSize(20, 24, 28),
+    maxHeight: "90%",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: responsiveSize(16, 18, 20),
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  modalTitle: {
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+  },
+  modalBody: {
+    padding: responsiveSize(16, 18, 20),
+  },
+  modalSubtitle: {
+    fontSize: responsiveSize(14, 15, 16),
+    color: "#BBBBBB",
+    marginBottom: responsiveSize(16, 18, 20),
+    lineHeight: responsiveSize(20, 22, 24),
+  },
+  venueNameHighlight: {
+    color: "#00D4AA",
+    fontWeight: "bold",
+  },
+  inputLabel: {
+    fontSize: responsiveSize(13, 14, 15),
+    color: "#DDDDDD",
+    marginBottom: responsiveSize(6, 8, 10),
+    marginTop: responsiveSize(12, 14, 16),
+  },
+  input: {
+    backgroundColor: "#2A2A2A",
+    borderRadius: responsiveSize(6, 8, 10),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    paddingVertical: responsiveSize(10, 12, 14),
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    borderWidth: 1,
+    borderColor: "#444444",
+  },
+  textArea: {
+    minHeight: responsiveSize(80, 90, 100),
+    textAlignVertical: "top",
+  },
+  submitButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#00D4AA",
+    paddingVertical: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(8, 10, 12),
+    marginTop: responsiveSize(20, 24, 28),
+    marginBottom: responsiveSize(20, 24, 28),
+  },
+  submitButtonDisabled: {
+    backgroundColor: "#666666",
+  },
+  submitButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 18),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
+  },
+  headerMoreButton: {
+    padding: 8,
+  },
+  moreMenuOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  moreMenuOverlayBg: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    left: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+  },
+  moreMenu: {
+    position: "absolute",
+    top: 60,
+    right: 16,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    paddingVertical: 8,
+    minWidth: 180,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "#333333",
+  },
+  moreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  moreMenuItemText: {
+    color: "#00D4AA",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 12,
+  },
+})
+
+export default VenueDetailScreen

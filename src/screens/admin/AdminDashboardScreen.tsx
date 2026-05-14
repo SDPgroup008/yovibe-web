@@ -1,0 +1,2722 @@
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  ActivityIndicator,
+  TouchableOpacity,
+  Dimensions,
+  RefreshControl,
+  Modal,
+  Pressable,
+  FlatList,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { ProfileStackParamList } from '../../navigation/types';
+import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
+import NotificationService from '../../services/NotificationService';
+import TokenService, { TokenAnalyticsSummary, DailyTokenStats, TokenRecord } from '../../services/TokenService';
+import type { NotificationAnalytics, NotificationDetailedAnalytics, DailyNotificationStats } from '../../models/Notification';
+
+type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
+
+const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation }) => {
+  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
+  const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
+  const [trendData, setTrendData] = useState<TrendData[]>([]);
+  const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
+  const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationDetailedAnalytics[]>([]);
+  const [expandedNotifications, setExpandedNotifications] = useState<Set<string>>(new Set());
+  const [dailyNotificationStats, setDailyNotificationStats] = useState<DailyNotificationStats[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
+  const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'notifications'>('overview');
+  const [lastFetchTime, setLastFetchTime] = useState<number>(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
+
+  // NEW: Granular visitor data state
+  const [hourlyVisitors, setHourlyVisitors] = useState<{ hour: number; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [dailyVisitors, setDailyVisitors] = useState<{ day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [weeklyVisitors, setWeeklyVisitors] = useState<{ week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [granularLoading, setGranularLoading] = useState(false);
+
+  // Token analytics state
+  const [tokenSummary, setTokenSummary] = useState<TokenAnalyticsSummary | null>(null);
+  const [dailyTokenStats, setDailyTokenStats] = useState<DailyTokenStats[]>([]);
+  const [tokenRecords, setTokenRecords] = useState<TokenRecord[]>([]);
+  const [tokenLoading, setTokenLoading] = useState(false);
+  const [tokenPage, setTokenPage] = useState(0);
+  const [tokenTotalPages, setTokenTotalPages] = useState(0);
+  const [tokenModalVisible, setTokenModalVisible] = useState(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+  const [hasLoadedMoreTokens, setHasLoadedMoreTokens] = useState(false);
+  const [activeTokenFilter, setActiveTokenFilter] = useState<'all' | 'authenticated' | 'unauthenticated'>('all');
+  const TOKEN_PAGE_SIZE = 20;
+  const INITIAL_DAYS = 7;
+
+  useEffect(() => {
+    console.log(`[ADMIN-DASHBOARD] useEffect triggered - selectedPeriod changed to: ${selectedPeriod}`);
+    console.log(`[ADMIN-DASHBOARD] Calling loadAnalytics() due to period change...`);
+    loadAnalytics();
+    
+    // Also load granular visitor data when period changes
+    if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD] Tab is 'visitors' - loading granular visitor data...`);
+      loadGranularVisitorData();
+    }
+  }, [selectedPeriod]);
+
+  // Load granular data when visitors tab is opened
+  useEffect(() => {
+    if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD] Visitors tab opened - loading granular data...`);
+      loadGranularVisitorData();
+    }
+  }, [activeTab]);
+
+  // Load token analytics when notifications tab is opened
+  useEffect(() => {
+    console.log(`[ADMIN-DASHBOARD] useEffect triggered - activeTab changed to: ${activeTab}`);
+    if (activeTab === 'notifications') {
+      console.log(`[ADMIN-DASHBOARD] Tab is 'notifications' - calling loadTokenAnalytics()`);
+      loadTokenAnalytics();
+    } else {
+      console.log(`[ADMIN-DASHBOARD] Tab is '${activeTab}' - skipping token analytics load`);
+    }
+  }, [activeTab]);
+
+  // Log when data is being rendered for each tab
+  useEffect(() => {
+    if (activeTab === 'overview') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Overview Tab - todaySummary: ${todaySummary ? 'loaded' : 'null'}, summary: ${summary ? 'loaded' : 'null'}`);
+    } else if (activeTab === 'visitors') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Visitors Tab - trendData: ${trendData.length} items, frequentVisitors: ${frequentVisitors.length} items`);
+    } else if (activeTab === 'notifications') {
+      console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDERING Notifications Tab - notificationAnalytics: ${notificationAnalytics.length} items, dailyNotificationStats: ${dailyNotificationStats.length} items, tokenSummary: ${tokenSummary ? 'loaded' : 'null'}`);
+    }
+  }, [activeTab, todaySummary, summary, trendData, frequentVisitors, notificationAnalytics, dailyNotificationStats, tokenSummary]);
+
+  const loadAnalytics = async (force: boolean = false) => {
+    // Check cache - if data was fetched recently, skip (unless forced)
+    const now = Date.now();
+    const timestamp = new Date().toISOString();
+    
+    console.log(`[ADMIN-DASHBOARD] ${timestamp} - loadAnalytics() STARTING - force: ${force}, selectedPeriod: ${selectedPeriod}`);
+    console.log(`[ADMIN-DASHBOARD] Cache check - lastFetchTime: ${lastFetchTime}, now: ${now}, cacheDuration: ${CACHE_DURATION}, diff: ${now - lastFetchTime}`);
+    
+    if (!force && now - lastFetchTime < CACHE_DURATION && summary !== null) {
+      console.log(`[ADMIN-DASHBOARD] Using cached analytics data (cache hit)`);
+      return;
+    }
+
+    console.log(`[ADMIN-DASHBOARD] Cache miss - initiating data fetch for period: ${selectedPeriod}`);
+    setLoading(true);
+    setRefreshing(true);
+    try {
+      // Parallelize all data fetching for faster loading
+      const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
+      
+      console.log(`[ADMIN-DASHBOARD] ${timestamp} - Initiating API calls - limit: ${limit}`);
+      console.log(`[ADMIN-DASHBOARD] API calls to make:`);
+      console.log(`[ADMIN-DASHBOARD]   1. AnalyticsService.getTodaySummary()`);
+      console.log(`[ADMIN-DASHBOARD]   2. AnalyticsService.getAnalyticsSummary()`);
+      console.log(`[ADMIN-DASHBOARD]   3. AnalyticsService.getTrendData(period: ${selectedPeriod}, limit: ${limit})`);
+      console.log(`[ADMIN-DASHBOARD]   4. AnalyticsService.getFrequentVisitorsToday()`);
+      console.log(`[ADMIN-DASHBOARD]   5. NotificationService.getAllNotificationDetailedAnalytics()`);
+      console.log(`[ADMIN-DASHBOARD]   6. NotificationService.getDailyNotificationStats(days: 30)`);
+      
+      const [todayData, summaryData, trends, visitors, notifAnalytics, dailyStats] = await Promise.all([
+        AnalyticsService.getTodaySummary(),
+        AnalyticsService.getAnalyticsSummary(),
+        AnalyticsService.getTrendData(selectedPeriod, limit),
+        AnalyticsService.getFrequentVisitorsToday(),
+        NotificationService.getAllNotificationDetailedAnalytics(),
+        NotificationService.getDailyNotificationStats(30),
+      ]);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - DATA RECEIVED from all API calls`);
+      console.log(`[ADMIN-DASHBOARD]   - todayData: ${JSON.stringify(todayData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - summaryData: ${JSON.stringify(summaryData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - trends (length: ${trends?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - visitors (length: ${visitors?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - notifAnalytics (length: ${notifAnalytics?.length || 0})`);
+      console.log(`[ADMIN-DASHBOARD]   - dailyStats (length: ${dailyStats?.length || 0})`);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Processing and setting state for all data...`);
+      setTodaySummary(todayData);
+      console.log(`[ADMIN-DASHBOARD]   - todaySummary SET`);
+      
+      setSummary(summaryData);
+      console.log(`[ADMIN-DASHBOARD]   - summary SET`);
+      
+      setTrendData(trends);
+      console.log(`[ADMIN-DASHBOARD]   - trendData SET (${trends.length} items)`);
+      
+      setFrequentVisitors(visitors);
+      console.log(`[ADMIN-DASHBOARD]   - frequentVisitors SET (${visitors.length} items)`);
+      
+      setNotificationAnalytics(notifAnalytics);
+      console.log(`[ADMIN-DASHBOARD]   - notificationAnalytics SET (${notifAnalytics.length} items)`);
+      
+      setDailyNotificationStats(dailyStats);
+      console.log(`[ADMIN-DASHBOARD]   - dailyNotificationStats SET (${dailyStats.length} items)`);
+      
+      setLastFetchTime(now);
+      console.log(`[ADMIN-DASHBOARD]   - lastFetchTime UPDATED to: ${now}`);
+      
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadAnalytics() COMPLETE - All data processed and state updated`);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading analytics:`, error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+      console.log(`[ADMIN-DASHBOARD] Loading states reset - loading: false, refreshing: false`);
+    }
+  };
+
+  // Migration state for UI feedback
+  const [migrationStatus, setMigrationStatus] = useState<{
+    inProgress: boolean;
+    migrated: number;
+    total: number;
+    errors: number;
+  } | null>(null);
+
+  // Token analytics functions
+  const loadTokenAnalytics = async (force: boolean = false) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[ADMIN-DASHBOARD] ${timestamp} - loadTokenAnalytics() STARTING - force: ${force}, activeTab: notifications`);
+    
+    try {
+      // First, migrate legacy tokens from tokens.json to Firestore
+      if (!migrationStatus) {
+        console.log(`[ADMIN-DASHBOARD] Migration not done - starting token migration from tokens.json`);
+        setMigrationStatus({ inProgress: true, migrated: 0, total: 0, errors: 0 });
+        
+        console.log(`[ADMIN-DASHBOARD] Calling TokenService.migrateLegacyTokens()...`);
+        const migrationResult = await TokenService.migrateLegacyTokens();
+        
+        console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Migration COMPLETE`);
+        console.log(`[ADMIN-DASHBOARD] Migration result: migrated=${migrationResult.migrated}, total=${migrationResult.total}, errors=${migrationResult.errors}`);
+        
+        setMigrationStatus({
+          inProgress: false,
+          migrated: migrationResult.migrated,
+          total: migrationResult.total,
+          errors: migrationResult.errors,
+        });
+      }
+      
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Starting token analytics data fetch...`);
+      setTokenLoading(true);
+      
+      // Load token summary with auth breakdown and daily stats
+      console.log(`[ADMIN-DASHBOARD] API calls to make:`);
+      console.log(`[ADMIN-DASHBOARD]   1. TokenService.getTokenAnalyticsSummaryWithAuth()`);
+      console.log(`[ADMIN-DASHBOARD]   2. TokenService.getDailyTokenStatsWithAuth(days: 7)`);
+      
+      const [summaryData, initialStats] = await Promise.all([
+        TokenService.getTokenAnalyticsSummaryWithAuth(),
+        TokenService.getDailyTokenStatsWithAuth(7), // Initial 7 days
+      ]);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - TOKEN DATA RECEIVED`);
+      console.log(`[ADMIN-DASHBOARD]   - tokenSummary: ${JSON.stringify(summaryData)}`);
+      console.log(`[ADMIN-DASHBOARD]   - initialStats (length: ${initialStats?.length || 0})`);
+
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Processing token data and updating state...`);
+      setTokenSummary(summaryData);
+      console.log(`[ADMIN-DASHBOARD]   - tokenSummary SET`);
+      
+      setDailyTokenStats(initialStats);
+      console.log(`[ADMIN-DASHBOARD]   - dailyTokenStats SET (${initialStats.length} items)`);
+      
+      setHasLoadedMoreTokens(false);
+      console.log(`[ADMIN-DASHBOARD]   - hasLoadedMoreTokens SET to false`);
+      
+      // Get total pages for pagination
+      console.log(`[ADMIN-DASHBOARD] Fetching total pages for pagination...`);
+      const totalPages = await TokenService.getTotalPages(TOKEN_PAGE_SIZE);
+      console.log(`[ADMIN-DASHBOARD]   - Total pages: ${totalPages}`);
+      setTokenTotalPages(totalPages);
+      setTokenPage(0);
+
+      // Load first page of token records with auth status
+      console.log(`[ADMIN-DASHBOARD] Loading first page of token records (page: 0, pageSize: ${TOKEN_PAGE_SIZE})...`);
+      const records = await TokenService.getTokenRecordsWithAuthStatus({ 
+        page: 0, 
+        pageSize: TOKEN_PAGE_SIZE 
+      });
+      console.log(`[ADMIN-DASHBOARD]   - Loaded ${records.length} token records`);
+      setTokenRecords(records);
+      console.log(`[ADMIN-DASHBOARD]   - tokenRecords SET (${records.length} items)`);
+
+      // Update sync time
+      const syncTime = TokenService.getLastSyncTime();
+      setLastSyncTime(syncTime);
+      console.log(`[ADMIN-DASHBOARD]   - lastSyncTime SET to: ${syncTime}`);
+      
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadTokenAnalytics() COMPLETE - All token data loaded`);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading token analytics:`, error);
+    } finally {
+      setTokenLoading(false);
+      console.log(`[ADMIN-DASHBOARD] Token loading state reset - tokenLoading: false`);
+    }
+  };
+
+  // Load more daily stats (pagination)
+  const loadMoreDailyStats = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadMoreDailyStats() STARTING - hasLoadedMoreTokens: ${hasLoadedMoreTokens}`);
+    
+    if (hasLoadedMoreTokens) {
+      console.log(`[ADMIN-DASHBOARD] Already loaded more stats, skipping...`);
+      return;
+    }
+    
+    try {
+      console.log(`[ADMIN-DASHBOARD] Calling TokenService.getDailyTokenStatsWithAuth(days: 30)...`);
+      setTokenLoading(true);
+      const moreStats = await TokenService.getDailyTokenStatsWithAuth(30);
+      console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Received ${moreStats.length} daily stats`);
+      
+      setDailyTokenStats(moreStats);
+      console.log(`[ADMIN-DASHBOARD] dailyTokenStats updated with ${moreStats.length} items`);
+      
+      setHasLoadedMoreTokens(true);
+      console.log(`[ADMIN-DASHBOARD] hasLoadedMoreTokens set to true`);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading more daily stats:`, error);
+    } finally {
+      setTokenLoading(false);
+    }
+  };
+
+  // Load more token records for modal
+  const loadMoreTokenRecords = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadMoreTokenRecords() STARTING - currentPage: ${tokenPage}, totalPages: ${tokenTotalPages}`);
+    
+    if (tokenPage >= tokenTotalPages - 1) {
+      console.log(`[ADMIN-DASHBOARD] Already at last page, skipping...`);
+      return;
+    }
+    
+    try {
+      const nextPage = tokenPage + 1;
+      console.log(`[ADMIN-DASHBOARD] Loading page ${nextPage} of ${tokenTotalPages}...`);
+      const newRecords = await TokenService.getTokenRecords({ page: nextPage, pageSize: TOKEN_PAGE_SIZE });
+      console.log(`[ADMIN-DASHBOARD] Received ${newRecords.length} new records`);
+      
+      setTokenRecords(prev => {
+        const updated = [...prev, ...newRecords];
+        console.log(`[ADMIN-DASHBOARD] tokenRecords updated - previous: ${prev.length}, new: ${newRecords.length}, total: ${updated.length}`);
+        return updated;
+      });
+      setTokenPage(nextPage);
+      console.log(`[ADMIN-DASHBOARD] tokenPage updated to: ${nextPage}`);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading more token records:`, error);
+    }
+  };
+
+  // Force refresh token data
+  const forceRefreshTokens = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - forceRefreshTokens() STARTING`);
+    await TokenService.forceRefresh();
+    console.log(`[ADMIN-DASHBOARD] TokenService.forceRefresh() complete, calling loadTokenAnalytics(true)...`);
+    await loadTokenAnalytics(true);
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - forceRefreshTokens() COMPLETE`);
+  };
+
+  // Load granular visitor data based on selected period
+  const loadGranularVisitorData = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - loadGranularVisitorData() STARTING - period: ${selectedPeriod}`);
+    setGranularLoading(true);
+    try {
+      const now = new Date();
+      
+      if (selectedPeriod === 'daily') {
+        // Get today's date
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        console.log(`[ADMIN-DASHBOARD] Fetching hourly data for today: ${today.toISOString()}`);
+        const data = await AnalyticsService.getHourlyVisitorsForDay(today);
+        setHourlyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Hourly data loaded: ${data.filter(d => d.sessions > 0).length} hours with sessions`);
+      } else if (selectedPeriod === 'weekly') {
+        // Get current week's start (Sunday)
+        const today = new Date(now);
+        const dayOfWeek = today.getDay();
+        const weekStart = new Date(today);
+        weekStart.setDate(today.getDate() - dayOfWeek);
+        console.log(`[ADMIN-DASHBOARD] Fetching daily data for week starting: ${weekStart.toISOString()}`);
+        const data = await AnalyticsService.getDailyVisitorsForWeek(weekStart);
+        setDailyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Daily data loaded: ${data.filter(d => d.sessions > 0).length} days with sessions`);
+      } else if (selectedPeriod === 'yearly') {
+        // Get current month
+        const year = now.getFullYear();
+        const month = now.getMonth();
+        console.log(`[ADMIN-DASHBOARD] Fetching weekly data for ${year}-${month + 1}`);
+        const data = await AnalyticsService.getWeeklyVisitorsForMonth(year, month);
+        setWeeklyVisitors(data);
+        console.log(`[ADMIN-DASHBOARD] Weekly data loaded: ${data.filter(d => d.sessions > 0).length} weeks with sessions`);
+      }
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading granular visitor data:`, error);
+    } finally {
+      setGranularLoading(false);
+    }
+  };
+
+  // Format last sync time
+  const formatLastSyncTime = () => {
+    if (!lastSyncTime) return 'Never synced';
+    const date = new Date(lastSyncTime);
+    return `Last synced: ${date.toLocaleTimeString()}`;
+  };
+
+  // Render token bar chart
+  const renderTokenBarChart = (data: DailyTokenStats[]) => {
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderTokenBarChart() called with ${data?.length || 0} data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderTokenBarChart: No data to render`);
+      return null;
+    }
+
+    const maxTokens = Math.max(...data.map(d => d.newTokens), 1);
+    const chartWidth = Dimensions.get('window').width - 64;
+    const barWidth = Math.max(chartWidth / data.length - 8, 30);
+
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderTokenBarChart: Rendering ${data.length} bars, maxTokens: ${maxTokens}`);
+    
+    return (
+      <View style={styles.chartRow}>
+        {data.map((item, index) => {
+          const barHeight = (item.newTokens / maxTokens) * 100;
+          const date = new Date(item.date);
+          const dateLabel = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+          return (
+            <View key={index} style={[styles.tokenBarContainer, { width: barWidth }]}>
+              <View style={styles.tokenBarWrapper}>
+                <View style={[styles.tokenBar, { height: barHeight }]} />
+              </View>
+              <Text style={styles.tokenBarLabel} numberOfLines={1}>
+                {dateLabel}
+              </Text>
+              <Text style={styles.tokenBarValue}>{item.newTokens}</Text>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const handleRefresh = async () => {
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - handleRefresh() called - forcing analytics refresh`);
+    await loadAnalytics(true); // Force refresh
+    console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - handleRefresh() complete`);
+  };
+
+  const formatDuration = (seconds: number): string => {
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ${Math.round(seconds % 60)}s`;
+    const hours = Math.floor(minutes / 60);
+    return `${hours}h ${minutes % 60}m`;
+  };
+
+  const formatDate = (dateStr: string): string => {
+    const date = new Date(dateStr);
+    if (selectedPeriod === 'daily') {
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    } else if (selectedPeriod === 'weekly') {
+      return `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+    } else {
+      return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+    }
+  };
+
+  const renderSimpleChart = (data: TrendData[]) => {
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderSimpleChart() called with ${data?.length || 0} trend data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderSimpleChart: No data to render`);
+      return null;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.totalSessions), 1);
+    const chartWidth = Dimensions.get('window').width - 64;
+    const barWidth = Math.max(chartWidth / data.length - 8, 20);
+    
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderSimpleChart: Rendering ${data.length} bars, maxSessions: ${maxSessions}`);
+
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const authHeight = (item.authenticatedSessions / maxSessions) * 150;
+            const unauthHeight = (item.unauthenticatedSessions / maxSessions) * 150;
+
+            return (
+              <View key={index} style={[styles.barContainer, { width: barWidth }]}>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: authHeight }]} />
+                  <View style={[styles.bar, styles.unauthBar, { height: unauthHeight }]} />
+                </View>
+                <Text style={styles.barLabel} numberOfLines={1}>
+                  {formatDate(item.date)}
+                </Text>
+                <Text style={styles.barValue}>{item.totalSessions}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+    );
+  };
+
+  // NEW: Render hourly data for daily view
+  const renderHourlyChart = (data: { hour: number; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No hourly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+    const chartWidth = Dimensions.get('window').width - 64;
+    const barWidth = Math.max(chartWidth / 24 - 4, 20);
+
+    // Only show hours with data or every 3rd hour to avoid clutter
+    const showEveryNth = 3;
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, h) => sum + h.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Hourly bar chart */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+          <View style={styles.chartContainer}>
+            {data.map((item, index) => {
+              const barHeight = (item.sessions / maxSessions) * 120;
+              const showLabel = index % showEveryNth === 0;
+              
+              return (
+                <View key={index} style={[styles.barContainer, { width: barWidth }]}>
+                  <Text style={styles.barValue}>{item.sessions > 0 ? item.sessions : ''}</Text>
+                  <View style={styles.barWrapper}>
+                    <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 2) }]} />
+                  </View>
+                  {showLabel && (
+                    <Text style={styles.barLabel}>
+                      {item.hour}:00
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // NEW: Render daily data for weekly view
+  const renderDailyChart = (data: { day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No daily data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, d) => sum + d.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Daily bars - using existing styles */}
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const barHeight = (item.sessions / maxSessions) * 120;
+            
+            return (
+              <View key={index} style={styles.barContainer}>
+                <Text style={styles.barValue}>{item.sessions}</Text>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                </View>
+                <Text style={styles.barLabel}>{item.dayName}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  // NEW: Render weekly data for monthly view
+  const renderWeeklyChart = (data: { week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No weekly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        {/* Summary stats */}
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Sessions</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, w) => sum + w.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+        
+        {/* Weekly bars - using existing styles */}
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const barHeight = (item.sessions / maxSessions) * 120;
+            
+            return (
+              <View key={index} style={styles.barContainer}>
+                <Text style={styles.barValue}>{item.sessions}</Text>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                </View>
+                <Text style={styles.barLabel}>{item.weekLabel}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderLineChart = (data: TrendData[]) => {
+    console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - renderLineChart() called with ${data?.length || 0} trend data items`);
+    
+    if (data.length === 0) {
+      console.log(`[ADMIN-DASHBOARD-RENDER] renderLineChart: No data to render`);
+      return null;
+    }
+
+    const maxValue = Math.max(
+      ...data.map(d => Math.max(d.totalSessions, d.totalNewUsers, d.totalUniqueUsers)),
+      1
+    );
+    const chartWidth = Dimensions.get('window').width - 64;
+    const chartHeight = 200;
+    const pointSpacing = data.length > 1 ? chartWidth / (data.length - 1) : chartWidth / 2;
+    
+    console.log(`[ADMIN-DASHBOARD-RENDER] renderLineChart: Rendering ${data.length} points, maxValue: ${maxValue}`);
+
+    // Calculate points for each line
+    const sessionPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalSessions / maxValue) * chartHeight,
+      value: item.totalSessions,
+    }));
+
+    const newUserPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalNewUsers / maxValue) * chartHeight,
+      value: item.totalNewUsers,
+    }));
+
+    const uniqueUserPoints = data.map((item, index) => ({
+      x: index * pointSpacing,
+      y: chartHeight - (item.totalUniqueUsers / maxValue) * chartHeight,
+      value: item.totalUniqueUsers,
+    }));
+
+    // Create SVG path for lines
+    const createPath = (points: typeof sessionPoints) => {
+      if (points.length === 0) return '';
+      let path = `M ${points[0].x} ${points[0].y}`;
+      for (let i = 1; i < points.length; i++) {
+        path += ` L ${points[i].x} ${points[i].y}`;
+      }
+      return path;
+    };
+
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+        <View style={[styles.lineChartContainer, { width: Math.max(chartWidth, data.length * 60) }]}>
+          <View style={[styles.lineChart, { height: chartHeight }]}>
+            {/* Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.gridLine,
+                  { bottom: ratio * chartHeight, width: Math.max(chartWidth, data.length * 60) },
+                ]}
+              />
+            ))}
+
+            {/* Session line - connecting lines between points */}
+            {sessionPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = sessionPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`session-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.sessionLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* New User line */}
+            {newUserPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = newUserPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`new-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.newUserLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* Unique User line */}
+            {uniqueUserPoints.map((point, index) => {
+              if (index === 0) return null;
+              const prevPoint = uniqueUserPoints[index - 1];
+              const lineWidth = Math.sqrt(
+                Math.pow(point.x - prevPoint.x, 2) + Math.pow(point.y - prevPoint.y, 2)
+              );
+              const angle = Math.atan2(point.y - prevPoint.y, point.x - prevPoint.x) * (180 / Math.PI);
+              
+              return (
+                <View
+                  key={`unique-line-${index}`}
+                  style={[
+                    styles.connectingLine,
+                    styles.uniqueUserLine,
+                    {
+                      width: lineWidth,
+                      left: prevPoint.x,
+                      top: prevPoint.y,
+                      transform: [{ rotate: `${angle}deg` }],
+                    },
+                  ]}
+                />
+              );
+            })}
+
+            {/* Data points */}
+            {sessionPoints.map((point, index) => (
+              <View key={`session-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.sessionPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+
+            {newUserPoints.map((point, index) => (
+              <View key={`new-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.newUserPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+
+            {uniqueUserPoints.map((point, index) => (
+              <View key={`unique-${index}`}>
+                <View
+                  style={[
+                    styles.linePoint,
+                    styles.uniqueUserPoint,
+                    { left: point.x - 4, top: point.y - 4 },
+                  ]}
+                />
+              </View>
+            ))}
+          </View>
+
+          {/* X-axis labels */}
+          <View style={styles.xAxisLabels}>
+            {data.map((item, index) => (
+              <Text
+                key={index}
+                style={[styles.xAxisLabel, { left: index * pointSpacing - 30 }]}
+                numberOfLines={1}
+              >
+                {formatDate(item.date)}
+              </Text>
+            ))}
+          </View>
+        </View>
+      </ScrollView>
+    );
+  };
+
+  console.log(`[ADMIN-DASHBOARD-RENDER] ${new Date().toISOString()} - RENDER - loading: ${loading}, activeTab: ${activeTab}`);
+  
+  if (loading) {
+    console.log(`[ADMIN-DASHBOARD-RENDER] Showing loading spinner`);
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#00F5FF" />
+        <Text style={styles.loadingText}>Loading analytics...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Analytics</Text>
+        <TouchableOpacity onPress={() => loadAnalytics(true)} style={styles.refreshButton}>
+          <Ionicons name={refreshing ? "hourglass" : "refresh"} size={24} color="#00F5FF" />
+        </TouchableOpacity>
+      </View>
+
+      {/* Tab Navigation */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'overview' && styles.tabActive]}
+          onPress={() => setActiveTab('overview')}
+        >
+          <Ionicons
+            name="speedometer-outline"
+            size={20}
+            color={activeTab === 'overview' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+            Overview
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'visitors' && styles.tabActive]}
+          onPress={() => setActiveTab('visitors')}
+        >
+          <Ionicons
+            name="people-outline"
+            size={20}
+            color={activeTab === 'visitors' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'visitors' && styles.tabTextActive]}>
+            Visitors
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'notifications' && styles.tabActive]}
+          onPress={() => setActiveTab('notifications')}
+        >
+          <Ionicons
+            name="notifications-outline"
+            size={20}
+            color={activeTab === 'notifications' ? '#00F5FF' : '#888'}
+          />
+          <Text style={[styles.tabText, activeTab === 'notifications' && styles.tabTextActive]}>
+            Notifications
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#00F5FF']}
+            tintColor="#00F5FF"
+          />
+        }
+      >
+        {/* Overview Tab */}
+        {activeTab === 'overview' && (
+          <View style={styles.tabContent}>
+            {/* Today's Activity */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="today-outline" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Today's Activity</Text>
+              </View>
+              <Text style={styles.sectionSubtext}>
+                {todaySummary?.lastUpdated.toLocaleTimeString() || 'N/A'}
+              </Text>
+
+              <View style={styles.statsGrid}>
+                <View style={[styles.statCard, styles.statCardPrimary]}>
+                  <Ionicons name="pulse" size={24} color="#00F5FF" />
+                  <Text style={styles.statValue}>{todaySummary?.totalSessions || 0}</Text>
+                  <Text style={styles.statLabel}>Sessions</Text>
+                </View>
+
+                <View style={[styles.statCard, styles.statCardSuccess]}>
+                  <Ionicons name="person-add" size={24} color="#00FF9F" />
+                  <Text style={styles.statValue}>{todaySummary?.totalNewUsers || 0}</Text>
+                  <Text style={styles.statLabel}>New Users</Text>
+                  <View style={styles.statBreakdown}>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.newAuthenticatedUsers || 0} Auth
+                    </Text>
+                    <Text style={styles.statBreakdownDivider}>•</Text>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.newUnauthenticatedUsers || 0} Guest
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statCard, styles.statCardInfo]}>
+                  <Ionicons name="repeat" size={24} color="#FF00FF" />
+                  <Text style={styles.statValue}>{todaySummary?.totalReturningUsers || 0}</Text>
+                  <Text style={styles.statLabel}>Returning</Text>
+                  <View style={styles.statBreakdown}>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.returningAuthenticatedUsers || 0} Auth
+                    </Text>
+                    <Text style={styles.statBreakdownDivider}>•</Text>
+                    <Text style={styles.statBreakdownText}>
+                      {todaySummary?.returningUnauthenticatedUsers || 0} Guest
+                    </Text>
+                  </View>
+                </View>
+
+                <View style={[styles.statCard, styles.statCardWarning]}>
+                  <Ionicons name="time" size={24} color="#FFD700" />
+                  <Text style={styles.statValue}>
+                    {formatDuration(todaySummary?.averageDuration || 0)}
+                  </Text>
+                  <Text style={styles.statLabel}>Avg Duration</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* All-Time Stats */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="stats-chart" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>All-Time Statistics</Text>
+              </View>
+
+              <View style={styles.statsGrid}>
+                <View style={styles.metricCard}>
+                  <Ionicons name="pulse-outline" size={28} color="#00F5FF" />
+                  <Text style={styles.metricValue}>{summary?.totalSessions || 0}</Text>
+                  <Text style={styles.metricLabel}>Total Sessions</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="people-outline" size={28} color="#FF00FF" />
+                  <Text style={styles.metricValue}>{summary?.totalUniqueUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Unique Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="person-circle-outline" size={28} color="#00FF9F" />
+                  <Text style={styles.metricValue}>{summary?.uniqueAuthenticatedUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Auth Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="person-outline" size={28} color="#FFD700" />
+                  <Text style={styles.metricValue}>{summary?.uniqueUnauthenticatedUsers || 0}</Text>
+                  <Text style={styles.metricLabel}>Guest Users</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="timer-outline" size={28} color="#FF00FF" />
+                  <Text style={styles.metricValue}>
+                    {formatDuration(summary?.averageDuration || 0)}
+                  </Text>
+                  <Text style={styles.metricLabel}>Avg Duration</Text>
+                </View>
+
+                <View style={styles.metricCard}>
+                  <Ionicons name="repeat-outline" size={28} color="#00F5FF" />
+                  <Text style={styles.metricValue}>
+                    {summary?.averageVisitsPerUser.toFixed(1) || '0.0'}
+                  </Text>
+                  <Text style={styles.metricLabel}>Avg Visits</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Recent New Users */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="person-add-outline" size={24} color="#00FF9F" />
+                <Text style={styles.sectionTitle}>Recent Growth (30 Days)</Text>
+              </View>
+
+              <View style={styles.growthRow}>
+                <View style={styles.growthItem}>
+                  <Text style={styles.growthValue}>{summary?.totalNewUsers || 0}</Text>
+                  <Text style={styles.growthLabel}>Total New</Text>
+                </View>
+                <View style={styles.growthDivider} />
+                <View style={styles.growthItem}>
+                  <Text style={[styles.growthValue, { color: '#00F5FF' }]}>
+                    {summary?.newAuthenticatedUsers || 0}
+                  </Text>
+                  <Text style={styles.growthLabel}>Authenticated</Text>
+                </View>
+                <View style={styles.growthDivider} />
+                <View style={styles.growthItem}>
+                  <Text style={[styles.growthValue, { color: '#FFD700' }]}>
+                    {summary?.newUnauthenticatedUsers || 0}
+                  </Text>
+                  <Text style={styles.growthLabel}>Guests</Text>
+                </View>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Visitors Tab */}
+        {activeTab === 'visitors' && (
+          <View style={styles.tabContent}>
+            {/* Period Selector */}
+            <View style={styles.periodSelector}>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'daily' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('daily')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'daily' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Daily
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'weekly' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('weekly')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'weekly' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Weekly
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'yearly' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('yearly')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'yearly' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Monthly
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* NEW: Granular Visitor Data Chart */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="analytics" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>
+                  {selectedPeriod === 'daily' ? 'Hourly Visitors Today' : 
+                   selectedPeriod === 'weekly' ? 'Daily Visitors This Week' : 
+                   'Weekly Visitors This Month'}
+                </Text>
+              </View>
+              
+              {granularLoading ? (
+                <ActivityIndicator size="small" color="#00F5FF" />
+              ) : (
+                <>
+                  {selectedPeriod === 'daily' && renderHourlyChart(hourlyVisitors)}
+                  {selectedPeriod === 'weekly' && renderDailyChart(dailyVisitors)}
+                  {selectedPeriod === 'yearly' && renderWeeklyChart(weeklyVisitors)}
+                </>
+              )}
+            </View>
+
+            {/* Trend Chart - Legacy data */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="trending-up" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Visitor Trends (30 Days)</Text>
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00F5FF' }]} />
+                  <Text style={styles.legendText}>Sessions</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00FF9F' }]} />
+                  <Text style={styles.legendText}>New Users</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                  <Text style={styles.legendText}>Unique Users</Text>
+                </View>
+              </View>
+              {renderLineChart(trendData)}
+            </View>
+
+            {/* Session Comparison */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="bar-chart" size={24} color="#FF00FF" />
+                <Text style={styles.sectionTitle}>Session Distribution</Text>
+              </View>
+              <View style={styles.chartLegend}>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#00F5FF' }]} />
+                  <Text style={styles.legendText}>Authenticated</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                  <Text style={styles.legendText}>Unauthenticated</Text>
+                </View>
+              </View>
+              {renderSimpleChart(trendData)}
+            </View>
+
+            {/* Frequent Visitors */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="flame" size={24} color="#FF6B6B" />
+                <Text style={styles.sectionTitle}>Today's Top Visitors</Text>
+              </View>
+
+              {frequentVisitors.length === 0 ? (
+                <Text style={styles.noDataText}>No visitors today yet</Text>
+              ) : (
+                frequentVisitors.slice(0, 10).map((visitor) => (
+                  <View key={visitor.uniqueVisitorId} style={styles.visitorCard}>
+                    <View style={styles.visitorRow}>
+                      <Ionicons
+                        name={visitor.isAuthenticated ? 'person-circle' : 'person-outline'}
+                        size={32}
+                        color={visitor.isAuthenticated ? '#00F5FF' : '#FFD700'}
+                      />
+                      <View style={styles.visitorInfo}>
+                        <Text style={styles.visitorType}>
+                          {visitor.isAuthenticated ? 'Authenticated' : 'Guest'}
+                        </Text>
+                        <Text style={styles.visitorId} numberOfLines={1}>
+                          {visitor.userId || visitor.uniqueVisitorId}
+                        </Text>
+                        <Text style={styles.visitorTime}>
+                          {visitor.lastVisit.toLocaleTimeString()}
+                        </Text>
+                      </View>
+                      <View style={styles.visitorBadge}>
+                        <Text style={styles.visitorBadgeCount}>{visitor.visitCount}</Text>
+                        <Text style={styles.visitorBadgeLabel}>visits</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <View style={styles.tabContent}>
+            {/* Token Subscribers Section - NEW */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Ionicons name="notifications" size={24} color="#00F5FF" />
+                  <Text style={styles.sectionTitle}>Notification Subscribers</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.syncButton}
+                  onPress={forceRefreshTokens}
+                  disabled={tokenLoading}
+                >
+                  <Ionicons 
+                    name={tokenLoading ? "hourglass" : "sync"} 
+                    size={20} 
+                    color="#00F5FF" 
+                  />
+                </TouchableOpacity>
+              </View>
+              
+              {/* Last Sync Time */}
+              <Text style={styles.syncTimeText}>{formatLastSyncTime()}</Text>
+
+              {/* Migration Status */}
+              {migrationStatus?.inProgress ? (
+                <View style={styles.migrationStatus}>
+                  <ActivityIndicator size="small" color="#FFD700" />
+                  <Text style={styles.migrationStatusText}>Migrating legacy tokens...</Text>
+                </View>
+              ) : migrationStatus && migrationStatus.migrated > 0 ? (
+                <View style={styles.migrationStatus}>
+                  <Ionicons name="checkmark-circle" size={14} color="#00FF9F" />
+                  <Text style={styles.migrationStatusText}>
+                    ✓ Migrated {migrationStatus.migrated} tokens from tokens.json
+                  </Text>
+                </View>
+              ) : null}
+
+              {/* Token Summary Cards */}
+              {tokenLoading && !tokenSummary ? (
+                <View style={styles.tokenLoadingContainer}>
+                  <ActivityIndicator size="large" color="#00F5FF" />
+                  <Text style={styles.loadingText}>Loading token data...</Text>
+                </View>
+              ) : (
+                <>
+                  {/* Summary Cards with Growth */}
+                  <View style={styles.tokenSummaryRow}>
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={styles.tokenSummaryIcon}>
+                        <Ionicons name="notifications" size={28} color="#00F5FF" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.totalTokens.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Total Subscribers</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(0, 255, 159, 0.1)' }]}>
+                        <Ionicons name="checkmark-circle" size={28} color="#00FF9F" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.activeTokens.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Active Tokens</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(255, 215, 0, 0.1)' }]}>
+                        <Ionicons name="trending-up" size={28} color="#FFD700" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <View style={styles.growthRowInline}>
+                          <Text style={styles.tokenSummaryValue}>
+                            +{tokenSummary?.newTokensToday || 0}
+                          </Text>
+                          <Ionicons 
+                            name={tokenSummary && tokenSummary.growthPercentage >= 0 ? "arrow-up" : "arrow-down"} 
+                            size={16} 
+                            color={tokenSummary && tokenSummary.growthPercentage >= 0 ? "#00FF9F" : "#FF6B6B"}
+                          />
+                          <Text style={[styles.growthPercentage, { color: tokenSummary && tokenSummary.growthPercentage >= 0 ? "#00FF9F" : "#FF6B6B" }]}>
+                            {Math.abs(tokenSummary?.growthPercentage || 0).toFixed(1)}%
+                          </Text>
+                        </View>
+                        <Text style={styles.tokenSummaryLabel}>Today</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Authenticated vs Unauthenticated Breakdown */}
+                  <View style={styles.tokenSummaryRow}>
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(138, 43, 226, 0.1)' }]}>
+                        <Ionicons name="person" size={24} color="#8A2BE2" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.authenticatedCount?.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Authenticated Users</Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.tokenSummaryCard}>
+                      <View style={[styles.tokenSummaryIcon, { backgroundColor: 'rgba(255, 140, 0, 0.1)' }]}>
+                        <Ionicons name="person-outline" size={24} color="#FF8C00" />
+                      </View>
+                      <View style={styles.tokenSummaryContent}>
+                        <Text style={styles.tokenSummaryValue}>
+                          {tokenSummary?.unauthenticatedCount?.toLocaleString() || 0}
+                        </Text>
+                        <Text style={styles.tokenSummaryLabel}>Unauthenticated</Text>
+                      </View>
+                    </View>
+                  </View>
+
+                  {/* Filter Buttons */}
+                  <View style={styles.filterRow}>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'all' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('all')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'all' && styles.filterButtonTextActive]}>All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'authenticated' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('authenticated')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'authenticated' && styles.filterButtonTextActive]}>Authenticated</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.filterButton, activeTokenFilter === 'unauthenticated' && styles.filterButtonActive]}
+                      onPress={() => setActiveTokenFilter('unauthenticated')}
+                    >
+                      <Text style={[styles.filterButtonText, activeTokenFilter === 'unauthenticated' && styles.filterButtonTextActive]}>Unauthenticated</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Daily Subscription Bar Chart */}
+                  <View style={styles.tokenChartSection}>
+                    <View style={styles.tokenChartHeader}>
+                      <Text style={styles.tokenChartTitle}>Daily New Subscribers (30 Days)</Text>
+                      {!hasLoadedMoreTokens ? (
+                        <TouchableOpacity onPress={loadMoreDailyStats}>
+                          <Text style={styles.loadMoreLink}>Load More</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.loadedText}>Showing 30 days</Text>
+                      )}
+                    </View>
+                    
+                    {dailyTokenStats.length > 0 ? (
+                      renderTokenBarChart(dailyTokenStats)
+                    ) : (
+                      <Text style={styles.noDataText}>No subscription data available</Text>
+                    )}
+                  </View>
+
+                  {/* View Details Button */}
+                  <TouchableOpacity 
+                    style={styles.viewDetailsButton}
+                    onPress={() => setTokenModalVisible(true)}
+                  >
+                    <Ionicons name="list-outline" size={20} color="#00F5FF" />
+                    <Text style={styles.viewDetailsButtonText}>View All Token Records</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#00F5FF" />
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+
+            {/* Daily Notification Stats */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="calendar-outline" size={24} color="#FF00FF" />
+                <Text style={styles.sectionTitle}>Daily Notification Analytics (30 Days)</Text>
+              </View>
+
+              {dailyNotificationStats.length === 0 ? (
+                <Text style={styles.noDataText}>No daily data available</Text>
+              ) : (
+                <>
+                  <View style={styles.statsGrid}>
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="paper-plane" size={24} color="#00F5FF" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.notificationsSent, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Total Sent</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="people" size={24} color="#00FF9F" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.usersReceived, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Users Reached</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="open" size={24} color="#FF00FF" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.notificationsOpened, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>Total Opened</Text>
+                    </View>
+
+                    <View style={styles.notifStatCard}>
+                      <Ionicons name="person-add" size={24} color="#FFD700" />
+                      <Text style={styles.notifStatValue}>
+                        {dailyNotificationStats.reduce((sum, d) => sum + d.newSubscriptions, 0)}
+                      </Text>
+                      <Text style={styles.notifStatLabel}>New Subs</Text>
+                    </View>
+                  </View>
+
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.dailyScroll}>
+                    {dailyNotificationStats.slice().reverse().map((dayStat) => (
+                      <View key={dayStat.date} style={styles.dailyCard}>
+                        <Text style={styles.dailyCardDate}>
+                          {new Date(dayStat.date).toLocaleDateString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </Text>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="paper-plane-outline" size={14} color="#00F5FF" />
+                          <Text style={styles.dailyCardText}>{dayStat.notificationsSent}</Text>
+                        </View>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="people-outline" size={14} color="#00FF9F" />
+                          <Text style={styles.dailyCardText}>{dayStat.usersReceived}</Text>
+                        </View>
+                        <View style={styles.dailyCardStat}>
+                          <Ionicons name="open-outline" size={14} color="#FF00FF" />
+                          <Text style={styles.dailyCardText}>{dayStat.notificationsOpened}</Text>
+                        </View>
+                        {dayStat.newSubscriptions > 0 && (
+                          <View style={styles.dailyCardStat}>
+                            <Ionicons name="person-add-outline" size={14} color="#FFD700" />
+                            <Text style={[styles.dailyCardText, { color: '#FFD700' }]}>
+                              +{dayStat.newSubscriptions}
+                            </Text>
+                          </View>
+                        )}
+                        <View style={styles.dailyCardRate}>
+                          <Text style={styles.dailyCardRateValue}>{dayStat.openRate.toFixed(1)}%</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+            </View>
+
+            {/* Per-Notification Analytics */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionHeaderRow}>
+                <Ionicons name="notifications" size={24} color="#00F5FF" />
+                <Text style={styles.sectionTitle}>Notification Performance</Text>
+              </View>
+
+              {notificationAnalytics.length === 0 ? (
+                <Text style={styles.noDataText}>No notification data available</Text>
+              ) : (
+                <>
+                  <View style={styles.statsRow}>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0)}
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Sent</Text>
+                    </View>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0)}
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Opened</Text>
+                    </View>
+                    <View style={styles.miniStat}>
+                      <Text style={styles.miniStatValue}>
+                        {(
+                          (notificationAnalytics.reduce((sum, n) => sum + n.totalOpened, 0) /
+                            Math.max(notificationAnalytics.reduce((sum, n) => sum + n.totalSent, 0), 1)) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </Text>
+                      <Text style={styles.miniStatLabel}>Open Rate</Text>
+                    </View>
+                  </View>
+
+                  {notificationAnalytics.slice(0, 10).map((notification) => {
+                    const isExpanded = expandedNotifications.has(notification.notificationId);
+                    
+                    return (
+                      <View key={notification.notificationId} style={styles.notifCard}>
+                        <TouchableOpacity
+                          onPress={() => {
+                            setExpandedNotifications(prev => {
+                              const next = new Set(prev);
+                              if (next.has(notification.notificationId)) {
+                                next.delete(notification.notificationId);
+                              } else {
+                                next.add(notification.notificationId);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <View style={styles.notifCardHeader}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.notifCardId} numberOfLines={1}>
+                                {notification.notificationId}
+                              </Text>
+                              <Text style={styles.notifCardDate}>
+                                {notification.createdAt.toLocaleDateString()}
+                              </Text>
+                            </View>
+                            <Ionicons
+                              name={isExpanded ? "chevron-up" : "chevron-down"}
+                              size={20}
+                              color="#00F5FF"
+                            />
+                          </View>
+
+                          <View style={styles.notifCardStats}>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.totalSent}</Text>
+                              <Text style={styles.notifCardStatLabel}>Sent</Text>
+                            </View>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.totalOpened}</Text>
+                              <Text style={styles.notifCardStatLabel}>Opened</Text>
+                            </View>
+                            <View style={styles.notifCardStat}>
+                              <Text style={styles.notifCardStatValue}>{notification.uniqueUsersReceived}</Text>
+                              <Text style={styles.notifCardStatLabel}>Unique Users</Text>
+                            </View>
+                          </View>
+
+                          <View style={styles.notifCardProgress}>
+                            <View style={styles.progressRow}>
+                              <Text style={styles.progressLabel}>Open Rate</Text>
+                              <Text style={styles.progressValue}>{notification.openRate.toFixed(1)}%</Text>
+                            </View>
+                            <View style={styles.progressBarContainer}>
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  { width: `${notification.openRate}%`, backgroundColor: '#00FF9F' },
+                                ]}
+                              />
+                            </View>
+                          </View>
+
+                          <View style={styles.notifCardProgress}>
+                            <View style={styles.progressRow}>
+                              <Text style={styles.progressLabel}>Read Rate</Text>
+                              <Text style={styles.progressValue}>{notification.readRate.toFixed(1)}%</Text>
+                            </View>
+                            <View style={styles.progressBarContainer}>
+                              <View
+                                style={[
+                                  styles.progressBarFill,
+                                  { width: `${notification.readRate}%`, backgroundColor: '#00F5FF' },
+                                ]}
+                              />
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+
+                        {isExpanded && (
+                          <View style={styles.userListsContainer}>
+                            <View style={styles.userListSection}>
+                              <View style={styles.userListHeader}>
+                                <Ionicons name="people" size={16} color="#00FF9F" />
+                                <Text style={styles.userListTitle}>
+                                  Users Received ({notification.usersWhoReceived.length})
+                                </Text>
+                              </View>
+                              {notification.usersWhoReceived.length > 0 ? (
+                                <View style={styles.userChipsContainer}>
+                                  {notification.usersWhoReceived.slice(0, 10).map((userId, idx) => (
+                                    <View key={idx} style={styles.userChip}>
+                                      <Text style={styles.userChipText} numberOfLines={1}>
+                                        {userId.substring(0, 8)}...
+                                      </Text>
+                                    </View>
+                                  ))}
+                                  {notification.usersWhoReceived.length > 10 && (
+                                    <View style={styles.userChip}>
+                                      <Text style={styles.userChipText}>
+                                        +{notification.usersWhoReceived.length - 10} more
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ) : (
+                                <Text style={styles.noUsersText}>No users</Text>
+                              )}
+                            </View>
+
+                            <View style={styles.userListSection}>
+                              <View style={styles.userListHeader}>
+                                <Ionicons name="open" size={16} color="#FF00FF" />
+                                <Text style={styles.userListTitle}>
+                                  Users Opened ({notification.usersWhoOpened.length})
+                                </Text>
+                              </View>
+                              {notification.usersWhoOpened.length > 0 ? (
+                                <View style={styles.userChipsContainer}>
+                                  {notification.usersWhoOpened.slice(0, 10).map((userId, idx) => (
+                                    <View key={idx} style={[styles.userChip, styles.userChipOpened]}>
+                                      <Text style={styles.userChipText} numberOfLines={1}>
+                                        {userId.substring(0, 8)}...
+                                      </Text>
+                                    </View>
+                                  ))}
+                                  {notification.usersWhoOpened.length > 10 && (
+                                    <View style={[styles.userChip, styles.userChipOpened]}>
+                                      <Text style={styles.userChipText}>
+                                        +{notification.usersWhoOpened.length - 10} more
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              ) : (
+                                <Text style={styles.noUsersText}>No users</Text>
+                              )}
+                            </View>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </>
+              )}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Token Records Modal */}
+      <Modal
+        visible={tokenModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setTokenModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Token Records</Text>
+              <TouchableOpacity onPress={() => setTokenModalVisible(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalStatsRow}>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenSummary?.totalTokens || 0}</Text>
+                <Text style={styles.modalStatLabel}>Total Tokens</Text>
+              </View>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenRecords.length}</Text>
+                <Text style={styles.modalStatLabel}>Showing</Text>
+              </View>
+              <View style={styles.modalStatItem}>
+                <Text style={styles.modalStatValue}>{tokenTotalPages}</Text>
+                <Text style={styles.modalStatLabel}>Pages</Text>
+              </View>
+            </View>
+
+            <View style={styles.modalTableHeader}>
+              <Text style={[styles.modalTableHeaderText, { flex: 2 }]}>Token</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 1 }]}>Subscribed</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 0.7 }]}>Auth</Text>
+              <Text style={[styles.modalTableHeaderText, { flex: 0.5 }]}>Status</Text>
+            </View>
+
+            {tokenLoading ? (
+              <View style={styles.modalLoadingContainer}>
+                <ActivityIndicator size="large" color="#00F5FF" />
+                <Text style={styles.loadingText}>Loading records...</Text>
+              </View>
+            ) : (
+              <>
+                <FlatList
+                  data={tokenRecords}
+                  keyExtractor={(item, index) => `${item.token}-${index}`}
+                  renderItem={({ item }) => (
+                    <View style={styles.modalTableRow}>
+                      <Text style={[styles.modalTableCell, { flex: 2 }]} numberOfLines={1}>
+                        {item.token}
+                      </Text>
+                      <Text style={[styles.modalTableCell, { flex: 1 }]}>
+                        {item.subscribedAt.toLocaleDateString()}
+                      </Text>
+                      <View style={[styles.modalTableCellContainer, { flex: 0.7 }]}>
+                        <View style={[
+                          styles.authBadge,
+                          { backgroundColor: item.isAuthenticated ? 'rgba(138, 43, 226, 0.2)' : 'rgba(255, 140, 0, 0.2)' }
+                        ]}>
+                          <Text style={[
+                            styles.authBadgeText,
+                            { color: item.isAuthenticated ? '#8A2BE2' : '#FF8C00' }
+                          ]}>
+                            {item.isAuthenticated ? 'Auth' : 'Anon'}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={[styles.modalTableCellContainer, { flex: 0.5, alignItems: 'flex-start' }]}>
+                        <View style={[
+                          styles.statusDot,
+                          { backgroundColor: item.isActive ? '#00FF9F' : '#FF4444' }
+                        ]} />
+                      </View>
+                    </View>
+                  )}
+                  initialNumToRender={10}
+                  maxToRenderPerBatch={10}
+                  windowSize={10}
+                />
+
+                {/* Load More Button */}
+                {tokenPage < tokenTotalPages - 1 && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreTokenRecords}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Load More Records</Text>
+                    <Ionicons name="chevron-down" size={16} color="#00F5FF" />
+                  </TouchableOpacity>
+                )}
+
+                {!hasLoadedMoreTokens && dailyTokenStats.length < 30 && (
+                  <TouchableOpacity
+                    style={styles.loadMoreButton}
+                    onPress={loadMoreDailyStats}
+                  >
+                    <Text style={styles.loadMoreButtonText}>Load 30-Day History</Text>
+                    <Ionicons name="chevron-down" size={16} color="#00F5FF" />
+                  </TouchableOpacity>
+                )}
+
+                {tokenRecords.length === 0 && (
+                  <Text style={styles.noDataText}>No token records found</Text>
+                )}
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0A0A0F',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0A0A0F',
+  },
+  loadingText: {
+    color: '#00F5FF',
+    marginTop: 16,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    paddingTop: 60,
+    backgroundColor: '#0F0F17',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 1,
+  },
+  refreshButton: {
+    padding: 8,
+  },
+
+  // Tab Navigation
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0F0F17',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+  },
+  tabActive: {
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
+  },
+  tabText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#888',
+  },
+  tabTextActive: {
+    color: '#00F5FF',
+  },
+
+  // Tab Content
+  tabContent: {
+    padding: 16,
+  },
+
+  // Section Cards
+  sectionCard: {
+    backgroundColor: '#14141F',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.1)',
+    shadowColor: '#00F5FF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    flex: 1,
+  },
+  sectionSubtext: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: -8,
+    marginBottom: 16,
+  },
+
+  // Stats Grid
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 140,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    borderWidth: 1,
+  },
+  statCardPrimary: {
+    backgroundColor: 'rgba(0, 245, 255, 0.05)',
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+  },
+  statCardSuccess: {
+    backgroundColor: 'rgba(0, 255, 159, 0.05)',
+    borderColor: 'rgba(0, 255, 159, 0.2)',
+  },
+  statCardInfo: {
+    backgroundColor: 'rgba(255, 0, 255, 0.05)',
+    borderColor: 'rgba(255, 0, 255, 0.2)',
+  },
+  statCardWarning: {
+    backgroundColor: 'rgba(255, 215, 0, 0.05)',
+    borderColor: 'rgba(255, 215, 0, 0.2)',
+  },
+  statValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#AAA',
+    textAlign: 'center',
+  },
+  statBreakdown: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  statBreakdownText: {
+    fontSize: 11,
+    color: '#666',
+  },
+  statBreakdownDivider: {
+    fontSize: 11,
+    color: '#444',
+  },
+
+  // Metric Cards
+  metricCard: {
+    flex: 1,
+    minWidth: 100,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 31, 0.8)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  metricValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  metricLabel: {
+    fontSize: 11,
+    color: '#888',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+
+  // Growth Section
+  growthRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingVertical: 12,
+  },
+  growthItem: {
+    alignItems: 'center',
+  },
+  growthValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#00FF9F',
+  },
+  growthLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 4,
+  },
+  growthDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+
+  // Period Selector
+  periodSelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 20,
+    padding: 4,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+  },
+  periodButton: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  periodButtonActive: {
+    backgroundColor: 'rgba(0, 245, 255, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
+  },
+  periodButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  periodButtonTextActive: {
+    color: '#00F5FF',
+  },
+
+  // Chart Legend
+  chartLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    marginBottom: 16,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#AAA',
+  },
+
+  // Charts (keeping existing chart styles)
+  chartScrollView: {
+    marginVertical: 8,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 150,
+    paddingHorizontal: 8,
+  },
+  chartContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 150,
+    paddingHorizontal: 8,
+  },
+  barContainer: {
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  barWrapper: {
+    flexDirection: 'column-reverse',
+    alignItems: 'center',
+    height: 150,
+  },
+  bar: {
+    width: 20,
+    borderRadius: 4,
+  },
+  authBar: {
+    backgroundColor: '#00F5FF',
+    marginBottom: 2,
+  },
+  unauthBar: {
+    backgroundColor: '#FFD700',
+  },
+  barLabel: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  barValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginTop: 2,
+  },
+
+  lineChartContainer: {
+    paddingHorizontal: 8,
+  },
+  lineChart: {
+    position: 'relative',
+  },
+  gridLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  connectingLine: {
+    position: 'absolute',
+    height: 2,
+    transformOrigin: 'left center',
+  },
+  sessionLine: {
+    backgroundColor: '#00F5FF',
+  },
+  newUserLine: {
+    backgroundColor: '#00FF9F',
+  },
+  uniqueUserLine: {
+    backgroundColor: '#FFD700',
+  },
+  linePoint: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#0A0A0F',
+  },
+  sessionPoint: {
+    backgroundColor: '#00F5FF',
+  },
+  newUserPoint: {
+    backgroundColor: '#00FF9F',
+  },
+  uniqueUserPoint: {
+    backgroundColor: '#FFD700',
+  },
+  xAxisLabels: {
+    position: 'relative',
+    height: 30,
+    marginTop: 8,
+  },
+  xAxisLabel: {
+    position: 'absolute',
+    fontSize: 10,
+    color: '#888',
+    width: 60,
+    textAlign: 'center',
+  },
+
+  // Visitor Cards
+  visitorCard: {
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  visitorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  visitorInfo: {
+    flex: 1,
+  },
+  visitorType: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  visitorId: {
+    fontSize: 11,
+    color: '#666',
+    marginTop: 2,
+  },
+  visitorTime: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 2,
+  },
+  visitorBadge: {
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+  },
+  visitorBadgeCount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#00F5FF',
+  },
+  visitorBadgeLabel: {
+    fontSize: 10,
+    color: '#888',
+  },
+
+  // Notification Stats
+  notifStatCard: {
+    flex: 1,
+    minWidth: 140,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  notifStatValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginTop: 8,
+  },
+  notifStatLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 4,
+  },
+
+  // Daily Notification Cards
+  dailyScroll: {
+    marginTop: 12,
+  },
+  dailyCard: {
+    width: 130,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 12,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  dailyCardDate: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  dailyCardStat: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  dailyCardText: {
+    fontSize: 12,
+    color: '#AAA',
+  },
+  dailyCardRate: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  dailyCardRateValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#00FF9F',
+  },
+
+  // Stats Row
+  statsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 16,
+  },
+  miniStat: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 12,
+    backgroundColor: 'rgba(20, 20, 31, 0.4)',
+    borderRadius: 8,
+  },
+  miniStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#00F5FF',
+  },
+  miniStatLabel: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 4,
+  },
+
+  // Notification Performance Cards
+  notifCard: {
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  notifCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  notifCardId: {
+    fontSize: 11,
+    color: '#666',
+    fontFamily: 'monospace',
+    flex: 1,
+  },
+  notifCardDate: {
+    fontSize: 11,
+    color: '#888',
+  },
+  notifCardStats: {
+    flexDirection: 'row',
+    gap: 16,
+    marginBottom: 12,
+  },
+  notifCardStat: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  notifCardStatValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  notifCardStatLabel: {
+    fontSize: 10,
+    color: '#888',
+    marginTop: 4,
+  },
+  notifCardProgress: {
+    marginBottom: 10,
+  },
+  progressRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  progressLabel: {
+    fontSize: 11,
+    color: '#AAA',
+  },
+  progressValue: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  progressBarContainer: {
+    height: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+
+  // User Lists in Notifications
+  userListsContainer: {
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  userListSection: {
+    marginBottom: 12,
+  },
+  userListHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  userListTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  userChipsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  userChip: {
+    backgroundColor: 'rgba(0, 255, 159, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 255, 159, 0.3)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    maxWidth: 100,
+  },
+  userChipOpened: {
+    backgroundColor: 'rgba(255, 0, 255, 0.1)',
+    borderColor: 'rgba(255, 0, 255, 0.3)',
+  },
+  userChipText: {
+    fontSize: 10,
+    color: '#FFFFFF',
+    fontFamily: 'monospace',
+  },
+  noUsersText: {
+    fontSize: 11,
+    color: '#666',
+    fontStyle: 'italic',
+  },
+
+  // Token Analytics Styles
+  tokenBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    height: 120,
+    paddingHorizontal: 4,
+    marginBottom: 16,
+  },
+  tokenBarWrapper: {
+    flexDirection: 'column-reverse',
+    alignItems: 'center',
+    height: 120,
+    justifyContent: 'flex-start',
+  },
+  tokenBar: {
+    width: 24,
+    borderRadius: 6,
+    minHeight: 4,
+  },
+  tokenBarLabel: {
+    fontSize: 9,
+    color: '#666',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  tokenBarValue: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.3)',
+  },
+  syncTimeText: {
+    fontSize: 11,
+    color: '#888',
+  },
+  migrationStatus: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 215, 0, 0.3)',
+  },
+  migrationStatusText: {
+    fontSize: 11,
+    color: '#FFD700',
+  },
+  tokenLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  tokenSummaryRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  tokenSummaryCard: {
+    flex: 1,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tokenSummaryIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  tokenSummaryContent: {
+    flex: 1,
+  },
+  tokenSummaryValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  tokenSummaryLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  growthRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+  },
+  growthPercentage: {
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  tokenChartSection: {
+    backgroundColor: 'rgba(20, 20, 31, 0.4)',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  tokenChartHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  tokenChartTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  loadMoreLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 10,
+    marginTop: 8,
+  },
+  loadedText: {
+    fontSize: 12,
+    color: '#666',
+  },
+  viewDetailsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    borderRadius: 8,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+  },
+  viewDetailsButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00F5FF',
+  },
+
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '95%',
+    maxHeight: '85%',
+    backgroundColor: '#0F0F17',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.2)',
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+  },
+  modalStatsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    gap: 16,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+  },
+  modalStatItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  modalStatValue: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#00F5FF',
+  },
+  modalStatLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  modalTableHeader: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(20, 20, 31, 0.8)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  modalTableHeaderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#888',
+    textTransform: 'uppercase',
+  },
+  modalLoadingContainer: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  modalTableRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+    alignItems: 'center',
+  },
+  modalTableCell: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    fontFamily: 'monospace',
+  },
+  modalTableCellContainer: {
+    justifyContent: 'center',
+  },
+  authBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  authBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  loadMoreButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  loadMoreButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#00F5FF',
+  },
+
+  // Filter Styles
+  filterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    marginTop: 8,
+  },
+  filterButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  filterButtonActive: {
+    backgroundColor: 'rgba(0, 245, 255, 0.15)',
+    borderColor: 'rgba(0, 245, 255, 0.4)',
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
+  },
+  filterButtonTextActive: {
+    color: '#00F5FF',
+  },
+
+  // No Data
+  noDataText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+});
+
+export default AdminDashboardScreen;

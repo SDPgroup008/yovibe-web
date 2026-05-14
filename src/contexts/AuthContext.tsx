@@ -1,0 +1,279 @@
+"use client";
+
+import type React from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useRef,
+  type ReactNode,
+} from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "../config/firebase";
+import FirebaseService from "../services/FirebaseService";
+import AnalyticsService from "../services/AnalyticsService";
+import type { User } from "../models/User";
+import { Platform, Dimensions } from "react-native";
+
+// Responsive context enhancements
+const { width: screenWidth } = Dimensions.get('window');
+const isSmallDevice = screenWidth < 380;
+const isTablet = screenWidth >= 768;
+
+export type RedirectIntent = {
+  routeName: string;
+  params?: Record<string, unknown>;
+};
+
+interface AuthContextType {
+  user: User | null;
+  /** legacy name kept for existing consumers */
+  isLoading: boolean;
+  /** new/alternate name some consumers expect */
+  loading: boolean;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+    userType: "user" | "club_owner" | "admin"
+  ) => Promise<void>;
+  signOut: () => Promise<void>;
+  updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
+  setRedirectIntent: (intent: RedirectIntent) => void;
+  consumeRedirectIntent: () => RedirectIntent | null;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider");
+  }
+  return context;
+};
+
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
+
+export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Track whether we've completed the initial auth resolution
+  const initializedRef = useRef(false);
+  
+  // Track analytics session
+  const sessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    console.log("AuthContext: Setting up auth state listener");
+
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      console.log("AuthContext: onAuthStateChanged fired, firebaseUser:", firebaseUser ? firebaseUser.uid : null);
+      try {
+        if (firebaseUser) {
+          // Authenticated: load profile and set user
+          console.log("AuthContext: Firebase user detected, loading profile for UID:", firebaseUser.uid);
+          try {
+            const userProfile = await FirebaseService.getUserProfile(firebaseUser.uid);
+            console.log("AuthContext: User profile loaded successfully:", userProfile?.email);
+            setUser(userProfile);
+          } catch (profileError) {
+            // User exists in Firebase Auth but not in Firestore
+            console.log("AuthContext: Profile error (will create basic profile):", profileError);
+            // Create a basic user profile so they can use the app
+            console.log("AuthContext: User profile not found in Firestore, creating basic profile");
+            const basicProfile = {
+              id: firebaseUser.uid,
+              uid: firebaseUser.uid,
+              email: firebaseUser.email || '',
+              userType: 'user' as const,
+              displayName: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+              photoURL: firebaseUser.photoURL || undefined,
+              venueId: undefined,
+              isFrozen: false,
+              createdAt: new Date(),
+              lastLoginAt: new Date(),
+            };
+            console.log("AuthContext: Created basic profile:", basicProfile.email);
+            setUser(basicProfile);
+          }
+        } else {
+          // No firebase user
+          console.log("AuthContext: No firebase user (signed out)");
+          if (!initializedRef.current) {
+            // First time: don't clear user state yet, just mark initialized.
+            console.log("AuthContext: No Firebase user on initial check — deferring clearing user until initialized.");
+          } else {
+            // After initial load, a null firebaseUser means the user is signed out.
+            console.log("AuthContext: Firebase user is null after initialization — clearing user.");
+            setUser(null);
+          }
+        }
+      } catch (error) {
+        console.error("AuthContext: Error while handling auth state change:", error);
+        // On error, be conservative: clear user so UI doesn't assume stale data
+        setUser(null);
+      } finally {
+        // Mark that initial resolution has completed at least once
+        if (!initializedRef.current) {
+          initializedRef.current = true;
+        }
+        setIsLoading(false);
+        // console.log("AuthContext: Auth state resolved. isLoading = false");
+      }
+    });
+
+    return () => {
+      // console.log("AuthContext: Cleaning up auth listener");
+      unsubscribe();
+    };
+  }, []);
+
+  // Track analytics session
+  useEffect(() => {
+    // Only track sessions on web platform
+    if (Platform.OS !== 'web') return;
+
+    const startSession = async () => {
+      try {
+        const sessionId = await AnalyticsService.startSession(
+          user?.id || null,
+          'web'
+        );
+        sessionIdRef.current = sessionId;
+        // console.log('Analytics: Session started for', user ? 'authenticated user' : 'guest');
+      } catch (error) {
+        // console.error('Analytics: Failed to start session', error);
+      }
+    };
+
+    const endSession = async () => {
+      if (sessionIdRef.current) {
+        try {
+          await AnalyticsService.endSession(sessionIdRef.current);
+          // console.log('Analytics: Session ended');
+        } catch (error) {
+          // console.error('Analytics: Failed to end session', error);
+        }
+      }
+    };
+
+    // Start session when component mounts or user changes
+    startSession();
+
+    // End session on unmount or before starting a new one
+    return () => {
+      endSession();
+    };
+  }, [user?.id]);
+
+  const signIn = async (email: string, password: string) => {
+    setIsLoading(true);
+    console.log("AuthContext: Starting sign in for:", email);
+    try {
+      await FirebaseService.signIn(email, password);
+      console.log("AuthContext: Sign in successful in Firebase Auth");
+      // onAuthStateChanged will populate user - wait a moment for the listener to fire
+      console.log("AuthContext: Waiting for onAuthStateChanged to fire...");
+    } catch (error) {
+      console.error("AuthContext: Sign in failed:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const signUp = async (
+    email: string,
+    password: string,
+    userType: "user" | "club_owner" | "admin"
+  ) => {
+    setIsLoading(true);
+    try {
+      await FirebaseService.signUp(email, password, userType);
+      // console.log("AuthContext: Sign up successful");
+      // onAuthStateChanged will populate user
+    } catch (error) {
+      // console.error("AuthContext: Sign up failed:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * signOut
+   *
+   * - Performs sign out via FirebaseService.
+   * - Clears local user state here so the app can render the unauthenticated main screen.
+   * - Does NOT perform any navigation; navigation decisions should be handled by the caller.
+   */
+  const signOut = async () => {
+    setIsLoading(true);
+    try {
+      // console.log("AuthContext: Signing out...");
+      await FirebaseService.signOut();
+      // Clear local user state explicitly so UI can immediately reflect unauthenticated state.
+      setUser(null);
+      // console.log("AuthContext: Signed out successfully and local user cleared");
+    } catch (error) {
+      // console.error("AuthContext: Sign out error:", error);
+      // Ensure local state is cleared even if signOut failed at the service level
+      setUser(null);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const updateProfile = async (data: { displayName?: string; photoURL?: string }) => {
+    if (!user) throw new Error("No user logged in");
+    await FirebaseService.updateUserProfile(user.id, data);
+    setUser({ ...user, ...data });
+  };
+
+  // --- Soft-auth redirect intent helpers ---
+  const setRedirectIntent = (intent: RedirectIntent) => {
+    try {
+      sessionStorage.setItem(REDIRECT_INTENT_KEY, JSON.stringify(intent));
+      // console.log("AuthContext: Redirect intent saved", intent);
+    } catch (err) {
+      // console.warn("AuthContext: Failed to save redirect intent", err);
+    }
+  };
+
+  const consumeRedirectIntent = (): RedirectIntent | null => {
+    try {
+      const raw = sessionStorage.getItem(REDIRECT_INTENT_KEY);
+      if (!raw) return null;
+      sessionStorage.removeItem(REDIRECT_INTENT_KEY);
+      const parsed = JSON.parse(raw) as RedirectIntent;
+      // console.log("AuthContext: Redirect intent consumed", parsed);
+      return parsed;
+    } catch (err) {
+      // console.warn("AuthContext: Failed to consume redirect intent", err);
+      return null;
+    }
+  };
+
+  const value: AuthContextType = {
+    user,
+    isLoading,
+    // Provide the alternate property name expected elsewhere
+    loading: isLoading,
+    signIn,
+    signUp,
+    signOut,
+    updateProfile,
+    setRedirectIntent,
+    consumeRedirectIntent,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};

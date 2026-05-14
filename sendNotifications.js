@@ -1,0 +1,169 @@
+const admin = require("firebase-admin");
+const fs = require("fs");
+const path = require("path");
+
+// Try to load service account from file first, then environment variable
+let serviceAccount;
+const serviceAccountPath = path.join(__dirname, "eco-guardian-bd74f-firebase-adminsdk-thlcj-b60714ed55.json");
+
+if (fs.existsSync(serviceAccountPath)) {
+  console.log("Loading service account from file:", serviceAccountPath);
+  serviceAccount = require(serviceAccountPath);
+} else if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+  console.log("Loading service account from environment variable");
+  serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+} else {
+  console.error("Missing FIREBASE_SERVICE_ACCOUNT env var and service account file not found");
+  process.exit(1);
+}
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+});
+
+const db = admin.firestore();
+const messaging = admin.messaging();
+
+/**
+ * Build summary message for upcoming events between startDate and endDate.
+ */
+async function buildSummaryPayload(startDate, endDate, mode = "week") {
+  const snap = await db
+    .collection("YoVibe/data/events")
+    .where("date", ">=", startDate)
+    .where("date", "<=", endDate)
+    .where("isDeleted", "==", false)
+    .get();
+
+  const events = [];
+  snap.forEach((doc) => {
+    const d = doc.data();
+    events.push({
+      id: doc.id,
+      name: d.name || "Event",
+      date: d.date ? d.date.toDate().toISOString() : null,
+    });
+  });
+
+  const count = events.length;
+  const title =
+    mode === "today"
+      ? `Events happening today: ${count}`
+      : `Events this week: ${count}`;
+  const body =
+    count > 0
+      ? `There ${count === 1 ? "is" : "are"} ${count} event${
+          count === 1 ? "" : "s"
+        } ${mode === "today" ? "today" : "this week"}. Tap to view details.`
+      : `No events scheduled ${mode === "today" ? "for today" : "this week"}.`;
+
+  const data = {
+    type: "upcoming_summary",
+    summaryMode: mode,
+    eventIds: JSON.stringify(events.map((e) => e.id)),
+  };
+
+  return { notification: { title, body }, data, events };
+}
+
+/**
+ * Compute start and end dates for today only (local time).
+ */
+function computeRangeForDay(now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(23, 59, 59, 999);
+
+  return {
+    start: admin.firestore.Timestamp.fromDate(start),
+    end: admin.firestore.Timestamp.fromDate(end),
+  };
+}
+
+/**
+ * Compute start and end dates for this week (local time).
+ */
+function computeRangeForWeek(now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const day = start.getDay(); // local day of week, 0=Sun
+  const daysUntilSunday = (7 - day) % 7;
+  const end = new Date(start);
+  end.setDate(end.getDate() + daysUntilSunday);
+  end.setHours(23, 59, 59, 999);
+
+  return {
+    start: admin.firestore.Timestamp.fromDate(start),
+    end: admin.firestore.Timestamp.fromDate(end),
+  };
+}
+
+/**
+ * Track sent notifications to prevent duplicates within a time window
+ */
+const sentNotifications = new Map();
+
+function getNotificationKey(notification, data) {
+  // Create a unique key based on title and time window (hourly)
+  const hour = new Date().getHours();
+  return `${notification.title}-${hour}`;
+}
+
+function isDuplicateNotification(notification, data) {
+  const key = getNotificationKey(notification, data);
+  if (sentNotifications.has(key)) {
+    console.log(`[DUPLICATE] Notification with key "${key}" already sent this hour, skipping`);
+    return true;
+  }
+  sentNotifications.set(key, Date.now());
+  return false;
+}
+
+/**
+ * Send a notification to all users via topic.
+ */
+async function sendToAllUsers(notification, data = {}) {
+  // Check for duplicate notification
+  if (isDuplicateNotification(notification, data)) {
+    return { success: 0, failed: 0, duplicate: true };
+  }
+  
+  try {
+    const message = {
+      topic: "all-users",
+      notification,
+      data,
+    };
+    const response = await messaging.send(message);
+    console.log("Notification sent to all-users:", response);
+    return { success: 1, failed: 0 };
+  } catch (err) {
+    console.error("Error sending to all-users:", err);
+    return { success: 0, failed: 1 };
+  }
+}
+
+/**
+ * Main entrypoint.
+ */
+async function main() {
+  const args = process.argv.slice(2);
+  const mode = args[0] || process.env.MODE || "week";
+
+  // summary mode
+  const now = new Date();
+  const range = mode === "today" ? computeRangeForDay(now) : computeRangeForWeek(now);
+  const { notification, data, events } = await buildSummaryPayload(range.start, range.end, mode);
+
+  data.rangeStart = range.start.toDate().toISOString();
+  data.rangeEnd = range.end.toDate().toISOString();
+
+  await sendToAllUsers(notification, data);
+
+  console.log(`${mode} summary sent. eventsCount:`, events.length);
+  process.exit(0);
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

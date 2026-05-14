@@ -1,0 +1,51 @@
+name: Send Notifications
+
+on:
+  schedule:
+    # Two runs for today's events
+    - cron: "0 8 * * *"   # 11am EAT
+    - cron: "0 18 * * *"  # 9pm EAT
+    # Two runs for this week's events
+    - cron: "0 12 * * *"  # 3pm EAT
+    - cron: "0 22 * * *"  # 1am EAT
+  workflow_dispatch:
+    inputs:
+      summaryType:
+        description: "Which summary to send (today/week)"
+        required: true
+        default: "today"
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install
+
+      # 🔔 Subscribe all tokens in tokens.json to the all-users topic
+      - name: Subscribe tokens to all-users
+        run: node subscribeTokens.js
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # 🔔 Send today summary notifications
+      - name: Send today summary
+        if: github.event.schedule == '0 8 * * *' || github.event.schedule == '0 18 * * *' || github.event.inputs.summaryType == 'today'
+        run: node sendNotifications.js today
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+
+      # 🔔 Send week summary notifications
+      - name: Send week summary
+        if: github.event.schedule == '0 12 * * *' || github.event.schedule == '0 22 * * *' || github.event.inputs.summaryType == 'week'
+        run: node sendNotifications.js week
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
