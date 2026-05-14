@@ -136,10 +136,11 @@ function AppContent() {
   const [initializing, setInitializing] = useState(true);
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
+  const [deepLinkHandled, setDeepLinkHandled] = useState(false); // Prevent duplicate handling
 
   // Handle deep links on app startup - CRITICAL FIX
   useEffect(() => {
-    if (!loading && navigationRef.current) {
+    if (!loading && navigationRef.current && !deepLinkHandled) {
       try {
         // Check if we have a deep link URL to handle
         const currentUrl = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -148,73 +149,181 @@ function AppContent() {
           const urlParts = currentUrl.split('/').filter(part => part);
           console.log('🚀 Deep link detected:', currentUrl, 'URL parts:', urlParts);
 
-          // Use a shorter timeout and reset navigation state first
-          setTimeout(() => {
-            try {
-              // Handle event deep links: /events/{eventId}
-              if (urlParts[0] === 'events' && urlParts[1] &&
-                  urlParts[1] !== 'add' && urlParts[1] !== 'notifications' &&
-                  urlParts[1] !== 'ticket-contacts' && urlParts[1] !== 'payment-callback') {
+          // Only handle URLs that look like deep links (with potential IDs)
+          const isDeepLink = (
+            (urlParts[0] === 'events' && urlParts[1] && !['add', 'notifications', 'ticket-contacts', 'payment-callback', 'my-tickets'].includes(urlParts[1])) ||
+            (urlParts[0] === 'venues' && urlParts[1] && !['add-event', 'programs', 'vibe', 'ticket-contacts', 'my-tickets'].includes(urlParts[1])) ||
+            (urlParts[0] === 'map' && urlParts[1] === 'venues' && urlParts[2]) ||
+            (urlParts[0] === 'map' && urlParts[1] === 'events' && urlParts[2]) ||
+            (urlParts[0] === 'calendar' && urlParts[1] === 'venues' && urlParts[2]) ||
+            (urlParts[0] === 'calendar' && urlParts[1] === 'events' && urlParts[2])
+          );
 
-                const eventId = urlParts[1];
-                console.log('🎯 Navigating to event details:', eventId);
+          if (isDeepLink) {
+            // Use a shorter timeout and reset navigation state first
+            setTimeout(() => {
+              try {
+                // Handle event deep links: /events/{eventId}
+                if (urlParts[0] === 'events' && urlParts[1]) {
+                  const eventId = urlParts[1];
+                  console.log('🎯 Navigating to event details:', eventId);
 
-                // First reset to Main, then navigate to the specific event
-                navigationRef.current?.reset({
-                  index: 0,
-                  routes: [{
-                    name: 'Main',
-                    state: {
-                      index: 0, // Events tab index
+                  // First reset to Main, then navigate to the specific event
+                  navigationRef.current?.reset({
+                    index: 0,
+                    routes: [{
+                      name: 'Main',
+                      state: {
+                        index: 0, // Events tab index
+                        routes: [{
+                          name: 'events',
+                          state: {
+                            index: 0,
+                            routes: [{
+                              name: 'EventDetail',
+                              params: { eventId }
+                            }]
+                          }
+                        }]
+                      }
+                    }
+                  });
+                }
+                // Handle venue deep links: /venues/{venueId}
+                else if (urlParts[0] === 'venues' && urlParts[1]) {
+                  const venueId = urlParts[1];
+                  console.log('🏢 Navigating to venue details:', venueId);
+
+                  navigationRef.current?.reset({
+                    index: 1, // Venues tab index
+                    routes: [{
+                      name: 'Main',
+                      state: {
+                        index: 1,
+                        routes: [{
+                          name: 'venues',
+                          state: {
+                            index: 0,
+                            routes: [{
+                              name: 'VenueDetail',
+                              params: { venueId }
+                            }]
+                          }
+                        }]
+                      }
+                    }
+                  });
+                }
+                // Handle map deep links: /map/venues/{venueId} or /map/events/{eventId}
+                else if (urlParts[0] === 'map') {
+                  if (urlParts[1] === 'venues' && urlParts[2]) {
+                    const venueId = urlParts[2];
+                    console.log('🗺️ Navigating to venue on map:', venueId);
+                    navigationRef.current?.reset({
+                      index: 2, // Map tab index
                       routes: [{
-                        name: 'events',
+                        name: 'Main',
                         state: {
-                          index: 0,
+                          index: 2,
                           routes: [{
-                            name: 'EventDetail',
-                            params: { eventId }
+                            name: 'map',
+                            state: {
+                              routes: [{
+                                name: 'VenueDetail',
+                                params: { venueId }
+                              }]
+                            }
                           }]
                         }
-                      }]
-                    }
-                  }]
-                });
-              }
-              // Handle venue deep links: /venues/{venueId}
-              else if (urlParts[0] === 'venues' && urlParts[1]) {
-                const venueId = urlParts[1];
-                console.log('🏢 Navigating to venue details:', venueId);
-
-                navigationRef.current?.reset({
-                  index: 1, // Venues tab index
-                  routes: [{
-                    name: 'Main',
-                    state: {
-                      index: 1,
+                      }
+                    });
+                  } else if (urlParts[1] === 'events' && urlParts[2]) {
+                    const eventId = urlParts[2];
+                    console.log('🗺️ Navigating to event on map:', eventId);
+                    navigationRef.current?.reset({
+                      index: 2, // Map tab index
                       routes: [{
-                        name: 'venues',
+                        name: 'Main',
                         state: {
-                          index: 0,
+                          index: 2,
                           routes: [{
-                            name: 'VenueDetail',
-                            params: { venueId }
+                            name: 'map',
+                            state: {
+                              routes: [{
+                                name: 'EventDetail',
+                                params: { eventId }
+                              }]
+                            }
                           }]
                         }
-                      }]
-                    }
-                  }]
-                });
+                      }
+                    });
+                  }
+                }
+                // Handle calendar deep links: /calendar/venues/{venueId} or /calendar/events/{eventId}
+                else if (urlParts[0] === 'calendar') {
+                  if (urlParts[1] === 'venues' && urlParts[2]) {
+                    const venueId = urlParts[2];
+                    console.log('📅 Navigating to venue in calendar:', venueId);
+                    navigationRef.current?.reset({
+                      index: 3, // Calendar tab index
+                      routes: [{
+                        name: 'Main',
+                        state: {
+                          index: 3,
+                          routes: [{
+                            name: 'calendar',
+                            state: {
+                              routes: [{
+                                name: 'VenueDetail',
+                                params: { venueId }
+                              }]
+                            }
+                          }]
+                        }
+                      }
+                    });
+                  } else if (urlParts[1] === 'events' && urlParts[2]) {
+                    const eventId = urlParts[2];
+                    console.log('📅 Navigating to event in calendar:', eventId);
+                    navigationRef.current?.reset({
+                      index: 3, // Calendar tab index
+                      routes: [{
+                        name: 'Main',
+                        state: {
+                          index: 3,
+                          routes: [{
+                            name: 'calendar',
+                            state: {
+                              routes: [{
+                                name: 'EventDetail',
+                                params: { eventId }
+                              }]
+                            }
+                          }]
+                        }
+                      }
+                    });
+                  }
+                }
+
+                // Mark deep link as handled to prevent re-running
+                setDeepLinkHandled(true);
+                console.log('✅ Deep link handling completed');
+
+              } catch (deepLinkErr) {
+                console.error('❌ Deep link navigation error:', deepLinkErr);
+                setDeepLinkHandled(true); // Still mark as handled to prevent infinite retries
               }
-            } catch (deepLinkErr) {
-              console.error('❌ Deep link navigation error:', deepLinkErr);
-            }
-          }, 50); // Very short delay to beat React Navigation's default routing
+            }, 50); // Very short delay to beat React Navigation's default routing
+          }
         }
       } catch (err) {
         console.warn('⚠️ Deep link detection error:', err);
+        setDeepLinkHandled(true); // Mark as handled even on error
       }
     }
-  }, [loading]);
+  }, [loading, deepLinkHandled]); // Added deepLinkHandled to dependencies
 
   useEffect(() => {
     if (!loading) {
