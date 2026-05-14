@@ -137,45 +137,81 @@ function AppContent() {
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
 
-  // Handle deep links on app startup
+  // Handle deep links on app startup - CRITICAL FIX
   useEffect(() => {
     if (!loading && navigationRef.current) {
       try {
         // Check if we have a deep link URL to handle
-        const currentUrl = typeof window !== 'undefined' ? window.location.pathname + window.location.search : '';
+        const currentUrl = typeof window !== 'undefined' ? window.location.pathname : '';
         if (currentUrl && currentUrl !== '/' && currentUrl !== '/login' && currentUrl !== '/signup') {
           // Parse the URL to determine what screen to navigate to
           const urlParts = currentUrl.split('/').filter(part => part);
-          console.log('Deep link detected:', currentUrl, 'URL parts:', urlParts);
+          console.log('🚀 Deep link detected:', currentUrl, 'URL parts:', urlParts);
 
+          // Use a shorter timeout and reset navigation state first
           setTimeout(() => {
             try {
               // Handle event deep links: /events/{eventId}
-              if (urlParts[0] === 'events' && urlParts[1] && urlParts[1] !== 'add' && urlParts[1] !== 'notifications') {
+              if (urlParts[0] === 'events' && urlParts[1] &&
+                  urlParts[1] !== 'add' && urlParts[1] !== 'notifications' &&
+                  urlParts[1] !== 'ticket-contacts' && urlParts[1] !== 'payment-callback') {
+
                 const eventId = urlParts[1];
-                console.log('Navigating to event:', eventId);
-                navigationRef.current?.navigate('Events', {
-                  screen: 'EventDetail',
-                  params: { eventId }
+                console.log('🎯 Navigating to event details:', eventId);
+
+                // First reset to Main, then navigate to the specific event
+                navigationRef.current?.reset({
+                  index: 0,
+                  routes: [{
+                    name: 'Main',
+                    state: {
+                      index: 0, // Events tab index
+                      routes: [{
+                        name: 'events',
+                        state: {
+                          index: 0,
+                          routes: [{
+                            name: 'EventDetail',
+                            params: { eventId }
+                          }]
+                        }
+                      }]
+                    }
+                  }]
                 });
               }
               // Handle venue deep links: /venues/{venueId}
               else if (urlParts[0] === 'venues' && urlParts[1]) {
                 const venueId = urlParts[1];
-                console.log('Navigating to venue:', venueId);
-                navigationRef.current?.navigate('Venues', {
-                  screen: 'VenueDetail',
-                  params: { venueId }
+                console.log('🏢 Navigating to venue details:', venueId);
+
+                navigationRef.current?.reset({
+                  index: 1, // Venues tab index
+                  routes: [{
+                    name: 'Main',
+                    state: {
+                      index: 1,
+                      routes: [{
+                        name: 'venues',
+                        state: {
+                          index: 0,
+                          routes: [{
+                            name: 'VenueDetail',
+                            params: { venueId }
+                          }]
+                        }
+                      }]
+                    }
+                  }]
                 });
               }
-              // Handle other deep links as needed...
             } catch (deepLinkErr) {
-              console.warn('Deep link navigation error:', deepLinkErr);
+              console.error('❌ Deep link navigation error:', deepLinkErr);
             }
-          }, 200); // Slightly longer delay to ensure navigation is fully ready
+          }, 50); // Very short delay to beat React Navigation's default routing
         }
       } catch (err) {
-        console.warn('Deep link detection error:', err);
+        console.warn('⚠️ Deep link detection error:', err);
       }
     }
   }, [loading]);
