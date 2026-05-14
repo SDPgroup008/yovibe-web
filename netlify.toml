@@ -1,5 +1,5 @@
 [build]
-  command = "expo export:web"
+  command = "expo export --platform web"
   publish = "dist"
 
 [build.environment]
@@ -35,6 +35,21 @@
   directory = "netlify/functions"
   # Use esbuild to bundle function dependencies (including firebase-admin)
   node_bundler = "esbuild"
+
+[[headers]]
+  # Cache TensorFlow.js model files for 1 year
+  for = "/vibe_model_tfjs/model.json"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+    Content-Type = "application/json"
+
+[[headers]]
+  # Cache TensorFlow.js weight files for 1 year
+  for = "/vibe_model_tfjs/*.bin"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Cache-Control = "public, max-age=31536000"
+    Content-Type = "application/octet-stream"
 
 [[redirects]]
   from = "/*"
