@@ -4,17 +4,13 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../utils/compatNavigation"
 import { useAuth } from "../contexts/AuthContext"
 import FirebaseService from "../services/FirebaseService"
 import type { Ticket } from "../models/Ticket"
-import type { MyTicketsScreenProps } from "../navigation/types"
 
-
-
-
-
-
-const MyTicketsScreen: React.FC<MyTicketsScreenProps> = ({ route, navigation }) => {
+const MyTicketsScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
   const { user } = useAuth()
   const [tickets, setTickets] = useState<Ticket[]>([])
   const [loading, setLoading] = useState(true)

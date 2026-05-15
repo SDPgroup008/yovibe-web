@@ -15,14 +15,12 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
+import { useCompatNavigation } from "../utils/compatNavigation"
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 
-interface MyVenuesScreenProps {
-  navigation: any
-}
-
-const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
+const MyVenuesScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
   const { user } = useAuth()
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
@@ -99,6 +97,13 @@ const MyVenuesScreen: React.FC<MyVenuesScreenProps> = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>My Venues</Text>
+        <View style={{ width: 40 }} />
+      </View>
       <TouchableOpacity style={styles.addButton} onPress={handleAddVenue}>
         <Ionicons name="add" size={24} color="#FFFFFF" />
         <Text style={styles.addButtonText}>Add New Venue</Text>
@@ -179,7 +184,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 16,
+    paddingTop: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#333",
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    flex: 1,
+    textAlign: "center",
   },
   loadingContainer: {
     flex: 1,

@@ -418,6 +418,9 @@ const VenueDetailScreen: React.FC = () => {
 
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
           <View style={styles.titleContainer}>
             <Text style={styles.venueName}>{venue.name}</Text>
             <Text style={styles.venueLocation}>{venue.location}</Text>
@@ -1121,9 +1124,14 @@ const styles = StyleSheet.create({
   },
   headerRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
     marginBottom: 8,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
   },
   titleContainer: {
     flex: 1,

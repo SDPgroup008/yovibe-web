@@ -17,15 +17,19 @@ import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { blobToDataURL } from "../utils/expoHelpers"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
-import type { NativeStackScreenProps } from "@react-navigation/native-stack"
-import type { ProfileStackParamList } from "../navigation/types"
 
-type Props = NativeStackScreenProps<ProfileStackParamList, "AddVibe">
+const AddVibeScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
 
-const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { venueId, venueName } = route.params
+  // Extract venueId from current path: /profile/add-vibe/:venueId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const venueId = pathParts[3] // profile/add-vibe/:venueId, so [profile, add-vibe, venueId]
+  const venueName = "Venue" // We'll need to fetch this or pass it differently
   const { user } = useAuth()
 
   // image is a data URL or object URL (string) for preview/analysis
@@ -299,6 +303,9 @@ const AddVibeScreen: React.FC<Props> = ({ navigation, route }) => {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Today's Vibe</Text>
           <View style={[styles.modelStatusIndicator, { backgroundColor: modelLoaded ? '#4CAF50' : '#FF3B30' }]}>
             <Text style={styles.modelStatusText}>{modelLoaded ? '✓' : '○'}</Text>
@@ -457,14 +464,21 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
   headerTitle: {
+    flex: 1,
     fontSize: 24,
     fontWeight: "bold",
     color: "#FFFFFF",
+    textAlign: "center",
   },
   modelStatusIndicator: {
     width: 24,

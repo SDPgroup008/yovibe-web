@@ -15,19 +15,20 @@ import {
   RefreshControl,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { VibeImage } from "../models/VibeImage"
-import { VenuesStackParamList, ProfileStackParamList } from "../navigation/types"
 
-type TodaysVibeScreenProps = NativeStackScreenProps<
-  VenuesStackParamList | ProfileStackParamList,
-  "TodaysVibe"
->
+const TodaysVibeScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
 
-const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }) => {
-  const { venueId, venueName } = route.params
+  // Extract venueId from current path: /venues/:venueId/vibe or /profile/todays-vibe/:venueId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const venueId = pathParts.length === 3 ? pathParts[2] : pathParts[3] // venues/:venueId/vibe or profile/todays-vibe/:venueId
+  const venueName = "Venue" // We'll need to fetch this or pass it differently
   const [activeTab, setActiveTab] = useState<"today" | "week">("today")
   const [todayVibes, setTodayVibes] = useState<VibeImage[]>([])
   const [weekVibes, setWeekVibes] = useState<Record<string, VibeImage[]>>({})
@@ -183,8 +184,16 @@ const TodaysVibeScreen: React.FC<TodaysVibeScreenProps> = ({ navigation, route }
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>{venueName}</Text>
-        <Text style={styles.headerSubtitle}>Vibe Gallery</Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>{venueName}</Text>
+            <Text style={styles.headerSubtitle}>Vibe Gallery</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
       </View>
 
       <View style={styles.tabContainer}>
@@ -306,9 +315,22 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   header: {
-    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#333",
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  titleContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
