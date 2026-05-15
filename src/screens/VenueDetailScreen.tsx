@@ -11,10 +11,13 @@ import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/f
 import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
-import type { VenueDetailScreenProps } from "../navigation/types"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
 import VibeAnalysisService from "../services/VibeAnalysisService"
-const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation }) => {
-  const { venueId } = route.params
+const VenueDetailScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { params } = useRouter()
+  const { venueId } = params
   const { user } = useAuth()
   const isFocused = useIsFocused()
   const scrollViewRef = useRef<ScrollView>(null)
@@ -373,18 +376,7 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
 
   const showOwnButton = user && !isOwner && !isAdmin && !isCustomVenue && !existingRequestStatus
 
-  useEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <TouchableOpacity 
-          style={styles.headerMoreButton}
-          onPress={() => setShowMoreMenu(!showMoreMenu)}
-        >
-          <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
-        </TouchableOpacity>
-      ),
-    })
-  }, [navigation, showMoreMenu])
+  // Header menu is now handled within the screen content since we don't use React Navigation headers
 
   if (loading) {
     return (
@@ -422,8 +414,20 @@ const VenueDetailScreen: React.FC<VenueDetailScreenProps> = ({ route, navigation
       />
 
       <View style={styles.contentContainer}>
-        <Text style={styles.venueName}>{venue.name}</Text>
-        <Text style={styles.venueLocation}>{venue.location}</Text>
+        <View style={styles.headerRow}>
+          <View style={styles.titleContainer}>
+            <Text style={styles.venueName}>{venue.name}</Text>
+            <Text style={styles.venueLocation}>{venue.location}</Text>
+          </View>
+          {showOwnButton && (
+            <TouchableOpacity
+              style={styles.moreButton}
+              onPress={() => setShowMoreMenu(!showMoreMenu)}
+            >
+              <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
+          )}
+        </View>
 
         <View style={styles.categoriesContainer}>
           {venue.categories.map((category, index) => (
@@ -1112,8 +1116,18 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: responsiveSize(8, 10, 12),
   },
-  headerMoreButton: {
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  titleContainer: {
+    flex: 1,
+  },
+  moreButton: {
     padding: 8,
+    marginTop: 4,
   },
   moreMenuOverlay: {
     position: "absolute",
