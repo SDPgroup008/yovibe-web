@@ -3,7 +3,9 @@
 import type React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions, TextInput } from "react-native";
-import { useIsFocused } from "../utils/compatNavigation";
+import { useIsFocused, useCompatNavigation } from "../utils/compatNavigation";
+import { useCachedVenues } from "../hooks/useDataCache";
+import { useVenuesScroll } from "../hooks/useScrollPersistence";
 import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";
@@ -26,7 +28,10 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
-const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
+const VenuesScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { data: venues = [], loading, error, refetch } = useCachedVenues()
+  const { scrollRef, onScroll } = useVenuesScroll()
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
 
@@ -47,19 +52,13 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
 
-  const [venues, setVenues] = useState<Venue[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
   const [activeTab, setActiveTab] = useState<"all" | "nightlife" | "recreation">("all");
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [dataCache, setDataCache] = useState<{data: Venue[], timestamp: number, version: string} | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const flatListRef = useRef<FlatList>(null);
+
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Debounced search handler for performance
@@ -88,12 +87,12 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
   const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   const CACHE_VERSION = '2'; // Increment to bust cache
 
-  // Initial data load only - no reload on focus
+  // Update displayed venues when data changes
   useEffect(() => {
-    if (venues.length === 0) {
-      loadVenues();
+    if (venues) {
+      setDisplayedVenues(venues);
     }
-  }, []);
+  }, [venues]);
 
   const isCacheValid = () => {
     if (!dataCache) {
@@ -419,9 +418,10 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
-    setDataCache(null); // Clear cache to force fresh load
-    await loadVenues(true, true);
-  }, []);
+    setRefreshing(true);
+    await refetch(); // Force refresh cached data
+    setRefreshing(false);
+  }, [refetch]);
 
   // Memoize renderVenueCard to prevent recreation on every render
   const renderVenueCard = useCallback(({ item }: { item: Venue }) => {
@@ -596,7 +596,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          ref={flatListRef}
+          ref={scrollRef}
           data={displayedVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}
@@ -625,6 +625,7 @@ const VenuesScreen: React.FC<VenuesScreenProps> = ({ navigation }) => {
           windowSize={5}
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
+          onScroll={onScroll}
         />
       )}
 
