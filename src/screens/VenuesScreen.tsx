@@ -32,9 +32,6 @@ const VenuesScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, error, refetch } = useCachedVenues()
   const { scrollRef, onScroll } = useVenuesScroll()
-
-  // State for initial batch loading
-  const [initialLoading, setInitialLoading] = useState(false)
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
 
@@ -62,17 +59,7 @@ const VenuesScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
 
-  // Pagination state - only for initial load
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [allDataLoaded, setAllDataLoaded] = useState(false);
-
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Pagination constants - only for initial load
-  const ITEMS_PER_PAGE = 5;
-  const BATCH_SIZE = 10; // Load 10 at a time during initial load
 
   // Debounced search handler for performance
   const handleSearchChange = useCallback((text: string) => {
@@ -97,83 +84,111 @@ const VenuesScreen: React.FC = () => {
   }, [showSearch]);
 
 
-  // Initial batch loading - only when data is not cached
+  // Update displayed venues when data changes
   useEffect(() => {
-    const performInitialLoad = async () => {
-      if (venues.length > 0 || initialLoading) {
-        // Data is already cached or loading is in progress
-        setAllDataLoaded(true);
-        return;
-      }
+    if (venues) {
+      setDisplayedVenues(venues);
+    }
+  }, [venues]);
 
-      setInitialLoading(true);
-      console.log("[VenuesScreen] Starting initial batch loading...");
 
-      try {
-        let allVenues: Venue[] = [];
-        let currentLastDoc: any = null;
-        const DELAY_MS = 2000; // 2 seconds between batches for better UX
 
-        while (true) {
-          const { venues: batchVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
 
-          if (batchVenues.length === 0) break;
 
-          allVenues = [...allVenues, ...batchVenues];
-          currentLastDoc = newLastDoc;
+  const handleVenueSelect = (venueId: string) => {
+    navigation.navigate("VenueDetail", { venueId });
+  };
 
-          // Update displayed venues progressively
-          const sortedBatch = [...allVenues].sort((a, b) => {
-            const aVibe = venueVibeRatings[a.id] || 0.0;
-            const bVibe = venueVibeRatings[b.id] || 0.0;
-            return bVibe - aVibe;
-          });
+  const getFilteredVenues = () => {
+    // Handle search query filtering
+    const searchTerm = searchQuery.toLowerCase().trim();
 
-          // Update cache with current batch
-          // Note: The useCachedVenues hook will handle caching, but we need to trigger it
-          // For now, just update local state and let the cache hook handle persistence
+    // Ensure venues is always an array
+    const venuesArray = venues || [];
 
-          if (!newLastDoc) break;
+    // Handle "all" tab - return all venues without filtering
+    if (activeTab === "all") {
+      let filtered = venuesArray;
 
-          // Delay between batches to prevent overwhelming the UI
-          if (batchVenues.length === BATCH_SIZE) {
-            await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-          }
-        }
-
-        // Final sort and cache update
-        const finalSorted = [...allVenues].sort((a, b) => {
-          const aVibe = venueVibeRatings[a.id] || 0.0;
-          const bVibe = venueVibeRatings[b.id] || 0.0;
-          return bVibe - aVibe;
+      // Apply search filter if search term exists
+      if (searchTerm) {
+        filtered = venuesArray.filter((venue) => {
+          const nameMatch = venue.name?.toLowerCase().includes(searchTerm);
+          const locationMatch = venue.location?.toLowerCase().includes(searchTerm);
+          const categoryMatch = venue.categories?.some((cat) => 
+            cat.toLowerCase().includes(searchTerm)
+          );
+          return nameMatch || locationMatch || categoryMatch;
         });
-
-        setAllDataLoaded(true);
-        console.log(`[VenuesScreen] Initial load complete: ${finalSorted.length} venues`);
-
-      } catch (error) {
-        console.error("[VenuesScreen] Error during initial load:", error);
-        setAllDataLoaded(true); // Prevent further loading attempts
-      } finally {
-        setInitialLoading(false);
       }
-    };
+      
+      const sorted = [...filtered].sort((a, b) => {
+        const aVibe = venueVibeRatings[a.id] || 0.0;
+        const bVibe = venueVibeRatings[b.id] || 0.0;
+        return bVibe - aVibe;
+      });
+      return sorted;
+    }
+    
+    let nightlifeCount = 0
+    let recreationCount = 0
+    let noCategoryCount = 0
 
-    performInitialLoad();
-  }, [venues.length, initialLoading]); // Only run when venues is empty and not already loading
+    const filtered = venuesArray.filter((venue) => {
+      const venueName = venue.name || "Unnamed"
+      const categories = venue.categories || []
+      
+      // Safety check: ensure categories exists and is an array, fallback to "Other"
+      if (!venue.categories || !Array.isArray(venue.categories) || venue.categories.length === 0) {
+        noCategoryCount++
+        const included = activeTab === "recreation"
+        return included;
+      }
+      
+      const isNightlife = venue.categories.some((cat) =>
+        ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase())
+      );
+      
+      if (isNightlife) {
+        nightlifeCount++
+        return activeTab === "nightlife";
+      } else {
+        recreationCount++
+        return activeTab === "recreation";
+      }
+    });
 
-  // Update displayed venues when data changes - show paginated initially, all if loaded
+    // Apply search filter to the tab-filtered results
+    let searchFiltered = filtered;
+    if (searchTerm) {
+      searchFiltered = filtered.filter((venue) => {
+        const nameMatch = venue.name?.toLowerCase().includes(searchTerm);
+        const locationMatch = venue.location?.toLowerCase().includes(searchTerm);
+        const categoryMatch = venue.categories?.some((cat) => 
+          cat.toLowerCase().includes(searchTerm)
+        );
+        return nameMatch || locationMatch || categoryMatch;
+      });
+    }
+    
+    // Sort by current vibe rating (highest first)
+    const sorted = searchFiltered.sort((a, b) => {
+      const aVibe = venueVibeRatings[a.id] || 0.0;
+      const bVibe = venueVibeRatings[b.id] || 0.0;
+      return bVibe - aVibe;
+    });
+    
+    return sorted;
+  };
+
+  // Memoize filtered and sorted venues to prevent recalculation on every render
+  // Only recalculate when venues, activeTab, or searchQuery changes
+  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery]);
+
   useEffect(() => {
     const venuesToDisplay = Array.isArray(filteredVenues) ? filteredVenues : [];
-    if (allDataLoaded) {
-      // Show all venues if all data has been loaded
-      setDisplayedVenues(venuesToDisplay);
-    } else {
-      // Show paginated during initial loading
-      const toDisplay = venuesToDisplay.slice(0, currentPage * ITEMS_PER_PAGE);
-      setDisplayedVenues(toDisplay);
-    }
-  }, [filteredVenues, currentPage, allDataLoaded]);
+    setDisplayedVenues(venuesToDisplay);
+  }, [filteredVenues]);
 
 
 
@@ -183,24 +198,6 @@ const VenuesScreen: React.FC = () => {
     await refetch(); // Force refresh cached data
     setRefreshing(false);
   }, [refetch]);
-
-  // Memoize loadMoreVenues for pagination during initial load
-  const loadMoreVenues = useCallback(async () => {
-    if (allDataLoaded) {
-      // If all data is loaded, just show more from filtered results
-      const filtered = Array.isArray(filteredVenues) ? filteredVenues : [];
-      if (displayedVenues.length < filtered.length) {
-        const nextPage = currentPage + 1;
-        const toDisplay = filtered.slice(0, nextPage * ITEMS_PER_PAGE);
-        setDisplayedVenues(toDisplay);
-        setCurrentPage(nextPage);
-      }
-      return;
-    }
-
-    // During initial load, don't trigger additional pagination
-    // The initial load handles all batch loading
-  }, [filteredVenues, displayedVenues, currentPage, allDataLoaded]);
 
   // Memoize renderVenueCard to prevent recreation on every render
   const renderVenueCard = useCallback(({ item }: { item: Venue }) => {
@@ -404,8 +401,6 @@ const VenuesScreen: React.FC = () => {
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
           onScroll={onScroll}
-          onEndReached={loadMoreVenues}
-          onEndReachedThreshold={0.5}
         />
       )}
 
