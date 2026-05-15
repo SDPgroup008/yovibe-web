@@ -25,7 +25,10 @@ const VenueDetailScreen: React.FC = () => {
   const { user } = useAuth()
   const isFocused = useIsFocused()
   const scrollViewRef = useRef<ScrollView>(null)
-  
+
+  // Validate venueId
+  const isValidVenueId = venueId && venueId.length > 0 && venueId !== 'add-event' && venueId !== 'programs' && venueId !== 'vibe' && venueId !== 'ticket-contacts' && venueId !== 'my-tickets'
+
   const [venue, setVenue] = useState<Venue | null>(null)
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -90,14 +93,20 @@ const VenueDetailScreen: React.FC = () => {
 
   useEffect(() => {
     const loadVenueAndEvents = async () => {
+      if (!isValidVenueId) {
+        setLoading(false)
+        return
+      }
+
       try {
         setLoading(true)
         console.log("[VenueDetailScreen] Loading venue details for venueId:", venueId)
         console.log("[VenueDetailScreen] User logged in:", !!user)
-        
+
         const venueData = await FirebaseService.getVenueById(venueId)
-        setVenue(venueData)
-        console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
+        if (venueData) {
+          setVenue(venueData)
+          console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
         // Fetch events regardless of user authentication (events are public data)
         if (venueData) {
@@ -199,7 +208,7 @@ const VenueDetailScreen: React.FC = () => {
     return () => {
       unsubscribeVibe()
     }
-  }, [venueId, user])
+  }, [venueId, user, isValidVenueId])
 
   // Inject JSON-LD structured data for SEO
   useEffect(() => {

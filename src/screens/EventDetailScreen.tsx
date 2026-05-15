@@ -43,26 +43,38 @@ const EventDetailScreen: React.FC = () => {
   const pathParts = currentPath.split('/').filter(Boolean)
   const eventId = pathParts[1] // events/:eventId, so [events, eventId]
   const { user } = useAuth()
-  
+
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
+
+  // Validate eventId
+  const isValidEventId = eventId && eventId.length > 0 && eventId !== 'add' && eventId !== 'notifications' && eventId !== 'ticket-contacts' && eventId !== 'my-tickets'
   const [isGoing, setIsGoing] = useState(false)
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
 
   useEffect(() => {
     const loadEvent = async () => {
+      if (!isValidEventId) {
+        setLoading(false)
+        return
+      }
+
       try {
         const eventData = await FirebaseService.getEventById(eventId)
-        setEvent(eventData)
+        if (eventData) {
+          setEvent(eventData)
 
-        // Check if current user is attending
-        if (user && eventData?.attendees) {
-          setIsGoing(eventData.attendees.includes(user.id))
+          // Check if current user is attending
+          if (user && eventData?.attendees) {
+            setIsGoing(eventData.attendees.includes(user.id))
+          }
+
+          // Set attendee count
+          setAttendeeCount(eventData?.attendees?.length || 0)
+        } else {
+          console.warn("Event not found:", eventId)
         }
-
-        // Set attendee count
-        setAttendeeCount(eventData?.attendees?.length || 0)
       } catch (error) {
         console.error("Error loading event details:", error)
       } finally {
@@ -71,7 +83,7 @@ const EventDetailScreen: React.FC = () => {
     }
 
     loadEvent()
-  }, [eventId, user])
+  }, [eventId, user, isValidEventId])
 
   const handleToggleGoing = async () => {
     if (!user) {
