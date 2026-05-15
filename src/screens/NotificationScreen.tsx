@@ -185,7 +185,7 @@ export default function NotificationScreen() {
     )
   }
 
-  const unreadCount = notifications.filter(n => !n.isRead).length
+  const unreadCount = (notifications || []).filter(n => !n.isRead).length
 
   return (
     <View style={styles.container}>

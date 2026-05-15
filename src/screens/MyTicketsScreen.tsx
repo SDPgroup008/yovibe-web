@@ -46,7 +46,7 @@ const MyTicketsScreen: React.FC = () => {
     }
   }
 
-  const filteredTickets = tickets.filter((ticket) => {
+  const filteredTickets = (tickets || []).filter((ticket) => {
     if (filter === "all") return true
     if (filter === "active") return ticket.status === "active" && !ticket.isScanned
     if (filter === "used") return ticket.status === "used" || ticket.isScanned
@@ -157,14 +157,14 @@ const MyTicketsScreen: React.FC = () => {
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
-            {tickets.filter((t) => t.status === "active" && !t.isScanned).length}
+            {(tickets || []).filter((t) => t.status === "active" && !t.isScanned).length}
           </Text>
           <Text style={styles.summaryLabel}>Active</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
-            {tickets.filter((t) => t.status === "used" || t.isScanned).length}
+            {(tickets || []).filter((t) => t.status === "used" || t.isScanned).length}
           </Text>
           <Text style={styles.summaryLabel}>Used</Text>
         </View>
