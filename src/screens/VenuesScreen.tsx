@@ -3,7 +3,7 @@
 import type React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions, TextInput } from "react-native";
-import { useIsFocused } from "@react-navigation/native";
+import { useIsFocused } from "../utils/compatNavigation";
 import FirebaseService from "../services/FirebaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";

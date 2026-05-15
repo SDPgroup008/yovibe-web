@@ -17,6 +17,14 @@ export interface CompatNavigation {
   addListener: (event: string, callback: () => void) => () => void;
 }
 
+// Compatibility hook for useIsFocused
+export const useIsFocused = (): boolean => {
+  // For URL routing, a screen is "focused" when it matches the current path
+  // Since we don't have a concept of focus in URL routing like React Navigation,
+  // we'll return true for now (screens are always "focused" in single-page apps)
+  return true;
+};
+
 // Hook that provides React Navigation compatible interface
 export const useCompatNavigation = (): CompatNavigation => {
   const { navigate, goBack } = useNavigation();
