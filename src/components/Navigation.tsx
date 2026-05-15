@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from '../utils/ResponsiveDesign';
 
 // Navigation hook
-import { useNavigation } from './URLRouter';
+import { useNavigation } from '../utils/URLRouter';
 
 // Tab bar configuration
 interface TabConfig {
