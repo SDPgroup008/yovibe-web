@@ -42,6 +42,21 @@ import { RouterProvider, RouteDefinition } from '../utils/URLRouter';
 
 // Route definitions - comprehensive mapping of all existing screens
 export const routes: RouteDefinition[] = [
+  // Root route - redirect to main events screen
+  {
+    path: '/',
+    component: () => {
+      // Redirect root to events
+      React.useEffect(() => {
+        if (typeof window !== 'undefined') {
+          window.location.href = '/events';
+        }
+      }, []);
+      return null;
+    },
+    exact: true
+  },
+
   // Authentication routes
   {
     path: '/login',
