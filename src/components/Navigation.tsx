@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
   standardBackButton: {
     position: 'absolute',
     top: 16,
-    right: 16,
+    left: 16,
     width: 44,
     height: 44,
     borderRadius: 22,

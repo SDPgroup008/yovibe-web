@@ -355,10 +355,13 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   if (!event) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Event not found</Text>
-      </View>
+  return (
+    <View style={styles.container}>
+      <BackButton />
+      <ScrollView>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Purchase Tickets</Text>
+        </View>
     )
   }
 
