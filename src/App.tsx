@@ -110,38 +110,7 @@ function AppContent() {
     }
   }, [loading]);
 
-  // Handle authentication routing
-  if (!loading && !user) {
-    // Show auth screens when not authenticated
-    return (
-      <View style={{ flex: 1 }}>
-        <RouterProvider routes={[
-          {
-            path: '/login',
-            component: require('./screens/auth/LoginScreen').default,
-            exact: true
-          },
-          {
-            path: '/signup',
-            component: require('./screens/auth/SignUpScreen').default,
-            exact: true
-          },
-          // Redirect all other routes to login
-          {
-            path: '*',
-            component: () => {
-              useEffect(() => {
-                if (typeof window !== 'undefined') {
-                  window.location.href = '/login';
-                }
-              }, []);
-              return null;
-            }
-          }
-        ]} />
-      </View>
-    );
-  }
+  // Let the router handle all routes - authentication is managed by individual screens
 
   // 🔔 Register service worker and show permission banner after 5 seconds
   useEffect(() => {
@@ -267,7 +236,7 @@ function AppContent() {
     );
   }
 
-  // Show main app when authenticated
+  // Always render the main router - screens handle their own authentication
   return (
     <View style={{ flex: 1 }}>
       {/* Permission banner at the very top */}
