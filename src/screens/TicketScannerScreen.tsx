@@ -5,13 +5,20 @@ import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal } from "react-native"
 import { CameraView } from "expo-camera"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
-import type { TicketScannerScreenProps } from "../navigation/types"
 
-const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, route }) => {
-  const { user } = useAuth()
-  const { eventId, eventName } = route.params || {}
+const TicketScannerScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
+
+  // Extract eventId from current path: /events/scanner/:eventId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const eventId = pathParts[2] // events/scanner/:eventId, so [events, scanner, eventId]
+  const eventName = "Event" // We'll need to fetch this or pass it differently
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
@@ -182,15 +189,12 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({ navigation, r
 
   return (
     <View style={styles.container}>
+      <BackButton />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Ticket Scanner</Text>
           {eventName && <Text style={styles.headerSubtitle}>{eventName}</Text>}
         </View>
-        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>

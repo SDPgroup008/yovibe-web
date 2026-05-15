@@ -4,27 +4,29 @@ import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Animated, Platform, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
+import FirebaseService from "../services/FirebaseService"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
 
-interface TicketPurchaseScreenProps {
-  route: {
-    params: {
-      event: Event
-    }
-  }
-  navigation: any
-}
+const TicketPurchaseScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
 
-const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navigation }) => {
-  const { event } = route.params
+  // Extract eventId from current path: /events/tickets/:eventId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const eventId = pathParts[2] // events/tickets/:eventId, so [events, tickets, eventId]
   const { user } = useAuth()
-  const [quantity, setQuantity] = useState(1)
-  const [loading, setLoading] = useState(false)
+
+  const [event, setEvent] = useState<Event | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [pageLoading, setPageLoading] = useState(false)
   const [photoCaptured, setPhotoCaptured] = useState(false)
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState("")
   const [securityPhotoEnabled, setSecurityPhotoEnabled] = useState(false)
@@ -33,8 +35,31 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
   const [selectedTicketType, setSelectedTicketType] = useState<{ name: string; amount: string } | null>(null)
   const [showTicketTypeModal, setShowTicketTypeModal] = useState(false)
   
+  // Load event data
+  useEffect(() => {
+    const loadEvent = async () => {
+      if (!eventId) {
+        setLoading(false)
+        return
+      }
+
+      try {
+        const eventData = await FirebaseService.getEventById(eventId)
+        if (eventData) {
+          setEvent(eventData)
+        }
+      } catch (error) {
+        console.error("Error loading event for ticket purchase:", error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    loadEvent()
+  }, [eventId])
+
   // Get ticket types from event entry fees
-  const ticketTypes = event.entryFees && event.entryFees.length > 0 ? event.entryFees : []
+  const ticketTypes = event?.entryFees && event.entryFees.length > 0 ? event.entryFees : []
   
   // Visitor info for unauthenticated users
   const [visitorName, setVisitorName] = useState("")
@@ -319,14 +344,30 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
     }
   }
 
-  return (
-    <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Purchase Tickets</Text>
+  if (loading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2196F3" />
+        <Text style={styles.loadingText}>Loading event details...</Text>
       </View>
+    )
+  }
+
+  if (!event) {
+    return (
+      <View style={styles.loadingContainer}>
+        <Text style={styles.loadingText}>Event not found</Text>
+      </View>
+    )
+  }
+
+  return (
+    <View style={styles.container}>
+      <BackButton />
+      <ScrollView>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Purchase Tickets</Text>
+        </View>
 
       <View style={styles.eventInfo}>
         <Text style={styles.eventName}>{event.name}</Text>
@@ -746,7 +787,8 @@ const TicketPurchaseScreen: React.FC<TicketPurchaseScreenProps> = ({ route, navi
           </View>
         </View>
       </Modal>
-    </ScrollView>
+      </ScrollView>
+    </View>
   )
 }
 

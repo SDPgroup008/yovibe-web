@@ -15,6 +15,9 @@ import {
   Image,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import FirebaseService from "../services/FirebaseService"
 import TicketService from "../services/TicketService"
@@ -52,7 +55,13 @@ type OrganiserDashboardScreenProps = NativeStackScreenProps<
   "OrganiserDashboard"
 >
 
-const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ route, navigation }) => {
+const OrganiserDashboardScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
+
+  // Extract eventId from current path: /events/organiser/:eventId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const eventId = pathParts[2] // events/organiser/:eventId, so [events, organiser, eventId]
   const { eventId } = route.params
   const { user } = useAuth()
 
@@ -727,11 +736,9 @@ const OrganiserDashboardScreen: React.FC<OrganiserDashboardScreenProps> = ({ rou
 
   return (
     <View style={styles.dashboardContainer}>
+      <BackButton />
       <View style={styles.dashboardHeader}>
         <Text style={styles.dashboardTitle}>Organiser Dashboard</Text>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="close" size={28} color="#FFFFFF" />
-        </TouchableOpacity>
       </View>
       <ScrollView style={styles.dashboardContent}>
         <View style={styles.dashboardTabs}>
