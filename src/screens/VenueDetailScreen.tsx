@@ -108,50 +108,47 @@ const VenueDetailScreen: React.FC = () => {
           setVenue(venueData)
           console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
-        // Fetch events regardless of user authentication (events are public data)
-        if (venueData) {
+          // Fetch events regardless of user authentication (events are public data)
           console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
           const venueEvents = await FirebaseService.getEventsByVenue(venueId)
           console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
           setEvents(venueEvents)
-          
+
           // Check if venue is a custom venue (tied to one event and owned by event creator)
           if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
             setIsCustomVenue(true)
           } else {
             setIsCustomVenue(false)
           }
-        }
 
-        // Always set owner/admin flags when user is logged in (independent of venue data)
-        if (user) {
-          console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
-          setIsOwner(venueData?.ownerId === user.id)
-          setIsAdmin(user.userType === "admin")
-          console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
+          // Always set owner/admin flags when user is logged in (independent of venue data)
+          if (user) {
+            console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
+            setIsOwner(venueData.ownerId === user.id)
+            setIsAdmin(user.userType === "admin")
+            console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
 
-          // Check if user has existing ownership request for this venue
-          if (venueData) {
+            // Check if user has existing ownership request for this venue
             const existingRequest = await FirebaseService.getUserOwnershipRequest(venueId, user.id)
             if (existingRequest) {
               setExistingRequestStatus(existingRequest.status)
             }
           }
-        }
 
-        // Load initial vibe rating for today (only when user is logged in and venue data exists)
-        if (user && venueData) {
-          const today = new Date()
-          const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
-          if (vibeImages.length > 0) {
-            const latestVibe = vibeImages.reduce((latest, image) => {
-              return image.uploadedAt > latest.uploadedAt ? image : latest
-            })
-            setVibeRating(latestVibe.vibeRating || 0.0)
-            setCurrentVibeImage(latestVibe.imageUrl)
-          } else {
-            setVibeRating(0.0)
-            setCurrentVibeImage(null)
+          // Load initial vibe rating for today (only when user is logged in and venue data exists)
+          if (user) {
+            const today = new Date()
+            const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+            if (vibeImages.length > 0) {
+              const latestVibe = vibeImages.reduce((latest, image) => {
+                return image.uploadedAt > latest.uploadedAt ? image : latest
+              })
+              setVibeRating(latestVibe.vibeRating || 0.0)
+              setCurrentVibeImage(latestVibe.imageUrl)
+            } else {
+              setVibeRating(0.0)
+              setCurrentVibeImage(null)
+            }
           }
         }
       } catch (error) {
