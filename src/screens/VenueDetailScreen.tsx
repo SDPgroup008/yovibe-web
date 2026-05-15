@@ -16,8 +16,11 @@ import { useRouter } from "../utils/URLRouter"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 const VenueDetailScreen: React.FC = () => {
   const navigation = useCompatNavigation()
-  const { params } = useRouter()
-  const { venueId } = params
+  const { currentPath } = useRouter()
+
+  // Extract venueId from current path: /venues/:venueId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const venueId = pathParts[1] // venues/:venueId, so [venues, venueId]
   const { user } = useAuth()
   const isFocused = useIsFocused()
   const scrollViewRef = useRef<ScrollView>(null)
