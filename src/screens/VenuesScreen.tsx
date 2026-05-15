@@ -82,10 +82,7 @@ const VenuesScreen: React.FC = () => {
       setSearchQuery("");
     }
   }, [showSearch]);
-  const ITEMS_PER_PAGE = 5;
-  const INITIAL_FETCH_SIZE = 10; // Fetch 10 initially to ensure 5 per tab
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  const CACHE_VERSION = '2'; // Increment to bust cache
+
 
   // Update displayed venues when data changes
   useEffect(() => {
@@ -94,161 +91,9 @@ const VenuesScreen: React.FC = () => {
     }
   }, [venues]);
 
-  const isCacheValid = () => {
-    if (!dataCache) {
-      // console.log("🔍 Cache check: No cache exists");
-      return false;
-    }
-    // Check version match (invalidate old caches without version)
-    if (!dataCache.version || dataCache.version !== CACHE_VERSION) {
-      // console.log(`🔍 Cache check: Version mismatch (cached: ${dataCache.version}, current: ${CACHE_VERSION}) - invalidating cache`);
-      setDataCache(null); // Clear old cache
-      return false;
-    }
-    // Check timestamp
-    const isValid = Date.now() - dataCache.timestamp < CACHE_DURATION;
-    // console.log(`🔍 Cache check: Version OK, timestamp ${isValid ? 'valid' : 'expired'}`);
-    return isValid;
-  };
 
-  const loadVenues = async (isInitial: boolean = true, isRefresh: boolean = false) => {
-    // console.log(`\n🚀 loadVenues CALLED - isInitial: ${isInitial}, isRefresh: ${isRefresh}`);
-    try {
-      if (isInitial && !isRefresh) {
-        // console.log("\n🔄 VENUES SCREEN: Loading venues (initial load - fetching venues for both tabs)...")
-        // console.log(`📦 Current cache state:`, dataCache ? `exists (${dataCache.data?.length || 0} venues, version: ${dataCache.version})` : 'null');
-        
-        // Check cache first
-        if (isCacheValid()) {
-          // console.log("✅ Using cached venues data (cache is valid)");
-          // console.log("Cached venues count:", dataCache!.data.length)
-          setVenues(dataCache!.data);
-          setLoading(false);
-          return;
-        }
-        // console.log("⚠️ Cache invalid or empty, fetching from Firebase...")
-        setLoading(true);
-      }
 
-      if (isRefresh) {
-        setRefreshing(true);
-      }
 
-      // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
-      if (isInitial) {
-        // console.log("\n🚀 STARTING AUTO-LOAD: Will fetch ALL venues from Firebase in batches...\n");
-        
-        let allVenues: any[] = [];
-        let currentLastDoc = null;
-        let fetchCount = 0;
-        const BATCH_SIZE = 10; // Fetch 10 venues per batch
-        const DELAY_MS = 3000; // 3-second delay between batches
-        
-        // Keep fetching until Firebase has no more data
-        while (true) {
-          fetchCount++;
-          // console.log(`\n${'='.repeat(60)}`);
-          // console.log(`📥 BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues from Firebase...`);
-          // console.log(`${'='.repeat(60)}`);
-          
-          const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
-          
-          // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-          // console.log(`   • Received: ${paginatedVenues.length} venues`);
-          // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
-          
-          // If no venues returned, we're done
-          if (paginatedVenues.length === 0) {
-            // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data reached`);
-            break;
-          }
-          
-          // Add to our collection
-          allVenues = [...allVenues, ...paginatedVenues];
-          currentLastDoc = newLastDoc;
-          
-          // 🚀 IMMEDIATELY DISPLAY the batch to users
-          setVenues(allVenues);
-          // console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
-          
-          // 🎵 Load vibe ratings for this batch BEFORE moving to next batch
-          // console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
-          const today = new Date();
-          for (const venue of paginatedVenues) {
-            const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
-            if (vibeImages.length > 0) {
-              const latestVibe = vibeImages.reduce((latest, image) => {
-                return image.uploadedAt > latest.uploadedAt ? image : latest;
-              });
-              setVenueVibeRatings(prev => ({ ...prev, [venue.id]: latestVibe.vibeRating || 0.0 }));
-            } else {
-              setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
-            }
-          }
-          // console.log(`✅ Vibe ratings loaded for batch #${fetchCount}`);
-          
-          // Hide loading spinner after first batch is displayed
-          if (fetchCount === 1) {
-            // console.log("🎬 First batch complete - hiding loading spinner");
-            setLoading(false);
-          }
-          
-          // Show current totals
-          const nightlifeVenues = allVenues.filter(v => {
-            if (!v.categories || !Array.isArray(v.categories) || v.categories.length === 0) return false;
-            return v.categories.some((cat: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()));
-          });
-          
-          const recreationVenues = allVenues.filter(v => {
-            if (!v.categories || !Array.isArray(v.categories) || v.categories.length === 0) return true;
-            return !v.categories.some((cat: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(cat.toLowerCase()));
-          });
-          
-          // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-          // console.log(`   • Total venues: ${allVenues.length}`);
-          // console.log(`   • Nightlife: ${nightlifeVenues.length}`);
-          // console.log(`   • Recreation: ${recreationVenues.length}`);
-          
-          // If Firebase says no more data (lastDoc is null), we're done
-          if (!newLastDoc) {
-            // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All data loaded!`);
-            break;
-          }
-          
-          // Wait 5 seconds before next batch
-          // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before fetching next batch...`);
-          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-        }
-        
-        // console.log(`\n${'='.repeat(60)}`);
-        // console.log(`🎉 AUTO-LOAD COMPLETE!`);
-        // console.log(`${'='.repeat(60)}`);
-        // console.log(`   • Total batches fetched: ${fetchCount}`);
-        // console.log(`   • Total venues loaded: ${allVenues.length}`);
-        // console.log(`   • Nightlife venues: ${allVenues.filter(v => v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
-        // console.log(`   • Recreation venues: ${allVenues.filter(v => !v.categories?.some((c: string) => ["nightclub", "bar", "club", "lounge", "pub", "disco"].includes(c.toLowerCase()))).length}`);
-        // console.log(`${'='.repeat(60)}\n`);
-        
-        setVenues(allVenues);
-        setLastDoc(null); // No more data to fetch
-        setHasMore(false); // All data loaded
-        
-        // Cache the complete data with version
-        setDataCache({ data: allVenues, timestamp: Date.now(), version: CACHE_VERSION });
-        // console.log("💾 Complete dataset cached with version:", CACHE_VERSION)
-        // console.log("✅ All vibe ratings already loaded per batch\n")
-      }
-    } catch (error) {
-      // console.error("❌ Error loading venues:", error);
-      const errorRatings: Record<string, number> = {};
-      venues.forEach((venue) => {
-        errorRatings[venue.id] = 0.0;
-      });
-      setVenueVibeRatings(errorRatings);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleVenueSelect = (venueId: string) => {
     navigation.navigate("VenueDetail", { venueId });
@@ -341,84 +186,11 @@ const VenuesScreen: React.FC = () => {
   const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery]);
 
   useEffect(() => {
-    setCurrentPage(1);
     const venuesToDisplay = Array.isArray(filteredVenues) ? filteredVenues : [];
-    const toDisplay = venuesToDisplay.slice(0, ITEMS_PER_PAGE);
-    setDisplayedVenues(toDisplay);
+    setDisplayedVenues(venuesToDisplay);
   }, [filteredVenues]);
 
-  // Memoize loadMoreVenues to prevent recreation on every render
-  const loadMoreVenues = useCallback(async () => {
-    const filtered = Array.isArray(filteredVenues) ? filteredVenues : [];
 
-    // First check if we have more filtered venues in cache, show them first
-    if (displayedVenues.length < filtered.length) {
-      // We have more filtered venues in cache, show them first
-      const nextPage = currentPage + 1;
-      const startIndex = 0;
-      const endIndex = nextPage * ITEMS_PER_PAGE;
-      const newDisplayed = filtered.slice(startIndex, endIndex);
-      // console.log(`✅ Displaying ${newDisplayed.length} venues from cache (page ${nextPage})`);
-      setDisplayedVenues(newDisplayed);
-      setCurrentPage(nextPage);
-      return;
-    }
-    
-    // All filtered venues are displayed, check if we can fetch more from Firebase
-    if (displayedVenues.length >= filtered.length) {
-      if (!hasMore || !lastDoc) {
-        // console.log("⛔ All venues displayed and no more data available from Firebase");
-        return;
-      }
-      
-      // console.log("\n🔄 All filtered venues displayed. Fetching more from Firebase...\n");
-      
-      try {
-        const { venues: moreVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(ITEMS_PER_PAGE, lastDoc);
-        
-        if (moreVenues.length > 0) {
-          const updatedVenues = [...venues, ...moreVenues];
-          // console.log(`✅ Added ${moreVenues.length} more venues. Total venues: ${updatedVenues.length}`);
-          
-          setVenues(updatedVenues);
-          setLastDoc(newLastDoc);
-          setHasMore(newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE);
-          
-          // console.log(`Updated hasMore state: ${newLastDoc !== null && moreVenues.length === ITEMS_PER_PAGE}`);
-          
-          // Update cache
-          setDataCache({ data: updatedVenues, timestamp: Date.now(), version: CACHE_VERSION });
-          
-          // Load vibe ratings for new venues
-          // console.log("\n🎵 Loading vibe ratings for new venues...");
-          const today = new Date();
-          const newRatings = { ...venueVibeRatings };
-          for (const venue of moreVenues) {
-            const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
-            if (vibeImages.length > 0) {
-              const latestVibe = vibeImages.reduce((latest, image) => {
-                return image.uploadedAt > latest.uploadedAt ? image : latest;
-              });
-              newRatings[venue.id] = latestVibe.vibeRating || 0.0;
-              // console.log(`  "${venue.name}" - Vibe: ${newRatings[venue.id].toFixed(1)}`);
-            } else {
-              newRatings[venue.id] = 0.0;
-              // console.log(`  "${venue.name}" - Vibe: 0.0`);
-            }
-          }
-          setVenueVibeRatings(newRatings);
-        } else {
-          // console.log("⛔ No more venues available from Firebase");
-          setHasMore(false);
-        }
-      } catch (error) {
-        // console.error("❌ Error loading more venues:", error);
-      } finally {
-        setRefreshing(false);
-      }
-      return;
-    }
-  }, [filteredVenues, displayedVenues, currentPage, hasMore, lastDoc]);
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
@@ -614,8 +386,7 @@ const VenuesScreen: React.FC = () => {
             styles.venuesList,
             { paddingHorizontal: spacing.md, paddingRight: spacing.md }
           ]}
-          onEndReached={loadMoreVenues}
-          onEndReachedThreshold={0.5}
+
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
