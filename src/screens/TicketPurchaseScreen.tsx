@@ -203,11 +203,11 @@ const TicketPurchaseScreen: React.FC = () => {
 
   // Calculate prices with late fee using useMemo for efficiency
   const pricing = useMemo(() => {
-    if (!event.date) {
+    if (!event || !event.date) {
       return { subtotal: 0, lateFee: 0, total: 0, isLatePurchase: false }
     }
     return PesaPalService.calculateTicketPrice(basePrice, quantity, event.date)
-  }, [basePrice, quantity, event.date])
+  }, [basePrice, quantity, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
