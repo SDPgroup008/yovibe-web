@@ -83,12 +83,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       console.log("Login attempt with:", email)
       await signIn(email, password)
       console.log("Login successful")
-      // Navigate to main app after successful login
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Main" }],
-      })
-      // The AuthContext will handle navigation
+      // The AuthContext will handle navigation automatically
     } catch (error) {
       console.error("Login failed:", error)
       // Log the full error object to debug

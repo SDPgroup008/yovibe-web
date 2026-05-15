@@ -56,15 +56,18 @@ export default function NotificationScreen() {
     // Navigate based on notification type or deepLink
     if (notification.type === "upcoming_summary") {
       // Navigate to Events screen to show all events
-      navigation.navigate("Events")
+      if (typeof window !== 'undefined') {
+        window.location.href = '/events';
+      }
       return
     }
-    
+
     if (notification.deepLink) {
-      // Parse deepLink and navigate
+      // Navigate directly using URL
       if (notification.deepLink.startsWith("/events/")) {
-        const eventId = notification.deepLink.replace("/events/", "")
-        navigation.navigate("EventDetail", { eventId })
+        if (typeof window !== 'undefined') {
+          window.location.href = notification.deepLink;
+        }
       }
     }
   }

@@ -71,12 +71,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
       console.log("Sign up attempt with:", email, "as", userType)
       await signUp(email, password, userType)
       console.log("Sign up successful")
-      // Navigate to main app after successful signup
-      navigation.reset({
-        index: 0,
-        routes: [{ name: "Main" }],
-      })
-      // The AuthContext will handle navigation
+      // The AuthContext will handle navigation automatically
     } catch (error) {
       console.error("Sign up failed:", error)
       Alert.alert("Sign Up Failed", error instanceof Error ? error.message : "Failed to create account")

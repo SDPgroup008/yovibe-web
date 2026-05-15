@@ -130,26 +130,12 @@ const ProfileScreen: React.FC = () => {
       await signOut();
       console.log("ProfileScreen: Sign out completed");
 
-      // Determine a safe public route name and reset navigation to it.
-      const targetRoute = determinePublicRoute();
-
-      // Use parent reset if available (safer to reset the root navigator)
-      const parent = navigation.getParent?.();
-      if (parent && parent.reset) {
-        // Cast the route name to any at the call site to satisfy TS typing constraints
-        parent.reset({
-          index: 0,
-          routes: [{ name: targetRoute as any }],
-        });
-      } else {
-        // Fallback to resetting the current navigator
-        navigation.reset({
-          index: 0,
-          routes: [{ name: targetRoute as any }],
-        });
+      // Redirect to login page after sign out
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
       }
 
-      console.log("ProfileScreen: Redirected to public route:", targetRoute);
+      console.log("ProfileScreen: Redirected to login page");
     } catch (error: any) {
       console.error("ProfileScreen: Sign out error:", error?.message ?? error);
       Alert.alert("Error", `Failed to sign out: ${error?.message ?? "Unknown error"}`);
