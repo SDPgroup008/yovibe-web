@@ -117,7 +117,7 @@ const EventsScreen: React.FC = () => {
 
     const query = searchQuery.toLowerCase().trim()
 
-    const filtered = events.filter((event) => {
+    const filtered = (events || []).filter((event) => {
       // Safely handle possibly undefined/null fields
       const title = event.name?.toLowerCase() || ""
       const venue = event.venueName?.toLowerCase() || ""
@@ -142,7 +142,7 @@ const EventsScreen: React.FC = () => {
   }, [searchQuery, events])
 
   useEffect(() => {
-    setDisplayedEvents(filteredEvents);
+    setDisplayedEvents(filteredEvents || []);
   }, [filteredEvents]);
 
   // Pull-to-refresh handler
@@ -344,7 +344,7 @@ const EventsScreen: React.FC = () => {
           <ActivityIndicator size="large" color="#2196F3" />
           <Text style={styles.loadingText}>Loading events...</Text>
         </View>
-      ) : filteredEvents.length === 0 ? (
+      ) : !filteredEvents || filteredEvents.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>
             {searchQuery ? "No events found matching your search" : "No events found"}
@@ -356,7 +356,7 @@ const EventsScreen: React.FC = () => {
       ) : (
         <FlatList
           ref={scrollRef}
-          data={displayedEvents}
+          data={displayedEvents || []}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
           numColumns={gridColumns}
