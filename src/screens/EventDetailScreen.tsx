@@ -126,7 +126,7 @@ const EventDetailScreen: React.FC = () => {
 
     // Navigate to TicketPurchaseScreen for actual ticket purchase
     // Both authenticated and unauthenticated users can access this screen
-    navigation.navigate("TicketPurchase", { event })
+    navigation.navigate("TicketPurchase", { eventId: event.id })
   }
 
   const handleViewTicketContacts = () => {

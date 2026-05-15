@@ -191,9 +191,9 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   // Get base price from selected ticket type or event entry fees
-  const basePrice = selectedTicketType 
+  const basePrice = selectedTicketType
     ? Number.parseInt(selectedTicketType.amount?.replace(/[^0-9]/g, "") || "0")
-    : event.entryFees && event.entryFees.length > 0 
+    : event && event.entryFees && event.entryFees.length > 0
       ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
       : 0
 

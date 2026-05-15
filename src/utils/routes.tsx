@@ -84,11 +84,7 @@ export const routes: RouteDefinition[] = [
     component: withCompatNavigation(AddEventScreen),
     exact: true
   },
-  {
-    path: '/events/notifications',
-    component: withCompatNavigation(NotificationScreen),
-    exact: true
-  },
+
   {
     path: '/events/ticket-contacts',
     component: withCompatNavigation(TicketContactScreen),
@@ -111,11 +107,7 @@ export const routes: RouteDefinition[] = [
     component: withCompatNavigation(PaymentCallbackScreen),
     exact: true
   },
-  {
-    path: '/events/my-tickets',
-    component: withCompatNavigation(MyTicketsScreen),
-    exact: true
-  },
+
 
   // Venues routes
   {
