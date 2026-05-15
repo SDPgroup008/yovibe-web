@@ -257,14 +257,17 @@ const VenuesScreen: React.FC = () => {
   const getFilteredVenues = () => {
     // Handle search query filtering
     const searchTerm = searchQuery.toLowerCase().trim();
-    
+
+    // Ensure venues is always an array
+    const venuesArray = venues || [];
+
     // Handle "all" tab - return all venues without filtering
     if (activeTab === "all") {
-      let filtered = venues;
-      
+      let filtered = venuesArray;
+
       // Apply search filter if search term exists
       if (searchTerm) {
-        filtered = venues.filter((venue) => {
+        filtered = venuesArray.filter((venue) => {
           const nameMatch = venue.name?.toLowerCase().includes(searchTerm);
           const locationMatch = venue.location?.toLowerCase().includes(searchTerm);
           const categoryMatch = venue.categories?.some((cat) => 
@@ -285,8 +288,8 @@ const VenuesScreen: React.FC = () => {
     let nightlifeCount = 0
     let recreationCount = 0
     let noCategoryCount = 0
-    
-    const filtered = venues.filter((venue) => {
+
+    const filtered = venuesArray.filter((venue) => {
       const venueName = venue.name || "Unnamed"
       const categories = venue.categories || []
       
@@ -339,15 +342,16 @@ const VenuesScreen: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-    const toDisplay = filteredVenues.slice(0, ITEMS_PER_PAGE);
+    const venuesToDisplay = Array.isArray(filteredVenues) ? filteredVenues : [];
+    const toDisplay = venuesToDisplay.slice(0, ITEMS_PER_PAGE);
     setDisplayedVenues(toDisplay);
   }, [filteredVenues]);
 
   // Memoize loadMoreVenues to prevent recreation on every render
   const loadMoreVenues = useCallback(async () => {
-    const filtered = filteredVenues;
-    
-    // First check if we need to load more from existing filtered venues
+    const filtered = Array.isArray(filteredVenues) ? filteredVenues : [];
+
+    // First check if we have more filtered venues in cache, show them first
     if (displayedVenues.length < filtered.length) {
       // We have more filtered venues in cache, show them first
       const nextPage = currentPage + 1;
