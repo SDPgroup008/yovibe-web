@@ -31,19 +31,10 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 import ImagePickerService from "../services/ImagePickerService";
-import type { ProfileScreenProps } from "../navigation/types";
+import { useCompatNavigation } from "../utils/compatNavigation";
 
-/**
- * ProfileScreen (fixed)
- *
- * - Uses a valid public route name from your MainTabNavigator ("Venues") as the
- *   target after sign out so TypeScript accepts the reset call.
- * - When resetting a parent navigator, the route name is cast to `any` at the
- *   call site to satisfy the navigation typing constraints while keeping the
- *   runtime behavior correct.
- */
-
-const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
+const ProfileScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
   const { user, signOut, updateProfile } = useAuth();
   const [loading, setLoading] = useState(false);
 
