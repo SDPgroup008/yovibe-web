@@ -1,22 +1,14 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { NavigationContainer } from "@react-navigation/native";
-import { createStackNavigator } from "@react-navigation/stack";
+import React, { useEffect, useState } from "react";
+import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { AuthNavigator, MainTabNavigator } from "./navigation/AppNavigator.web";
-import {
-  View,
-  Text,
-  ActivityIndicator,
-  StyleSheet,
-  TouchableOpacity,
-  Animated,
-} from "react-native";
-import { navigationRef } from "./utils/navigationRef";
+import { RouterProvider } from "./utils/URLRouter";
+import { routes } from "./utils/routes";
+import { DesktopLayout, MobileLayout } from "./components/Navigation";
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, messaging, ensureMessagingInitialized } from "./config/firebase";
+import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
@@ -24,32 +16,21 @@ import TokenService from "./services/TokenService";
 // Store messaging instance in a ref to handle async initialization
 let messagingInstance = null;
 
-const Stack = createStackNavigator();
-
 // 🔔 Persistent Permission Banner that floats at the top
 function PermissionBanner({ onAllow, onBlock }) {
-  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const [slideAnim, setSlideAnim] = useState(0);
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    setSlideAnim(0); // Slide in
   }, []);
 
   const handleAction = (callback) => {
-    Animated.timing(slideAnim, {
-      toValue: -100,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      callback();
-    });
+    setSlideAnim(-100); // Slide out
+    setTimeout(callback, 300);
   };
 
   return (
-    <Animated.View style={[styles.permissionBanner, { transform: [{ translateY: slideAnim }] }]}>
+    <View style={[styles.permissionBanner, { transform: [{ translateY: slideAnim }] }]}>
       <View style={styles.permissionContent}>
         <Text style={styles.permissionTitle}>📢 Stay Updated!</Text>
         <Text style={styles.permissionBody}>Enable notifications to get updates about events and vibes</Text>
@@ -62,40 +43,29 @@ function PermissionBanner({ onAllow, onBlock }) {
           <Text style={styles.allowButtonText}>Allow</Text>
         </TouchableOpacity>
       </View>
-    </Animated.View>
+    </View>
   );
 }
 
 // 🔔 Temporary notification banner with auto-dismiss
 function NotificationBanner({ title, body, onClose }) {
-  const slideAnim = useRef(new Animated.Value(-100)).current;
+  const [slideAnim, setSlideAnim] = useState(0);
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
-
+    setSlideAnim(0); // Slide in
     const timer = setTimeout(() => {
       handleClose();
     }, 15000);
-
     return () => clearTimeout(timer);
   }, []);
 
   const handleClose = () => {
-    Animated.timing(slideAnim, {
-      toValue: -100,
-      duration: 300,
-      useNativeDriver: true,
-    }).start(() => {
-      onClose();
-    });
+    setSlideAnim(-100); // Slide out
+    setTimeout(onClose, 300);
   };
 
   return (
-    <Animated.View style={[styles.banner, { transform: [{ translateY: slideAnim }] }]}>
+    <View style={[styles.banner, { transform: [{ translateY: slideAnim }] }]}>
       <View style={styles.bannerContent}>
         <Text style={styles.bannerTitle}>{title}</Text>
         <Text style={styles.bannerBody}>{body}</Text>
@@ -103,15 +73,13 @@ function NotificationBanner({ title, body, onClose }) {
       <TouchableOpacity onPress={handleClose} style={styles.bannerClose}>
         <Text style={styles.bannerCloseText}>×</Text>
       </TouchableOpacity>
-    </Animated.View>
+    </View>
   );
 }
 
 // 🔔 Trigger GitHub Action via repository_dispatch AND save to Firestore with topic subscription
 async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
-    // Save to Firestore AND subscribe to "all-users" topic via Netlify function
-    // This handles both storage and topic subscription in one place
     const res = await fetch("/.netlify/functions/save-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -119,209 +87,22 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
     });
 
     if (!res.ok) {
-      // console.error("Failed to save token:", await res.text());
+      console.error("Failed to save token:", await res.text());
     } else {
       const result = await res.json();
-      // console.log("[App] Token saved and subscribed to all-users:", result);
+      console.log("[App] Token saved and subscribed to all-users:", result);
     }
   } catch (err) {
-    // console.error("Error calling Netlify function:", err);
+    console.error("Error calling Netlify function:", err);
   }
 }
 
-
-// Main app component with auth state handling
+// Main app component with URL routing
 function AppContent() {
-  const { user, loading, consumeRedirectIntent } = useAuth();
+  const { user, loading } = useAuth();
   const [initializing, setInitializing] = useState(true);
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
-  const [deepLinkHandled, setDeepLinkHandled] = useState(false); // Prevent duplicate handling
-
-  // Handle deep links on app startup - CRITICAL FIX
-  useEffect(() => {
-    if (!loading && navigationRef.current && !deepLinkHandled) {
-      try {
-        // Check if we have a deep link URL to handle
-        const currentUrl = typeof window !== 'undefined' ? window.location.pathname : '';
-        if (currentUrl && currentUrl !== '/' && currentUrl !== '/login' && currentUrl !== '/signup') {
-          // Parse the URL to determine what screen to navigate to
-          const urlParts = currentUrl.split('/').filter(part => part);
-          console.log('🚀 Deep link detected:', currentUrl, 'URL parts:', urlParts);
-
-          // Only handle URLs that look like deep links (with potential IDs)
-          const isDeepLink = (
-            (urlParts[0] === 'events' && urlParts[1] && !['add', 'notifications', 'ticket-contacts', 'payment-callback', 'my-tickets'].includes(urlParts[1])) ||
-            (urlParts[0] === 'venues' && urlParts[1] && !['add-event', 'programs', 'vibe', 'ticket-contacts', 'my-tickets'].includes(urlParts[1])) ||
-            (urlParts[0] === 'map' && urlParts[1] === 'venues' && urlParts[2]) ||
-            (urlParts[0] === 'map' && urlParts[1] === 'events' && urlParts[2]) ||
-            (urlParts[0] === 'calendar' && urlParts[1] === 'venues' && urlParts[2]) ||
-            (urlParts[0] === 'calendar' && urlParts[1] === 'events' && urlParts[2])
-          );
-
-          if (isDeepLink) {
-            // Use a shorter timeout and reset navigation state first
-            setTimeout(() => {
-              try {
-                // Handle event deep links: /events/{eventId}
-                if (urlParts[0] === 'events' && urlParts[1]) {
-                  const eventId = urlParts[1];
-                  console.log('🎯 Navigating to event details:', eventId);
-
-                  // First reset to Main, then navigate to the specific event
-                  navigationRef.current?.reset({
-                    index: 0,
-                    routes: [{
-                      name: 'Main',
-                      state: {
-                        index: 0, // Events tab index
-                        routes: [{
-                          name: 'events',
-                          state: {
-                            routes: [{
-                              name: 'EventDetail',
-                              params: { eventId }
-                            }]
-                          }
-                        }]
-                      }
-                    }]
-                  });
-                }
-                // Handle venue deep links: /venues/{venueId}
-                else if (urlParts[0] === 'venues' && urlParts[1]) {
-                  const venueId = urlParts[1];
-                  console.log('🏢 Navigating to venue details:', venueId);
-
-                  navigationRef.current?.reset({
-                    index: 1, // Venues tab index
-                    routes: [{
-                      name: 'Main',
-                      state: {
-                        index: 1,
-                        routes: [{
-                          name: 'venues',
-                          state: {
-                            routes: [{
-                              name: 'VenueDetail',
-                              params: { venueId }
-                            }]
-                          }
-                        }]
-                      }
-                    }]
-                  });
-                }
-                // Handle map deep links: /map/venues/{venueId} or /map/events/{eventId}
-                else if (urlParts[0] === 'map') {
-                  if (urlParts[1] === 'venues' && urlParts[2]) {
-                    const venueId = urlParts[2];
-                    console.log('🗺️ Navigating to venue on map:', venueId);
-                    navigationRef.current?.reset({
-                      index: 2, // Map tab index
-                      routes: [{
-                        name: 'Main',
-                        state: {
-                          index: 2,
-                          routes: [{
-                            name: 'map',
-                            state: {
-                              routes: [{
-                                name: 'VenueDetail',
-                                params: { venueId }
-                              }]
-                            }
-                          }]
-                        }
-                      }]
-                    });
-                  } else if (urlParts[1] === 'events' && urlParts[2]) {
-                    const eventId = urlParts[2];
-                    console.log('🗺️ Navigating to event on map:', eventId);
-                    navigationRef.current?.reset({
-                      index: 2, // Map tab index
-                      routes: [{
-                        name: 'Main',
-                        state: {
-                          index: 2,
-                          routes: [{
-                            name: 'map',
-                            state: {
-                              routes: [{
-                                name: 'EventDetail',
-                                params: { eventId }
-                              }]
-                            }
-                          }]
-                        }
-                      }]
-                    });
-                  }
-                }
-                // Handle calendar deep links: /calendar/venues/{venueId} or /calendar/events/{eventId}
-                else if (urlParts[0] === 'calendar') {
-                  if (urlParts[1] === 'venues' && urlParts[2]) {
-                    const venueId = urlParts[2];
-                    console.log('📅 Navigating to venue in calendar:', venueId);
-                    navigationRef.current?.reset({
-                      index: 3, // Calendar tab index
-                      routes: [{
-                        name: 'Main',
-                        state: {
-                          index: 3,
-                          routes: [{
-                            name: 'calendar',
-                            state: {
-                              routes: [{
-                                name: 'VenueDetail',
-                                params: { venueId }
-                              }]
-                            }
-                          }]
-                        }
-                      }]
-                    });
-                  } else if (urlParts[1] === 'events' && urlParts[2]) {
-                    const eventId = urlParts[2];
-                    console.log('📅 Navigating to event in calendar:', eventId);
-                    navigationRef.current?.reset({
-                      index: 3, // Calendar tab index
-                      routes: [{
-                        name: 'Main',
-                        state: {
-                          index: 3,
-                          routes: [{
-                            name: 'calendar',
-                            state: {
-                              routes: [{
-                                name: 'EventDetail',
-                                params: { eventId }
-                              }]
-                            }
-                          }]
-                        }
-                      }]
-                    });
-                  }
-                }
-
-                // Mark deep link as handled to prevent re-running
-                setDeepLinkHandled(true);
-                console.log('✅ Deep link handling completed');
-
-              } catch (deepLinkErr) {
-                console.error('❌ Deep link navigation error:', deepLinkErr);
-                setDeepLinkHandled(true); // Still mark as handled to prevent infinite retries
-              }
-            }, 50); // Very short delay to beat React Navigation's default routing
-          }
-        }
-      } catch (err) {
-        console.warn('⚠️ Deep link detection error:', err);
-        setDeepLinkHandled(true); // Mark as handled even on error
-      }
-    }
-  }, [loading, deepLinkHandled]); // Added deepLinkHandled to dependencies
 
   useEffect(() => {
     if (!loading) {
@@ -329,50 +110,48 @@ function AppContent() {
     }
   }, [loading]);
 
-  useEffect(() => {
-    if (!loading && user) {
-      try {
-        const intent = consumeRedirectIntent?.();
-        if (intent && intent.routeName) {
-          navigationRef.current?.reset({
-            index: 0,
-            routes: [{ name: "Main" }],
-          });
-
-          setTimeout(() => {
-            try {
-              if (intent.params) {
-                navigationRef.current?.navigate(intent.routeName as any, intent.params);
-              } else {
-                navigationRef.current?.navigate(intent.routeName as any);
-              }
-            } catch (navErr) {
-              // console.warn("Post-login navigation error:", navErr);
+  // Handle authentication routing
+  if (!loading && !user) {
+    // Show auth screens when not authenticated
+    return (
+      <View style={{ flex: 1 }}>
+        <RouterProvider routes={[
+          {
+            path: '/login',
+            component: require('./screens/auth/LoginScreen').default,
+            exact: true
+          },
+          {
+            path: '/signup',
+            component: require('./screens/auth/SignUpScreen').default,
+            exact: true
+          },
+          // Redirect all other routes to login
+          {
+            path: '*',
+            component: () => {
+              useEffect(() => {
+                if (typeof window !== 'undefined') {
+                  window.location.href = '/login';
+                }
+              }, []);
+              return null;
             }
-          }, 50);
-        }
-      } catch (err) {
-        // console.warn("Failed to consume redirect intent:", err);
-      }
-    }
-  }, [user, loading, consumeRedirectIntent]);
+          }
+        ]} />
+      </View>
+    );
+  }
 
   // 🔔 Register service worker and show permission banner after 5 seconds
   useEffect(() => {
-    // Register service worker immediately
     (async () => {
       if ("serviceWorker" in navigator) {
         try {
           const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-          // 🔔 iOS Debug: Service worker registered
           console.log("[iOS-NOTIF] Service worker registered:", registration.scope);
           await navigator.serviceWorker.ready;
           console.log("[iOS-NOTIF] Service worker is active and ready");
-          
-          // Now that service worker is ready, initialize FCM
-          console.log("[iOS-NOTIF] Initializing FCM after service worker ready...");
-          await ensureMessagingInitialized();
-          console.log("[iOS-NOTIF] FCM initialization complete");
         } catch (err) {
           console.warn("[iOS-NOTIF] Service worker registration failed:", err);
         }
@@ -381,30 +160,24 @@ function AppContent() {
       }
     })();
 
-    // Check if permission has already been granted or denied
-    // First check if Notification API exists (required for iOS Safari)
-    // On iOS Safari, Notification.permission may be undefined until requestPermission is called
     let currentPermission = "default";
     if (typeof Notification !== 'undefined' && Notification.permission) {
       currentPermission = Notification.permission;
     }
-    
+
     if (currentPermission === "default") {
-      // Show banner after 5 seconds if permission hasn't been decided
       const bannerTimer = setTimeout(() => {
         setShowPermissionBanner(true);
       }, 5000);
       return () => clearTimeout(bannerTimer);
     }
 
-    // If already granted, get token (wrapped in try-catch for safety)
     if (currentPermission === "granted") {
       (async () => {
         try {
           const token = await getWebFcmToken();
           if (token) {
             console.log("Web FCM token retrieved:", token);
-            // Pass user info if authenticated
             const userId = user?.uid || null;
             const userEmail = user?.email;
             const userName = user?.displayName || null;
@@ -419,26 +192,20 @@ function AppContent() {
 
   // 🔔 Listen for foreground notifications
   useEffect(() => {
-    // Only set up listener if messaging is available
     if (!messaging) {
-      // console.log("Messaging not available, skipping foreground notification listener");
       return;
     }
-    
+
     const unsubscribe = onMessage(messaging, async (payload) => {
-      // 🔔 iOS Debug: Foreground notification
       console.log("[iOS-NOTIF] Foreground notification received");
       console.log("[iOS-NOTIF] Title:", payload.notification?.title);
-      console.log("[iOS-NOTIF] Data:", payload.data);
-      
+
       try {
-        // Save notification to Firestore (will handle broadcast vs user-specific)
         await NotificationService.processIncomingNotification(payload, user?.uid);
       } catch (error) {
-        // console.error("❌ ERROR saving notification to Firestore:", error);
+        console.error("❌ ERROR saving notification to Firestore:", error);
       }
-      
-      // Show foreground banner
+
       setBanner({
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
@@ -448,31 +215,29 @@ function AppContent() {
     return () => unsubscribe();
   }, [user]);
 
-// 🔔 Handle permission banner actions
-   const handleAllowNotifications = async () => {
+  // 🔔 Handle permission banner actions
+  const handleAllowNotifications = async () => {
     setShowPermissionBanner(false);
     console.log("[iOS-NOTIF] User tapped Allow - requesting permission...");
     try {
       const granted = await requestNotificationPermission();
       console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied');
-      
+
       if (granted) {
         try {
           console.log("[iOS-NOTIF] Getting FCM token...");
           const token = await getWebFcmToken();
           console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO');
-          
+
           if (token) {
             console.log("[iOS-NOTIF] FCM Token (first 20 chars):", token.substring(0, 20) + "...");
-            // Pass user info if authenticated
             const userId = user?.uid || null;
             const userEmail = user?.email;
             const userName = user?.displayName || undefined;
             console.log("[iOS-NOTIF] Saving token to Firestore...");
             await saveTokenToRepo(token, userId, userEmail, userName);
             console.log("[iOS-NOTIF] Token saved successfully!");
-            
-            // Track new subscription in daily stats
+
             await NotificationService.trackNewSubscription();
           } else {
             console.warn("[iOS-NOTIF] No FCM token received - browser permission was granted but FCM is not supported on this browser. In-app notifications will still work.");
@@ -502,6 +267,7 @@ function AppContent() {
     );
   }
 
+  // Show main app when authenticated
   return (
     <View style={{ flex: 1 }}>
       {/* Permission banner at the very top */}
@@ -511,11 +277,11 @@ function AppContent() {
           onBlock={handleBlockNotifications}
         />
       )}
-      
-      <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Main">
-        <Stack.Screen name="Main" component={MainTabNavigator} />
-        <Stack.Screen name="Auth" component={AuthNavigator} />
-      </Stack.Navigator>
+
+      {/* URL-based routing with responsive layout */}
+      <DesktopLayout>
+        <RouterProvider routes={routes} />
+      </DesktopLayout>
 
       {/* Temporary notification banner */}
       {banner && (
@@ -530,127 +296,12 @@ function AppContent() {
 }
 
 export default function App() {
-  const linking = {
-    prefixes: ['https://yovibe.net', 'http://localhost:19006'],
-    config: {
-      screens: {
-        // Auth screens
-        Auth: {
-          screens: {
-            Login: 'login',
-            SignUp: 'signup',
-          },
-        },
-        // Main app screens
-        Main: {
-          screens: {
-            // Events tab
-            Events: {
-              screens: {
-                // More specific routes first (with parameters)
-                EventDetail: 'events/:eventId',
-                VenueDetail: 'events/venues/:venueId',
-                TicketPurchase: 'events/tickets/:eventId',
-                TicketScanner: 'events/scanner/:eventId',
-                OrganiserDashboard: 'events/organiser/:eventId',
-                // Static routes after (no parameters)
-                EventsList: 'events',
-                AddEvent: 'events/add',
-                Notification: 'events/notifications',
-                TicketContactScreen: 'events/ticket-contacts',
-                PaymentCallback: 'events/payment-callback',
-                MyTickets: 'events/my-tickets',
-              },
-            },
-            // Venues tab
-            Venues: {
-              screens: {
-                // More specific routes first (with parameters)
-                VenueDetail: 'venues/:venueId',
-                AddEvent: 'venues/:venueId/add-event',
-                EventDetail: 'venues/events/:eventId',
-                ManagePrograms: 'venues/:venueId/programs',
-                TodaysVibe: 'venues/:venueId/vibe',
-                TicketPurchase: 'venues/tickets/:eventId',
-                TicketScanner: 'venues/scanner/:eventId',
-                OrganiserDashboard: 'venues/organiser/:eventId',
-                // Static routes after (no parameters)
-                VenuesList: 'venues',
-                TicketContactScreen: 'venues/ticket-contacts',
-                MyTickets: 'venues/my-tickets',
-              },
-            },
-            // Map tab
-            Map: {
-              screens: {
-                // More specific routes first (with parameters)
-                VenueDetail: 'map/venues/:venueId',
-                EventDetail: 'map/events/:eventId',
-                TicketPurchase: 'map/tickets/:eventId',
-                TicketScanner: 'map/scanner/:eventId',
-                OrganiserDashboard: 'map/organiser/:eventId',
-                // Static routes after (no parameters)
-                MapView: 'map',
-                TicketContactScreen: 'map/ticket-contacts',
-                MyTickets: 'map/my-tickets',
-              },
-            },
-            // Calendar tab
-            Calendar: {
-              screens: {
-                // More specific routes first (with parameters)
-                EventDetail: 'calendar/events/:eventId',
-                VenueDetail: 'calendar/venues/:venueId',
-                TicketPurchase: 'calendar/tickets/:eventId',
-                TicketScanner: 'calendar/scanner/:eventId',
-                OrganiserDashboard: 'calendar/organiser/:eventId',
-                // Static routes after (no parameters)
-                CalendarView: 'calendar',
-                TicketContactScreen: 'calendar/ticket-contacts',
-                MyTickets: 'calendar/my-tickets',
-              },
-            },
-            // Profile tab
-            Profile: {
-              screens: {
-                // More specific routes first (with parameters)
-                VenueDetail: 'profile/venues/:venueId',
-                EventDetail: 'profile/events/:eventId',
-                AddVibe: 'profile/add-vibe/:venueId',
-                TodaysVibe: 'profile/todays-vibe/:venueId',
-                TicketPurchase: 'profile/tickets/:eventId',
-                TicketScanner: 'profile/scanner/:eventId',
-                OrganiserDashboard: 'profile/organiser/:eventId',
-                // Static routes after (no parameters)
-                ProfileMain: 'profile',
-                MyVenues: 'profile/my-venues',
-                AddVenue: 'profile/add-venue',
-                Notification: 'profile/notifications',
-                AdminDashboard: 'profile/admin/dashboard',
-                AdminUsers: 'profile/admin/users',
-                AdminVenues: 'profile/admin/venues',
-                AdminEvents: 'profile/admin/events',
-                AdminOwnershipRequests: 'profile/admin/ownership-requests',
-                TicketContactScreen: 'profile/ticket-contacts',
-                MyTickets: 'profile/my-tickets',
-                Auth: 'profile/auth',
-              },
-            },
-          },
-        },
-      },
-    },
-  };
-
   return (
     <AuthProvider>
-      <NavigationContainer ref={navigationRef} linking={linking}>
-        <AppContent />
-      </NavigationContainer>
+      <AppContent />
     </AuthProvider>
   );
 }
-
 
 const styles = StyleSheet.create({
   loadingContainer: {

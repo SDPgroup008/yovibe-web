@@ -34,21 +34,10 @@ import AdminOwnershipRequestsScreen from '../screens/admin/AdminOwnershipRequest
 import { withCompatNavigation } from './compatNavigation';
 
 // Import router utilities
-import { RouterProvider, RouteDefinition, withRouteGuard } from '../utils/URLRouter';
+import { RouterProvider, RouteDefinition } from '../utils/URLRouter';
 
-// Authentication guard middleware
-const requireAuth: RouteDefinition['middleware'] = (params, path) => {
-  // This would integrate with your existing auth system
-  // For now, return true to allow all routes
-  return true;
-};
-
-// Admin guard middleware
-const requireAdmin: RouteDefinition['middleware'] = (params, path) => {
-  // This would check if user is admin
-  // For now, return true to allow all routes
-  return true;
-};
+// Authentication and admin guards are handled by individual screens using withAuth HOC
+// No global middleware needed - screens manage their own auth requirements
 
 // Route definitions - comprehensive mapping of all existing screens
 export const routes: RouteDefinition[] = [
@@ -76,12 +65,12 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/events/add',
-    component: withCompatNavigation(withRouteGuard(AddEventScreen, requireAuth)),
+    component: withCompatNavigation(AddEventScreen),
     exact: true
   },
   {
     path: '/events/notifications',
-    component: withCompatNavigation(withRouteGuard(NotificationScreen, requireAuth)),
+    component: withCompatNavigation(NotificationScreen),
     exact: true
   },
   {
@@ -91,15 +80,15 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/events/tickets/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketPurchaseScreen, requireAuth))
+    component: withCompatNavigation(TicketPurchaseScreen)
   },
   {
     path: '/events/scanner/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketScannerScreen, requireAuth))
+    component: withCompatNavigation(TicketScannerScreen)
   },
   {
     path: '/events/organiser/:eventId',
-    component: withCompatNavigation(withRouteGuard(OrganiserDashboardScreen, requireAuth))
+    component: withCompatNavigation(OrganiserDashboardScreen)
   },
   {
     path: '/events/payment-callback',
@@ -108,7 +97,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/events/my-tickets',
-    component: withCompatNavigation(withRouteGuard(MyTicketsScreen, requireAuth)),
+    component: withCompatNavigation(MyTicketsScreen),
     exact: true
   },
 
@@ -145,19 +134,19 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/venues/tickets/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketPurchaseScreen, requireAuth))
+    component: withCompatNavigation(TicketPurchaseScreen)
   },
   {
     path: '/venues/scanner/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketScannerScreen, requireAuth))
+    component: withCompatNavigation(TicketScannerScreen)
   },
   {
     path: '/venues/organiser/:eventId',
-    component: withCompatNavigation(withRouteGuard(OrganiserDashboardScreen, requireAuth))
+    component: withCompatNavigation(OrganiserDashboardScreen)
   },
   {
     path: '/venues/my-tickets',
-    component: withCompatNavigation(withRouteGuard(MyTicketsScreen, requireAuth)),
+    component: withCompatNavigation(MyTicketsScreen),
     exact: true
   },
 
@@ -182,19 +171,19 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/map/tickets/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketPurchaseScreen, requireAuth))
+    component: withCompatNavigation(TicketPurchaseScreen)
   },
   {
     path: '/map/scanner/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketScannerScreen, requireAuth))
+    component: withCompatNavigation(TicketScannerScreen)
   },
   {
     path: '/map/organiser/:eventId',
-    component: withCompatNavigation(withRouteGuard(OrganiserDashboardScreen, requireAuth))
+    component: withCompatNavigation(OrganiserDashboardScreen)
   },
   {
     path: '/map/my-tickets',
-    component: withCompatNavigation(withRouteGuard(MyTicketsScreen, requireAuth)),
+    component: withCompatNavigation(MyTicketsScreen),
     exact: true
   },
 
@@ -219,87 +208,87 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/calendar/tickets/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketPurchaseScreen, requireAuth))
+    component: withCompatNavigation(TicketPurchaseScreen)
   },
   {
     path: '/calendar/scanner/:eventId',
-    component: withCompatNavigation(withRouteGuard(TicketScannerScreen, requireAuth))
+    component: withCompatNavigation(TicketScannerScreen)
   },
   {
     path: '/calendar/organiser/:eventId',
-    component: withCompatNavigation(withRouteGuard(OrganiserDashboardScreen, requireAuth))
+    component: withCompatNavigation(OrganiserDashboardScreen)
   },
   {
     path: '/calendar/my-tickets',
-    component: withCompatNavigation(withRouteGuard(MyTicketsScreen, requireAuth)),
+    component: withCompatNavigation(MyTicketsScreen),
     exact: true
   },
 
   // Profile routes
   {
     path: '/profile',
-    component: withRouteGuard(ProfileScreen, requireAuth),
+    component: ProfileScreen,
     exact: true
   },
   {
     path: '/profile/my-venues',
-    component: withRouteGuard(MyVenuesScreen, requireAuth),
+    component: MyVenuesScreen,
     exact: true
   },
   {
     path: '/profile/add-venue',
-    component: withRouteGuard(AddVenueScreen, requireAuth),
+    component: AddVenueScreen,
     exact: true
   },
   {
     path: '/profile/venues/:venueId',
-    component: withRouteGuard(VenueDetailScreen, requireAuth)
+    component: VenueDetailScreen
   },
   {
     path: '/profile/events/:eventId',
-    component: withRouteGuard(EventDetailScreen, requireAuth)
+    component: EventDetailScreen
   },
   {
     path: '/profile/notifications',
-    component: withRouteGuard(NotificationScreen, requireAuth),
+    component: NotificationScreen,
     exact: true
   },
   {
     path: '/profile/admin/dashboard',
-    component: withRouteGuard(AdminDashboardScreen, requireAdmin),
+    component: AdminDashboardScreen,
     exact: true
   },
   {
     path: '/profile/admin/users',
-    component: withRouteGuard(AdminUsersScreen, requireAdmin),
+    component: AdminUsersScreen,
     exact: true
   },
   {
     path: '/profile/admin/venues',
-    component: withRouteGuard(AdminVenuesScreen, requireAdmin),
+    component: AdminVenuesScreen,
     exact: true
   },
   {
     path: '/profile/admin/events',
-    component: withRouteGuard(AdminEventsScreen, requireAdmin),
+    component: AdminEventsScreen,
     exact: true
   },
   {
     path: '/profile/admin/ownership-requests',
-    component: withRouteGuard(AdminOwnershipRequestsScreen, requireAdmin),
+    component: AdminOwnershipRequestsScreen,
     exact: true
   },
   {
     path: '/profile/add-vibe/:venueId',
-    component: withRouteGuard(AddVibeScreen, requireAuth)
+    component: AddVibeScreen
   },
   {
     path: '/profile/todays-vibe/:venueId',
-    component: withRouteGuard(TodaysVibeScreen, requireAuth)
+    component: TodaysVibeScreen
   },
   {
     path: '/profile/ticket-contacts',
-    component: withRouteGuard(TicketContactScreen, requireAuth),
+    component: TicketContactScreen,
     exact: true
   },
   {
@@ -328,4 +317,4 @@ export const routes: RouteDefinition[] = [
 
 // Export the configured router
 export { RouterProvider } from './URLRouter';
-export { useRouter, useNavigation, Link, withRouteGuard } from './URLRouter';
+export { useRouter, useNavigation, Link } from './URLRouter';
