@@ -20,7 +20,8 @@ import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
-import type { EventDetailScreenProps } from "../navigation/types"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
 import TicketService from "../services/TicketService"
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
 import { db } from "../config/firebase"
@@ -33,8 +34,13 @@ const isLargeScreen = screenWidth >= 1024;
 
 console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
 
-const EventDetailScreen: React.FC<EventDetailScreenProps> = ({ route, navigation }) => {
-  const { eventId } = route.params
+const EventDetailScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
+
+  // Extract eventId from current path: /events/:eventId
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const eventId = pathParts[1] // events/:eventId, so [events, eventId]
   const { user } = useAuth()
   
   const [event, setEvent] = useState<Event | null>(null)

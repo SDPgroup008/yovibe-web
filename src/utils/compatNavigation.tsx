@@ -58,6 +58,9 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminVenues': () => navigate('/profile/admin/venues'),
         'AdminEvents': () => navigate('/profile/admin/events'),
         'AdminOwnershipRequests': () => navigate('/profile/admin/ownership-requests'),
+        'Auth': () => navigate('/login'),
+        'Login': () => navigate('/login'),
+        'SignUp': () => navigate('/signup'),
       };
 
       const navigateFn = routeMap[screen];

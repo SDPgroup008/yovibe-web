@@ -15,12 +15,11 @@ import {
   Dimensions,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useCompatNavigation } from "../utils/compatNavigation"
 import ImagePickerService from "../services/ImagePickerService"
 import FirebaseService from "../services/FirebaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
-import { VenuesStackParamList, EventsStackParamList } from "../navigation/types"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -37,11 +36,8 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-type AddEventScreenProps =
-  | NativeStackScreenProps<VenuesStackParamList, "AddEvent">
-  | NativeStackScreenProps<EventsStackParamList, "AddEvent">
-
-const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) => {
+const AddEventScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
   const { user } = useAuth()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -474,6 +470,12 @@ const AddEventScreen: React.FC<AddEventScreenProps> = ({ navigation, route }) =>
 
   return (
     <ScrollView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
+      </View>
       <View style={styles.form}>
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Event Name *</Text>
@@ -999,6 +1001,24 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+  },
+  header: {
+    padding: responsiveSize(12, 16, 24),
+    paddingBottom: responsiveSize(8, 12, 16),
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: responsiveSize(8, 10, 12),
+    paddingHorizontal: responsiveSize(12, 16, 20),
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: responsiveSize(8, 10, 12),
+    alignSelf: "flex-start",
+  },
+  backButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    marginLeft: responsiveSize(6, 8, 10),
   },
   form: {
     padding: responsiveSize(12, 16, 24),
