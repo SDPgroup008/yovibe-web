@@ -107,7 +107,7 @@ interface RouteRendererProps {
   fallback?: React.ComponentType;
 }
 
-const RouteRenderer: React.FC<RouteRendererProps> = ({ routes, fallback: Fallback = NotFound }) => {
+export const RouteRenderer: React.FC<RouteRendererProps> = ({ routes, fallback: Fallback = NotFound }) => {
   const { currentPath, params } = useRouter();
 
   // Find matching route
@@ -268,7 +268,7 @@ export const RouterProvider: React.FC<RouterProviderProps> = ({
 
   return (
     <RouterContext.Provider value={contextValue}>
-      <RouteRenderer routes={routes} fallback={fallback} />
+      {children || <RouteRenderer routes={routes} fallback={fallback} />}
     </RouterContext.Provider>
   );
 };

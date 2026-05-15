@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { RouterProvider } from "./utils/URLRouter";
+import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
 import { routes } from "./utils/routes";
 import { TabBar } from "./components/Navigation";
 
@@ -248,10 +248,12 @@ function AppContent() {
       )}
 
       {/* URL-based routing with navigation */}
-      <View style={{ flex: 1 }}>
-        <RouterProvider routes={routes} />
-        <TabBar />
-      </View>
+      <RouterProvider routes={routes}>
+        <View style={{ flex: 1 }}>
+          <RouteRenderer routes={routes} />
+          <TabBar />
+        </View>
+      </RouterProvider>
 
       {/* Temporary notification banner */}
       {banner && (
