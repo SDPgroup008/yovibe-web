@@ -161,11 +161,7 @@ export const routes: RouteDefinition[] = [
     path: '/venues/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
   },
-  {
-    path: '/venues/my-tickets',
-    component: withCompatNavigation(MyTicketsScreen),
-    exact: true
-  },
+
 
   // Map routes
   {
@@ -198,11 +194,7 @@ export const routes: RouteDefinition[] = [
     path: '/map/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
   },
-  {
-    path: '/map/my-tickets',
-    component: withCompatNavigation(MyTicketsScreen),
-    exact: true
-  },
+
 
   // Calendar routes
   {
@@ -235,11 +227,7 @@ export const routes: RouteDefinition[] = [
     path: '/calendar/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
   },
-  {
-    path: '/calendar/my-tickets',
-    component: withCompatNavigation(MyTicketsScreen),
-    exact: true
-  },
+
 
   // Profile routes
   {
@@ -325,11 +313,7 @@ export const routes: RouteDefinition[] = [
     component: withCompatNavigation(MyTicketsScreen),
     exact: true
   },
-  {
-    path: '/profile/auth',
-    component: withCompatNavigation(SignUpScreen), // This was in the original config
-    exact: true
-  },
+
   {
     path: '/profile/todays-vibe/:venueId',
     component: TodaysVibeScreen
@@ -351,16 +335,7 @@ export const routes: RouteDefinition[] = [
     path: '/profile/organiser/:eventId',
     component: OrganiserDashboardScreen
   },
-  {
-    path: '/profile/my-tickets',
-    component: MyTicketsScreen,
-    exact: true
-  },
-  {
-    path: '/profile/auth',
-    component: SignUpScreen, // This was in the original config
-    exact: true
-  }
+
 ];
 
 // Export the configured router

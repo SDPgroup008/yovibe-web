@@ -27,6 +27,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [pageLoading, setPageLoading] = useState(false)
+  const [quantity, setQuantity] = useState(1)
   const [photoCaptured, setPhotoCaptured] = useState(false)
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState("")
   const [securityPhotoEnabled, setSecurityPhotoEnabled] = useState(false)
