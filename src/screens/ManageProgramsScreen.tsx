@@ -4,16 +4,20 @@ import type React from "react"
 import { useState } from "react"
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useCompatNavigation } from "../utils/compatNavigation"
+import { useRouter } from "../utils/URLRouter"
 import FirebaseService from "../services/FirebaseService"
-import { VenuesStackParamList } from "../navigation/types"
-
-type ManageProgramsScreenProps = NativeStackScreenProps<VenuesStackParamList, "ManagePrograms">
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-const ManageProgramsScreen: React.FC<ManageProgramsScreenProps> = ({ navigation, route }) => {
-  const { venueId, weeklyPrograms } = route.params
+const ManageProgramsScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { currentPath } = useRouter()
+
+  // Extract venueId from current path: /venues/:venueId/programs
+  const pathParts = currentPath.split('/').filter(Boolean)
+  const venueId = pathParts[1] // venues/:venueId/programs
+  const weeklyPrograms = {} // We'll need to fetch this from the venue data
   const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms)
   const [loading, setLoading] = useState(false)
 
@@ -41,8 +45,16 @@ const ManageProgramsScreen: React.FC<ManageProgramsScreenProps> = ({ navigation,
   return (
     <ScrollView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Manage Weekly Programs</Text>
-        <Text style={styles.headerSubtitle}>Add or update your venue's weekly schedule</Text>
+        <View style={styles.headerTop}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <View style={styles.titleContainer}>
+            <Text style={styles.headerTitle}>Manage Weekly Programs</Text>
+            <Text style={styles.headerSubtitle}>Add or update your venue's weekly schedule</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
       </View>
 
       {DAYS_OF_WEEK.map((day) => (
@@ -83,9 +95,22 @@ const styles = StyleSheet.create({
     backgroundColor: "#121212",
   },
   header: {
-    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: "#333",
+  },
+  headerTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+  },
+  backButton: {
+    marginRight: 12,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  titleContainer: {
+    flex: 1,
   },
   headerTitle: {
     fontSize: 24,
