@@ -12,6 +12,7 @@ import { useAuth } from "../contexts/AuthContext"
 import NotificationService from "../services/NotificationService"
 import type { AppNotification } from "../models/Notification"
 import { useCompatNavigation } from "../utils/compatNavigation"
+import { BackButton } from "../components/Navigation"
 
 export default function NotificationScreen() {
   const { user } = useAuth()
@@ -190,6 +191,7 @@ export default function NotificationScreen() {
 
   return (
     <View style={styles.container}>
+      <BackButton />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notifications</Text>
         {unreadCount > 0 && (
