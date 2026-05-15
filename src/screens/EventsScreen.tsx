@@ -40,7 +40,7 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
 
 const EventsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
-  const { data: events, loading, error, refetch } = useCachedEvents()
+  const { data: events = [], loading, error, refetch } = useCachedEvents()
   const { scrollRef, onScroll } = useEventsScroll()
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
@@ -64,7 +64,7 @@ const EventsScreen: React.FC = () => {
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
-  const { data: events = [], loading, error, refetch } = useCachedEvents();
+
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
