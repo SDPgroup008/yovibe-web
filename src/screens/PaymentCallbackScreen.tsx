@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from "react"
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from "react-native"
-import { useRoute, useNavigation } from "@react-navigation/native"
-import type { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { useCompatNavigation } from "../utils/compatNavigation"
 import PesaPalService from "../services/PesaPalService"
 import TicketService from "../services/TicketService"
-import type { EventsStackParamList } from "../navigation/types"
 
-type PaymentCallbackScreenProps = NativeStackScreenProps<EventsStackParamList, "PaymentCallback">
-
-const PaymentCallbackScreen: React.FC<PaymentCallbackScreenProps> = ({ navigation }) => {
-  const route = useRoute()
+const PaymentCallbackScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
   const [status, setStatus] = useState<"verifying" | "success" | "failed">("verifying")
   const [message, setMessage] = useState("Verifying your payment...")
 

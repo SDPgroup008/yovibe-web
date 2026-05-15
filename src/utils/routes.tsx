@@ -252,60 +252,91 @@ export const routes: RouteDefinition[] = [
   // Profile routes
   {
     path: '/profile',
-    component: ProfileScreen,
+    component: withCompatNavigation(ProfileScreen),
     exact: true
   },
   {
     path: '/profile/my-venues',
-    component: MyVenuesScreen,
+    component: withCompatNavigation(MyVenuesScreen),
     exact: true
   },
   {
     path: '/profile/add-venue',
-    component: AddVenueScreen,
+    component: withCompatNavigation(AddVenueScreen),
     exact: true
   },
   {
     path: '/profile/venues/:venueId',
-    component: VenueDetailScreen
+    component: withCompatNavigation(VenueDetailScreen)
   },
   {
     path: '/profile/events/:eventId',
-    component: EventDetailScreen
+    component: withCompatNavigation(EventDetailScreen)
   },
   {
     path: '/profile/notifications',
-    component: NotificationScreen,
+    component: withCompatNavigation(NotificationScreen),
     exact: true
   },
   {
     path: '/profile/admin/dashboard',
-    component: AdminDashboardScreen,
+    component: withCompatNavigation(AdminDashboardScreen),
     exact: true
   },
   {
     path: '/profile/admin/users',
-    component: AdminUsersScreen,
+    component: withCompatNavigation(AdminUsersScreen),
     exact: true
   },
   {
     path: '/profile/admin/venues',
-    component: AdminVenuesScreen,
+    component: withCompatNavigation(AdminVenuesScreen),
     exact: true
   },
   {
     path: '/profile/admin/events',
-    component: AdminEventsScreen,
+    component: withCompatNavigation(AdminEventsScreen),
     exact: true
   },
   {
     path: '/profile/admin/ownership-requests',
-    component: AdminOwnershipRequestsScreen,
+    component: withCompatNavigation(AdminOwnershipRequestsScreen),
     exact: true
   },
   {
     path: '/profile/add-vibe/:venueId',
-    component: AddVibeScreen
+    component: withCompatNavigation(AddVibeScreen)
+  },
+  {
+    path: '/profile/todays-vibe/:venueId',
+    component: withCompatNavigation(TodaysVibeScreen)
+  },
+  {
+    path: '/profile/ticket-contacts',
+    component: withCompatNavigation(TicketContactScreen),
+    exact: true
+  },
+  {
+    path: '/profile/tickets/:eventId',
+    component: withCompatNavigation(TicketPurchaseScreen)
+  },
+  {
+    path: '/profile/scanner/:eventId',
+    component: withCompatNavigation(TicketScannerScreen)
+  },
+  {
+    path: '/profile/organiser/:eventId',
+    component: withCompatNavigation(OrganiserDashboardScreen)
+  },
+  {
+    path: '/profile/my-tickets',
+    component: withCompatNavigation(MyTicketsScreen),
+    exact: true
+  },
+  {
+    path: '/profile/auth',
+    component: withCompatNavigation(SignUpScreen), // This was in the original config
+    exact: true
   },
   {
     path: '/profile/todays-vibe/:venueId',

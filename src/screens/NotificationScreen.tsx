@@ -11,19 +11,11 @@ import {
 import { useAuth } from "../contexts/AuthContext"
 import NotificationService from "../services/NotificationService"
 import type { AppNotification } from "../models/Notification"
-import { useNavigation } from "@react-navigation/native"
-import type { NativeStackNavigationProp } from "@react-navigation/native-stack"
-import type { CompositeNavigationProp } from "@react-navigation/native"
-import type { EventsStackParamList, ProfileStackParamList } from "../navigation/types"
-
-type NotificationScreenNavigationProp = CompositeNavigationProp<
-  NativeStackNavigationProp<EventsStackParamList>,
-  NativeStackNavigationProp<ProfileStackParamList>
->
+import { useCompatNavigation } from "../utils/compatNavigation"
 
 export default function NotificationScreen() {
   const { user } = useAuth()
-  const navigation = useNavigation<NotificationScreenNavigationProp>()
+  const navigation = useCompatNavigation()
   const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
