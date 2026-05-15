@@ -46,7 +46,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'OrganiserDashboard': (params) => navigate(`/events/organiser/${params?.eventId}`, params),
         'TicketContactScreen': (params) => navigate('/events/ticket-contacts', params),
         'MyTickets': () => navigate('/profile/my-tickets'),
-        'Notification': () => navigate('/events/notifications'),
+        'Notification': () => navigate('/profile/notifications'),
         'PaymentCallback': () => navigate('/events/payment-callback'),
         'AddVenue': () => navigate('/profile/add-venue'),
         'MyVenues': () => navigate('/profile/my-venues'),
