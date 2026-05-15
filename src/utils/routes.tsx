@@ -113,8 +113,17 @@ export const routes: RouteDefinition[] = [
     component: withCompatNavigation(VenueDetailScreen)
   },
   {
-    path: '/venues/:venueId/add-event',
-    component: withCompatNavigation(withRouteGuard(AddEventScreen, requireAuth))
+    path: '/venues/add-event',
+    component: withCompatNavigation(AddEventScreen),
+    exact: true
+  },
+  {
+    path: '/venues/:venueId/programs',
+    component: withCompatNavigation(ManageProgramsScreen)
+  },
+  {
+    path: '/venues/:venueId/vibe',
+    component: withCompatNavigation(TodaysVibeScreen)
   },
   {
     path: '/venues/events/:eventId',
@@ -122,11 +131,11 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/venues/:venueId/programs',
-    component: withCompatNavigation(withRouteGuard(ManageProgramsScreen, requireAuth))
+    component: withCompatNavigation(ManageProgramsScreen)
   },
   {
     path: '/venues/:venueId/vibe',
-    component: withCompatNavigation(withRouteGuard(TodaysVibeScreen, requireAuth))
+    component: withCompatNavigation(TodaysVibeScreen)
   },
   {
     path: '/venues/ticket-contacts',
@@ -294,19 +303,19 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/profile/tickets/:eventId',
-    component: withRouteGuard(TicketPurchaseScreen, requireAuth)
+    component: TicketPurchaseScreen
   },
   {
     path: '/profile/scanner/:eventId',
-    component: withRouteGuard(TicketScannerScreen, requireAuth)
+    component: TicketScannerScreen
   },
   {
     path: '/profile/organiser/:eventId',
-    component: withRouteGuard(OrganiserDashboardScreen, requireAuth)
+    component: OrganiserDashboardScreen
   },
   {
     path: '/profile/my-tickets',
-    component: withRouteGuard(MyTicketsScreen, requireAuth),
+    component: MyTicketsScreen,
     exact: true
   },
   {
