@@ -12,18 +12,16 @@ import { useAuth } from "../contexts/AuthContext"
 import NotificationService from "../services/NotificationService"
 import type { AppNotification } from "../models/Notification"
 import { useCompatNavigation } from "../utils/compatNavigation"
+import { useCachedNotifications } from "../hooks/useDataCache"
+import { useNotificationsScroll } from "../hooks/useScrollPersistence"
 import { BackButton } from "../components/Navigation"
 
 export default function NotificationScreen() {
   const { user } = useAuth()
   const navigation = useCompatNavigation()
-  const [notifications, setNotifications] = useState<AppNotification[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: notifications = [], loading, error, refetch } = useCachedNotifications(user?.uid)
+  const { scrollRef, onScroll } = useNotificationsScroll()
   const [refreshing, setRefreshing] = useState(false)
-
-  useEffect(() => {
-    loadNotifications()
-  }, [user])
 
   const loadNotifications = async () => {
     try {
@@ -39,7 +37,7 @@ export default function NotificationScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    await loadNotifications()
+    await refetch()
     setRefreshing(false)
   }
 
@@ -210,11 +208,13 @@ export default function NotificationScreen() {
       )}
 
       <FlatList
+        ref={scrollRef}
         data={notifications}
         renderItem={renderNotification}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={renderEmptyState}
+        onScroll={onScroll}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}

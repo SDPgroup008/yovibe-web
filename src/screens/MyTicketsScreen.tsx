@@ -5,6 +5,8 @@ import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
+import { useCachedUserTickets } from "../hooks/useDataCache"
+import { useMyTicketsScroll } from "../hooks/useScrollPersistence"
 import { useAuth } from "../contexts/AuthContext"
 import FirebaseService from "../services/FirebaseService"
 import type { Ticket } from "../models/Ticket"
@@ -12,14 +14,10 @@ import type { Ticket } from "../models/Ticket"
 const MyTicketsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { user } = useAuth()
-  const [tickets, setTickets] = useState<Ticket[]>([])
-  const [loading, setLoading] = useState(true)
+  const { data: tickets = [], loading, error, refetch } = useCachedUserTickets(user?.uid)
+  const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
-
-  useEffect(() => {
-    loadUserTickets()
-  }, [user])
 
   const loadUserTickets = async () => {
     if (!user) {
@@ -172,7 +170,7 @@ const MyTicketsScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView style={styles.ticketList} showsVerticalScrollIndicator={false}>
+      <ScrollView ref={scrollRef} style={styles.ticketList} showsVerticalScrollIndicator={false} onScroll={onScroll}>
         {filteredTickets.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="ticket-outline" size={64} color="#444444" />
