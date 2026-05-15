@@ -18,7 +18,9 @@ import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { blobToDataURL } from "../utils/expoHelpers"
 import { useCompatNavigation } from "../utils/compatNavigation"
-import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
+import FirebaseService from "../services/FirebaseService"
+import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
 
@@ -301,11 +303,9 @@ const AddVibeScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+      <BackButton />
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
           <Text style={styles.headerTitle}>Add Today's Vibe</Text>
           <View style={[styles.modelStatusIndicator, { backgroundColor: modelLoaded ? '#4CAF50' : '#FF3B30' }]}>
             <Text style={styles.modelStatusText}>{modelLoaded ? '✓' : '○'}</Text>
@@ -464,6 +464,7 @@ const styles = StyleSheet.create({
   },
   headerTop: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },

@@ -171,7 +171,7 @@ const DesktopTabBar: React.FC<{ currentPath: string }> = ({ currentPath }) => {
   );
 };
 
-// Back button component
+// Standardized Back button component - positioned in top-right corner
 export const BackButton: React.FC<{ style?: any }> = ({ style }) => {
   const { goBack, canGoBack } = useNavigation();
 
@@ -179,7 +179,7 @@ export const BackButton: React.FC<{ style?: any }> = ({ style }) => {
 
   return (
     <TouchableOpacity
-      style={[styles.backButton, style]}
+      style={[styles.standardBackButton, style]}
       onPress={goBack}
       activeOpacity={0.7}
     >
@@ -401,6 +401,21 @@ const styles = StyleSheet.create({
   mobileContent: {
     flex: 1,
     paddingBottom: 80, // Account for bottom tab bar
+  },
+  // Standardized back button positioned in top-right corner
+  standardBackButton: {
+    position: 'absolute',
+    top: 16,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.3)",
+    zIndex: 1000,
   },
 });
 

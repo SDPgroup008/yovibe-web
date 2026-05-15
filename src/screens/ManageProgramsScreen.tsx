@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import FirebaseService from "../services/FirebaseService"
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -44,16 +45,11 @@ const ManageProgramsScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
+      <BackButton />
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>Manage Weekly Programs</Text>
-            <Text style={styles.headerSubtitle}>Add or update your venue's weekly schedule</Text>
-          </View>
-          <View style={{ width: 40 }} />
+        <View style={styles.titleContainer}>
+          <Text style={styles.headerTitle}>Manage Weekly Programs</Text>
+          <Text style={styles.headerSubtitle}>Add or update your venue's weekly schedule</Text>
         </View>
       </View>
 

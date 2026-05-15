@@ -13,6 +13,7 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 const VenueDetailScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -416,11 +417,9 @@ const VenueDetailScreen: React.FC = () => {
         alt={`Venue image for ${venue.name}`}
       />
 
+      <BackButton />
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
           <View style={styles.titleContainer}>
             <Text style={styles.venueName}>{venue.name}</Text>
             <Text style={styles.venueLocation}>{venue.location}</Text>

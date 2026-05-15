@@ -16,6 +16,7 @@ import { Ionicons } from "@expo/vector-icons"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useCompatNavigation } from "../utils/compatNavigation"
+import { BackButton } from "../components/Navigation"
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 
@@ -97,12 +98,9 @@ const MyVenuesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <BackButton />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>My Venues</Text>
-        <View style={{ width: 40 }} />
       </View>
       <TouchableOpacity style={styles.addButton} onPress={handleAddVenue}>
         <Ionicons name="add" size={24} color="#FFFFFF" />

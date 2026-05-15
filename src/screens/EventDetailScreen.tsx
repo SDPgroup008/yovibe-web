@@ -22,6 +22,7 @@ import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import TicketService from "../services/TicketService"
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
 import { db } from "../config/firebase"
@@ -343,7 +344,9 @@ const EventDetailScreen: React.FC = () => {
   const canManageEvent = isEventOwner || user?.userType === "admin"
 
   return (
-    <ScrollView style={styles.container}>
+    <View style={styles.container}>
+      <BackButton />
+      <ScrollView>
       <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
         <ImageBackground 
           source={{ uri: event.posterImageUrl }} 
@@ -352,9 +355,6 @@ const EventDetailScreen: React.FC = () => {
           accessibilityLabel={`Event poster for ${event.name}`}
         >
           <View style={styles.headerOverlay}>
-            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-              <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-            </TouchableOpacity>
 
             <View style={styles.eventHeaderInfo}>
               <Text style={styles.eventName}>{event.name}</Text>
@@ -494,6 +494,7 @@ const EventDetailScreen: React.FC = () => {
 
       </View>
     </ScrollView>
+    </View>
   )
 }
 

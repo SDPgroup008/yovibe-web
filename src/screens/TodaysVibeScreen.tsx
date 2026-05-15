@@ -17,6 +17,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { BackButton } from "../components/Navigation"
 import FirebaseService from "../services/FirebaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { VibeImage } from "../models/VibeImage"
@@ -183,16 +184,11 @@ const TodaysVibeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <BackButton />
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <View style={styles.titleContainer}>
-            <Text style={styles.headerTitle}>{venueName}</Text>
-            <Text style={styles.headerSubtitle}>Vibe Gallery</Text>
-          </View>
-          <View style={{ width: 40 }} />
+        <View style={styles.titleContainer}>
+          <Text style={styles.headerTitle}>{venueName}</Text>
+          <Text style={styles.headerSubtitle}>Vibe Gallery</Text>
         </View>
       </View>
 

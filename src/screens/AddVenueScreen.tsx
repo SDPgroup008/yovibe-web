@@ -15,6 +15,7 @@ import {
   Dimensions,
 } from "react-native"
 import { useCompatNavigation } from "../utils/compatNavigation"
+import { BackButton } from "../components/Navigation"
 import FirebaseService from "../services/FirebaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
@@ -211,12 +212,7 @@ const AddVenueScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-          <Text style={styles.backButtonText}>Back</Text>
-        </TouchableOpacity>
-      </View>
+      <BackButton />
       <View style={styles.form}>
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Venue Name *</Text>
