@@ -62,7 +62,6 @@ const OrganiserDashboardScreen: React.FC = () => {
   // Extract eventId from current path: /events/organiser/:eventId
   const pathParts = currentPath.split('/').filter(Boolean)
   const eventId = pathParts[2] // events/organiser/:eventId, so [events, organiser, eventId]
-  const { eventId } = route.params
   const { user } = useAuth()
 
   const [event, setEvent] = useState<Event | null>(null)
