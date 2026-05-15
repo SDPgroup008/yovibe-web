@@ -18,11 +18,13 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "../utils/compatNavigation";
+import { useCompatNavigation } from "../utils/compatNavigation";
+import { useCachedEvents } from "../hooks/useDataCache";
+import { useEventsScroll } from "../hooks/useScrollPersistence";
 import FirebaseService from "../services/FirebaseService";
 import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
-import type { EventsScreenProps } from "../navigation/types";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 
 // Responsive design hooks
@@ -36,7 +38,10 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
-const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
+const EventsScreen: React.FC = () => {
+  const navigation = useCompatNavigation()
+  const { data: events, loading, error, refetch } = useCachedEvents()
+  const { scrollRef, onScroll } = useEventsScroll()
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
 
@@ -59,29 +64,24 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
-  const [events, setEvents] = useState<Event[]>([]);
+  const { data: events = [], loading, error, refetch } = useCachedEvents();
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [lastDoc, setLastDoc] = useState<any>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [dataCache, setDataCache] = useState<{data: Event[], timestamp: number} | null>(null);
-  const flatListRef = useRef<FlatList>(null);
-  const ITEMS_PER_PAGE = 5;
-  const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 
   // Initial data load only - no reload on focus
+  // Update filtered events when events data changes
   useEffect(() => {
-    if (events.length === 0) {
-      loadEvents();
+    if (events) {
+      setFilteredEvents(events);
+      setDisplayedEvents(events.slice(0, 20)); // Show first 20 events initially
     }
-  }, []);
+  }, [events]);
 
   // Update notification badge when screen is focused
   useEffect(() => {
@@ -142,191 +142,21 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
   }, [searchQuery, events])
 
   useEffect(() => {
-    // Reset to first page and display first 5 items when filteredEvents changes
-    setCurrentPage(1);
-    setDisplayedEvents(filteredEvents.slice(0, ITEMS_PER_PAGE));
+    setDisplayedEvents(filteredEvents);
   }, [filteredEvents]);
-
-  const isCacheValid = () => {
-    if (!dataCache) return false;
-    return Date.now() - dataCache.timestamp < CACHE_DURATION;
-  };
-
-  const loadEvents = async (isInitial: boolean = true, isRefresh: boolean = false) => {
-    try {
-      if (isInitial && !isRefresh) {
-        // Check cache first for initial load
-        if (isCacheValid()) {
-          // console.log("Using cached events data");
-          setEvents(dataCache!.data);
-          setFilteredEvents(dataCache!.data);
-          setLoading(false);
-          return;
-        }
-        setLoading(true);
-      }
-
-      if (isRefresh) {
-        setRefreshing(true);
-      }
-
-      // AUTO-LOAD ALL EVENTS: Fetch all data in batches with 7-second delays
-      if (isInitial) {
-        // console.log("\n🚀 EVENTS AUTO-LOAD: Fetching ALL events from Firebase in batches...\n");
-        
-        let allEvents: any[] = [];
-        let currentLastDoc = null;
-        let fetchCount = 0;
-        const BATCH_SIZE = 5;
-        const DELAY_MS = 3000;
-        
-        while (true) {
-          fetchCount++;
-          // console.log(`\n${'='.repeat(60)}`);
-          // console.log(`📅 EVENT BATCH #${fetchCount}: Requesting ${BATCH_SIZE} events...`);
-          // console.log(`${'='.repeat(60)}`);
-          
-          const { events: paginatedEvents, lastDoc: newLastDoc } = await FirebaseService.getEventsPaginated(BATCH_SIZE, currentLastDoc);
-          
-          // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-          // console.log(`   • Received: ${paginatedEvents.length} events`);
-          // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
-          
-          if (paginatedEvents.length === 0) {
-            // console.log(`\n⛔ BATCH #${fetchCount}: No events returned - End of data`);
-            break;
-          }
-          
-          allEvents = [...allEvents, ...paginatedEvents];
-          currentLastDoc = newLastDoc;
-          
-          // 🚀 IMMEDIATELY DISPLAY the batch to users
-          const sortedSoFar = [...allEvents].sort((a, b) => {
-            const today = new Date();
-            const diffA = Math.abs(a.date.getTime() - today.getTime());
-            const diffB = Math.abs(b.date.getTime() - today.getTime());
-            return diffA - diffB;
-          });
-          setEvents(sortedSoFar);
-          setFilteredEvents(sortedSoFar);
-          // console.log(`🎨 DISPLAYED: Batch #${fetchCount} sorted and visible (${sortedSoFar.length} events)`);
-          
-          // Hide loading spinner after first batch is displayed
-          if (fetchCount === 1) {
-            // console.log("🎬 First batch complete - hiding loading spinner");
-            setLoading(false);
-          }
-          
-          // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-          // console.log(`   • Total events loaded: ${allEvents.length}`);
-          // console.log(`   • Displayed (sorted by date): ${sortedSoFar.length}`);
-          
-          if (!newLastDoc) {
-            // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All events loaded!`);
-            break;
-          }
-          
-          // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
-          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-        }
-        
-        // console.log(`\n${'='.repeat(60)}`);
-        // console.log(`🎉 EVENTS AUTO-LOAD COMPLETE!`);
-        // console.log(`${'='.repeat(60)}`);
-        // console.log(`   • Total batches: ${fetchCount}`);
-        // console.log(`   • Total events: ${allEvents.length}`);
-        // console.log(`${'='.repeat(60)}\n`);
-        
-        // Sort events by date (closest to today first)
-        const sortedEvents = [...allEvents].sort((a, b) => {
-          const today = new Date();
-          const diffA = Math.abs(a.date.getTime() - today.getTime());
-          const diffB = Math.abs(b.date.getTime() - today.getTime());
-          return diffA - diffB;
-        });
-
-        setEvents(sortedEvents);
-        setFilteredEvents(sortedEvents);
-        setLastDoc(null);
-        setHasMore(false);
-        
-        // Cache the complete data
-        setDataCache({ data: sortedEvents, timestamp: Date.now() });
-        // console.log("💾 Complete events dataset cached");
-
-        // Get featured events
-        const featured = await FirebaseService.getFeaturedEvents();
-        const sortedFeatured = [...featured].sort((a, b) => {
-          const today = new Date();
-          const diffA = Math.abs(a.date.getTime() - today.getTime());
-          const diffB = Math.abs(b.date.getTime() - today.getTime());
-          return diffA - diffB;
-        });
-
-        setFeaturedEvents(sortedFeatured);
-      }
-    } catch (error) {
-      // console.error("Error loading events:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
-    setDataCache(null); // Clear cache to force fresh load
-    await loadEvents(true, true);
-  }, []);
+    setRefreshing(true);
+    await refetch(); // Force refresh cached data
+    setRefreshing(false);
+  }, [refetch]);
 
   const handleEventSelect = (eventId: string) => {
     navigation.navigate("EventDetail", { eventId });
   };
 
-  // Memoize loadMoreEvents to prevent recreation on every render
-  const loadMoreEvents = useCallback(async () => {
-    if (displayedEvents.length >= filteredEvents.length && hasMore) {
-      // Need to fetch more from Firebase
-      if (!lastDoc || !hasMore) return;
-      
-      try {
-        const { events: moreEvents, lastDoc: newLastDoc } = await FirebaseService.getEventsPaginated(ITEMS_PER_PAGE, lastDoc);
-        
-        if (moreEvents.length > 0) {
-          const sortedEvents = [...moreEvents].sort((a, b) => {
-            const today = new Date();
-            const diffA = Math.abs(a.date.getTime() - today.getTime());
-            const diffB = Math.abs(b.date.getTime() - today.getTime());
-            return diffA - diffB;
-          });
-          
-          const updatedEvents = [...events, ...sortedEvents];
-          setEvents(updatedEvents);
-          setFilteredEvents(updatedEvents);
-          setLastDoc(newLastDoc);
-          setHasMore(moreEvents.length === ITEMS_PER_PAGE);
-          
-          // Update cache
-          setDataCache({ data: updatedEvents, timestamp: Date.now() });
-        } else {
-          setHasMore(false);
-        }
-      } catch (error) {
-        console.error("Error loading more events:", error);
-      }
-      return;
-    }
-    
-    // Load more from existing filtered events
-    if (displayedEvents.length >= filteredEvents.length) {
-      return; // No more items to load
-    }
-    const nextPage = currentPage + 1;
-    const startIndex = 0;
-    const endIndex = nextPage * ITEMS_PER_PAGE;
-    setDisplayedEvents(filteredEvents.slice(startIndex, endIndex));
-    setCurrentPage(nextPage);
-  }, [displayedEvents, filteredEvents, hasMore, lastDoc, events, currentPage]);
+
 
   /**
    * handleAddEvent
@@ -525,7 +355,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          ref={flatListRef}
+          ref={scrollRef}
           data={displayedEvents}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
@@ -545,8 +375,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
               columnGap: gridColumns > 1 ? spacing.md : 0
             }
           ]}
-          onEndReached={loadMoreEvents}
-          onEndReachedThreshold={0.5}
+
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -560,6 +389,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ navigation }) => {
           windowSize={5}
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
+          onScroll={onScroll}
         />
       )}
 
