@@ -29,6 +29,7 @@ import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminVenuesScreen from '../screens/admin/AdminVenuesScreen';
 import AdminEventsScreen from '../screens/admin/AdminEventsScreen';
 import AdminOwnershipRequestsScreen from '../screens/admin/AdminOwnershipRequestsScreen';
+import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
 
 // Import compatibility wrapper
 import { withCompatNavigation } from './compatNavigation';
