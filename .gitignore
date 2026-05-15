@@ -103,7 +103,11 @@ jspm_packages/
 
 # Gatsby files
 .cache/
-public
+
+# Public directory - mostly ignored, but allow TensorFlow models
+public/*
+!public/vibe_model_tfjs/
+!public/vibe_model_tfjs/*
 
 # Storybook build outputs
 .out
@@ -141,8 +145,8 @@ firestore-debug.log
 # Patch files (temporary)
 *.patch
 
-# Large ML models (should be downloaded at runtime)
-public/vibe_model_tfjs/
+# Large ML models - ALLOWED (needed for vibe analysis feature)
+# public/vibe_model_tfjs/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .github/instructions/snyk_rules.instructions.md
