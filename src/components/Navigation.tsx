@@ -291,6 +291,10 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'rgba(0, 212, 255, 0.2)',
     height: '100%',
+    position: 'fixed',
+    left: 0,
+    top: 0,
+    zIndex: 100,
     width: 80,
   },
   logoContainer: {
@@ -386,6 +390,7 @@ const styles = StyleSheet.create({
   desktopMainContent: {
     flex: 1,
     backgroundColor: '#121212',
+    marginLeft: 80,
   },
 
   mobileLayout: {
