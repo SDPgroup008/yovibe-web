@@ -291,10 +291,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'rgba(0, 212, 255, 0.2)',
     height: '100%',
-    position: 'fixed',
-    left: 0,
-    top: 0,
-    zIndex: 100,
+    width: 80,
   },
   logoContainer: {
     paddingTop: 20,
@@ -385,7 +382,6 @@ const styles = StyleSheet.create({
   },
   desktopContent: {
     flex: 1,
-    marginLeft: 80, // Account for sidebar
   },
   desktopMainContent: {
     flex: 1,
