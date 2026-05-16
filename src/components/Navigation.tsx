@@ -304,6 +304,13 @@ const styles = StyleSheet.create({
   logoImage: {
     width: 50,
     height: 50,
+    borderWidth: 1,
+    borderColor: '#2196F3',
+    shadowColor: '#2196F3',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 5,
   },
   desktopNavItems: {
     flex: 1,
