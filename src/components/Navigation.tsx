@@ -8,6 +8,9 @@ import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from '../ut
 // Navigation hook
 import { useNavigation } from '../utils/URLRouter';
 
+// Layout Context
+import { LayoutProvider, ScreenContainer } from '../contexts/LayoutContext';
+
 // Tab bar configuration
 interface TabConfig {
   key: string;
@@ -227,7 +230,9 @@ export const DesktopLayout: React.FC<{ children: React.ReactNode }> = ({ childre
       <View style={styles.desktopContent}>
         <AppHeader />
         <View style={styles.desktopMainContent}>
-          {children}
+          <ScreenContainer>
+            {children}
+          </ScreenContainer>
         </View>
         {/* Desktop doesn't need bottom tab bar */}
       </View>
@@ -390,7 +395,6 @@ const styles = StyleSheet.create({
   desktopMainContent: {
     flex: 1,
     backgroundColor: '#121212',
-    marginLeft: 80,
   },
 
   mobileLayout: {
