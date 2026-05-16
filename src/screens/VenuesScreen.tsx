@@ -426,6 +426,8 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+    paddingLeft: 80,
+    paddingBottom: 80,
   },
   // Screen reader only style for SEO - React Native compatible
   srOnly: {

@@ -447,6 +447,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
+    paddingLeft: 80,
     paddingBottom: responsiveSize(54, 60, 68), // Match bottom navbar height
   },
   profileHeader: {
