@@ -390,7 +390,6 @@ const styles = StyleSheet.create({
   desktopMainContent: {
     flex: 1,
     backgroundColor: '#121212',
-    marginLeft: 80,
   },
 
   mobileLayout: {
