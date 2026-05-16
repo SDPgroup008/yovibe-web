@@ -750,12 +750,12 @@ export const MainTabNavigator = () => {
   if (isLargeScreen) {
     return (
       <View style={styles.tabContainer}>
-        {/* Left Navigation - rendered outside navigator */}
-        <View style={styles.desktopLeftNav}>
+        {/* Desktop Left Navigation - Flexbox layout to prevent overlap */}
+        <View style={styles.desktopLeftNavContainer}>
           <DesktopLeftNavWrapper />
         </View>
         
-        {/* Main Navigator Content */}
+        {/* Main Navigator Content - Takes remaining space */}
         <View style={styles.desktopNavigatorContent}>
           <MainTab.Navigator
             tabBar={() => null}
@@ -996,24 +996,17 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   // Desktop left nav container (full height, positioned left)
-  desktopLeftNav: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 100,
-  },
-  // Desktop left nav content wrapper
+  // Desktop left nav container - fixed width for flex layout
   desktopLeftNavContainer: {
     backgroundColor: '#121212',
     borderRightWidth: 1,
     borderRightColor: 'rgba(0, 212, 255, 0.2)',
     height: '100%',
+    width: 80,
   },
-  // Desktop navigator content (to the right of left nav)
+  // Desktop navigator content - takes remaining space
   desktopNavigatorContent: {
     flex: 1,
-    marginLeft: 80, // Offset for left navigation width
   },
   leftNavContent: {
     flex: 1,
