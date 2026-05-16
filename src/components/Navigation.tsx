@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 // Import responsive utilities
@@ -129,9 +129,11 @@ const DesktopTabBar: React.FC<{ currentPath: string }> = ({ currentPath }) => {
     <View style={[styles.desktopSidebar, { width: 80 }]}>
       {/* Logo */}
       <View style={styles.logoContainer}>
-        <View style={styles.logoPlaceholder}>
-          <Text style={styles.logoText}>YV</Text>
-        </View>
+        <Image 
+          source={require('../../assets/icon.png')} 
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
       </View>
 
       {/* Navigation Items */}
@@ -299,20 +301,9 @@ const styles = StyleSheet.create({
     paddingBottom: 30,
     alignItems: 'center',
   },
-  logoPlaceholder: {
+  logoImage: {
     width: 50,
     height: 50,
-    borderRadius: 12,
-    backgroundColor: '#2196F3',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(33, 150, 243, 0.8)',
-  },
-  logoText: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
   },
   desktopNavItems: {
     flex: 1,
@@ -392,6 +383,7 @@ const styles = StyleSheet.create({
   desktopMainContent: {
     flex: 1,
     backgroundColor: '#121212',
+    marginLeft: 80,
   },
 
   mobileLayout: {
