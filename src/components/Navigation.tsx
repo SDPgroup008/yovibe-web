@@ -210,7 +210,7 @@ export const AppHeader: React.FC = () => {
   return (
     <View style={styles.mobileHeader}>
       <BackButton />
-      <Image source={require('../../assets/icon.png')} style={{width: 20, height: 20, marginRight: 8}} resizeMode="contain" /><Text style={styles.headerTitle}>YoVibe</Text>
+      <Image source={require('../../assets/icon.png')} style={{width: 35, height: 35, marginLeft: 55, marginRight: 5}} resizeMode="contain" /><Text style={[styles.headerTitle, { marginLeft: -65 }]}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
       <View style={{ width: 40 }} /> {/* Spacer for centering */}
     </View>
   );
@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   // Standardized back button positioned in top-right corner
   standardBackButton: {
     position: 'absolute',
-    top: 16,
+    top: 6,
     left: 16,
     width: 44,
     height: 44,
