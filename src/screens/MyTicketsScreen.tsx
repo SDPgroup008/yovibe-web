@@ -14,7 +14,8 @@ import type { Ticket } from "../models/Ticket"
 const MyTicketsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { user } = useAuth()
-  const { data: tickets = [], loading, error, refetch } = useCachedUserTickets(user?.uid)
+  const { data: ticketsRaw, loading, error, refetch } = useCachedUserTickets(user?.uid)
+  const tickets = ticketsRaw || []
   const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
