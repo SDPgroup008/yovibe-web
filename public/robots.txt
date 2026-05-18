@@ -1,0 +1,62 @@
+# YoVibe robots.txt - SEO Configuration for Google Search Console
+# Last updated: 2026-05-18
+
+# Allow all legitimate crawlers
+User-agent: *
+Allow: /
+
+# Allow specific user agents
+User-agent: Googlebot
+Allow: /
+Crawl-delay: 0
+
+User-agent: Bingbot
+Allow: /
+Crawl-delay: 1
+
+# Block bad bots
+User-agent: MJ12bot
+User-agent: SemrushBot
+User-agent: DotBot
+Disallow: /
+
+# Disallow private/admin routes from being indexed
+Disallow: /admin/
+Disallow: /profile/admin/
+Disallow: /api/
+
+# Disallow auth pages from sitemap
+Disallow: /login
+Disallow: /signup
+Disallow: /auth/
+
+# Allow public pages
+Allow: /events
+Allow: /venues
+Allow: /map
+Allow: /calendar
+Allow: /profile/
+
+# Prevent crawling of internal routes that don't need indexing
+Disallow: /profile/add-venue
+Disallow: /profile/add-vibe
+Disallow: /profile/my-venues
+Disallow: /profile/my-tickets
+Disallow: /profile/notifications
+Disallow: /events/add
+Disallow: /events/ticket-contacts
+Disallow: /events/payment-callback
+
+# Sitemap location - critical for Google Search Console
+Sitemap: https://yovibe.net/sitemap.xml
+
+# Sitemap for mobile
+Sitemap: https://yovibe.net/sitemap-mobile.xml
+
+# Crawl delay for respect to server
+Crawl-delay: 1
+
+# Request rate limiting (events per 10 seconds)
+Request-rate: 5/10s
+
+

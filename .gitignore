@@ -104,10 +104,7 @@ jspm_packages/
 # Gatsby files
 .cache/
 
-# Public directory - mostly ignored, but allow TensorFlow models
-public/*
-!public/vibe_model_tfjs/
-!public/vibe_model_tfjs/*
+# Public directory fully included (no ignores)
 
 # Storybook build outputs
 .out

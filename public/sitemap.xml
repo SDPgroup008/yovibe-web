@@ -1,0 +1,376 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"
+        xmlns:mobile="http://www.google.com/schemas/sitemap-mobile/1.0">
+
+  <!-- ============================================ -->
+  <!-- PRIMARY PAGES - Highest Priority -->
+  <!-- ============================================ -->
+
+  <!-- Homepage Redirect to Events -->
+  <url>
+    <loc>https://yovibe.net/</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Events Listing Page -->
+  <url>
+    <loc>https://yovibe.net/events</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- Venues Listing Page -->
+  <url>
+    <loc>https://yovibe.net/venues</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- Map View Page -->
+  <url>
+    <loc>https://yovibe.net/map</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.85</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- Calendar View Page -->
+  <url>
+    <loc>https://yovibe.net/calendar</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.90</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- SECONDARY PAGES - High Priority -->
+  <!-- ============================================ -->
+
+  <!-- Event Detail Pages - Dynamic Content -->
+  <!-- Note: This is a template. In production, these should be generated from your database -->
+  <url>
+    <loc>https://yovibe.net/events/event-example-001</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/events/live-dj-night-kumull-klub</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/events/weekend-vibes-club-cubana</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- Venue Detail Pages - Dynamic Content -->
+  <!-- Note: This is a template. In production, these should be generated from your database -->
+  <url>
+    <loc>https://yovibe.net/venues/club-cubana</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/kumull-klub</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/parliament-disco</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/kla-kampala</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.80</priority>
+    <mobile:mobile/>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- TERTIARY PAGES - Medium Priority -->
+  <!-- ============================================ -->
+
+  <!-- Venue Program/Event Management Pages -->
+  <url>
+    <loc>https://yovibe.net/venues/club-cubana/programs</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <!-- Venue Vibe Pages -->
+  <url>
+    <loc>https://yovibe.net/venues/club-cubana/vibe</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <!-- Events by Section/Category (Examples) -->
+  <!-- Note: These represent common search patterns -->
+  <url>
+    <loc>https://yovibe.net/events/category/concerts</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/events/category/dj-nights</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/events/category/parties</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/events/category/live-music</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <!-- Venue by Category/Type -->
+  <url>
+    <loc>https://yovibe.net/venues/category/clubs</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/category/bars</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/category/lounges</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <url>
+    <loc>https://yovibe.net/venues/category/rooftops</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- LOCATION-BASED PAGES - Medium-Low Priority -->
+  <!-- ============================================ -->
+
+  <!-- Kampala Events -->
+  <url>
+    <loc>https://yovibe.net/events/location/kampala</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <!-- Entebbe Events -->
+  <url>
+    <loc>https://yovibe.net/events/location/entebbe</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.60</priority>
+  </url>
+
+  <!-- Kampala Venues -->
+  <url>
+    <loc>https://yovibe.net/venues/location/kampala</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.70</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- SPECIAL PAGES - Low-Medium Priority -->
+  <!-- ============================================ -->
+
+  <!-- Weekend Events -->
+  <url>
+    <loc>https://yovibe.net/events/weekend</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.65</priority>
+  </url>
+
+  <!-- Today's Events -->
+  <url>
+    <loc>https://yovibe.net/events/today</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.65</priority>
+  </url>
+
+  <!-- Popular Events -->
+  <url>
+    <loc>https://yovibe.net/events/popular</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.65</priority>
+  </url>
+
+  <!-- Trending Venues -->
+  <url>
+    <loc>https://yovibe.net/venues/trending</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.60</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- TICKET & BOOKING PAGES - Medium Priority -->
+  <!-- ============================================ -->
+
+  <!-- Ticket Purchase Page (Example) -->
+  <url>
+    <loc>https://yovibe.net/events/tickets/event-001</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>hourly</changefreq>
+    <priority>0.75</priority>
+  </url>
+
+  <!-- My Tickets -->
+  <url>
+    <loc>https://yovibe.net/profile/my-tickets</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.50</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- PROFILE & USER PAGES - Low Priority (Noindex in robots.txt) -->
+  <!-- ============================================ -->
+
+  <!-- Main Profile Page -->
+  <url>
+    <loc>https://yovibe.net/profile</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.30</priority>
+  </url>
+
+  <!-- My Venues -->
+  <url>
+    <loc>https://yovibe.net/profile/my-venues</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.40</priority>
+  </url>
+
+  <!-- Notifications -->
+  <url>
+    <loc>https://yovibe.net/profile/notifications</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.30</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- ORGANIZER DASHBOARD PAGES -->
+  <!-- ============================================ -->
+
+  <!-- Event Organizer Dashboard (Example) -->
+  <url>
+    <loc>https://yovibe.net/events/organiser/event-001</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>0.50</priority>
+  </url>
+
+  <!-- ============================================ -->
+  <!-- ADMINISTRATIVE PAGES (Marked as Low Priority) -->
+  <!-- ============================================ -->
+
+  <!-- Admin Dashboard - Note: Should have noindex in meta tags -->
+  <url>
+    <loc>https://yovibe.net/profile/admin/dashboard</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.20</priority>
+  </url>
+
+  <!-- Admin Users -->
+  <url>
+    <loc>https://yovibe.net/profile/admin/users</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.20</priority>
+  </url>
+
+
+
+  <!-- Admin Venues -->
+  <url>
+    <loc>https://yovibe.net/profile/admin/venues</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.20</priority>
+  </url>
+
+
+
+  <!-- Admin Events -->
+  <url>
+    <loc>https://yovibe.net/profile/admin/events</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.20</priority>
+  </url>
+
+
+
+  <!-- Admin Ownership Requests -->
+  <url>
+    <loc>https://yovibe.net/profile/admin/ownership-requests</loc>
+    <lastmod>2026-05-18</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.20</priority>
+  </url>
+
+</urlset>
+
+
+
+
