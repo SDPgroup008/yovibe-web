@@ -100,7 +100,8 @@ export const generateCanonicalUrl = (path?: string): string => {
   const currentPath = path || getCurrentPath()
   // Remove trailing slash except for root
   const normalizedPath = currentPath === "/" ? "/" : currentPath.replace(/\/$/, "")
-  return `${DEFAULT_SEO.url}${normalizedPath}`
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : DEFAULT_SEO.url
+  return `${baseUrl}${normalizedPath}`
 }
 
 // Generate keywords string from array
@@ -131,7 +132,7 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
   const finalTitle = generateTitle(title || DEFAULT_SEO.title)
   const finalDescription = generateDescription(description || DEFAULT_SEO.description)
   const finalKeywords = generateKeywords(keywords)
-  const finalUrl = url || DEFAULT_SEO.url
+  const finalUrl = url || (typeof window !== "undefined" ? window.location.origin : DEFAULT_SEO.url)
   const finalImage = image || DEFAULT_SEO.image
   const finalCanonicalUrl = canonicalUrl || generateCanonicalUrl()
 
@@ -379,14 +380,14 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
 // Screen-specific SEO configurations for YoVibe
 export const SCREEN_SEO = {
   events: {
-    title: "Events in Kampala - Parties, Concerts & Nightlife",
+    title: "Events in Kampala - Parties, Concerts & Nightlife | YoVibe",
     description:
       "Browse all upcoming events, parties, concerts, DJ nights, and live music in Kampala and Uganda. Find the best events, see who's going, and buy tickets on YoVibe.",
     keywords: ["events", "parties", "concerts", "DJ nights", "live music", "Kampala events", "Uganda events"],
     type: "website" as const,
   },
   venues: {
-    title: "Nightlife Venues & Clubs in Kampala",
+    title: "Nightlife Venues & Clubs in Kampala | YoVibe",
     description:
       "Discover the best nightlife venues, clubs, bars, lounges, and rooftop bars in Kampala. Find the perfect venue for your night out with YoVibe.",
     keywords: ["venues", "clubs", "bars", "lounges", "rooftops", "nightlife", "Kampala venues"],
@@ -400,7 +401,7 @@ export const SCREEN_SEO = {
     type: "website" as const,
   },
   calendar: {
-    title: "Event Calendar - Upcoming Events",
+    title: "Event Calendar - Upcoming Events | YoVibe",
     description:
       "View the complete calendar of events, parties, concerts, and nightlife experiences in Kampala and Uganda. Plan your weekends with YoVibe.",
     keywords: ["calendar", "events calendar", "schedule", "upcoming events"],
@@ -426,6 +427,14 @@ export const SCREEN_SEO = {
     keywords: ["signup", "register", "create account", "join yovibe"],
     type: "website" as const,
     noindex: true,
+  },
+  admin: {
+    title: "Admin Dashboard - YoVibe Administration",
+    description: "YoVibe administration and management dashboard. For authorized administrators only.",
+    keywords: ["admin", "dashboard", "administration"],
+    type: "website" as const,
+    noindex: true, // Admin pages should NOT be indexed
+    nofollow: true, // Don't follow links from admin pages
   },
 }
 
