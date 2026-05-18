@@ -66,8 +66,8 @@ export const TabBar: React.FC = () => {
       styles.bottomTabBar,
       {
         height: componentSizes.tabBarHeight,
-        paddingBottom: Platform.OS === 'ios' ? spacing.small : 0,
-        paddingTop: spacing.small,
+        paddingBottom: Platform.OS === 'ios' ? spacing.xs : 0,
+        paddingTop: spacing.xs,
       }
     ]}>
       {tabs.map((tab) => {
@@ -210,7 +210,7 @@ export const AppHeader: React.FC = () => {
   return (
     <View style={styles.mobileHeader}>
       <BackButton />
-      <Text style={styles.headerTitle}>YoVibe</Text>
+      <Image source={require('../../assets/icon.png')} style={{width: 20, height: 20, marginRight: 8}} resizeMode="contain" /><Text style={styles.headerTitle}>YoVibe</Text>
       <View style={{ width: 40 }} /> {/* Spacer for centering */}
     </View>
   );
@@ -230,9 +230,7 @@ export const DesktopLayout: React.FC<{ children: React.ReactNode }> = ({ childre
       <View style={styles.desktopContent}>
         <AppHeader />
         <View style={styles.desktopMainContent}>
-          <ScreenContainer>
-            {children}
-          </ScreenContainer>
+          {children}
         </View>
         {/* Desktop doesn't need bottom tab bar */}
       </View>
@@ -296,7 +294,7 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: 'rgba(0, 212, 255, 0.2)',
     height: '100%',
-    position: 'fixed',
+    position: ('fixed' as any),
     left: 0,
     top: 0,
     zIndex: 100,
@@ -391,6 +389,7 @@ const styles = StyleSheet.create({
   },
   desktopContent: {
     flex: 1,
+    marginLeft: 80,
   },
   desktopMainContent: {
     flex: 1,

@@ -5,7 +5,8 @@ import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "rea
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
 import { routes } from "./utils/routes";
-import { TabBar } from "./components/Navigation";
+import { DesktopLayout, MobileLayout } from "./components/Navigation";
+import { LayoutProvider } from "./contexts/LayoutContext";
 
 // 🔔 Import Firebase helpers for notifications
 import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
@@ -249,10 +250,11 @@ function AppContent() {
 
       {/* URL-based routing with navigation */}
       <RouterProvider routes={routes}>
-        <View style={{ flex: 1 }}>
-          <RouteRenderer routes={routes} />
-          <TabBar />
-        </View>
+        <DesktopLayout>
+          <MobileLayout>
+            <RouteRenderer routes={routes} />
+          </MobileLayout>
+        </DesktopLayout>
       </RouterProvider>
 
       {/* Temporary notification banner */}
@@ -270,7 +272,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <LayoutProvider>
+        <AppContent />
+      </LayoutProvider>
     </AuthProvider>
   );
 }

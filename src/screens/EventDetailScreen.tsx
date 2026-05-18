@@ -539,7 +539,7 @@ const styles = StyleSheet.create({
   headerOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.4)",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     padding: responsiveSize(12, 14, 18),
     paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 60) : responsiveSize(12, 14, 18),
   },
