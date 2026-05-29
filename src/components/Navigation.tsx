@@ -9,7 +9,7 @@ import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from '../ut
 import { useNavigation } from '../utils/URLRouter';
 
 // Layout Context
-import { LayoutProvider, ScreenContainer } from '../contexts/LayoutContext';
+import { LayoutProvider, ScreenContainer, useLayout } from '../contexts/LayoutContext';
 
 // Tab bar configuration
 interface TabConfig {
@@ -193,6 +193,16 @@ export const BackButton: React.FC<{ style?: any }> = ({ style }) => {
   );
 };
 
+const HeaderAction: React.FC = () => {
+  const { headerRight } = useLayout();
+
+  if (!headerRight) {
+    return <View style={styles.mobileHeaderSpacer} />;
+  }
+
+  return <View style={styles.headerActionSlot}>{headerRight}</View>;
+};
+
 // Header component for consistency
 export const AppHeader: React.FC = () => {
   const { isLargeScreen } = useDeviceType();
@@ -202,6 +212,7 @@ export const AppHeader: React.FC = () => {
     return (
       <View style={styles.desktopHeader}>
         <BackButton />
+        <HeaderAction />
       </View>
     );
   }
@@ -210,8 +221,14 @@ export const AppHeader: React.FC = () => {
   return (
     <View style={styles.mobileHeader}>
       <BackButton />
-      <Image source={require('../../assets/icon.png')} style={{width: 35, height: 35, marginLeft: 55, marginRight: 5}} resizeMode="contain" /><Text style={[styles.headerTitle, { marginLeft: -65 }]}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
-      <View style={{ width: 40 }} /> {/* Spacer for centering */}
+      <View style={styles.mobileHeaderSpacer} />
+      <View style={styles.headerBrand}>
+        <View style={styles.headerIconWrap}>
+          <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
+        </View>
+        <Text style={styles.headerTitle}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
+      </View>
+      <HeaderAction />
     </View>
   );
 };
@@ -351,7 +368,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(0, 212, 255, 0.2)',
     paddingHorizontal: 16,
-    justifyContent: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
   mobileHeader: {
     height: 56,
@@ -363,6 +382,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 20 : 0,
+  },
+  mobileHeaderSpacer: {
+    width: 44,
+  },
+  headerActionSlot: {
+    width: 44,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  headerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginLeft: -40,
+  },
+  headerIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: '#66CCFF',
+    overflow: 'hidden',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerIcon: {
+    width: 34,
+    height: 34,
   },
   headerTitle: {
     color: '#FFFFFF',

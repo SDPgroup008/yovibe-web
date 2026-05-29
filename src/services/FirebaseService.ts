@@ -297,6 +297,7 @@ class FirebaseService {
         return this.getMockVenues()
       }
 
+      console.log("[DB Fetch] Loaded venues from Firebase:", venues.map(v => ({ id: v.id, slug: (v as any).slug, hasId: !!v.id, hasSlug: !!(v as any).slug })));
       return venues
     } catch (error) {
       // console.error("FirebaseService: Error getting venues:", error);
@@ -963,6 +964,7 @@ class FirebaseService {
         })
       })
 
+      console.log("[DB Fetch] Loaded events from Firebase:", events.map(e => ({ id: e.id, slug: (e as any).slug, hasId: !!e.id, hasSlug: !!(e as any).slug })));
       // console.log("FirebaseService: Found", events.length, "events")
       return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {

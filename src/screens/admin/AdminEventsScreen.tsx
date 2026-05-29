@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../../services/FirebaseService"
+import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { Event } from "../../models/Event"
 import type { AdminEventsScreenProps } from "../../navigation/types"
@@ -27,7 +27,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   const loadEvents = async () => {
     try {
       setLoading(true)
-      const eventsList = await FirebaseService.getEvents()
+      const eventsList = await SupabaseService.getEvents()
       setEvents(eventsList)
     } catch (error) {
       console.error("Error loading events:", error)
@@ -51,7 +51,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
       setLoading(true)
       console.log("[AdminEventsScreen] Deleting event:", eventId)
       
-      await FirebaseService.deleteEvent(eventId)
+      await SupabaseService.deleteEvent(eventId)
       console.log("[AdminEventsScreen] Event deleted successfully")
       
       Alert.alert("Success", "Event deleted successfully")
@@ -65,7 +65,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
 
   const handleToggleFeature = async (eventId: string, isFeatured: boolean) => {
     try {
-      await FirebaseService.updateEvent(eventId, { isFeatured: !isFeatured })
+      await SupabaseService.updateEvent(eventId, { isFeatured: !isFeatured })
       Alert.alert("Success", `Event ${isFeatured ? "unfeatured" : "featured"} successfully`)
       loadEvents()
     } catch (error) {

@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, Modal, KeyboardAvoidingView, Platform, ScrollView } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../../services/FirebaseService"
+import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { VenueOwnershipRequest } from "../../models/VenueOwnershipRequest"
 import type { AdminOwnershipRequestsScreenProps } from "../../navigation/types"
@@ -32,7 +32,7 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
   const loadRequests = async () => {
     try {
       setLoading(true)
-      const requestsList = await FirebaseService.getOwnershipRequests()
+      const requestsList = await SupabaseService.getOwnershipRequests()
       setRequests(requestsList)
     } catch (error) {
       console.error("Error loading ownership requests:", error)
@@ -76,9 +76,9 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
     }
     
     setProcessing(true)
-    console.log("[AdminOwnershipRequestsScreen] Calling FirebaseService.approveOwnershipRequest...")
+    console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.approveOwnershipRequest...")
     try {
-      await FirebaseService.approveOwnershipRequest(
+      await SupabaseService.approveOwnershipRequest(
         selectedRequest.id,
         currentUser.id,
         reviewNote
@@ -118,9 +118,9 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
     }
 
     setProcessing(true)
-    console.log("[AdminOwnershipRequestsScreen] Calling FirebaseService.rejectOwnershipRequest...")
+    console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.rejectOwnershipRequest...")
     try {
-      await FirebaseService.rejectOwnershipRequest(
+      await SupabaseService.rejectOwnershipRequest(
         selectedRequest.id,
         currentUser.id,
         reviewNote

@@ -37,6 +37,18 @@
   node_bundler = "esbuild"
 
 [[headers]]
+  for = "/manifest.webmanifest"
+  [headers.values]
+    Content-Type = "application/manifest+json"
+    Cache-Control = "public, max-age=0, must-revalidate"
+
+[[headers]]
+  for = "/firebase-messaging-sw.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+    Service-Worker-Allowed = "/"
+
+[[headers]]
   # Cache TensorFlow.js model files for 1 year
   for = "/vibe_model_tfjs/model.json"
   [headers.values]

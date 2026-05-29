@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useEffect, useState, useCallback } from "react"
 import { useNavigation, useNavigationState } from "@react-navigation/native"
 import { View, ActivityIndicator, Dimensions, Platform, useWindowDimensions, TouchableOpacity, Text, StyleSheet, Image } from "react-native"
+import SkeletonLoader from "../components/SkeletonLoader"
 
 // Import responsive hooks
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from "../utils/ResponsiveDesign"
@@ -150,13 +151,9 @@ function withAuth<P extends Record<string, any>>(WrappedComponent: React.Compone
       }
     }, [user, isLoading, navigation, props, setRedirectIntent])
 
-    // Show loading spinner while checking auth state
+    // Show skeleton while checking auth state
     if (isLoading) {
-      return (
-        <View style={{ flex: 1, backgroundColor: "#121212", justifyContent: "center", alignItems: "center" }}>
-          <ActivityIndicator size="large" color="#2196F3" />
-        </View>
-      )
+      return <SkeletonLoader />
     }
 
     // Show nothing while redirecting (safe)

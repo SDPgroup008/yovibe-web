@@ -6,7 +6,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, Ac
 import { useIsFocused, useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedVenues } from "../hooks/useDataCache";
 import { useVenuesScroll } from "../hooks/useScrollPersistence";
-import FirebaseService from "../services/FirebaseService";
+import SupabaseService from "../services/SupabaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
@@ -204,7 +204,7 @@ const VenuesScreen: React.FC = () => {
     return (
     <TouchableOpacity 
       style={[styles.venueCard, { width: cardWidth, paddingHorizontal: spacing.md }]}
-      onPress={() => handleVenueSelect(item.id)}
+      onPress={() => handleVenueSelect(item.slug || item.id)}
       accessibilityLabel={`View venue: ${item.name}`}
       accessibilityRole="button"
     >
@@ -267,7 +267,7 @@ const VenuesScreen: React.FC = () => {
     }
 
     // Authenticated and allowed (club_owner or admin) -> open AddVenue
-    ;(navigation as any).navigate("AddVenue");
+    navigation.navigate('/profile/add-venue');
   };
 
   return (

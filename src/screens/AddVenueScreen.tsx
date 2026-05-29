@@ -15,8 +15,7 @@ import {
   Dimensions,
 } from "react-native"
 import { useCompatNavigation } from "../utils/compatNavigation"
-import { BackButton } from "../components/Navigation"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
 import ImagePickerService from "../services/ImagePickerService"
@@ -37,8 +36,9 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-const AddVenueScreen: React.FC = () => {
+const AddVenueScreen: React.FC<any> = (props) => {
   const navigation = useCompatNavigation()
+  const route = props?.route || {}
   const { user } = useAuth()
   const [name, setName] = useState("")
   const [location, setLocation] = useState("")
@@ -155,7 +155,7 @@ const AddVenueScreen: React.FC = () => {
       }
 
       // Upload image first (image is now a string)
-      const imageUrl = await FirebaseService.uploadVenueImage(image)
+      const imageUrl = await SupabaseService.uploadVenueImage(image)
 
       // Create venue object with venue type consideration
       const venueCategories = categories.split(",").map((cat) => cat.trim())
@@ -197,7 +197,7 @@ const AddVenueScreen: React.FC = () => {
       }
 
       // Add venue to database
-      await FirebaseService.addVenue(venueData)
+      await SupabaseService.addVenue(venueData)
 
       Alert.alert("Success", "Venue created successfully")
       navigation.goBack()
@@ -212,7 +212,6 @@ const AddVenueScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <BackButton />
       <View style={styles.form}>
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Venue Name *</Text>

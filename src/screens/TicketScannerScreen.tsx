@@ -7,13 +7,14 @@ import { CameraView } from "expo-camera"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
+
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 
 const TicketScannerScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
+  const { user } = useAuth()
 
   // Extract eventId from current path: /events/scanner/:eventId
   const pathParts = currentPath.split('/').filter(Boolean)
@@ -189,7 +190,6 @@ const TicketScannerScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <BackButton />
       <View style={styles.header}>
         <View style={styles.headerTextContainer}>
           <Text style={styles.headerTitle}>Ticket Scanner</Text>

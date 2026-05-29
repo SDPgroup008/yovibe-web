@@ -1,4 +1,4 @@
-import FirebaseService from "./FirebaseService"
+import supabase from "../config/supabase"
 import PaymentService from "./PaymentService"
 import PesaPalService from "./PesaPalService"
 import NotificationService from "./NotificationService"
@@ -168,10 +168,12 @@ export class TicketService {
       }
 
       // Step 8: Save ticket to database
-      console.log("--- Step 8: Saving ticket to Firebase ---")
-      const ticketId = await FirebaseService.saveTicket(ticket)
+      console.log("--- Step 8: Saving ticket to Supabase ---")
+      const { data: savedTicket, error: saveError } = await supabase.from("tickets").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
+      if (saveError) throw saveError
+      const ticketId = savedTicket.id
       console.log("✅ Ticket saved to database!")
-      console.log("   - Firestore Document ID:", ticketId)
+      console.log("   - Supabase ID:", ticketId)
 
       // Step 9: Send notification to event owner
       console.log("--- Step 9: Sending notification to event owner ---")
@@ -238,7 +240,8 @@ export class TicketService {
 
       // Step 1: Get ticket directly by QR code
       console.log("--- Step 1: Fetching ticket by QR code ---")
-      const ticket = await FirebaseService.getTicketByQRCode(qrCodeValue)
+      const { data: ticket, error: ticketError } = await supabase.from("tickets").select("*").eq("qr_code", qrCodeValue).single()
+      if (ticketError && ticketError.code !== "PGRST116") throw ticketError
 
       if (!ticket) {
         console.log("❌ Ticket not found with QR code:", qrCodeValue)
@@ -262,9 +265,7 @@ export class TicketService {
       if (ticket.expiresAt && new Date(ticket.expiresAt) < now) {
         console.log("❌ Ticket has expired")
         
-        await FirebaseService.updateTicket(ticket.id, {
-          status: "expired"
-        })
+        await supabase.from("tickets").update({ status: "expired" }).eq("id", ticket.id)
         
         const validation: TicketValidation = {
           id: `val_${Date.now()}`,
@@ -411,21 +412,16 @@ export class TicketService {
       // Step 7: Mark ticket as used immediately (prevent double-use)
       console.log("--- Step 7: Marking ticket as used ---")
       try {
-        await FirebaseService.updateTicket(ticket.id, {
+        await supabase.from("tickets").update({
           status: "used",
-          isScanned: true,
-          scannedAt: now,
-          payoutEligible,
-          payoutStatus: "pending",
-        })
+          is_scanned: true,
+          scanned_at: now.toISOString(),
+          payout_eligible: payoutEligible,
+          payout_status: "pending",
+        }).eq("id", ticket.id)
         console.log("✅ Ticket status updated to: USED")
       } catch (updateError: any) {
-        // If document doesn't exist, check if it's already been used
-        if (updateError?.message?.includes("No document to update")) {
-          console.log("⚠️ Ticket may already be used - continuing validation")
-        } else {
-          throw updateError
-        }
+        console.log("⚠️ Ticket update issue - continuing validation")
       }
 
       // Step 8: Log successful validation
@@ -486,7 +482,8 @@ export class TicketService {
       const now = new Date()
 
       // Get the ticket first
-      const ticket = await FirebaseService.getTicketById(ticketDocId)
+      const { data: ticket, error: getErr } = await supabase.from("tickets").select("*").eq("id", ticketDocId).single()
+      if (getErr) throw getErr
       if (!ticket) {
         console.log("❌ Ticket not found:", ticketDocId)
         return { success: false, reason: "Ticket not found" }
@@ -513,13 +510,13 @@ export class TicketService {
 
       // Mark ticket as used
       console.log("--- Marking ticket as used ---")
-      await FirebaseService.updateTicket(ticketDocId, {
+      await supabase.from("tickets").update({
         status: "used",
-        isScanned: true,
-        scannedAt: now,
-        payoutEligible,
-        payoutStatus: "pending",
-      })
+        is_scanned: true,
+        scanned_at: now.toISOString(),
+        payout_eligible: payoutEligible,
+        payout_status: "pending",
+      }).eq("id", ticketDocId)
       console.log("✅ Ticket status updated to: USED")
 
       // Log successful validation
@@ -581,9 +578,9 @@ export class TicketService {
       const eligibleTickets: Ticket[] = []
       
       for (const ticketId of ticketIds) {
-        const ticket = await FirebaseService.getTicketById(ticketId)
-        if (ticket && ticket.payoutEligible && ticket.payoutStatus === "pending") {
-          eligibleTickets.push(ticket)
+        const { data: ticket } = await supabase.from("tickets").select("*").eq("id", ticketId).single()
+        if (ticket && ticket.payout_eligible && ticket.payout_status === "pending") {
+          eligibleTickets.push(ticket as any)
           console.log("   ✅ Ticket", ticketId, "eligible for payout")
         } else {
           console.log("   ❌ Ticket", ticketId, "not eligible")
@@ -615,9 +612,7 @@ export class TicketService {
         
         // Update ticket statuses to failed
         for (const ticket of eligibleTickets) {
-          await FirebaseService.updateTicket(ticket.id, {
-            payoutStatus: "failed",
-          })
+          await supabase.from("tickets").update({ payout_status: "failed" }).eq("id", ticket.id)
         }
         
         return { success: false, error: payoutResult.error }
@@ -630,9 +625,7 @@ export class TicketService {
       // Step 3: Update ticket statuses
       console.log("--- Step 3: Updating ticket payout statuses ---")
       for (const ticket of eligibleTickets) {
-        await FirebaseService.updateTicket(ticket.id, {
-          payoutStatus: "processing",
-        })
+        await supabase.from("tickets").update({ payout_status: "processing" }).eq("id", ticket.id)
         console.log("   ✅ Ticket", ticket.id, "marked as processing")
       }
 
@@ -660,7 +653,7 @@ export class TicketService {
   static async getEventTickets(eventId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId)
-      const tickets = await FirebaseService.getTicketsByEvent(eventId)
+      const { data: tickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
       console.log("✅ Found", tickets.length, "tickets")
       return tickets
     } catch (error) {
@@ -672,7 +665,7 @@ export class TicketService {
   static async getUserTickets(userId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId)
-      const tickets = await FirebaseService.getTicketsByUser(userId)
+      const { data: tickets } = await supabase.from("tickets").select("*").eq("buyer_id", userId)
       console.log("✅ Found", tickets.length, "tickets")
       return tickets
     } catch (error) {
@@ -730,7 +723,7 @@ export class TicketService {
       console.log("   - Status:", validation.status)
       console.log("   - Validated By:", validation.validatedBy)
       
-      await FirebaseService.saveTicketValidation(validation)
+      await supabase.from("ticket_validations").insert(validation)
       console.log("✅ Validation logged successfully")
     } catch (error) {
       console.error("Error logging validation:", error)

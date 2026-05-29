@@ -6,8 +6,34 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform
 import { Ionicons } from "@expo/vector-icons"
 import type { TicketContactScreenProps } from "../navigation/types"
 
+type TicketContact = { number: string; type: "call" | "whatsapp" }
+
+const normalizeTicketContacts = (input: unknown): TicketContact[] => {
+  if (!input) return []
+
+  // URL-router compatibility: params may come as serialized JSON.
+  let parsedInput: unknown = input
+  if (typeof input === "string") {
+    try {
+      parsedInput = JSON.parse(input)
+    } catch {
+      return []
+    }
+  }
+
+  if (!Array.isArray(parsedInput)) return []
+
+  return parsedInput
+    .filter((item): item is Partial<TicketContact> => typeof item === "object" && item !== null)
+    .map((item) => ({
+      number: String(item.number ?? "").trim(),
+      type: item.type === "call" ? "call" : "whatsapp",
+    }))
+    .filter((item) => item.number.length > 0)
+}
+
 const TicketContactScreen: React.FC<TicketContactScreenProps> = ({ navigation, route }) => {
-  const { ticketContacts } = route.params
+  const ticketContacts = normalizeTicketContacts(route?.params?.ticketContacts)
   const [linkingError, setLinkingError] = useState<string | null>(null)
 
   const handleContactPress = async (number: string, type: "call" | "whatsapp") => {
@@ -37,9 +63,6 @@ const TicketContactScreen: React.FC<TicketContactScreenProps> = ({ navigation, r
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Ticket Contacts</Text>
       </View>
 

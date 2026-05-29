@@ -13,10 +13,10 @@ import {
   ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useCompatNavigation } from "../utils/compatNavigation"
-import { BackButton } from "../components/Navigation"
+
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 
@@ -36,13 +36,13 @@ const MyVenuesScreen: React.FC = () => {
 
     setLoading(true)
     try {
-      const venuesList = await FirebaseService.getVenuesByOwner(user.id)
+      const venuesList = await SupabaseService.getVenuesByOwner(user.id)
       setVenues(venuesList)
 
       // Load current vibe ratings for each venue
       const vibeRatings: Record<string, number> = {}
       for (const venue of venuesList) {
-        const rating = await FirebaseService.getLatestVibeRating(venue.id)
+        const rating = await SupabaseService.getLatestVibeRating(venue.id)
         if (rating !== null) {
           vibeRatings[venue.id] = rating
         }
@@ -74,7 +74,7 @@ const MyVenuesScreen: React.FC = () => {
       setLoading(true)
       console.log("[MyVenuesScreen] Deleting venue:", venueId)
       
-      await FirebaseService.deleteVenue(venueId)
+      await SupabaseService.deleteVenue(venueId)
       console.log("[MyVenuesScreen] Venue deleted successfully")
       
       Alert.alert("Success", "Venue deleted successfully")
@@ -98,7 +98,6 @@ const MyVenuesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <BackButton />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Venues</Text>
       </View>
@@ -119,7 +118,7 @@ const MyVenuesScreen: React.FC = () => {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <View style={styles.venueCard}>
-              <TouchableOpacity style={styles.venueContent} onPress={() => handleVenueSelect(item.id)}>
+              <TouchableOpacity style={styles.venueContent} onPress={() => handleVenueSelect(item.slug || item.id)}>
                 <ImageBackground source={{ uri: item.backgroundImageUrl }} style={styles.venueImage} resizeMode="cover">
                   <View style={styles.venueGradient}>
                     <Text style={styles.venueName}>{item.name}</Text>
@@ -148,7 +147,7 @@ const MyVenuesScreen: React.FC = () => {
               <View style={styles.venueActions}>
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => navigation.navigate("AddEvent", { venueId: item.id, venueName: item.name })}
+                  onPress={() => navigation.navigate("AddEvent", { venueId: item.slug || item.id, venueName: item.name })}
                 >
                   <Ionicons name="calendar" size={20} color="#2196F3" />
                   <Text style={styles.actionText}>Add Event</Text>
@@ -156,7 +155,7 @@ const MyVenuesScreen: React.FC = () => {
 
                 <TouchableOpacity
                   style={styles.actionButton}
-                  onPress={() => navigation.navigate("AddVibe", { venueId: item.id, venueName: item.name })}
+                  onPress={() => navigation.navigate("AddVibe", { venueId: item.slug || item.id, venueName: item.name })}
                 >
                   <Ionicons name="camera" size={20} color="#2196F3" />
                   <Text style={styles.actionText}>Add Vibe</Text>

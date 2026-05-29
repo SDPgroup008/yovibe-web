@@ -75,20 +75,26 @@ export const routes: RouteDefinition[] = [
     component: withCompatNavigation(EventsScreen),
     exact: true
   },
-  {
-    path: '/events/:eventId',
-    component: withCompatNavigation(EventDetailScreen)
-  },
+  // Static sub-routes must come BEFORE the dynamic /events/:eventId
   {
     path: '/events/add',
     component: withCompatNavigation(AddEventScreen),
     exact: true
   },
-
   {
     path: '/events/ticket-contacts',
     component: withCompatNavigation(TicketContactScreen),
     exact: true
+  },
+  {
+    path: '/events/payment-callback',
+    component: withCompatNavigation(PaymentCallbackScreen),
+    exact: true
+  },
+  // Dynamic catch-all for event details (must be after static routes)
+  {
+    path: '/events/:eventId',
+    component: withCompatNavigation(EventDetailScreen)
   },
   {
     path: '/events/tickets/:eventId',
@@ -101,11 +107,6 @@ export const routes: RouteDefinition[] = [
   {
     path: '/events/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
-  },
-  {
-    path: '/events/payment-callback',
-    component: withCompatNavigation(PaymentCallbackScreen),
-    exact: true
   },
 
 

@@ -16,6 +16,8 @@ import {
 } from "react-native"
 import { useAuth } from "../../contexts/AuthContext"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../../utils/compatNavigation"
+import { supabase } from "../../config/supabase"
 
 // Responsive breakpoints for login screen
 const { width, height } = Dimensions.get('window');
@@ -36,8 +38,9 @@ interface LoginScreenProps {
   navigation: any
 }
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
-  const { signIn } = useAuth()
+const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation }) => {
+  const navigation = useCompatNavigation()
+  const { signIn, consumeRedirectIntent } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -83,7 +86,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation }) => {
       console.log("Login attempt with:", email)
       await signIn(email, password)
       console.log("Login successful")
-      // The AuthContext will handle navigation automatically
+
+      // Handle redirect intent (e.g. came from AddEvent or AddVenue buttons via soft-auth)
+      const redirectIntent = consumeRedirectIntent()
+      if (redirectIntent?.routeName) {
+        navigation.navigate(redirectIntent.routeName as any, redirectIntent.params || {})
+      } else {
+        navigation.navigate("Events")
+      }
     } catch (error) {
       console.error("Login failed:", error)
       // Log the full error object to debug

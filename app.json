@@ -45,7 +45,7 @@
         "command": "npx expo export:web"
       },
       "favicon": "./assets/favicon.png",
-      "manifest": "./web/manifest.json"
+      "manifest": "./public/manifest.webmanifest"
     },
     "platforms": ["ios", "android", "web"],
     "experiments": {

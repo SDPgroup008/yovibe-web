@@ -6,12 +6,33 @@ const isServerSide = typeof window === 'undefined';
 
 const BUCKET = process.env.R2_BUCKET_NAME || process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'yovibe';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
+const FUNCTIONS_BASE_URL =
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  '';
+const UPLOAD_TIMEOUT_MS = 20000;
 
 export interface UploadOptions {
   contentType: string;
   path: string;
   filename: string;
   body: Buffer | Blob | string;
+}
+
+function resolveFunctionUrl(functionName: string): string {
+  const normalizedBase = FUNCTIONS_BASE_URL.replace(/\/$/, '');
+  if (normalizedBase) {
+    return `${normalizedBase}/.netlify/functions/${functionName}`;
+  }
+
+  if (!isServerSide && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+    // In expo web dev, local server does not host Netlify functions by default.
+    // Route to deployed function host unless an explicit base URL is provided.
+    return `https://yovibe.net/.netlify/functions/${functionName}`;
+  }
+
+  return `/.netlify/functions/${functionName}`;
 }
 
 /**
@@ -98,29 +119,56 @@ async function uploadToR2Browser(
 ): Promise<{ url: string; key: string }> {
   let fileData: string | Buffer;
 
+  const blobToDataUrl = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error('Failed to read file for upload'));
+      reader.readAsDataURL(blob);
+    });
+  };
+
   if (typeof body === 'string') {
-    fileData = body; // data URL or base64
+    fileData = body.startsWith('data:') ? body.replace(/^data:[^;]+;base64,/, '') : body;
   } else if (body instanceof Blob) {
-    fileData = await body.text();
+    const dataUrl = await blobToDataUrl(body);
+    fileData = dataUrl.replace(/^data:[^;]+;base64,/, '');
   } else if (Buffer.isBuffer(body)) {
     fileData = body.toString('base64');
   } else {
     fileData = body as string;
   }
 
-  const response = await fetch('/.netlify/functions/uploadR2', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      file: fileData,
-      filename,
-      contentType,
-      path,
-      type: 'media',
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(resolveFunctionUrl('uploadR2'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        file: fileData,
+        filename,
+        contentType,
+        path,
+        type: 'media',
+      }),
+    });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') {
+      throw new Error(
+        `Upload request timed out after ${UPLOAD_TIMEOUT_MS / 1000}s. ` +
+        `If running locally, set NEXT_PUBLIC_FUNCTIONS_BASE_URL or run via netlify dev.`
+      );
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({ error: response.statusText }));

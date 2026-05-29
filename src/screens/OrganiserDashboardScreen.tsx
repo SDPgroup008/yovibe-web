@@ -17,9 +17,9 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
+
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import TicketService from "../services/TicketService"
 import PesaPalService from "../services/PesaPalService"
 import { useAuth } from "../contexts/AuthContext"
@@ -119,7 +119,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   useEffect(() => {
     const loadEvent = async () => {
       try {
-        const eventData = await FirebaseService.getEventById(eventId)
+        const eventData = await SupabaseService.getEventById(eventId)
         setEvent(eventData)
       } catch (error) {
         console.error("Error loading event details in organiser dashboard:", error)
@@ -138,7 +138,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       
       try {
         console.log("Loading scan logs for event:", eventId)
-        const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+        const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
         
         // Convert to scanLogs format
         const logs = validations.map((v) => ({
@@ -346,7 +346,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                   Alert.alert("✅ Entry Granted", "Ticket validated successfully. Entry granted.", [{ text: "OK" }])
                   
                   // Refresh scan logs from database
-                  const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+                  const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
                   const logs = validations.map((v) => ({
                     time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
                     ticketId: v.ticketId || "",
@@ -357,7 +357,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                   Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
                   
                   // Refresh scan logs from database
-                  const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+                  const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
                   const logs = validations.map((v) => ({
                     time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
                     ticketId: v.ticketId || "",
@@ -410,7 +410,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           )
           
           // Reload scan logs after confirmation
-          const validations = await FirebaseService.getTicketValidationsByEvent(eventId)
+          const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
           const logs = validations.map((v) => ({
             time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
             ticketId: v.ticketId || "",
@@ -478,7 +478,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       }
 
       const paymentMethods = { mobileMoney, bankAccounts }
-      await FirebaseService.updateEvent(event.id, { paymentMethods })
+      await SupabaseService.updateEvent(event.id, { paymentMethods })
       setEvent({ ...event, paymentMethods })
       setIsEditingPayment(false)
       Alert.alert("Success", "Payment details updated successfully")
@@ -507,7 +507,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const loadPaymentDetails = async () => {
     if (!user) return
     try {
-      const userData = await FirebaseService.getUserProfile(user.uid)
+      const userData = await SupabaseService.getUserProfileOrNull(user.uid)
       if (userData?.paymentDetails) {
         setOrganizerPaymentDetails(userData.paymentDetails)
       }
@@ -518,7 +518,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const loadEventCreatorPaymentDetails = async (creatorId: string) => {
     try {
-      const userData = await FirebaseService.getUserProfile(creatorId)
+      const userData = await SupabaseService.getUserProfileOrNull(creatorId)
       return userData?.paymentDetails || null
     } catch (error) {
       console.error("Error loading organizer payment details:", error)
@@ -565,7 +565,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       // Fetch eligible tickets for this specific event to update their payout status after successful payout
       console.log("📋 Fetching eligible tickets for payout update...")
       console.log("   - Event ID:", eventId)
-      const eligibleTickets = await FirebaseService.getEligibleTicketsForEvent(eventId)
+      const eligibleTickets = await SupabaseService.getEligibleTicketsForEvent(eventId)
       console.log("   - Found eligible tickets:", eligibleTickets.length)
       
       if (eligibleTickets.length === 0) {
@@ -575,9 +575,9 @@ const OrganiserDashboardScreen: React.FC = () => {
       }
 
       // Get user and event payment details
-      const userData = await FirebaseService.getUserProfile(user.uid)
+      const userData = await SupabaseService.getUserProfileOrNull(user.uid)
       const userPaymentDetails = userData?.paymentDetails
-      const eventData = await FirebaseService.getEventById(eventId)
+      const eventData = await SupabaseService.getEventById(eventId)
       const eventPaymentMethods = eventData?.paymentMethods
 
       const hasMobileMoney = userPaymentDetails?.mobileMoney?.phoneNumber
@@ -678,7 +678,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       for (const ticket of ticketsToPayout) {
         try {
           console.log("   - Updating ticket:", ticket.id)
-          await FirebaseService.updateTicket(ticket.id, {
+          await SupabaseService.updateTicket(ticket.id, {
             payoutStatus: "paid",
             payoutDate: new Date(),
           })
@@ -735,7 +735,6 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   return (
     <View style={styles.dashboardContainer}>
-      <BackButton />
       <View style={styles.dashboardHeader}>
         <Text style={styles.dashboardTitle}>Organiser Dashboard</Text>
       </View>

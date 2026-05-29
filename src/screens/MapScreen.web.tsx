@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
 import { db } from "../config/firebase"
@@ -59,7 +59,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
     const setupVibeListeners = async () => {
       try {
-        const venuesList = await FirebaseService.getVenues()
+        const venuesList = await SupabaseService.getVenues()
         for (const venue of venuesList) {
           const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
           const today = new Date()
@@ -145,7 +145,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       // console.log("\n🚀 MAP WEB AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
       
       let allVenues: any[] = [];
-      let currentLastDoc = null;
+      let currentLastCreatedAt: string | undefined = undefined;
       let fetchCount = 0;
       const BATCH_SIZE = 5;
       const DELAY_MS = 3000;
@@ -156,11 +156,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // console.log(`🗺️ MAP WEB BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
         // console.log(`${'='.repeat(60)}`);
         
-        const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
+        const { venues: paginatedVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, currentLastCreatedAt);
         
         // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
         // console.log(`   • Received: ${paginatedVenues.length} venues`);
-        // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+        // console.log(`   • Has more data: ${newLastCreatedAt ? 'YES' : 'NO'}`);
         
         if (paginatedVenues.length === 0) {
           // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
@@ -168,7 +168,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         }
         
         allVenues = [...allVenues, ...paginatedVenues];
-        currentLastDoc = newLastDoc;
+        currentLastCreatedAt = newLastCreatedAt ?? undefined;
         
         // 🚀 IMMEDIATELY DISPLAY the batch to users
         setVenues(allVenues);
@@ -178,7 +178,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
         const today = new Date();
         for (const venue of paginatedVenues) {
-          const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venue.id, today);
+          const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venue.id, today);
           if (vibeImages.length > 0) {
             const latestVibe = vibeImages.reduce((latest, image) => {
               return image.uploadedAt > latest.uploadedAt ? image : latest;
@@ -199,7 +199,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
         // console.log(`   • Total venues loaded: ${allVenues.length}`);
         
-        if (!newLastDoc) {
+        if (!newLastCreatedAt) {
           // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
           break;
         }
@@ -394,7 +394,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 </View>
               </View>
               <View style={styles.venueActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.id)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
                   <Ionicons name="information-circle" size={20} color="#2196F3" />
                   <Text style={styles.actionText}>Details</Text>
                 </TouchableOpacity>

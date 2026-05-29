@@ -6,12 +6,12 @@ import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, Scr
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
+
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
 
@@ -45,7 +45,7 @@ const TicketPurchaseScreen: React.FC = () => {
       }
 
       try {
-        const eventData = await FirebaseService.getEventById(eventId)
+        const eventData = await SupabaseService.getEventById(eventId)
         if (eventData) {
           setEvent(eventData)
         }
@@ -357,7 +357,6 @@ const TicketPurchaseScreen: React.FC = () => {
   if (!event) {
     return (
       <View style={styles.container}>
-        <BackButton />
         <ScrollView>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Purchase Tickets</Text>
@@ -369,7 +368,6 @@ const TicketPurchaseScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <BackButton />
       <ScrollView>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Purchase Tickets</Text>
@@ -802,7 +800,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
-    paddingBottom: 100, // Extra bottom padding for mobile navigation
   },
   header: {
     flexDirection: "row",

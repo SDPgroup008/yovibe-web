@@ -14,11 +14,11 @@ import {
   Image as RNImage,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { blobToDataURL } from "../utils/expoHelpers"
 import { useCompatNavigation, useRouter } from "../utils/compatNavigation"
-import { BackButton } from "../components/Navigation"
+
 import { useAuth } from "../contexts/AuthContext"
 import type { VibeImage } from "../models/VibeImage"
 
@@ -243,8 +243,8 @@ const AddVibeScreen: React.FC = () => {
        // If image is already a data URL string, use it directly
        // (else assume it's already a data URL string)
 
-       // FirebaseService.uploadVibeImage now accepts data URL string like uploadEventImage
-       const imageUrl = await FirebaseService.uploadVibeImage(imageDataUrl, venueId)
+       // SupabaseService.uploadVibeImage now accepts data URL string like uploadEventImage
+       const imageUrl = await SupabaseService.uploadVibeImage(imageDataUrl, venueId)
 
        const vibeImageData: Omit<VibeImage, "id"> = {
          venueId,
@@ -255,7 +255,7 @@ const AddVibeScreen: React.FC = () => {
          analysisData: analysisResult.analysisData,
        }
 
-       await FirebaseService.addVibeImage(vibeImageData)
+       await SupabaseService.addVibeImage(vibeImageData)
 
       Alert.alert("Success", "Vibe image uploaded successfully!", [
         {
@@ -301,7 +301,6 @@ const AddVibeScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <BackButton />
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>Add Today's Vibe</Text>

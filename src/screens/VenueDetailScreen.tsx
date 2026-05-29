@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "../utils/compatNavigation"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import { useAuth } from "../contexts/AuthContext"
 import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
 import { db } from "../config/firebase"
@@ -13,7 +13,7 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
+
 import VibeAnalysisService from "../services/VibeAnalysisService"
 const VenueDetailScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -100,17 +100,17 @@ const VenueDetailScreen: React.FC = () => {
 
       try {
         setLoading(true)
-        console.log("[VenueDetailScreen] Loading venue details for venueId:", venueId)
+        console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId)
         console.log("[VenueDetailScreen] User logged in:", !!user)
 
-        const venueData = await FirebaseService.getVenueById(venueId)
+        const venueData = await SupabaseService.getVenueById(venueId || route.params?.venueSlug)
         if (venueData) {
           setVenue(venueData)
           console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
           // Fetch events regardless of user authentication (events are public data)
-          console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
-          const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+           console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
+           const venueEvents = await SupabaseService.getEventsByVenue(venueId || route.params?.venueSlug)
           console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
           setEvents(venueEvents)
 
@@ -129,7 +129,7 @@ const VenueDetailScreen: React.FC = () => {
             console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
 
             // Check if user has existing ownership request for this venue
-            const existingRequest = await FirebaseService.getUserOwnershipRequest(venueId, user.id)
+            const existingRequest = await SupabaseService.getUserOwnershipRequest(venueId, user.id)
             if (existingRequest) {
               setExistingRequestStatus(existingRequest.status)
             }
@@ -138,7 +138,7 @@ const VenueDetailScreen: React.FC = () => {
           // Load initial vibe rating for today (only when user is logged in and venue data exists)
           if (user) {
             const today = new Date()
-            const vibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+            const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venueId, today)
             if (vibeImages.length > 0) {
               const latestVibe = vibeImages.reduce((latest, image) => {
                 return image.uploadedAt > latest.uploadedAt ? image : latest
@@ -265,13 +265,13 @@ const VenueDetailScreen: React.FC = () => {
     try {
       console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId)
       
-      const venueData = await FirebaseService.getVenueById(venueId)
+      const venueData = await SupabaseService.getVenueById(venueId)
       setVenue(venueData)
       
       // Fetch events regardless of user authentication (events are public data)
       if (venueData) {
         console.log("[VenueDetailScreen] Refreshing events for venue:", venueId)
-        const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+        const venueEvents = await SupabaseService.getEventsByVenue(venueId)
         console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length)
         setEvents(venueEvents)
         
@@ -313,14 +313,14 @@ const VenueDetailScreen: React.FC = () => {
       console.log("[VenueDetailScreen] Deleting venue:", venueId)
       
       // Delete all events associated with this venue
-      const venueEvents = await FirebaseService.getEventsByVenue(venueId)
+      const venueEvents = await SupabaseService.getEventsByVenue(venueId)
       console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete")
       
       for (const event of venueEvents) {
-        await FirebaseService.deleteEvent(event.id)
+        await SupabaseService.deleteEvent(event.id)
       }
       
-      await FirebaseService.deleteVenue(venueId)
+      await SupabaseService.deleteVenue(venueId)
       console.log("[VenueDetailScreen] Venue deleted successfully")
       
       Alert.alert("Success", "Venue and associated events deleted successfully")
@@ -362,7 +362,7 @@ const VenueDetailScreen: React.FC = () => {
 
     setSubmittingRequest(true)
     try {
-      await FirebaseService.submitOwnershipRequest({
+      await SupabaseService.submitOwnershipRequest({
         venueId: venue.id,
         venueName: venue.name,
         userId: user.id,
@@ -423,7 +423,6 @@ const VenueDetailScreen: React.FC = () => {
         alt={`Venue image for ${venue.name}`}
       />
 
-      <BackButton />
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
           <View style={styles.titleContainer}>
@@ -601,7 +600,7 @@ const VenueDetailScreen: React.FC = () => {
                 key={event.id}
                 style={styles.eventCard}
                 onPress={() => {
-                  navigation.navigate("EventDetail", { eventId: event.id })
+                  navigation.navigate("EventDetail", { eventId: event.slug || event.id })
                 }}
               >
                 <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />

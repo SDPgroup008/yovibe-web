@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect, useCallback } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
 
@@ -16,7 +16,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([])
   const [currentPage, setCurrentPage] = useState(1)
-  const [lastDoc, setLastDoc] = useState<any>(null)
+  const [lastCreatedAt, setLastCreatedAt] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
   const [dataCache, setDataCache] = useState<{data: Venue[], timestamp: number} | null>(null)
   const ITEMS_PER_PAGE = 5
@@ -74,7 +74,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       // console.log("\n🚀 MAP AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
       
       let allVenues: any[] = [];
-      let currentLastDoc = null;
+      let currentLastCreatedAt: string | undefined = undefined;
       let fetchCount = 0;
       const BATCH_SIZE = 5;
       const DELAY_MS = 3000;
@@ -85,11 +85,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // console.log(`🗺️  MAP BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
         // console.log(`${'='.repeat(60)}`);
         
-        const { venues: paginatedVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(BATCH_SIZE, currentLastDoc);
+        const { venues: paginatedVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, currentLastCreatedAt);
         
         // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
         // console.log(`   • Received: ${paginatedVenues.length} venues`);
-        // console.log(`   • Has more data: ${newLastDoc ? 'YES' : 'NO'}`);
+        // console.log(`   • Has more data: ${newLastCreatedAt ? 'YES' : 'NO'}`);
         
         if (paginatedVenues.length === 0) {
           // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
@@ -97,7 +97,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         }
         
         allVenues = [...allVenues, ...paginatedVenues];
-        currentLastDoc = newLastDoc;
+        currentLastCreatedAt = newLastCreatedAt ?? undefined;
         
         // 🚀 IMMEDIATELY DISPLAY the batch to users
         setVenues(allVenues);
@@ -112,7 +112,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
         // console.log(`   • Total venues loaded: ${allVenues.length}`);
         
-        if (!newLastDoc) {
+        if (!newLastCreatedAt) {
           // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
           break;
         }
@@ -129,7 +129,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       // console.log(`${'='.repeat(60)}\n`);
       
       setVenues(allVenues);
-      setLastDoc(null);
+      setLastCreatedAt(null);
       setHasMore(false);
       
       // Cache the complete data
@@ -145,15 +145,15 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const loadMoreVenues = async () => {
     if (displayedVenues.length >= venues.length && hasMore) {
       // Need to fetch more from Firebase
-      if (!lastDoc || !hasMore) return;
+      if (!lastCreatedAt || !hasMore) return;
       
       try {
-        const { venues: moreVenues, lastDoc: newLastDoc } = await FirebaseService.getVenuesPaginated(ITEMS_PER_PAGE, lastDoc);
+        const { venues: moreVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(ITEMS_PER_PAGE, lastCreatedAt ?? undefined);
         
         if (moreVenues.length > 0) {
           const updatedVenues = [...venues, ...moreVenues];
           setVenues(updatedVenues);
-          setLastDoc(newLastDoc);
+          setLastCreatedAt(newLastCreatedAt ?? null);
           setHasMore(moreVenues.length === ITEMS_PER_PAGE);
           
           // Update cache
@@ -234,7 +234,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 <Ionicons name="star" size={16} color="#FFD700" />
               </View>
               <View style={styles.venueActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.id)}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
                   <Ionicons name="information-circle" size={20} color="#2196F3" />
                   <Text style={styles.actionText}>Details</Text>
                 </TouchableOpacity>

@@ -16,9 +16,8 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
-import { BackButton } from "../components/Navigation"
 import ImagePickerService from "../services/ImagePickerService"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
 
@@ -37,8 +36,9 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-const AddEventScreen: React.FC = () => {
+const AddEventScreen: React.FC<any> = (props) => {
   const navigation = useCompatNavigation()
+  const route = props?.route || {}
   const { user } = useAuth()
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -49,11 +49,12 @@ const AddEventScreen: React.FC = () => {
   const [imageFile, setImageFile] = useState<any>(null)
   const [isFeatured, setIsFeatured] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [venues, setVenues] = useState<Array<{ id: string; name: string }>>([])
+  const [venues, setVenues] = useState<Array<{ id: string; slug?: string; name: string }>>([])
   const [selectedVenueId, setSelectedVenueId] = useState(route.params?.venueId ?? "")
   const [selectedVenueName, setSelectedVenueName] = useState(route.params?.venueName ?? "")
   const [showVenueSelector, setShowVenueSelector] = useState(false)
   const [useCustomVenue, setUseCustomVenue] = useState(false)
+  const [venueSearch, setVenueSearch] = useState("")
   const [customVenueName, setCustomVenueName] = useState("")
   const [customVenueAddress, setCustomVenueAddress] = useState("")
   const [latitude, setLatitude] = useState("0")
@@ -104,7 +105,7 @@ const AddEventScreen: React.FC = () => {
       // Fetch venue name for club owner
       const fetchVenueName = async () => {
         try {
-          const venue = await FirebaseService.getVenueById(route.params?.venueId ?? "")
+          const venue = await SupabaseService.getVenueById(route.params?.venueId ?? "")
           if (venue) {
             setSelectedVenueName(venue.name)
           }
@@ -133,17 +134,36 @@ const AddEventScreen: React.FC = () => {
 
   const loadVenues = async () => {
     try {
-      const venuesList = await FirebaseService.getVenues()
-      setVenues(venuesList.map((venue) => ({ id: venue.id, name: venue.name })))
+      const venuesList = await SupabaseService.getVenues()
+      setVenues(venuesList.map((venue) => ({ id: venue.id, slug: venue.slug, name: venue.name })))
       // Set default venue if provided in route params
       if (route.params?.venueId) {
-        const selectedVenue = venuesList.find((venue) => venue.id === route.params.venueId)
+        const selectedVenue = venuesList.find((venue) => venue.id === route.params?.venueId)
         if (selectedVenue) {
           setSelectedVenueName(selectedVenue.name)
         }
       }
     } catch (error) {
       console.error("Error loading venues:", error)
+    }
+  }
+
+  const uploadPosterWithTimeout = async (posterSource: string | Blob, timeoutMs = 45000) => {
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
+
+    try {
+      return await Promise.race([
+        SupabaseService.uploadEventImage(posterSource),
+        new Promise<string>((_, reject) => {
+          timeoutId = setTimeout(() => {
+            reject(new Error("Poster upload timed out"))
+          }, timeoutMs)
+        }),
+      ])
+    } finally {
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
   }
 
@@ -158,6 +178,7 @@ const AddEventScreen: React.FC = () => {
     setSelectedVenueName(venueName)
     setShowVenueSelector(false)
     setUseCustomVenue(false)
+    setVenueSearch("")
   }
 
   const toggleCustomVenue = () => {
@@ -414,7 +435,7 @@ const AddEventScreen: React.FC = () => {
           weeklyPrograms: {} as Record<string, any>,
         }
 
-        venueId = await FirebaseService.addVenue(customVenue)
+        venueId = await SupabaseService.addVenue(customVenue)
         venueName = customVenueName
       }
 
@@ -422,9 +443,9 @@ const AddEventScreen: React.FC = () => {
       if (imageFile) {
         try {
           console.log("Uploading event poster image...")
-          // Ensure image is non-null before calling uploadEventImage
-          if (image) {
-            imageUrl = await FirebaseService.uploadEventImage(image)
+          const posterSource = imageFile.file || image
+          if (posterSource) {
+            imageUrl = await uploadPosterWithTimeout(posterSource)
             console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...")
           } else {
             console.warn("imageFile is true but image URI is null; skipping upload")
@@ -432,6 +453,7 @@ const AddEventScreen: React.FC = () => {
         } catch (error) {
           console.error("Error uploading image:", error)
           Alert.alert("Warning", "There was an issue uploading the image, but we'll continue creating the event.")
+          imageUrl = ""
         }
       }
 
@@ -441,7 +463,7 @@ const AddEventScreen: React.FC = () => {
         date,
         time: `${new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(`2000-01-01T${endTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
         artists: artists.split(",").map((artist) => artist.trim()),
-        venueId,
+        venueSlug: venueId,
         venueName,
         posterImageUrl: imageUrl || "",
         isFeatured,
@@ -457,7 +479,7 @@ const AddEventScreen: React.FC = () => {
         createdAt: new Date(),
       }
 
-      await FirebaseService.addEvent(eventData)
+      await SupabaseService.addEvent(eventData)
 
       Alert.alert("Success", "Event created successfully")
       navigation.goBack()
@@ -471,7 +493,6 @@ const AddEventScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <BackButton />
       <View style={styles.form}>
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Event Name *</Text>
@@ -512,18 +533,22 @@ const AddEventScreen: React.FC = () => {
             style={{
               backgroundColor: "#1E1E1E",
               color: "#FFFFFF",
-              padding: "12px",
+              paddingTop: "12px",
+              paddingBottom: "12px",
+              paddingLeft: "12px",
+              paddingRight: "12px",
               borderRadius: "8px",
               border: "1px solid #333",
-              width: "100%",
+              width: "93%",
               fontSize: 16,
+              colorScheme: "dark",
             }}
           />
         </View>
 
         {/* Start & End Time Pickers */}
         <Text style={styles.label}>Event Time *</Text>
-        <View style={{ flexDirection: "row", gap: 16, marginBottom: 16 }}>
+        <View style={{ flexDirection: "row", gap: 16, marginBottom: 16, width: "93%" }}>
           <View style={{ flex: 1 }}>
             <Text style={{ color: "#999", fontSize: 14, marginBottom: 8 }}>Start Time</Text>
             <input
@@ -533,11 +558,15 @@ const AddEventScreen: React.FC = () => {
               style={{
                 backgroundColor: "#1E1E1E",
                 color: "#FFFFFF",
-                padding: "12px",
+                paddingTop: "12px",
+                paddingBottom: "12px",
+                paddingLeft: "12px",
+                paddingRight: "12px",
                 borderRadius: "8px",
                 border: "1px solid #333",
                 width: "100%",
                 fontSize: 16,
+                colorScheme: "dark",
               }}
             />
           </View>
@@ -550,11 +579,15 @@ const AddEventScreen: React.FC = () => {
               style={{
                 backgroundColor: "#1E1E1E",
                 color: "#FFFFFF",
-                padding: "12px",
+                paddingTop: "12px",
+                paddingBottom: "12px",
+                paddingLeft: "12px",
+                paddingRight: "12px",
                 borderRadius: "8px",
                 border: "1px solid #333",
                 width: "100%",
                 fontSize: 16,
+                colorScheme: "dark",
               }}
             />
           </View>
@@ -616,16 +649,38 @@ const AddEventScreen: React.FC = () => {
 
                 {showVenueSelector && (
                   <View style={styles.venueDropdown}>
+                    <TextInput
+                      style={{
+                        backgroundColor: "#2A2A2A",
+                        color: "#FFFFFF",
+                        paddingHorizontal: 12,
+                        paddingVertical: 10,
+                        borderRadius: 8,
+                        borderWidth: 1,
+                        borderColor: "#444",
+                        fontSize: 14,
+                        marginBottom: 8,
+                      }}
+                      value={venueSearch}
+                      onChangeText={setVenueSearch}
+                      placeholder="Search venues..."
+                      placeholderTextColor="#666"
+                      autoFocus
+                    />
                     <ScrollView style={styles.venueList} nestedScrollEnabled>
-                      {venues.map((venue) => (
-                        <TouchableOpacity
-                          key={venue.id}
-                          style={styles.venueItem}
-                          onPress={() => handleVenueSelect(venue.id, venue.name)}
-                        >
-                          <Text style={styles.venueItemText}>{venue.name}</Text>
-                        </TouchableOpacity>
-                      ))}
+                      {venues
+                        .filter((v) =>
+                          v.name.toLowerCase().includes(venueSearch.toLowerCase())
+                        )
+                        .map((venue) => (
+                          <TouchableOpacity
+                            key={venue.id}
+                            style={styles.venueItem}
+                            onPress={() => handleVenueSelect(venue.slug || venue.id, venue.name)}
+                          >
+                            <Text style={styles.venueItemText}>{venue.name}</Text>
+                          </TouchableOpacity>
+                        ))}
                     </ScrollView>
                   </View>
                 )}

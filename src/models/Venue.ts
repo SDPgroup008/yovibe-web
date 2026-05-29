@@ -1,5 +1,6 @@
 export interface Venue {
   id: string
+  slug: string
   name: string
   location: string
   description: string

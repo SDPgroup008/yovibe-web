@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../../services/FirebaseService"
+import SupabaseService from "../../services/SupabaseService"
 import AnalyticsService, { type UserVisitData } from "../../services/AnalyticsService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { User } from "../../models/User"
@@ -45,7 +45,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
     try {
       setLoading(true)
       console.log("AdminUsersScreen: Loading users...")
-      const allUsers = await FirebaseService.getAllUsers()
+      const allUsers = await SupabaseService.getAllUsers()
       console.log("AdminUsersScreen: Loaded", allUsers.length, "users")
       setUsers(allUsers)
     } catch (error) {
@@ -58,7 +58,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
 
   const handleFreezeUser = async (userId: string, isFrozen: boolean) => {
     try {
-      await FirebaseService.freezeUser(userId, isFrozen)
+      await SupabaseService.freezeUser(userId, isFrozen)
       Alert.alert("Success", `User ${isFrozen ? "frozen" : "unfrozen"} successfully`)
       loadUsers()
     } catch (error) {
@@ -81,7 +81,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
       setLoading(true)
       console.log("[AdminUsersScreen] Deleting user:", userId)
       
-      await FirebaseService.deleteUser(userId)
+      await SupabaseService.deleteUser(userId)
       console.log("[AdminUsersScreen] User deleted successfully")
       
       Alert.alert("Success", "User deleted successfully")

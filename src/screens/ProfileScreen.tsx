@@ -20,7 +20,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
-import FirebaseService from "../services/FirebaseService";
+import SupabaseService from "../services/SupabaseService";
 
 const { width } = Dimensions.get('window');
 
@@ -232,7 +232,7 @@ const ProfileScreen: React.FC = () => {
           setEditProfileLoading(true);
           try {
             // Upload image and get URL
-            const uploadedUrl = await FirebaseService.uploadVenueImage(imageUri);
+            const uploadedUrl = await SupabaseService.uploadVenueImage(imageUri);
             await updateProfile({ photoURL: uploadedUrl });
             setBannerStatus("success");
             setBannerMessage("Profile image updated successfully");
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#121212",
-    paddingBottom: responsiveSize(54, 60, 68), // Match bottom navbar height
+    paddingBottom: responsiveSize(8, 10, 12),
   },
   profileHeader: {
     alignItems: "center",
@@ -522,7 +522,9 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   signOutButton: {
-    margin: 24,
+    marginHorizontal: 24,
+    marginTop: 16,
+    marginBottom: 8,
     padding: 16,
     backgroundColor: "#FF3B30",
     borderRadius: 8,

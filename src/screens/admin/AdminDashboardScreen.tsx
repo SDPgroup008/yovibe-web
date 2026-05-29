@@ -31,7 +31,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [notificationAnalytics, setNotificationAnalytics] = useState<NotificationDetailedAnalytics[]>([]);
   const [expandedNotifications, setExpandedNotifications] = useState<Set<string>>(new Set());
   const [dailyNotificationStats, setDailyNotificationStats] = useState<DailyNotificationStats[]>([]);
-  const [selectedPeriod, setSelectedPeriod] = useState<'daily' | 'weekly' | 'yearly'>('daily');
+  const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'decade'>('day');
   const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'notifications'>('overview');
   const [lastFetchTime, setLastFetchTime] = useState<number>(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -41,6 +41,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
   const [hourlyVisitors, setHourlyVisitors] = useState<{ hour: number; sessions: number; newUsers: number; returningUsers: number }[]>([]);
   const [dailyVisitors, setDailyVisitors] = useState<{ day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
   const [weeklyVisitors, setWeeklyVisitors] = useState<{ week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [monthlyVisitors, setMonthlyVisitors] = useState<{ month: number; monthName: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
+  const [yearlyVisitors, setYearlyVisitors] = useState<{ year: number; yearLabel: string; sessions: number; newUsers: number; returningUsers: number }[]>([]);
   const [granularLoading, setGranularLoading] = useState(false);
 
   // Token analytics state
@@ -74,6 +76,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     if (activeTab === 'visitors') {
       console.log(`[ADMIN-DASHBOARD] Visitors tab opened - loading granular data...`);
       loadGranularVisitorData();
+      loadFrequentVisitorAnalytics();
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'notifications') {
+      loadNotificationAnalyticsData();
     }
   }, [activeTab]);
 
@@ -117,33 +126,25 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     setRefreshing(true);
     try {
       // Parallelize all data fetching for faster loading
-      const limit = selectedPeriod === 'daily' ? 30 : selectedPeriod === 'weekly' ? 12 : 12;
+      const trendPeriod = selectedPeriod === 'day' ? 'daily' : selectedPeriod === 'week' ? 'weekly' : 'yearly';
+      const limit = selectedPeriod === 'day' ? 30 : selectedPeriod === 'week' ? 12 : selectedPeriod === 'month' ? 12 : selectedPeriod === 'year' ? 24 : 120;
       
       console.log(`[ADMIN-DASHBOARD] ${timestamp} - Initiating API calls - limit: ${limit}`);
       console.log(`[ADMIN-DASHBOARD] API calls to make:`);
       console.log(`[ADMIN-DASHBOARD]   1. AnalyticsService.getTodaySummary()`);
       console.log(`[ADMIN-DASHBOARD]   2. AnalyticsService.getAnalyticsSummary()`);
-      console.log(`[ADMIN-DASHBOARD]   3. AnalyticsService.getTrendData(period: ${selectedPeriod}, limit: ${limit})`);
-      console.log(`[ADMIN-DASHBOARD]   4. AnalyticsService.getFrequentVisitorsToday()`);
-      console.log(`[ADMIN-DASHBOARD]   5. NotificationService.getAllNotificationDetailedAnalytics()`);
-      console.log(`[ADMIN-DASHBOARD]   6. NotificationService.getDailyNotificationStats(days: 30)`);
+      console.log(`[ADMIN-DASHBOARD]   3. AnalyticsService.getTrendData(period: ${trendPeriod}, limit: ${limit})`);
       
-      const [todayData, summaryData, trends, visitors, notifAnalytics, dailyStats] = await Promise.all([
+      const [todayData, summaryData, trends] = await Promise.all([
         AnalyticsService.getTodaySummary(),
         AnalyticsService.getAnalyticsSummary(),
-        AnalyticsService.getTrendData(selectedPeriod, limit),
-        AnalyticsService.getFrequentVisitorsToday(),
-        NotificationService.getAllNotificationDetailedAnalytics(),
-        NotificationService.getDailyNotificationStats(30),
+        AnalyticsService.getTrendData(trendPeriod as 'daily' | 'weekly' | 'yearly', limit),
       ]);
 
       console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - DATA RECEIVED from all API calls`);
       console.log(`[ADMIN-DASHBOARD]   - todayData: ${JSON.stringify(todayData)}`);
       console.log(`[ADMIN-DASHBOARD]   - summaryData: ${JSON.stringify(summaryData)}`);
       console.log(`[ADMIN-DASHBOARD]   - trends (length: ${trends?.length || 0})`);
-      console.log(`[ADMIN-DASHBOARD]   - visitors (length: ${visitors?.length || 0})`);
-      console.log(`[ADMIN-DASHBOARD]   - notifAnalytics (length: ${notifAnalytics?.length || 0})`);
-      console.log(`[ADMIN-DASHBOARD]   - dailyStats (length: ${dailyStats?.length || 0})`);
 
       console.log(`[ADMIN-DASHBOARD] ${new Date().toISOString()} - Processing and setting state for all data...`);
       setTodaySummary(todayData);
@@ -154,15 +155,6 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
       
       setTrendData(trends);
       console.log(`[ADMIN-DASHBOARD]   - trendData SET (${trends.length} items)`);
-      
-      setFrequentVisitors(visitors);
-      console.log(`[ADMIN-DASHBOARD]   - frequentVisitors SET (${visitors.length} items)`);
-      
-      setNotificationAnalytics(notifAnalytics);
-      console.log(`[ADMIN-DASHBOARD]   - notificationAnalytics SET (${notifAnalytics.length} items)`);
-      
-      setDailyNotificationStats(dailyStats);
-      console.log(`[ADMIN-DASHBOARD]   - dailyNotificationStats SET (${dailyStats.length} items)`);
       
       setLastFetchTime(now);
       console.log(`[ADMIN-DASHBOARD]   - lastFetchTime UPDATED to: ${now}`);
@@ -338,14 +330,14 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     try {
       const now = new Date();
       
-      if (selectedPeriod === 'daily') {
+      if (selectedPeriod === 'day') {
         // Get today's date
         const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
         console.log(`[ADMIN-DASHBOARD] Fetching hourly data for today: ${today.toISOString()}`);
         const data = await AnalyticsService.getHourlyVisitorsForDay(today);
         setHourlyVisitors(data);
         console.log(`[ADMIN-DASHBOARD] Hourly data loaded: ${data.filter(d => d.sessions > 0).length} hours with sessions`);
-      } else if (selectedPeriod === 'weekly') {
+      } else if (selectedPeriod === 'week') {
         // Get current week's start (Sunday)
         const today = new Date(now);
         const dayOfWeek = today.getDay();
@@ -355,7 +347,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         const data = await AnalyticsService.getDailyVisitorsForWeek(weekStart);
         setDailyVisitors(data);
         console.log(`[ADMIN-DASHBOARD] Daily data loaded: ${data.filter(d => d.sessions > 0).length} days with sessions`);
-      } else if (selectedPeriod === 'yearly') {
+      } else if (selectedPeriod === 'month') {
         // Get current month
         const year = now.getFullYear();
         const month = now.getMonth();
@@ -363,11 +355,48 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
         const data = await AnalyticsService.getWeeklyVisitorsForMonth(year, month);
         setWeeklyVisitors(data);
         console.log(`[ADMIN-DASHBOARD] Weekly data loaded: ${data.filter(d => d.sessions > 0).length} weeks with sessions`);
+      } else if (selectedPeriod === 'year') {
+        const year = now.getFullYear();
+        console.log(`[ADMIN-DASHBOARD] Fetching monthly data for ${year}`);
+        const data = await AnalyticsService.getMonthlyVisitorsForYear(year);
+        setMonthlyVisitors(data);
+      } else if (selectedPeriod === 'decade') {
+        const currentYear = now.getFullYear();
+        const decadeStartYear = Math.floor(currentYear / 10) * 10;
+        console.log(`[ADMIN-DASHBOARD] Fetching yearly data for decade ${decadeStartYear}s`);
+        const data = await AnalyticsService.getYearlyVisitorsForDecade(decadeStartYear);
+        setYearlyVisitors(data);
       }
     } catch (error) {
       console.error(`[ADMIN-DASHBOARD] Error loading granular visitor data:`, error);
     } finally {
       setGranularLoading(false);
+    }
+  };
+
+  const loadFrequentVisitorAnalytics = async () => {
+    try {
+      const visitors = await AnalyticsService.getFrequentVisitorsToday();
+      setFrequentVisitors(visitors);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading frequent visitors:`, error);
+      setFrequentVisitors([]);
+    }
+  };
+
+  const loadNotificationAnalyticsData = async () => {
+    try {
+      const [notifAnalytics, dailyStats] = await Promise.all([
+        NotificationService.getAllNotificationDetailedAnalytics(),
+        NotificationService.getDailyNotificationStats(30),
+      ]);
+
+      setNotificationAnalytics(notifAnalytics);
+      setDailyNotificationStats(dailyStats);
+    } catch (error) {
+      console.error(`[ADMIN-DASHBOARD] Error loading notification analytics:`, error);
+      setNotificationAnalytics([]);
+      setDailyNotificationStats([]);
     }
   };
 
@@ -432,13 +461,115 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
 
   const formatDate = (dateStr: string): string => {
     const date = new Date(dateStr);
-    if (selectedPeriod === 'daily') {
+    if (selectedPeriod === 'day') {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } else if (selectedPeriod === 'weekly') {
+    } else if (selectedPeriod === 'week') {
       return `Week of ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
     } else {
       return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
     }
+  };
+
+  const getSelectedPeriodRows = () => {
+    if (selectedPeriod === 'day') {
+      return hourlyVisitors.map((item) => ({
+        bucket: `${item.hour.toString().padStart(2, '0')}:00`,
+        sessions: item.sessions,
+        newUsers: item.newUsers,
+        returningUsers: item.returningUsers,
+      }));
+    }
+
+    if (selectedPeriod === 'week') {
+      return dailyVisitors.map((item) => ({
+        bucket: item.dayName,
+        sessions: item.sessions,
+        newUsers: item.newUsers,
+        returningUsers: item.returningUsers,
+      }));
+    }
+
+    if (selectedPeriod === 'month') {
+      return weeklyVisitors.map((item) => ({
+        bucket: item.weekLabel,
+        sessions: item.sessions,
+        newUsers: item.newUsers,
+        returningUsers: item.returningUsers,
+      }));
+    }
+
+    if (selectedPeriod === 'year') {
+      return monthlyVisitors.map((item) => ({
+        bucket: item.monthName,
+        sessions: item.sessions,
+        newUsers: item.newUsers,
+        returningUsers: item.returningUsers,
+      }));
+    }
+
+    return yearlyVisitors.map((item) => ({
+      bucket: item.yearLabel,
+      sessions: item.sessions,
+      newUsers: item.newUsers,
+      returningUsers: item.returningUsers,
+    }));
+  };
+
+  const getSelectedPeriodTotalVisitors = () => {
+    return getSelectedPeriodRows().reduce((sum, row) => sum + row.sessions, 0);
+  };
+
+  const getSelectedPeriodWindowLabel = () => {
+    if (selectedPeriod === 'day') return 'Today';
+    if (selectedPeriod === 'week') return 'This Week';
+    if (selectedPeriod === 'month') return 'This Month';
+    if (selectedPeriod === 'year') return 'This Year';
+    return 'This Decade';
+  };
+
+  const escapeCsvValue = (value: string | number) => {
+    const stringValue = String(value);
+    if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+      return `"${stringValue.replace(/"/g, '""')}"`;
+    }
+    return stringValue;
+  };
+
+  const handleExportVisitorsCsv = () => {
+    const rows = getSelectedPeriodRows();
+    if (rows.length === 0) {
+      return;
+    }
+
+    const header = ['period', 'bucket', 'sessions', 'new_visitors', 'returning_visitors'];
+    const csvRows = rows.map((row) => [
+      selectedPeriod,
+      row.bucket,
+      row.sessions,
+      row.newUsers,
+      row.returningUsers,
+    ]);
+
+    const csv = [header, ...csvRows]
+      .map((columns) => columns.map((column) => escapeCsvValue(column)).join(','))
+      .join('\n');
+
+    if (typeof document === 'undefined' || typeof URL === 'undefined') {
+      console.log('[ADMIN-DASHBOARD] CSV export is only available in web context');
+      return;
+    }
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const dateLabel = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = `visitors-${selectedPeriod}-${dateLabel}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const renderSimpleChart = (data: TrendData[]) => {
@@ -520,7 +651,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
               
               return (
                 <View key={index} style={[styles.barContainer, { width: barWidth }]}>
-                  <Text style={styles.barValue}>{item.sessions > 0 ? item.sessions : ''}</Text>
+                  <Text style={styles.barValueNew}>{item.newUsers > 0 ? item.newUsers : ''}</Text>
+                  <Text style={styles.barValueReturning}>{item.returningUsers > 0 ? item.returningUsers : ''}</Text>
                   <View style={styles.barWrapper}>
                     <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 2) }]} />
                   </View>
@@ -571,7 +703,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             
             return (
               <View key={index} style={styles.barContainer}>
-                <Text style={styles.barValue}>{item.sessions}</Text>
+                <Text style={styles.barValueNew}>{item.newUsers}</Text>
+                <Text style={styles.barValueReturning}>{item.returningUsers}</Text>
                 <View style={styles.barWrapper}>
                   <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
                 </View>
@@ -617,11 +750,100 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             
             return (
               <View key={index} style={styles.barContainer}>
-                <Text style={styles.barValue}>{item.sessions}</Text>
+                <Text style={styles.barValueNew}>{item.newUsers}</Text>
+                <Text style={styles.barValueReturning}>{item.returningUsers}</Text>
                 <View style={styles.barWrapper}>
                   <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
                 </View>
                 <Text style={styles.barLabel}>{item.weekLabel}</Text>
+              </View>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderMonthlyChart = (data: { month: number; monthName: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No monthly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, m) => sum + m.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Visitors (Year)</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, m) => sum + m.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, m) => sum + m.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScrollView}>
+          <View style={styles.chartContainer}>
+            {data.map((item, index) => {
+              const barHeight = (item.sessions / maxSessions) * 120;
+              return (
+                <View key={index} style={styles.barContainer}>
+                  <Text style={styles.barValueNew}>{item.newUsers}</Text>
+                  <Text style={styles.barValueReturning}>{item.returningUsers}</Text>
+                  <View style={styles.barWrapper}>
+                    <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                  </View>
+                  <Text style={styles.barLabel}>{item.monthName}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  const renderYearlyChart = (data: { year: number; yearLabel: string; sessions: number; newUsers: number; returningUsers: number }[]) => {
+    if (!data || data.length === 0) {
+      return <Text style={styles.noDataText}>No yearly data available</Text>;
+    }
+
+    const maxSessions = Math.max(...data.map(d => d.sessions), 1);
+
+    return (
+      <View>
+        <View style={styles.statsGrid}>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, y) => sum + y.sessions, 0)}</Text>
+            <Text style={styles.metricLabel}>Total Visitors (Decade)</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, y) => sum + y.newUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>New Visitors</Text>
+          </View>
+          <View style={styles.metricCard}>
+            <Text style={styles.metricValue}>{data.reduce((sum, y) => sum + y.returningUsers, 0)}</Text>
+            <Text style={styles.metricLabel}>Returning</Text>
+          </View>
+        </View>
+
+        <View style={styles.chartContainer}>
+          {data.map((item, index) => {
+            const barHeight = (item.sessions / maxSessions) * 120;
+            return (
+              <View key={index} style={styles.barContainer}>
+                <Text style={styles.barValueNew}>{item.newUsers}</Text>
+                <Text style={styles.barValueReturning}>{item.returningUsers}</Text>
+                <View style={styles.barWrapper}>
+                  <View style={[styles.bar, styles.authBar, { height: Math.max(barHeight, 4) }]} />
+                </View>
+                <Text style={styles.barLabel}>{item.yearLabel}</Text>
               </View>
             );
           })}
@@ -841,9 +1063,6 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Analytics</Text>
         <TouchableOpacity onPress={() => loadAnalytics(true)} style={styles.refreshButton}>
           <Ionicons name={refreshing ? "hourglass" : "refresh"} size={24} color="#00F5FF" />
@@ -1052,42 +1271,68 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
             {/* Period Selector */}
             <View style={styles.periodSelector}>
               <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'daily' && styles.periodButtonActive]}
-                onPress={() => setSelectedPeriod('daily')}
+                style={[styles.periodButton, selectedPeriod === 'day' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('day')}
               >
                 <Text
                   style={[
                     styles.periodButtonText,
-                    selectedPeriod === 'daily' && styles.periodButtonTextActive,
+                    selectedPeriod === 'day' && styles.periodButtonTextActive,
                   ]}
                 >
-                  Daily
+                  Day
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'weekly' && styles.periodButtonActive]}
-                onPress={() => setSelectedPeriod('weekly')}
+                style={[styles.periodButton, selectedPeriod === 'week' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('week')}
               >
                 <Text
                   style={[
                     styles.periodButtonText,
-                    selectedPeriod === 'weekly' && styles.periodButtonTextActive,
+                    selectedPeriod === 'week' && styles.periodButtonTextActive,
                   ]}
                 >
-                  Weekly
+                  Week
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.periodButton, selectedPeriod === 'yearly' && styles.periodButtonActive]}
-                onPress={() => setSelectedPeriod('yearly')}
+                style={[styles.periodButton, selectedPeriod === 'month' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('month')}
               >
                 <Text
                   style={[
                     styles.periodButtonText,
-                    selectedPeriod === 'yearly' && styles.periodButtonTextActive,
+                    selectedPeriod === 'month' && styles.periodButtonTextActive,
                   ]}
                 >
                   Monthly
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'year' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('year')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'year' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Year
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.periodButton, selectedPeriod === 'decade' && styles.periodButtonActive]}
+                onPress={() => setSelectedPeriod('decade')}
+              >
+                <Text
+                  style={[
+                    styles.periodButtonText,
+                    selectedPeriod === 'decade' && styles.periodButtonTextActive,
+                  ]}
+                >
+                  Decade
                 </Text>
               </TouchableOpacity>
             </View>
@@ -1097,19 +1342,46 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
               <View style={styles.sectionHeaderRow}>
                 <Ionicons name="analytics" size={24} color="#00F5FF" />
                 <Text style={styles.sectionTitle}>
-                  {selectedPeriod === 'daily' ? 'Hourly Visitors Today' : 
-                   selectedPeriod === 'weekly' ? 'Daily Visitors This Week' : 
-                   'Weekly Visitors This Month'}
+                  {selectedPeriod === 'day' ? 'Visitors by Hour (Today)' : 
+                   selectedPeriod === 'week' ? 'Visitors by Day (This Week)' : 
+                   selectedPeriod === 'month' ? 'Visitors by Week (This Month)' :
+                   selectedPeriod === 'year' ? 'Visitors by Month (This Year)' :
+                   'Visitors by Year (This Decade)'}
                 </Text>
+                <TouchableOpacity
+                  onPress={handleExportVisitorsCsv}
+                  style={styles.exportButton}
+                  disabled={getSelectedPeriodRows().length === 0}
+                >
+                  <Ionicons
+                    name="download-outline"
+                    size={18}
+                    color={getSelectedPeriodRows().length === 0 ? '#4F6470' : '#00F5FF'}
+                  />
+                  <Text
+                    style={[
+                      styles.exportButtonText,
+                      getSelectedPeriodRows().length === 0 && styles.exportButtonTextDisabled,
+                    ]}
+                  >
+                    CSV
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              <Text style={styles.periodTotalText}>
+                {`Period Total (${getSelectedPeriodWindowLabel()}): ${getSelectedPeriodTotalVisitors()} visitors`}
+              </Text>
               
               {granularLoading ? (
                 <ActivityIndicator size="small" color="#00F5FF" />
               ) : (
                 <>
-                  {selectedPeriod === 'daily' && renderHourlyChart(hourlyVisitors)}
-                  {selectedPeriod === 'weekly' && renderDailyChart(dailyVisitors)}
-                  {selectedPeriod === 'yearly' && renderWeeklyChart(weeklyVisitors)}
+                  {selectedPeriod === 'day' && renderHourlyChart(hourlyVisitors)}
+                  {selectedPeriod === 'week' && renderDailyChart(dailyVisitors)}
+                  {selectedPeriod === 'month' && renderWeeklyChart(weeklyVisitors)}
+                  {selectedPeriod === 'year' && renderMonthlyChart(monthlyVisitors)}
+                  {selectedPeriod === 'decade' && renderYearlyChart(yearlyVisitors)}
                 </>
               )}
             </View>
@@ -1767,13 +2039,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = ({ navigation 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0A0A0F',
+    backgroundColor: '#070B14',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#0A0A0F',
+    backgroundColor: '#070B14',
   },
   loadingText: {
     color: '#00F5FF',
@@ -1789,9 +2061,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     paddingTop: 60,
-    backgroundColor: '#0F0F17',
+    backgroundColor: '#0B1020',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
+    borderBottomColor: 'rgba(102, 204, 255, 0.16)',
   },
   backButton: {
     padding: 8,
@@ -1809,11 +2081,15 @@ const styles = StyleSheet.create({
   // Tab Navigation
   tabContainer: {
     flexDirection: 'row',
-    backgroundColor: '#0F0F17',
-    paddingHorizontal: 16,
+    backgroundColor: '#0B1020',
+    paddingHorizontal: 14,
     paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 245, 255, 0.1)',
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 204, 255, 0.14)',
   },
   tab: {
     flex: 1,
@@ -1823,13 +2099,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 12,
     gap: 6,
-    borderRadius: 8,
+    borderRadius: 14,
     backgroundColor: 'transparent',
   },
   tabActive: {
-    backgroundColor: 'rgba(0, 245, 255, 0.1)',
+    backgroundColor: 'rgba(102, 204, 255, 0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(0, 245, 255, 0.3)',
+    borderColor: 'rgba(102, 204, 255, 0.35)',
   },
   tabText: {
     fontSize: 13,
@@ -1843,21 +2119,22 @@ const styles = StyleSheet.create({
   // Tab Content
   tabContent: {
     padding: 16,
+    paddingTop: 10,
   },
 
   // Section Cards
   sectionCard: {
-    backgroundColor: '#14141F',
-    borderRadius: 16,
+    backgroundColor: '#10182A',
+    borderRadius: 20,
     padding: 20,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0, 245, 255, 0.1)',
-    shadowColor: '#00F5FF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    borderColor: 'rgba(102, 204, 255, 0.16)',
+    shadowColor: '#66CCFF',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 16,
+    elevation: 7,
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1882,13 +2159,13 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 14,
   },
   statCard: {
     flex: 1,
     minWidth: 140,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
     borderWidth: 1,
   },
@@ -1941,11 +2218,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 100,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(20, 20, 31, 0.8)',
+    backgroundColor: 'rgba(13, 20, 38, 0.96)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   metricValue: {
     fontSize: 20,
@@ -1992,8 +2269,10 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 20,
     padding: 4,
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(13, 20, 38, 0.8)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   periodButton: {
     flex: 1,
@@ -2014,6 +2293,31 @@ const styles = StyleSheet.create({
   },
   periodButtonTextActive: {
     color: '#00F5FF',
+  },
+  exportButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 245, 255, 0.22)',
+    backgroundColor: 'rgba(0, 245, 255, 0.08)',
+  },
+  exportButtonText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00F5FF',
+  },
+  exportButtonTextDisabled: {
+    color: '#4F6470',
+  },
+  periodTotalText: {
+    fontSize: 12,
+    color: '#A8C5D2',
+    marginTop: -6,
+    marginBottom: 12,
   },
 
   // Chart Legend
@@ -2045,13 +2349,13 @@ const styles = StyleSheet.create({
   chartRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 150,
+    height: 190,
     paddingHorizontal: 8,
   },
   chartContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    height: 150,
+    height: 190,
     paddingHorizontal: 8,
   },
   barContainer: {
@@ -2085,6 +2389,20 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#FFFFFF',
     marginTop: 2,
+  },
+  barValueNew: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#00FF9F',
+    marginTop: 2,
+    lineHeight: 14,
+  },
+  barValueReturning: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#FFD700',
+    marginTop: 1,
+    lineHeight: 12,
   },
 
   lineChartContainer: {
@@ -2144,12 +2462,12 @@ const styles = StyleSheet.create({
 
   // Visitor Cards
   visitorCard: {
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(13, 20, 38, 0.82)',
+    borderRadius: 16,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   visitorRow: {
     flexDirection: 'row',
@@ -2198,11 +2516,11 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 140,
     padding: 14,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
+    backgroundColor: 'rgba(13, 20, 38, 0.82)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   notifStatValue: {
     fontSize: 24,
@@ -2222,12 +2540,12 @@ const styles = StyleSheet.create({
   },
   dailyCard: {
     width: 130,
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(13, 20, 38, 0.82)',
+    borderRadius: 16,
     padding: 12,
     marginRight: 10,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   dailyCardDate: {
     fontSize: 13,
@@ -2268,8 +2586,10 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     padding: 12,
-    backgroundColor: 'rgba(20, 20, 31, 0.4)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(13, 20, 38, 0.66)',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(102, 204, 255, 0.1)',
   },
   miniStatValue: {
     fontSize: 18,
@@ -2284,12 +2604,12 @@ const styles = StyleSheet.create({
 
   // Notification Performance Cards
   notifCard: {
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(13, 20, 38, 0.82)',
+    borderRadius: 16,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   notifCardHeader: {
     flexDirection: 'row',
@@ -2480,11 +2800,11 @@ const styles = StyleSheet.create({
   },
   tokenSummaryCard: {
     flex: 1,
-    backgroundColor: 'rgba(20, 20, 31, 0.6)',
-    borderRadius: 12,
+    backgroundColor: 'rgba(13, 20, 38, 0.82)',
+    borderRadius: 16,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: 'rgba(102, 204, 255, 0.12)',
   },
   tokenSummaryIcon: {
     width: 36,

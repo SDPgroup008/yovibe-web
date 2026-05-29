@@ -6,7 +6,7 @@ import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, 
 import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "../utils/compatNavigation"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import type { Event } from "../models/Event"
 import type { CalendarScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
@@ -131,7 +131,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
       if (!isRefresh) {
         setLoading(true)
       }
-      const rawEvents = await FirebaseService.getEvents()
+      const rawEvents = await SupabaseService.getEvents()
       const normalized: Event[] = (rawEvents || []).map((ev: any) => normalizeEvent(ev))
       setEvents(normalized)
 
@@ -261,7 +261,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
                   <TouchableOpacity
                     style={styles.eventCard}
                     onPress={() => {
-                      navigation.navigate("EventDetail", { eventId: item.id })
+                      navigation.navigate("EventDetail", { eventId: item.slug || item.id })
                     }}
                   >
                     <ImageBackground
@@ -360,7 +360,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
               <TouchableOpacity
                 style={styles.eventCard}
                 onPress={() => {
-                  navigation.navigate("EventDetail", { eventId: item.id })
+                  navigation.navigate("EventDetail", { eventId: item.slug || item.id })
                 }}
               >
                 <ImageBackground

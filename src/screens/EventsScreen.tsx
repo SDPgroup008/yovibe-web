@@ -21,7 +21,7 @@ import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedEvents } from "../hooks/useDataCache";
 import { useEventsScroll } from "../hooks/useScrollPersistence";
-import FirebaseService from "../services/FirebaseService";
+import SupabaseService from "../services/SupabaseService";
 import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
@@ -237,7 +237,7 @@ const EventsScreen: React.FC = () => {
     return (
     <TouchableOpacity 
       style={[styles.eventCard, { width: cardWidth }]} 
-      onPress={() => handleEventSelect(item.id)}
+      onPress={() => handleEventSelect(item.slug || item.id)}
       accessibilityLabel={`View event: ${item.name}`}
       accessibilityRole="button"
     >

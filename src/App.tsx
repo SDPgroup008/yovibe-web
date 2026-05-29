@@ -2,17 +2,24 @@
 
 import React, { useEffect, useState } from "react";
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
+import SkeletonLoader from "./components/SkeletonLoader";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
 import { routes } from "./utils/routes";
 import { DesktopLayout, MobileLayout } from "./components/Navigation";
-import { LayoutProvider } from "./contexts/LayoutContext";
+import { LayoutProvider, useLayout } from "./contexts/LayoutContext";
+import { Ionicons } from "@expo/vector-icons";
 
 // 🔔 Import Firebase helpers for notifications
 import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
+
+type DeferredInstallPrompt = {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
 
 // Store messaging instance in a ref to handle async initialization
 let messagingInstance = null;
@@ -101,9 +108,13 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
 // Main app component with URL routing
 function AppContent() {
   const { user, loading } = useAuth();
+  const { setHeaderRight } = useLayout();
   const [initializing, setInitializing] = useState(true);
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
+  const [installPromptEvent, setInstallPromptEvent] = useState<DeferredInstallPrompt | null>(null);
+  const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
+  const [waitingServiceWorker, setWaitingServiceWorker] = useState<any | null>(null);
 
   useEffect(() => {
     if (!loading) {
@@ -113,23 +124,81 @@ function AppContent() {
 
   // Let the router handle all routes - authentication is managed by individual screens
 
-  // 🔔 Register service worker and show permission banner after 5 seconds
+  // Register service worker once and track updates waiting to be applied.
   useEffect(() => {
-    (async () => {
-      if ("serviceWorker" in navigator) {
-        try {
-          const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-          console.log("[iOS-NOTIF] Service worker registered:", registration.scope);
-          await navigator.serviceWorker.ready;
-          console.log("[iOS-NOTIF] Service worker is active and ready");
-        } catch (err) {
-          console.warn("[iOS-NOTIF] Service worker registration failed:", err);
-        }
-      } else {
-        console.warn("[iOS-NOTIF] Service worker not supported in this browser");
-      }
-    })();
+    if (typeof window === "undefined" || !("serviceWorker" in navigator)) {
+      console.warn("[PWA] Service worker not supported in this browser");
+      return;
+    }
 
+    let mounted = true;
+
+    const registerServiceWorker = async () => {
+      try {
+        const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+        console.log("[PWA] Service worker registered:", registration.scope);
+
+        if (registration.waiting && mounted) {
+          setWaitingServiceWorker(registration.waiting);
+          setShowUpdatePrompt(true);
+        }
+
+        registration.addEventListener("updatefound", () => {
+          const installing = registration.installing;
+          if (!installing) return;
+
+          installing.addEventListener("statechange", () => {
+            if (installing.state === "installed" && navigator.serviceWorker.controller && mounted) {
+              setWaitingServiceWorker(registration.waiting || installing);
+              setShowUpdatePrompt(true);
+            }
+          });
+        });
+
+        await navigator.serviceWorker.ready;
+        console.log("[PWA] Service worker is active and ready");
+      } catch (err) {
+        console.warn("[PWA] Service worker registration failed:", err);
+      }
+    };
+
+    const onControllerChange = () => {
+      window.location.reload();
+    };
+
+    navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+    registerServiceWorker();
+
+    return () => {
+      mounted = false;
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    };
+  }, []);
+
+  // Capture install prompt event so we can show an explicit in-app Install button.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const onBeforeInstallPrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPromptEvent(event as Event & DeferredInstallPrompt);
+    };
+
+    const onAppInstalled = () => {
+      setInstallPromptEvent(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+    window.addEventListener("appinstalled", onAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt as EventListener);
+      window.removeEventListener("appinstalled", onAppInstalled);
+    };
+  }, []);
+
+  // Notification permission + token flow
+  useEffect(() => {
     let currentPermission = "default";
     if (typeof Notification !== 'undefined' && Notification.permission) {
       currentPermission = Notification.permission;
@@ -228,13 +297,42 @@ function AppContent() {
     console.log("[iOS-NOTIF] User tapped Block");
   };
 
-  if (initializing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading YoVibe...</Text>
-      </View>
+  const handleInstallApp = async () => {
+    if (!installPromptEvent) return;
+
+    try {
+      await installPromptEvent.prompt();
+      await installPromptEvent.userChoice;
+    } catch (error) {
+      console.warn("[PWA] Install prompt failed:", error);
+    } finally {
+      setInstallPromptEvent(null);
+    }
+  };
+
+  const handleApplyUpdate = () => {
+    if (!waitingServiceWorker) return;
+    waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
+    setShowUpdatePrompt(false);
+  };
+
+  useEffect(() => {
+    if (!installPromptEvent) {
+      setHeaderRight(null);
+      return;
+    }
+
+    setHeaderRight(
+      <TouchableOpacity style={styles.headerInstallButton} onPress={handleInstallApp} activeOpacity={0.8}>
+        <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+      </TouchableOpacity>
     );
+
+    return () => setHeaderRight(null);
+  }, [installPromptEvent, setHeaderRight]);
+
+  if (initializing) {
+    return <SkeletonLoader />;
   }
 
   // Always render the main router - screens handle their own authentication
@@ -246,6 +344,15 @@ function AppContent() {
           onAllow={handleAllowNotifications}
           onBlock={handleBlockNotifications}
         />
+      )}
+
+      {showUpdatePrompt && (
+        <View style={styles.updateBanner}>
+          <Text style={styles.updateBannerText}>A new version is available.</Text>
+          <TouchableOpacity style={styles.updateButton} onPress={handleApplyUpdate}>
+            <Text style={styles.updateButtonText}>Update</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {/* URL-based routing with navigation */}
@@ -265,6 +372,7 @@ function AppContent() {
           onClose={() => setBanner(null)}
         />
       )}
+
     </View>
   );
 }
@@ -378,5 +486,49 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 20,
     fontWeight: "bold",
+  },
+  headerInstallButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(102, 204, 255, 0.85)",
+    backgroundColor: "rgba(33, 150, 243, 0.16)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  updateBanner: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 146,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.35)",
+    zIndex: 1000,
+  },
+  updateBannerText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
+    marginRight: 10,
+    flex: 1,
+  },
+  updateButton: {
+    backgroundColor: "#2196F3",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  updateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

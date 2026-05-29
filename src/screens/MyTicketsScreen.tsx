@@ -8,7 +8,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import { useCachedUserTickets } from "../hooks/useDataCache"
 import { useMyTicketsScroll } from "../hooks/useScrollPersistence"
 import { useAuth } from "../contexts/AuthContext"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import type { Ticket } from "../models/Ticket"
 
 const MyTicketsScreen: React.FC = () => {
@@ -28,7 +28,7 @@ const MyTicketsScreen: React.FC = () => {
 
     try {
       console.log("📋 MyTicketsScreen: Loading tickets for user:", user.id)
-      const userTickets = await FirebaseService.getTicketsByUser(user.id)
+      const userTickets = await SupabaseService.getTicketsByUser(user.id)
       
       // Sort by purchase date (newest first)
       userTickets.sort((a, b) => {
@@ -125,9 +125,6 @@ const MyTicketsScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>My Tickets</Text>
         <TouchableOpacity onPress={handleRefresh}>
           <Ionicons name="refresh" size={24} color="#00D4FF" />

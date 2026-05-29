@@ -38,6 +38,48 @@
   ];
   
   const head = document.getElementsByTagName('head')[0];
+
+  const ensureHeadTag = (selector, factory) => {
+    if (head.querySelector(selector)) return;
+    const el = factory();
+    head.appendChild(el);
+  };
+
+  // PWA installability and iOS standalone support tags.
+  ensureHeadTag('link[rel="manifest"]', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'manifest');
+    link.setAttribute('href', '/manifest.webmanifest');
+    return link;
+  });
+
+  ensureHeadTag('link[rel="apple-touch-icon"]', () => {
+    const link = document.createElement('link');
+    link.setAttribute('rel', 'apple-touch-icon');
+    link.setAttribute('href', '/assets/icon.png');
+    return link;
+  });
+
+  ensureHeadTag('meta[name="apple-mobile-web-app-capable"]', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'apple-mobile-web-app-capable');
+    meta.setAttribute('content', 'yes');
+    return meta;
+  });
+
+  ensureHeadTag('meta[name="apple-mobile-web-app-status-bar-style"]', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'apple-mobile-web-app-status-bar-style');
+    meta.setAttribute('content', 'black-translucent');
+    return meta;
+  });
+
+  ensureHeadTag('meta[name="apple-mobile-web-app-title"]', () => {
+    const meta = document.createElement('meta');
+    meta.setAttribute('name', 'apple-mobile-web-app-title');
+    meta.setAttribute('content', 'YoVibe');
+    return meta;
+  });
   
   metaTags.forEach(tag => {
     const meta = document.createElement('meta');

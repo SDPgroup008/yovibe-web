@@ -17,8 +17,8 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
-import FirebaseService from "../services/FirebaseService"
+
+import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { VibeImage } from "../models/VibeImage"
 
@@ -75,7 +75,7 @@ const TodaysVibeScreen: React.FC = () => {
       // Load today's vibes
       const today = new Date()
       console.log("Loading vibes for today:", today.toDateString())
-      const todayVibeImages = await FirebaseService.getVibeImagesByVenueAndDate(venueId, today)
+      const todayVibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venueId, today)
       // Sort by uploadedAt in descending order (most recent first)
       const sortedTodayVibes = todayVibeImages.sort(
         (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()
@@ -85,7 +85,7 @@ const TodaysVibeScreen: React.FC = () => {
 
       // Load week's vibes
       console.log("Loading week's vibes...")
-      const weekData = await FirebaseService.getVibeImagesByVenueAndWeek(venueId)
+      const weekData = await SupabaseService.getVibeImagesByVenueAndWeek(venueId)
       // Sort vibes within each day by uploadedAt in descending order
       const sortedWeekData = Object.fromEntries(
         Object.entries(weekData).map(([day, vibes]) => [
@@ -184,7 +184,6 @@ const TodaysVibeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <BackButton />
       <View style={styles.header}>
         <View style={styles.titleContainer}>
           <Text style={styles.headerTitle}>{venueName}</Text>

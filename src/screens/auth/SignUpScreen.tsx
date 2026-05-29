@@ -17,6 +17,8 @@ import {
 import { useAuth } from "../../contexts/AuthContext"
 import type { UserType } from "../../models/User"
 import { Ionicons } from "@expo/vector-icons"
+import { useCompatNavigation } from "../../utils/compatNavigation"
+import { supabase } from "../../config/supabase"
 
 // Responsive breakpoints for signup screen
 const { width } = Dimensions.get('window');
@@ -37,8 +39,9 @@ interface SignUpScreenProps {
   navigation: any
 }
 
-const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
-  const { signUp } = useAuth()
+const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation }) => {
+  const navigation = useCompatNavigation()
+  const { signUp, consumeRedirectIntent } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -70,8 +73,29 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation }) => {
     try {
       console.log("Sign up attempt with:", email, "as", userType)
       await signUp(email, password, userType)
-      console.log("Sign up successful")
-      // The AuthContext will handle navigation automatically
+
+      // Check if user was signed in immediately (confirmation disabled or already confirmed)
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (session) {
+        console.log("Sign up successful - user is signed in")
+
+        // Handle redirect intent (e.g. user clicked Add Event / Add Venue while logged out)
+        const redirectIntent = consumeRedirectIntent()
+        if (redirectIntent?.routeName) {
+          navigation.navigate(redirectIntent.routeName as any, redirectIntent.params || {})
+        } else {
+          navigation.navigate("Events")
+        }
+      } else {
+        // Fallback: user might need to log in manually (rare now that confirmation is disabled)
+        console.log("Sign up successful but no active session")
+        Alert.alert(
+          "Account Created",
+          "Please log in with your new credentials to continue."
+        )
+        navigation.navigate("Login")
+      }
     } catch (error) {
       console.error("Sign up failed:", error)
       Alert.alert("Sign Up Failed", error instanceof Error ? error.message : "Failed to create account")

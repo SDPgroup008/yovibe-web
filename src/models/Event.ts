@@ -3,8 +3,9 @@ import type { UserType } from "./User"
 
 export interface Event {
   id: string
+  slug: string
   name: string
-  venueId: string
+  venueSlug: string
   venueName: string
   description: string
   date: Date
@@ -31,7 +32,7 @@ export interface Event {
 // Add a new interface for Firestore storage
 export interface FirestoreEvent {
   name: string
-  venueId: string
+  venueSlug: string
   venueName: string
   description: string
   date: Timestamp

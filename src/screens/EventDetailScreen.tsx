@@ -17,12 +17,12 @@ import {
   Dimensions,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../services/FirebaseService"
+import SupabaseService from "../services/SupabaseService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
+
 import TicketService from "../services/TicketService"
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
 import { db } from "../config/firebase"
@@ -61,7 +61,7 @@ const EventDetailScreen: React.FC = () => {
       }
 
       try {
-        const eventData = await FirebaseService.getEventById(eventId)
+        const eventData = await SupabaseService.getEventById(eventId)
         if (eventData) {
           setEvent(eventData)
 
@@ -105,7 +105,7 @@ const EventDetailScreen: React.FC = () => {
         ? [...(event.attendees || []), user.id]
         : (event.attendees || []).filter((id) => id !== user.id)
 
-      await FirebaseService.updateEvent(event.id, { attendees: updatedAttendees })
+      await SupabaseService.updateEvent(event.id, { attendees: updatedAttendees })
 
       // Update local event state
       setEvent({
@@ -126,7 +126,7 @@ const EventDetailScreen: React.FC = () => {
 
     // Navigate to TicketPurchaseScreen for actual ticket purchase
     // Both authenticated and unauthenticated users can access this screen
-    navigation.navigate("TicketPurchase", { eventId: event.id })
+    navigation.navigate("TicketPurchase", { eventId: event.slug || event.id })
   }
 
   const handleViewTicketContacts = () => {
@@ -180,26 +180,44 @@ const EventDetailScreen: React.FC = () => {
     return date.toLocaleDateString("en-US", options).toUpperCase()
   }
 
-  // Handle delete event for admin
-  const handleDeleteEvent = async () => {
-    if (!event) return
-    
-    try {
-      console.log("[EventDetailScreen] Deleting event:", event.id)
-      await FirebaseService.deleteEvent(event.id)
-      console.log("[EventDetailScreen] Event deleted successfully")
-      Alert.alert("Success", "Event deleted successfully")
-      navigation.goBack()
-    } catch (error) {
-      console.error("[EventDetailScreen] Error deleting event:", error)
-      Alert.alert("Error", "Failed to delete event")
-    }
-  }
+   // Handle venue navigation
+   const handleVenuePress = () => {
+     if (!event) return
+
+     // Use venueSlug if available, otherwise show error
+     if (!event.venueSlug || event.venueSlug === 'undefined' || event.venueSlug === 'null') {
+       Alert.alert("Venue Information", `This event is at ${event.venueName}. Venue details are not available.`)
+       return
+     }
+
+     try {
+       navigation.navigate("VenueDetail", { venueId: event.venueSlug })
+     } catch (error) {
+       console.error("[EventDetailScreen] Error navigating to venue:", error)
+       Alert.alert("Error", "Failed to navigate to venue details")
+     }
+   }
+
+   // Handle delete event for admin
+   const handleDeleteEvent = async () => {
+     if (!event) return
+     
+     try {
+       console.log("[EventDetailScreen] Deleting event:", event.id)
+       await SupabaseService.deleteEvent(event.id)
+       console.log("[EventDetailScreen] Event deleted successfully")
+       Alert.alert("Success", "Event deleted successfully")
+       navigation.goBack()
+     } catch (error) {
+       console.error("[EventDetailScreen] Error deleting event:", error)
+       Alert.alert("Error", "Failed to delete event")
+     }
+   }
 
   // Load event creator's payment details (for admin view)
   const loadEventCreatorPaymentDetails = async (creatorId: string) => {
     try {
-      const userData = await FirebaseService.getUserProfile(creatorId)
+      const userData = await SupabaseService.getUserProfileOrNull(creatorId)
       return userData?.paymentDetails || null
     } catch (error) {
       console.error("Error loading organizer payment details:", error)
@@ -357,7 +375,6 @@ const EventDetailScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <BackButton />
       <ScrollView>
       <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
         <ImageBackground 
@@ -449,24 +466,7 @@ const EventDetailScreen: React.FC = () => {
 
         <TouchableOpacity
           style={styles.venueContainer}
-          onPress={() => {
-            const venueId = event.venueId
-
-            // Preferred: navigate directly to VenueDetail if it's registered in the same navigator
-            try {
-              navigation.navigate("VenueDetail", { venueId })
-              return
-            } catch (e) {
-              // ignore and try nested navigation below
-            }
-
-            // Fallback for cross-stack navigation: cast to any to satisfy TypeScript
-            // (keeps runtime behavior of navigating to Venues -> VenueDetail)
-            ;(navigation as any).navigate("Venues", {
-              screen: "VenueDetail",
-              params: { venueId },
-            })
-          }}
+          onPress={handleVenuePress}
         >
           <Ionicons name="location" size={20} color="#2196F3" />
           <Text style={styles.venueName}>{event.venueName}</Text>

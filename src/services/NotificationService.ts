@@ -1,19 +1,5 @@
 // Notification Service for sending alerts and updates
-import {
-  collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  updateDoc,
-  doc,
-  query,
-  where,
-  orderBy,
-  limit,
-  Timestamp,
-  increment,
-} from "firebase/firestore"
-import { db, auth } from "../config/firebase"
+import { supabase } from "../config/supabase"
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { AppNotification, NotificationAnalytics, DailyNotificationStats, NotificationUserInteraction, NotificationDetailedAnalytics } from "../models/Notification"
@@ -28,50 +14,35 @@ export class NotificationService {
     return NotificationService.instance
   }
 
-  // Save a notification to Firestore
+  // Save a notification to Supabase
   async saveNotification(notification: Omit<AppNotification, "id" | "createdAt">): Promise<string> {
     console.log("[NotificationService] saveNotification called");
-    console.log("[NotificationService] Input notification:", notification);
     
     try {
       const notificationData: any = {
+        user_id: notification.userId,
         title: notification.title,
         body: notification.body,
         type: notification.type,
-        isRead: false,
-        createdAt: Timestamp.now(),
+        data: notification.data,
+        image_url: notification.imageUrl,
+        deep_link: notification.deepLink,
+        is_read: false,
+        created_at: new Date().toISOString(),
       }
 
-      // Explicitly set userId (null for broadcast, string for user-specific, omit if undefined)
-      if (notification.userId === null) {
-        notificationData.userId = null
-        console.log("[NotificationService] Setting userId to NULL (broadcast)");
-      } else if (notification.userId !== undefined) {
-        notificationData.userId = notification.userId
-        console.log("[NotificationService] Setting userId to:", notification.userId);
-      } else {
-        console.log("[NotificationService] No userId set (undefined)");
-      }
+      const { data, error } = await supabase
+        .from("notifications")
+        .insert(notificationData)
+        .select("id")
+        .single()
 
-      // Add optional fields if present
-      if (notification.data) notificationData.data = notification.data
-      if (notification.imageUrl) notificationData.imageUrl = notification.imageUrl
-      if (notification.deepLink) notificationData.deepLink = notification.deepLink
+      if (error) throw error
 
-      console.log("[NotificationService] Final notification data to save:", notificationData);
-      console.log("[NotificationService] Saving to collection: YoVibe/data/notifications");
-      
-      const docRef = await addDoc(collection(db, "YoVibe/data/notifications"), notificationData)
-      
-      console.log("[NotificationService] ✅ Saved notification with ID:", docRef.id);
-      console.log("[NotificationService] Document path:", docRef.path);
-      
-      return docRef.id
+      console.log("[NotificationService] ✅ Saved notification with ID:", data.id);
+      return data.id
     } catch (error) {
       console.error("[NotificationService] ❌ ERROR saving notification:", error);
-      console.error("[NotificationService] Error type:", error instanceof Error ? error.constructor.name : typeof error);
-      console.error("[NotificationService] Error message:", error instanceof Error ? error.message : String(error));
-      console.error("[NotificationService] Error stack:", error instanceof Error ? error.stack : "N/A");
       throw error
     }
   }
@@ -79,72 +50,67 @@ export class NotificationService {
   // Get notifications for a specific user
   async getUserNotifications(userId?: string, limitCount: number = 50): Promise<AppNotification[]> {
     try {
-      const notificationsRef = collection(db, "YoVibe/data/notifications")
-      const allNotifications: AppNotification[] = []
+      let query = supabase
+        .from("notifications")
+        .select("*")
+        .is("user_id", null)
+        .order("created_at", { ascending: false })
+        .limit(limitCount)
 
-      // Get broadcast notifications (userId == null)
-      const broadcastQuery = query(
-        notificationsRef,
-        where("userId", "==", null),
-        limit(limitCount)
-      )
-      const broadcastSnapshot = await getDocs(broadcastQuery)
-      console.log(`NotificationService: Found ${broadcastSnapshot.size} broadcast notifications`)
-      
-      broadcastSnapshot.forEach((doc) => {
-        const data = doc.data()
-        allNotifications.push({
-          id: doc.id,
-          userId: data.userId,
-          title: data.title,
-          body: data.body,
-          type: data.type,
-          data: data.data,
-          imageUrl: data.imageUrl,
-          deepLink: data.deepLink,
-          isRead: data.isRead || false,
-          createdAt: data.createdAt?.toDate() || new Date(),
-          readAt: data.readAt?.toDate(),
-          openedAt: data.openedAt?.toDate(),
-        })
-      })
+      const { data: broadcastData, error: broadcastError } = await query
+
+      if (broadcastError) throw broadcastError
+
+      const allNotifications: AppNotification[] = broadcastData?.map((doc) => ({
+        id: doc.id,
+        userId: doc.user_id,
+        title: doc.title,
+        body: doc.body,
+        type: doc.type,
+        data: doc.data,
+        imageUrl: doc.image_url,
+        deepLink: doc.deep_link,
+        isRead: doc.is_read || false,
+        createdAt: new Date(doc.created_at),
+        readAt: doc.read_at ? new Date(doc.read_at) : undefined,
+        openedAt: doc.opened_at ? new Date(doc.opened_at) : undefined,
+      })) || []
 
       // If user is authenticated, also get their personal notifications
       if (userId) {
-        const userQuery = query(
-          notificationsRef,
-          where("userId", "==", userId),
-          limit(limitCount)
-        )
-        const userSnapshot = await getDocs(userQuery)
-        console.log(`NotificationService: Found ${userSnapshot.size} user-specific notifications`)
-        
-        userSnapshot.forEach((doc) => {
-          const data = doc.data()
-          allNotifications.push({
-            id: doc.id,
-            userId: data.userId,
-            title: data.title,
-            body: data.body,
-            type: data.type,
-            data: data.data,
-            imageUrl: data.imageUrl,
-            deepLink: data.deepLink,
-            isRead: data.isRead || false,
-            createdAt: data.createdAt?.toDate() || new Date(),
-            readAt: data.readAt?.toDate(),
-            openedAt: data.openedAt?.toDate(),
+        const { data: userData, error: userError } = await supabase
+          .from("notifications")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(limitCount)
+
+        if (userError) throw userError
+
+        if (userData) {
+          userData.forEach((doc) => {
+            allNotifications.push({
+              id: doc.id,
+              userId: doc.user_id,
+              title: doc.title,
+              body: doc.body,
+              type: doc.type,
+              data: doc.data,
+              imageUrl: doc.image_url,
+              deepLink: doc.deep_link,
+              isRead: doc.is_read || false,
+              createdAt: new Date(doc.created_at),
+              readAt: doc.read_at ? new Date(doc.read_at) : undefined,
+              openedAt: doc.opened_at ? new Date(doc.opened_at) : undefined,
+            })
           })
-        })
+        }
       }
 
       // Sort all notifications by date and limit
-      const sortedNotifications = allNotifications
+      return allNotifications
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
         .slice(0, limitCount)
-
-      console.log(`NotificationService: Retrieved ${sortedNotifications.length} total notifications`)
-      return sortedNotifications
     } catch (error) {
       console.error("NotificationService: Error getting notifications:", error)
       return []
@@ -154,31 +120,30 @@ export class NotificationService {
   // Get unread count for a user
   async getUnreadCount(userId?: string): Promise<number> {
     try {
-      const notificationsRef = collection(db, "YoVibe/data/notifications")
       let count = 0
 
-      // Get broadcast unread notifications (userId == null)
-      const broadcastQuery = query(
-        notificationsRef,
-        where("userId", "==", null),
-        where("isRead", "==", false)
-      )
-      const broadcastSnapshot = await getDocs(broadcastQuery)
-      count += broadcastSnapshot.size
-      console.log(`NotificationService: Found ${broadcastSnapshot.size} unread broadcast notifications`)
+      // Get broadcast unread notifications
+      const { data: broadcastData, error: broadcastError } = await supabase
+        .from("notifications")
+        .select("id", { count: "exact" })
+        .is("user_id", null)
+        .eq("is_read", false)
+
+      if (broadcastError) throw broadcastError
+      count += broadcastData?.length || 0
 
       // If user is authenticated, also get their personal unread notifications
       if (userId) {
-        const userQuery = query(
-          notificationsRef,
-          where("userId", "==", userId),
-          where("isRead", "==", false)
-        )
-        const userSnapshot = await getDocs(userQuery)
-        count += userSnapshot.size
-        console.log(`NotificationService: Found ${userSnapshot.size} unread user notifications`)
+        const { data: userData, error: userError } = await supabase
+          .from("notifications")
+          .select("id", { count: "exact" })
+          .eq("user_id", userId)
+          .eq("is_read", false)
+
+        if (userError) throw userError
+        count += userData?.length || 0
       }
-      
+
       console.log(`NotificationService: Total unread count for user ${userId || 'anonymous'}: ${count}`)
       return count
     } catch (error) {
@@ -190,15 +155,17 @@ export class NotificationService {
   // Mark notification as read
   async markAsRead(notificationId: string): Promise<void> {
     try {
-      const notificationRef = doc(db, "YoVibe/data/notifications", notificationId)
-      await updateDoc(notificationRef, {
-        isRead: true,
-        readAt: Timestamp.now(),
-      })
+      const { error } = await supabase
+        .from("notifications")
+        .update({
+          is_read: true,
+          read_at: new Date().toISOString(),
+        })
+        .eq("id", notificationId)
+
+      if (error) throw error
+
       console.log("NotificationService: Marked notification as read:", notificationId)
-      
-      // Update analytics
-      await this.updateAnalytics(notificationId, "read")
     } catch (error) {
       console.error("NotificationService: Error marking as read:", error)
     }
@@ -207,30 +174,18 @@ export class NotificationService {
   // Mark notification as opened
   async markAsOpened(notificationId: string, userId?: string): Promise<void> {
     try {
-      const notificationRef = doc(db, "YoVibe/data/notifications", notificationId)
-      const notificationDoc = await getDoc(notificationRef)
-      
-      if (notificationDoc.exists() && !notificationDoc.data().openedAt) {
-        await updateDoc(notificationRef, {
-          openedAt: Timestamp.now(),
-          isRead: true,
-          readAt: Timestamp.now(),
+      const { error } = await supabase
+        .from("notifications")
+        .update({
+          opened_at: new Date().toISOString(),
+          is_read: true,
+          read_at: new Date().toISOString(),
         })
-        console.log("NotificationService: Marked notification as opened:", notificationId)
-        
-        // Update analytics
-        await this.updateAnalytics(notificationId, "opened")
-        
-        // Track daily stats
-        const today = new Date().toISOString().split('T')[0]
-        await this.trackDailyStat(today, 'opened')
-        
-        // Track which user opened this notification
-        const trackingUserId = userId || auth.currentUser?.uid
-        if (trackingUserId) {
-          await this.trackUserOpened(notificationId, trackingUserId)
-        }
-      }
+        .eq("id", notificationId)
+
+      if (error) throw error
+
+      console.log("NotificationService: Marked notification as opened:", notificationId)
     } catch (error) {
       console.error("NotificationService: Error marking as opened:", error)
     }
@@ -241,78 +196,14 @@ export class NotificationService {
     try {
       const notifications = await this.getUserNotifications(userId)
       const unreadNotifications = notifications.filter(n => !n.isRead)
-      
-      const promises = unreadNotifications.map(notification =>
-        this.markAsRead(notification.id)
-      )
-      
-      await Promise.all(promises)
+
+      for (const notification of unreadNotifications) {
+        await this.markAsRead(notification.id)
+      }
+
       console.log(`NotificationService: Marked ${unreadNotifications.length} notifications as read`)
     } catch (error) {
       console.error("NotificationService: Error marking all as read:", error)
-    }
-  }
-
-  // Update analytics for a notification
-  private async updateAnalytics(notificationId: string, action: "read" | "opened"): Promise<void> {
-    try {
-      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
-      const q = query(analyticsRef, where("notificationId", "==", notificationId))
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        // Create new analytics document
-        await addDoc(analyticsRef, {
-          notificationId,
-          totalSent: 1,
-          totalOpened: action === "opened" ? 1 : 0,
-          totalRead: 1,
-          createdAt: Timestamp.now(),
-        })
-      } else {
-        // Update existing analytics
-        const analyticsDoc = querySnapshot.docs[0]
-        const updateData: any = {
-          totalRead: increment(1),
-        }
-        
-        if (action === "opened") {
-          updateData.totalOpened = increment(1)
-        }
-        
-        await updateDoc(doc(db, "YoVibe/data/notification_analytics", analyticsDoc.id), updateData)
-      }
-    } catch (error) {
-      console.error("NotificationService: Error updating analytics:", error)
-    }
-  }
-
-  // Get analytics for all notifications (limited to most recent)
-  async getAllNotificationAnalytics(limitCount: number = 20): Promise<NotificationAnalytics[]> {
-    try {
-      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
-      const q = query(analyticsRef, orderBy("createdAt", "desc"), limit(limitCount))
-      const querySnapshot = await getDocs(q)
-      
-      const analytics: NotificationAnalytics[] = []
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        analytics.push({
-          notificationId: data.notificationId,
-          totalSent: data.totalSent || 0,
-          totalOpened: data.totalOpened || 0,
-          totalRead: data.totalRead || 0,
-          openRate: data.totalSent > 0 ? (data.totalOpened / data.totalSent) * 100 : 0,
-          readRate: data.totalSent > 0 ? (data.totalRead / data.totalSent) * 100 : 0,
-          createdAt: data.createdAt?.toDate() || new Date(),
-        })
-      })
-      
-      return analytics
-    } catch (error) {
-      console.error("NotificationService: Error getting analytics:", error)
-      return []
     }
   }
 
@@ -320,8 +211,7 @@ export class NotificationService {
   async notifyTicketPurchase(event: Event, ticket: Ticket): Promise<void> {
     try {
       console.log("NotificationService: Sending ticket purchase notification")
-      
-      // Save to Firestore
+
       await this.saveNotification({
         userId: event.createdBy,
         title: "🎫 New Ticket Purchased",
@@ -332,7 +222,8 @@ export class NotificationService {
           ticketId: ticket.id,
           buyerName: ticket.buyerName,
         },
-        deepLink: `/events/${event.id}`,
+        deepLink: `/events/${event.slug}`,
+        isRead: false,
       })
 
       console.log("NotificationService: Ticket purchase notification saved successfully")
@@ -361,6 +252,7 @@ export class NotificationService {
           eventName,
           entryGranted,
         },
+        isRead: false,
       })
 
       console.log("NotificationService: Validation notification saved")
@@ -387,6 +279,7 @@ export class NotificationService {
           eventName,
           amount,
         },
+        isRead: false,
       })
 
       console.log("NotificationService: Payment confirmation saved")
@@ -408,8 +301,9 @@ export class NotificationService {
           eventName: event.name,
           eventTime: event.time,
         },
-        deepLink: `/events/${event.id}`,
+        deepLink: `/events/${event.slug}`,
         imageUrl: event.posterImageUrl,
+        isRead: false,
       })
 
       console.log("NotificationService: Event reminder saved")
@@ -429,6 +323,7 @@ export class NotificationService {
         data: {
           userName,
         },
+        isRead: false,
       })
 
       console.log("NotificationService: Welcome notification saved")
@@ -443,7 +338,6 @@ export class NotificationService {
   // Register a listener for new notifications
   addNotificationListener(callback: () => void): () => void {
     this.notificationListeners.push(callback)
-    // Return unsubscribe function
     return () => {
       this.notificationListeners = this.notificationListeners.filter(cb => cb !== callback)
     }
@@ -460,22 +354,16 @@ export class NotificationService {
     })
   }
 
-  // Process incoming push notification and save to Firestore
+  // Process incoming push notification and save to database
   async processIncomingNotification(payload: any, userId?: string): Promise<void> {
     console.log("[NotificationService] processIncomingNotification called");
-    console.log("[NotificationService] Payload:", payload);
-    console.log("[NotificationService] User ID:", userId);
-    
+
     try {
       const notificationType = payload.data?.type || "other"
-      console.log("[NotificationService] Notification type:", notificationType);
-      
-      // Broadcast notifications (upcoming_summary from GitHub workflows) should have null userId
       const isBroadcast = notificationType === "upcoming_summary"
-      console.log("[NotificationService] Is broadcast:", isBroadcast);
-      
+
       const notification: Omit<AppNotification, "id" | "createdAt"> = {
-        userId: isBroadcast ? null : (userId || undefined),
+        userId: isBroadcast ? undefined : (userId || undefined),
         title: payload.notification?.title || "Notification",
         body: payload.notification?.body || "",
         type: notificationType,
@@ -485,269 +373,111 @@ export class NotificationService {
         isRead: false,
       }
 
-      console.log("[NotificationService] Prepared notification:", notification);
-      console.log("[NotificationService] Calling saveNotification...");
-      
       const notificationId = await this.saveNotification(notification)
-      
+
       console.log("[NotificationService] ✅ Notification saved with ID:", notificationId);
-      console.log("[NotificationService] Notifying listeners...");
-      
-      // Track daily stats - increment notifications sent
-      try {
-        const todayStr = new Date().toISOString().split('T')[0];
-        await this.trackDailyStat(todayStr, 'sent')
-      } catch (statsError) {
-        console.warn("[NotificationService] Failed to track daily stats:", statsError);
-      }
-      
-      // Track which user received this notification
-      const trackingUserId = userId || auth.currentUser?.uid
-      if (trackingUserId) {
-        await this.trackUserInteraction(notificationId, trackingUserId)
-      }
-      
-      // Notify all listeners that a new notification arrived
       this.notifyListeners()
-      
-      console.log("[NotificationService] ✅ Processing complete");
     } catch (error) {
       console.error("[NotificationService] ❌ ERROR processing incoming notification:", error);
-      console.error("[NotificationService] Error details:", error instanceof Error ? error.message : String(error));
-      console.error("[NotificationService] Error stack:", error instanceof Error ? error.stack : "N/A");
       throw error;
     }
-  }
-
-  // Track daily notification statistics
-  private async trackDailyStat(date: string, action: 'sent' | 'opened' | 'subscription'): Promise<void> {
-    try {
-      const statsRef = collection(db, "YoVibe/data/daily_notification_stats")
-      const q = query(statsRef, where("date", "==", date))
-      const querySnapshot = await getDocs(q)
-
-      if (querySnapshot.empty) {
-        // Create new daily stats document
-        await addDoc(statsRef, {
-          date,
-          notificationsSent: action === 'sent' ? 1 : 0,
-          usersReceived: action === 'sent' ? 1 : 0,
-          notificationsOpened: action === 'opened' ? 1 : 0,
-          newSubscriptions: action === 'subscription' ? 1 : 0,
-          createdAt: Timestamp.now(),
-        })
-        console.log("[NotificationService] Created daily stats for", date)
-      } else {
-        // Update existing daily stats
-        const statsDoc = querySnapshot.docs[0]
-        const updateData: any = {}
-        
-        if (action === 'sent') {
-          updateData.notificationsSent = increment(1)
-          updateData.usersReceived = increment(1)
-        } else if (action === 'opened') {
-          updateData.notificationsOpened = increment(1)
-        } else if (action === 'subscription') {
-          updateData.newSubscriptions = increment(1)
-        }
-        
-        await updateDoc(doc(db, "YoVibe/data/daily_notification_stats", statsDoc.id), updateData)
-        console.log("[NotificationService] Updated daily stats for", date, "action:", action)
-      }
-    } catch (error) {
-      console.error("[NotificationService] Error tracking daily stat:", error)
-    }
-  }
-
-  // Track new subscription
-  async trackNewSubscription(): Promise<void> {
-    const today = new Date().toISOString().split('T')[0]
-    await this.trackDailyStat(today, 'subscription')
   }
 
   // Get daily notification statistics
   async getDailyNotificationStats(days: number = 30): Promise<DailyNotificationStats[]> {
     try {
-      const statsRef = collection(db, "YoVibe/data/daily_notification_stats")
-      
-      // Get stats from the last N days
       const startDate = new Date()
       startDate.setDate(startDate.getDate() - days)
       const startDateStr = startDate.toISOString().split('T')[0]
-      
-      const q = query(
-        statsRef,
-        where("date", ">=", startDateStr),
-        limit(days)
-      )
-      const querySnapshot = await getDocs(q)
-      
-      const stats: DailyNotificationStats[] = []
-      
-      querySnapshot.forEach((doc) => {
-        const data = doc.data()
-        const sent = data.notificationsSent || 0
-        const opened = data.notificationsOpened || 0
-        
-        stats.push({
-          date: data.date,
-          notificationsSent: sent,
-          usersReceived: data.usersReceived || 0,
-          notificationsOpened: opened,
-          newSubscriptions: data.newSubscriptions || 0,
-          openRate: sent > 0 ? (opened / sent) * 100 : 0,
-          createdAt: data.createdAt?.toDate() || new Date(),
-        })
-      })
-      
-      // Sort by date ascending (oldest first) for charts
-      return stats.sort((a, b) => a.date.localeCompare(b.date))
+
+      const { data, error } = await supabase
+        .from("daily_notification_stats")
+        .select("*")
+        .gte("date", startDateStr)
+        .limit(days)
+        .order("date", { ascending: true })
+
+      if (error) throw error
+
+      return (data || []).map((doc) => ({
+        date: doc.date,
+        notificationsSent: doc.notifications_sent || 0,
+        usersReceived: doc.users_received || 0,
+        notificationsOpened: doc.notifications_opened || 0,
+        newSubscriptions: doc.new_subscriptions || 0,
+        openRate: doc.notifications_sent > 0 ? (doc.notifications_opened / doc.notifications_sent) * 100 : 0,
+        createdAt: new Date(doc.created_at),
+      }))
     } catch (error) {
       console.error("[NotificationService] Error getting daily stats:", error)
       return []
     }
   }
 
-  // Track user interaction with a notification (when received)
-  async trackUserInteraction(notificationId: string, userId: string): Promise<void> {
+  // Get analytics for all notifications
+  async getAllNotificationAnalytics(limitCount: number = 20): Promise<NotificationAnalytics[]> {
     try {
-      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
-      
-      // Check if interaction already exists
-      const q = query(
-        interactionsRef,
-        where("notificationId", "==", notificationId),
-        where("userId", "==", userId),
-        limit(1)
-      )
-      const existing = await getDocs(q)
-      
-      if (existing.empty) {
-        await addDoc(interactionsRef, {
-          notificationId,
-          userId,
-          receivedAt: Timestamp.now(),
-        })
-        console.log("[NotificationService] Tracked user interaction:", { notificationId, userId })
-        
-        // Update analytics with unique user count
-        await this.updateUniqueUserCount(notificationId, 'received')
-      }
-    } catch (error) {
-      console.error("[NotificationService] Error tracking user interaction:", error)
-    }
-  }
+      const { data, error } = await supabase
+        .from("notification_analytics")
+        .select("*")
+        .limit(limitCount)
+        .order("created_at", { ascending: false })
 
-  // Track when user opens a notification
-  async trackUserOpened(notificationId: string, userId: string): Promise<void> {
-    try {
-      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
-      
-      const q = query(
-        interactionsRef,
-        where("notificationId", "==", notificationId),
-        where("userId", "==", userId),
-        limit(1)
-      )
-      const querySnapshot = await getDocs(q)
-      
-      if (!querySnapshot.empty) {
-        const interactionDoc = querySnapshot.docs[0]
-        const data = interactionDoc.data()
-        
-        if (!data.openedAt) {
-          await updateDoc(doc(db, "YoVibe/data/notification_user_interactions", interactionDoc.id), {
-            openedAt: Timestamp.now(),
-          })
-          console.log("[NotificationService] Tracked user opened:", { notificationId, userId })
-          
-          // Update analytics with unique opened count
-          await this.updateUniqueUserCount(notificationId, 'opened')
-        }
-      }
-    } catch (error) {
-      console.error("[NotificationService] Error tracking user opened:", error)
-    }
-  }
+      if (error) throw error
 
-  // Update unique user counts in analytics
-  private async updateUniqueUserCount(notificationId: string, action: 'received' | 'opened'): Promise<void> {
-    try {
-      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
-      const q = query(analyticsRef, where("notificationId", "==", notificationId), limit(1))
-      const querySnapshot = await getDocs(q)
-      
-      if (!querySnapshot.empty) {
-        const analyticsDoc = querySnapshot.docs[0]
-        const updateData: any = {}
-        
-        if (action === 'received') {
-          updateData.uniqueUsersReceived = increment(1)
-        } else if (action === 'opened') {
-          updateData.uniqueUsersOpened = increment(1)
-        }
-        
-        await updateDoc(doc(db, "YoVibe/data/notification_analytics", analyticsDoc.id), updateData)
-      } else {
-        // Create analytics if doesn't exist
-        await addDoc(analyticsRef, {
-          notificationId,
-          totalSent: 0,
-          totalOpened: 0,
-          totalRead: 0,
-          uniqueUsersReceived: action === 'received' ? 1 : 0,
-          uniqueUsersOpened: action === 'opened' ? 1 : 0,
-          createdAt: Timestamp.now(),
-        })
-      }
+      return (data || []).map((doc) => ({
+        notificationId: doc.notification_id,
+        totalSent: doc.total_sent || 0,
+        totalOpened: doc.total_opened || 0,
+        totalRead: doc.total_read || 0,
+        uniqueUsersReceived: doc.unique_users_received || 0,
+        uniqueUsersOpened: doc.unique_users_opened || 0,
+        openRate: doc.total_sent > 0 ? (doc.total_opened / doc.total_sent) * 100 : 0,
+        readRate: doc.total_sent > 0 ? (doc.total_read / doc.total_sent) * 100 : 0,
+        createdAt: new Date(doc.created_at),
+      }))
     } catch (error) {
-      console.error("[NotificationService] Error updating unique user count:", error)
+      console.error("NotificationService: Error getting analytics:", error)
+      return []
     }
   }
 
   // Get detailed analytics for a notification with user lists
   async getNotificationDetailedAnalytics(notificationId: string): Promise<NotificationDetailedAnalytics | null> {
     try {
-      // Get basic analytics
-      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
-      const q = query(analyticsRef, where("notificationId", "==", notificationId), limit(1))
-      const analyticsSnapshot = await getDocs(q)
-      
-      if (analyticsSnapshot.empty) {
-        return null
-      }
-      
-      const analyticsData = analyticsSnapshot.docs[0].data()
-      
-      // Get user interactions
-      const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
-      const interactionsQuery = query(interactionsRef, where("notificationId", "==", notificationId))
-      const interactionsSnapshot = await getDocs(interactionsQuery)
-      
-      const usersWhoReceived: string[] = []
-      const usersWhoOpened: string[] = []
-      
-      interactionsSnapshot.forEach((doc) => {
-        const data = doc.data()
-        usersWhoReceived.push(data.userId)
-        if (data.openedAt) {
-          usersWhoOpened.push(data.userId)
-        }
-      })
-      
-      const totalSent = analyticsData.totalSent || 0
-      const totalOpened = analyticsData.totalOpened || 0
-      
+      const { data, error } = await supabase
+        .from("notification_analytics")
+        .select("*")
+        .eq("notification_id", notificationId)
+        .single()
+
+      if (error) throw error
+
+      if (!data) return null
+
+      const { data: interactions, error: interactionsError } = await supabase
+        .from("notification_user_interactions")
+        .select("user_id, opened_at")
+        .eq("notification_id", notificationId)
+
+      if (interactionsError) throw interactionsError
+
+      const usersWhoReceived = interactions?.map(i => i.user_id) || []
+      const usersWhoOpened = interactions?.filter(i => i.opened_at).map(i => i.user_id) || []
+
+      const totalSent = data.total_sent || 0
+      const totalOpened = data.total_opened || 0
+
       return {
         notificationId,
         totalSent,
         totalOpened,
-        totalRead: analyticsData.totalRead || 0,
-        openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
-        readRate: totalSent > 0 ? ((analyticsData.totalRead || 0) / totalSent) * 100 : 0,
-        createdAt: analyticsData.createdAt?.toDate() || new Date(),
+        totalRead: data.total_read || 0,
         uniqueUsersReceived: usersWhoReceived.length,
         uniqueUsersOpened: usersWhoOpened.length,
+        openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
+        readRate: totalSent > 0 ? ((data.total_read || 0) / totalSent) * 100 : 0,
+        createdAt: new Date(data.created_at),
         usersWhoReceived,
         usersWhoOpened,
       }
@@ -760,57 +490,71 @@ export class NotificationService {
   // Get all notifications with user interaction details
   async getAllNotificationDetailedAnalytics(limitCount: number = 20): Promise<NotificationDetailedAnalytics[]> {
     try {
-      const analyticsRef = collection(db, "YoVibe/data/notification_analytics")
-      const q = query(analyticsRef, limit(limitCount))
-      const querySnapshot = await getDocs(q)
-      
+      const { data: analytics, error: analyticsError } = await supabase
+        .from("notification_analytics")
+        .select("*")
+        .limit(limitCount)
+
+      if (analyticsError) throw analyticsError
+
       const detailedAnalytics: NotificationDetailedAnalytics[] = []
-      
-      for (const analyticsDoc of querySnapshot.docs) {
-        const data = analyticsDoc.data()
-        const notificationId = data.notificationId
-        
-        // Get user interactions for this notification
-        const interactionsRef = collection(db, "YoVibe/data/notification_user_interactions")
-        const interactionsQuery = query(interactionsRef, where("notificationId", "==", notificationId))
-        const interactionsSnapshot = await getDocs(interactionsQuery)
-        
-        const usersWhoReceived: string[] = []
-        const usersWhoOpened: string[] = []
-        
-        interactionsSnapshot.forEach((doc) => {
-          const interactionData = doc.data()
-          usersWhoReceived.push(interactionData.userId)
-          if (interactionData.openedAt) {
-            usersWhoOpened.push(interactionData.userId)
-          }
-        })
-        
-        const totalSent = data.totalSent || 0
-        const totalOpened = data.totalOpened || 0
-        
+
+      for (const doc of analytics || []) {
+        const { data: interactions, error: interactionsError } = await supabase
+          .from("notification_user_interactions")
+          .select("user_id, opened_at")
+          .eq("notification_id", doc.notification_id)
+
+        if (interactionsError) throw interactionsError
+
+        const usersWhoReceived = interactions?.map(i => i.user_id) || []
+        const usersWhoOpened = interactions?.filter(i => i.opened_at).map(i => i.user_id) || []
+
+        const totalSent = doc.total_sent || 0
+        const totalOpened = doc.total_opened || 0
+
         detailedAnalytics.push({
-          notificationId,
+          notificationId: doc.notification_id,
           totalSent,
           totalOpened,
-          totalRead: data.totalRead || 0,
-          openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
-          readRate: totalSent > 0 ? ((data.totalRead || 0) / totalSent) * 100 : 0,
-          createdAt: data.createdAt?.toDate() || new Date(),
+          totalRead: doc.total_read || 0,
           uniqueUsersReceived: usersWhoReceived.length,
           uniqueUsersOpened: usersWhoOpened.length,
+          openRate: totalSent > 0 ? (totalOpened / totalSent) * 100 : 0,
+          readRate: totalSent > 0 ? ((doc.total_read || 0) / totalSent) * 100 : 0,
+          createdAt: new Date(doc.created_at),
           usersWhoReceived,
           usersWhoOpened,
         })
       }
-      
+
       return detailedAnalytics
     } catch (error) {
       console.error("[NotificationService] Error getting all detailed analytics:", error)
       return []
     }
   }
+
+  // Track new subscription
+  async trackNewSubscription(): Promise<void> {
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const { error } = await supabase
+        .from("daily_notification_stats")
+        .upsert({
+          date: today,
+          new_subscriptions: 1,
+          created_at: new Date().toISOString(),
+        }, {
+          onConflict: 'date'
+        })
+
+      if (error) throw error
+      console.log("NotificationService: New subscription tracked")
+    } catch (error) {
+      console.error("NotificationService: Error tracking subscription:", error)
+    }
+  }
 }
 
 export default NotificationService.getInstance()
-

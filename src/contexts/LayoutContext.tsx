@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState } from 'react';
 import { View } from 'react-native';
 import { useDeviceType } from '../utils/ResponsiveDesign';
 
@@ -7,6 +7,8 @@ interface LayoutState {
   sidebarWidth: number;
   isSidebarVisible: boolean;
   bottomBarHeight: number;
+  headerRight: ReactNode | null;
+  setHeaderRight: (content: ReactNode | null) => void;
 }
 
 // Define the context with a default value
@@ -19,6 +21,7 @@ interface LayoutProviderProps {
 
 export const LayoutProvider: React.FC<LayoutProviderProps> = ({ children }) => {
   const { isLargeScreen } = useDeviceType();
+  const [headerRight, setHeaderRight] = useState<ReactNode | null>(null);
 
   // Define layout dimensions based on screen size
   const sidebarWidth = 80; // Width of the desktop sidebar
@@ -28,6 +31,8 @@ export const LayoutProvider: React.FC<LayoutProviderProps> = ({ children }) => {
     sidebarWidth: isLargeScreen ? sidebarWidth : 0,
     isSidebarVisible: isLargeScreen,
     bottomBarHeight: isLargeScreen ? 0 : bottomBarHeight,
+    headerRight,
+    setHeaderRight,
   };
 
   return (

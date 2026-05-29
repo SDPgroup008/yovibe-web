@@ -4,7 +4,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import FirebaseService from "../../services/FirebaseService"
+import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { Venue } from "../../models/Venue"
 import type { AdminVenuesScreenProps } from "../../navigation/types"
@@ -27,7 +27,7 @@ const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => 
   const loadVenues = async () => {
     try {
       setLoading(true)
-      const venuesList = await FirebaseService.getVenues()
+      const venuesList = await SupabaseService.getVenues()
       setVenues(venuesList)
     } catch (error) {
       console.error("Error loading venues:", error)
@@ -51,10 +51,10 @@ const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => 
       setLoading(true)
       console.log("[AdminVenuesScreen] Deleting venue:", venueId)
       
-      await FirebaseService.deleteVenue(venueId)
+      await SupabaseService.deleteVenue(venueId)
 
       // Also delete all events associated with this venue
-      await FirebaseService.deleteEventsByVenue(venueId)
+      await SupabaseService.deleteEventsByVenue(venueId)
       console.log("[AdminVenuesScreen] Venue and events deleted successfully")
 
       Alert.alert("Success", "Venue and associated events deleted successfully")

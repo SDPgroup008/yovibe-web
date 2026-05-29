@@ -6,8 +6,8 @@ import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert,
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
-import { BackButton } from "../components/Navigation"
-import FirebaseService from "../services/FirebaseService"
+
+import SupabaseService from "../services/SupabaseService"
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -32,7 +32,7 @@ const ManageProgramsScreen: React.FC = () => {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await FirebaseService.updateVenuePrograms(venueId, programs)
+      await SupabaseService.updateVenuePrograms(venueId, programs)
       Alert.alert("Success", "Weekly programs updated successfully")
       navigation.goBack()
     } catch (error) {
@@ -45,7 +45,6 @@ const ManageProgramsScreen: React.FC = () => {
 
   return (
     <ScrollView style={styles.container}>
-      <BackButton />
       <View style={styles.header}>
         <View style={styles.titleContainer}>
           <Text style={styles.headerTitle}>Manage Weekly Programs</Text>
