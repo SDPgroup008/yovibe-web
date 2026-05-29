@@ -221,13 +221,13 @@ export const AppHeader: React.FC = () => {
   return (
     <View style={styles.mobileHeader}>
       <BackButton />
-      <View style={styles.mobileHeaderSpacer} />
       <View style={styles.headerBrand}>
         <View style={styles.headerIconWrap}>
           <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
         </View>
         <Text style={styles.headerTitle}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
       </View>
+      <View style={styles.mobileHeaderSpacer} />
       <HeaderAction />
     </View>
   );
@@ -379,12 +379,11 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(0, 212, 255, 0.2)',
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 20 : 0,
   },
   mobileHeaderSpacer: {
-    width: 44,
+     flex: 1,
   },
   headerActionSlot: {
     width: 44,
@@ -394,8 +393,8 @@ const styles = StyleSheet.create({
   headerBrand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 40,
-    marginLeft: -40,
+    gap: 60,
+    marginLeft: 60,
   },
   headerIconWrap: {
     width: 40,

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { Alert, Platform, View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Platform, View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import SkeletonLoader from "./components/SkeletonLoader";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
@@ -113,6 +113,7 @@ function AppContent() {
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
   const [showPermissionBanner, setShowPermissionBanner] = useState(false);
   const [installPromptEvent, setInstallPromptEvent] = useState<DeferredInstallPrompt | null>(null);
+  const installPromptRef = useRef<DeferredInstallPrompt | null>(null);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
   const [waitingServiceWorker, setWaitingServiceWorker] = useState<any | null>(null);
 
@@ -181,10 +182,13 @@ function AppContent() {
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
-      setInstallPromptEvent(event as Event & DeferredInstallPrompt);
+      const deferred = event as Event & DeferredInstallPrompt;
+      installPromptRef.current = deferred;
+      setInstallPromptEvent(deferred);
     };
 
     const onAppInstalled = () => {
+      installPromptRef.current = null;
       setInstallPromptEvent(null);
     };
 
@@ -297,24 +301,29 @@ function AppContent() {
     console.log("[iOS-NOTIF] User tapped Block");
   };
 
-  const handleInstallApp = async () => {
-    if (!installPromptEvent) {
-      Alert.alert(
-        "Install App",
-        "This browser is not showing the automatic install prompt. Use your browser menu to add YoVibe to your home screen or install it as an app."
-      );
+  const handleInstallApp = useCallback(async () => {
+    const prompt = installPromptRef.current;
+    if (!prompt) {
+      if (typeof window !== "undefined") {
+        window.alert(
+          "To install YoVibe, use your browser menu:\n" +
+          "• Chrome/Edge: tap the ⋮ menu → \"Install app\"\n" +
+          "• Safari on iOS: tap Share → \"Add to Home Screen\""
+        );
+      }
       return;
     }
 
     try {
-      await installPromptEvent.prompt();
-      await installPromptEvent.userChoice;
+      await prompt.prompt();
+      await prompt.userChoice;
     } catch (error) {
       console.warn("[PWA] Install prompt failed:", error);
     } finally {
+      installPromptRef.current = null;
       setInstallPromptEvent(null);
     }
-  };
+  }, []);
 
   const handleApplyUpdate = () => {
     if (!waitingServiceWorker) return;
@@ -328,6 +337,8 @@ function AppContent() {
       return;
     }
 
+    // Set the button once — handleInstallApp is stable (useCallback with no deps)
+    // and reads installPromptRef.current at call time, so it's always fresh.
     setHeaderRight(
       <TouchableOpacity style={styles.headerInstallButton} onPress={handleInstallApp} activeOpacity={0.8}>
         <Ionicons name="download-outline" size={18} color="#FFFFFF" />
@@ -335,7 +346,8 @@ function AppContent() {
     );
 
     return () => setHeaderRight(null);
-  }, [handleInstallApp, setHeaderRight]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setHeaderRight]);
 
   if (initializing) {
     return <SkeletonLoader />;
