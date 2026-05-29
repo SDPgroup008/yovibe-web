@@ -2,6 +2,7 @@ const DEFAULT_SITE_URL = "https://yovibe.net";
 const FALLBACK_SUPABASE_URL = "https://uqukizjohackrcwrtefk.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY = "sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_";
 const PAGE_SIZE = 1000;
+const SITEMAP_FUNCTION_VERSION = "2026-05-29-2";
 
 const xmlEscape = (value = "") =>
   String(value)
@@ -81,12 +82,14 @@ export async function handler() {
     FALLBACK_SUPABASE_ANON_KEY;
 
   try {
+    console.log(`[sitemap] Function version ${SITEMAP_FUNCTION_VERSION}`);
+
     const [venues, events] = await Promise.all([
       fetchSupabaseRows({
         supabaseUrl,
         supabaseAnonKey,
         table: "venues",
-        select: "slug,updated_at,created_at",
+        select: "slug,created_at",
         filters: {
           is_deleted: "eq.false",
           slug: "not.is.null",
@@ -96,7 +99,7 @@ export async function handler() {
         supabaseUrl,
         supabaseAnonKey,
         table: "events",
-        select: "slug,updated_at,created_at",
+        select: "slug,created_at",
         filters: {
           is_deleted: "eq.false",
           slug: "not.is.null",
@@ -118,7 +121,7 @@ export async function handler() {
         loc: `${siteUrl}/venues/${encodeURIComponent(venue.slug.trim())}`,
         changefreq: "daily",
         priority: "0.8",
-        lastmod: normalizeLastMod(venue.updated_at, venue.created_at),
+        lastmod: normalizeLastMod(venue.created_at),
       }));
 
     const eventUrls = events
@@ -127,7 +130,7 @@ export async function handler() {
         loc: `${siteUrl}/events/${encodeURIComponent(event.slug.trim())}`,
         changefreq: "daily",
         priority: "0.8",
-        lastmod: normalizeLastMod(event.updated_at, event.created_at),
+        lastmod: normalizeLastMod(event.created_at),
       }));
 
     const allUrls = [...staticUrls, ...venueUrls, ...eventUrls];
@@ -142,6 +145,7 @@ export async function handler() {
       headers: {
         "Content-Type": "application/xml; charset=utf-8",
         "Cache-Control": "public, max-age=300, s-maxage=300",
+        "X-Sitemap-Version": SITEMAP_FUNCTION_VERSION,
       },
       body: xmlBody,
     };
@@ -152,7 +156,7 @@ export async function handler() {
       headers: {
         "Content-Type": "text/plain; charset=utf-8",
       },
-      body: "Failed to generate sitemap",
+      body: `Failed to generate sitemap: ${error?.message || "Unknown error"}`,
     };
   }
 }
