@@ -47,11 +47,8 @@ Disallow: /events/add
 Disallow: /events/ticket-contacts
 Disallow: /events/payment-callback
 
-# Sitemap location - critical for Google Search Console
+# Canonical sitemap location (dynamic, generated from database)
 Sitemap: https://yovibe.net/sitemap.xml
-
-# Sitemap for mobile
-Sitemap: https://yovibe.net/sitemap-mobile.xml
 
 # Crawl delay for respect to server
 Crawl-delay: 1
