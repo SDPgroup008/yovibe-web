@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
+import { Alert, Platform, View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import SkeletonLoader from "./components/SkeletonLoader";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
@@ -298,7 +298,13 @@ function AppContent() {
   };
 
   const handleInstallApp = async () => {
-    if (!installPromptEvent) return;
+    if (!installPromptEvent) {
+      Alert.alert(
+        "Install App",
+        "This browser is not showing the automatic install prompt. Use your browser menu to add YoVibe to your home screen or install it as an app."
+      );
+      return;
+    }
 
     try {
       await installPromptEvent.prompt();
@@ -317,7 +323,7 @@ function AppContent() {
   };
 
   useEffect(() => {
-    if (!installPromptEvent) {
+    if (Platform.OS !== "web") {
       setHeaderRight(null);
       return;
     }
@@ -329,7 +335,7 @@ function AppContent() {
     );
 
     return () => setHeaderRight(null);
-  }, [installPromptEvent, setHeaderRight]);
+  }, [handleInstallApp, setHeaderRight]);
 
   if (initializing) {
     return <SkeletonLoader />;

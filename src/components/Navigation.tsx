@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
   headerBrand: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 40,
     marginLeft: -40,
   },
   headerIconWrap: {
