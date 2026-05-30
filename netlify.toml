@@ -1,5 +1,5 @@
 [build]
-  command = "expo export --platform web"
+  command = "npm run build:web"
   publish = "dist"
 
 [build.environment]
