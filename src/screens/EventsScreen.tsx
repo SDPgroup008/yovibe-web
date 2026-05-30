@@ -38,12 +38,20 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
-const EventsScreen: React.FC = () => {
+type EventsScreenProps = {
+  initialSearchQuery?: string;
+};
+
+const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
-  const { data: events = [], loading, error, refetch } = useCachedEvents()
+  const { data: cachedEvents, loading, error, refetch } = useCachedEvents()
   const { scrollRef, onScroll } = useEventsScroll()
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
+  const seoUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}`
+      : "https://yovibe.net/events";
 
   // Get responsive values using hooks
   const gridColumns = useGridColumns();
@@ -72,6 +80,18 @@ const EventsScreen: React.FC = () => {
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  const events = useMemo<Event[]>(() => {
+    return Array.isArray(cachedEvents) ? cachedEvents : [];
+  }, [cachedEvents]);
+  useEffect(() => {
+    const normalized = initialSearchQuery.trim();
+    if (!normalized) return;
+
+    setSearchQuery(normalized);
+    setShowSearch(true);
+  }, [initialSearchQuery]);
+
 
 
   // Initial data load only - no reload on focus
@@ -111,7 +131,7 @@ const EventsScreen: React.FC = () => {
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
-      setFilteredEvents(events)
+      setFilteredEvents(events || [])
       return
     }
 
@@ -298,7 +318,7 @@ const EventsScreen: React.FC = () => {
         description={eventSeo.description}
         keywords={eventSeo.keywords}
         type={eventSeo.type}
-        url="https://yovibe.net/events"
+        url={seoUrl}
       />
       {/* Screen reader only heading for SEO */}
       <Text style={styles.srOnly} accessibilityRole="header">

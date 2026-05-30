@@ -5,8 +5,10 @@ import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
 import EventsScreen from '../screens/EventsScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
+import EventsRouteScreen from '../screens/EventsRouteScreen';
 import VenuesScreen from '../screens/VenuesScreen';
 import VenueDetailScreen from '../screens/VenueDetailScreen';
+import VenuesRouteScreen from '../screens/VenuesRouteScreen';
 import MapScreen from '../screens/MapScreen.web';
 import EventCalendarScreen from '../screens/EventCalendarScreen';
 import ProfileScreen from '../screens/ProfileScreen';
@@ -94,7 +96,7 @@ export const routes: RouteDefinition[] = [
   // Dynamic catch-all for event details (must be after static routes)
   {
     path: '/events/:eventId',
-    component: withCompatNavigation(EventDetailScreen)
+    component: withCompatNavigation(EventsRouteScreen)
   },
   {
     path: '/events/tickets/:eventId',
@@ -115,10 +117,6 @@ export const routes: RouteDefinition[] = [
     path: '/venues',
     component: withCompatNavigation(VenuesScreen),
     exact: true
-  },
-  {
-    path: '/venues/:venueId',
-    component: withCompatNavigation(VenueDetailScreen)
   },
   {
     path: '/venues/add-event',
@@ -161,6 +159,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/venues/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
+  },
+  // Dynamic catch-all for venue detail or location-filtered listings (must be after static routes)
+  {
+    path: '/venues/:venueId',
+    component: withCompatNavigation(VenuesRouteScreen)
   },
 
 

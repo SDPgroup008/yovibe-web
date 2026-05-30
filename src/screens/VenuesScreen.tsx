@@ -28,12 +28,20 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
-const VenuesScreen: React.FC = () => {
+type VenuesScreenPropsInternal = {
+  initialSearchQuery?: string;
+};
+
+const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, error, refetch } = useCachedVenues()
   const { scrollRef, onScroll } = useVenuesScroll()
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
+  const seoUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${window.location.pathname}`
+      : "https://yovibe.net/venues";
 
   // Get responsive values using hooks
   const gridColumns = useGridColumns();
@@ -58,6 +66,14 @@ const VenuesScreen: React.FC = () => {
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+  useEffect(() => {
+    const normalized = initialSearchQuery.trim();
+    if (!normalized) return;
+
+    setSearchQuery(normalized);
+    setShowSearch(true);
+  }, [initialSearchQuery]);
+
 
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -281,7 +297,7 @@ const VenuesScreen: React.FC = () => {
         description={venueSeo.description}
         keywords={venueSeo.keywords}
         type={venueSeo.type}
-        url="https://yovibe.net/venues"
+        url={seoUrl}
       />
       {/* Screen reader only heading for SEO */}
       <Text style={styles.srOnly} accessibilityRole="header">

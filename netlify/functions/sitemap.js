@@ -2,7 +2,41 @@ const DEFAULT_SITE_URL = "https://yovibe.net";
 const FALLBACK_SUPABASE_URL = "https://uqukizjohackrcwrtefk.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY = "sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_";
 const PAGE_SIZE = 1000;
-const SITEMAP_FUNCTION_VERSION = "2026-05-29-2";
+const SITEMAP_FUNCTION_VERSION = "2026-05-30-2";
+
+const POPULAR_LOCATION_SLUGS = ["kampala", "entebbe", "entebe", "mukono", "jinja", "wakiso", "mbarara", "gulu"];
+const POPULAR_ARTIST_SLUGS = [
+  "king-saha",
+  "jose-chameleone",
+  "chameleon",
+  "karole-kasita",
+  "carol-kasita",
+  "bobi-wine",
+  "bebe-cool",
+  "eddy-kenzo",
+  "fik-fameica",
+  "sheebah-karungi",
+  "spice-diana",
+  "lydia-jazmine",
+  "winnie-nwagi",
+  "vinka",
+  "rema-namakula",
+  "azawi",
+  "pallaso",
+  "gravity-omutujju",
+  "john-blaq",
+  "navio",
+  "ray-g",
+  "levixone",
+  "juliana-kanyomozi",
+  "irene-ntale",
+  "a-pass",
+  "ykee-benda",
+  "mun-g",
+  "chosen-becky",
+  "david-lutalo",
+  "grace-nakimera",
+];
 
 const xmlEscape = (value = "") =>
   String(value)
@@ -113,6 +147,24 @@ export async function handler() {
       { loc: `${siteUrl}/venues`, changefreq: "daily", priority: "0.95", lastmod: normalizeLastMod() },
       { loc: `${siteUrl}/calendar`, changefreq: "daily", priority: "0.9", lastmod: normalizeLastMod() },
       { loc: `${siteUrl}/map`, changefreq: "weekly", priority: "0.85", lastmod: normalizeLastMod() },
+      ...POPULAR_LOCATION_SLUGS.map((slug) => ({
+        loc: `${siteUrl}/events/${slug}`,
+        changefreq: "daily",
+        priority: "0.78",
+        lastmod: normalizeLastMod(),
+      })),
+      ...POPULAR_ARTIST_SLUGS.map((slug) => ({
+        loc: `${siteUrl}/events/${slug}`,
+        changefreq: "daily",
+        priority: "0.78",
+        lastmod: normalizeLastMod(),
+      })),
+      ...POPULAR_LOCATION_SLUGS.map((slug) => ({
+        loc: `${siteUrl}/venues/${slug}`,
+        changefreq: "daily",
+        priority: "0.76",
+        lastmod: normalizeLastMod(),
+      })),
     ];
 
     const venueUrls = venues
