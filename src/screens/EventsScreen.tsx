@@ -448,8 +448,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: responsiveSize(14, 18, 24),
-    paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 60) : responsiveSize(20, 30, 40),
+    padding: responsiveSize(14, 18, 12),
+    paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 30) : responsiveSize(20, 30, 20),
     backgroundColor: "#1A1A2E",
   },
   headerTitle: {
@@ -461,7 +461,7 @@ const styles = StyleSheet.create({
     textShadowRadius: 4,
   },
   searchButton: {
-    padding: responsiveSize(8, 12, 14),
+    padding: responsiveSize(8, 12, 7),
     backgroundColor: "rgba(0, 212, 255, 0.2)",
     borderRadius: responsiveSize(8, 12, 14),
     borderWidth: 1,
@@ -469,10 +469,10 @@ const styles = StyleSheet.create({
   },
   headerActions: {
     flexDirection: "row",
-    gap: responsiveSize(6, 8, 10),
+    gap: responsiveSize(6, 8, 5),
   },
   notificationButton: {
-    padding: responsiveSize(8, 12, 14),
+    padding: responsiveSize(8, 12, 7),
     backgroundColor: "rgba(0, 212, 255, 0.2)",
     borderRadius: responsiveSize(8, 12, 14),
     borderWidth: 1,

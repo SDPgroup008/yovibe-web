@@ -1,19 +1,72 @@
 {
-  "name": "YoVibe",
+  "name": "YoVibe - Nightlife & Events",
   "short_name": "YoVibe",
   "description": "Discover nightlife events, venues, and experiences across Uganda.",
   "id": "/",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#121212",
   "theme_color": "#121212",
   "lang": "en",
+  "categories": ["entertainment", "lifestyle", "events", "nightlife"],
+  "display_override": ["standalone", "minimal-ui"],
+  "screenshots": [
+    {
+      "src": "/assets/og-image.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "YoVibe Home Screen"
+    }
+  ],
   "icons": [
     {
       "src": "/assets/icon.png",
+      "sizes": "48x48",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "128x128",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "144x144",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "152x152",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
       "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/icon.png",
+      "sizes": "384x384",
       "type": "image/png",
       "purpose": "any"
     },

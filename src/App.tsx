@@ -305,10 +305,20 @@ function AppContent() {
     const prompt = installPromptRef.current;
     if (!prompt) {
       if (typeof window !== "undefined") {
+        // Determine why the install prompt isn't available
+        let reason = "";
+        if (!("serviceWorker" in navigator)) {
+          reason = "Your browser does not support installing web apps.";
+        } else if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+          reason = "YoVibe is already installed on your device.";
+        } else {
+          reason = "The install prompt is not available right now.";
+        }
         window.alert(
-          "To install YoVibe, use your browser menu:\n" +
-          "• Chrome/Edge: tap the ⋮ menu → \"Install app\"\n" +
-          "• Safari on iOS: tap Share → \"Add to Home Screen\""
+          `${reason}\n\nTo manually install YoVibe:\n` +
+          "• Chrome/Edge: tap the ⋮ menu → \"Install app\" or \"Cast, save, and share\" → \"Install page as app\"\n" +
+          "• Safari on iOS: tap Share → \"Add to Home Screen\"\n" +
+          "• Firefox/Samsung Internet: tap the menu → \"Add to Home screen\""
         );
       }
       return;

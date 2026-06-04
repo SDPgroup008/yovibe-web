@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput, Dimensions } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
@@ -15,6 +15,10 @@ import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // SEO Metadata for Map page
   const mapSeo = SCREEN_SEO.map;
+
+  // Detect desktop viewport (>=1024px)
+  const screenWidth = Dimensions.get("window").width;
+  const isDesktop = screenWidth >= 1024;
 
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
@@ -360,6 +364,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       ) : (
         <ScrollView
           style={styles.venueList}
+          contentContainerStyle={isDesktop ? styles.venueGrid : undefined}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -370,38 +375,40 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           }
         >
           {filteredAndSortedVenues.map((venue) => (
-            <View key={venue.id} style={[styles.venueCard, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
-              <View style={styles.venueInfo}>
-                <Text style={styles.venueName}>{venue.name}</Text>
-                <Text style={styles.venueAddress}>{venue.location}</Text>
-                <Text style={styles.venueCategories}>
-                  {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
-                </Text>
-                <View style={styles.vibeRatingContainer}>
-                  <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-                  <Text
-                    style={[
-                      styles.vibeRatingValue,
-                      { color: VibeAnalysisService.getVibeColor(venueVibeRatings[venue.id] || 0.0) },
-                    ]}
-                  >
-                    {(venueVibeRatings[venue.id] || 0.0).toFixed(1)}
+            <View key={venue.id} style={[styles.venueCard, isDesktop && styles.venueCardDesktop, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
+              <View style={styles.venueCardRow}>
+                <View style={styles.venueInfo}>
+                  <Text style={styles.venueName}>{venue.name}</Text>
+                  <Text style={styles.venueAddress}>{venue.location}</Text>
+                  <Text style={styles.venueCategories}>
+                    {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
                   </Text>
-                  <Text style={styles.vibeRatingDescription}>
-                    {" "}
-                    - {VibeAnalysisService.getVibeDescription(venueVibeRatings[venue.id] || 0.0)}
-                  </Text>
+                  <View style={styles.vibeRatingContainer}>
+                    <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                    <Text
+                      style={[
+                        styles.vibeRatingValue,
+                        { color: VibeAnalysisService.getVibeColor(venueVibeRatings[venue.id] || 0.0) },
+                      ]}
+                    >
+                      {(venueVibeRatings[venue.id] || 0.0).toFixed(1)}
+                    </Text>
+                    <Text style={styles.vibeRatingDescription}>
+                      {" "}
+                      - {VibeAnalysisService.getVibeDescription(venueVibeRatings[venue.id] || 0.0)}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.venueActions}>
-                <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
-                  <Ionicons name="information-circle" size={20} color="#2196F3" />
-                  <Text style={styles.actionText}>Details</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
-                  <Ionicons name="navigate" size={20} color="#2196F3" />
-                  <Text style={styles.actionText}>Directions</Text>
-                </TouchableOpacity>
+                <View style={styles.venueActions}>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
+                    <Ionicons name="information-circle" size={16} color="#2196F3" />
+                    <Text style={styles.actionText}>Details</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
+                    <Ionicons name="navigate" size={16} color="#2196F3" />
+                    <Text style={styles.actionText}>Directions</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
           ))}
@@ -506,13 +513,26 @@ const styles = StyleSheet.create({
   },
   venueList: {
     flex: 1,
-    padding: 16,
+    padding: 8,
+  },
+  venueGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
   },
   venueCard: {
     backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 6,
+    padding: 8,
+    marginBottom: 5,
+  },
+  venueCardDesktop: {
+    width: "49%",
+    marginBottom: 6,
+  },
+  venueCardRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   selectedVenueCard: {
     backgroundColor: "#2a2a2a",
@@ -521,23 +541,23 @@ const styles = StyleSheet.create({
   },
   venueInfo: {
     flex: 1,
-    marginBottom: 12,
+    marginBottom: 6,
   },
   venueName: {
-    fontSize: 18,
+    fontSize: 13,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   venueAddress: {
-    fontSize: 14,
+    fontSize: 11,
     color: "#BBBBBB",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   venueCategories: {
-    fontSize: 14,
+    fontSize: 11,
     color: "#2196F3",
-    marginBottom: 8,
+    marginBottom: 4,
   },
   vibeRatingContainer: {
     flexDirection: "row",
@@ -545,34 +565,36 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
   },
   vibeRatingLabel: {
-    fontSize: 14,
+    fontSize: 11,
     color: "#BBBBBB",
   },
   vibeRatingValue: {
-    fontSize: 14,
+    fontSize: 11,
     fontWeight: "bold",
   },
   vibeRatingDescription: {
-    fontSize: 12,
+    fontSize: 10,
     color: "#BBBBBB",
   },
   venueActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 8,
+    gap: 4,
   },
   actionButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#2a2a2a",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
     borderRadius: 4,
-    marginLeft: 8,
   },
   actionText: {
     color: "#2196F3",
-    marginLeft: 4,
-    fontSize: 14,
+    marginLeft: 3,
+    fontSize: 10,
   },
 })
 

@@ -458,14 +458,14 @@ const styles = StyleSheet.create({
     backgroundColor: "#F5F5F5",
   },
   header: {
-    padding: responsiveSize(12, 20, 24),
+    padding: responsiveSize(12, 20, 8),
     paddingBottom: 0,
   },
   tabContainer: {
     flexDirection: "row",
     backgroundColor: "rgba(20, 25, 35, 0.95)",
     borderRadius: responsiveSize(20, 28, 32),
-    padding: responsiveSize(3, 6, 8),
+    padding: responsiveSize(3, 6, 4),
     borderWidth: 1,
     borderColor: "rgba(0, 255, 255, 0.2)",
     shadowColor: "#00FFFF",
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
   },
   tab: {
     flex: 1,
-    paddingVertical: responsiveSize(8, 12, 14),
-    paddingHorizontal: responsiveSize(8, 14, 18),
+    paddingVertical: responsiveSize(8, 12, 7),
+    paddingHorizontal: responsiveSize(8, 14, 9),
     alignItems: "center",
     justifyContent: "center",
     borderRadius: responsiveSize(14, 20, 24),
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 210, 255, 0.6)",
   },
   tabText: {
-    fontSize: responsiveSize(10, 12, 13),
+    fontSize: responsiveSize(10, 12, 10),
     color: "rgba(255, 255, 255, 0.5)",
     fontWeight: "500",
     letterSpacing: 0.5,
@@ -502,8 +502,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   searchButton: {
-    paddingVertical: responsiveSize(8, 12, 14),
-    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(8, 12, 7),
+    paddingHorizontal: responsiveSize(8, 10, 6),
     justifyContent: "center",
     alignItems: "center",
     marginLeft: responsiveSize(2, 4, 6),

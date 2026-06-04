@@ -6,11 +6,14 @@ const OFFLINE_URL = "/offline.html";
 
 const APP_SHELL = [
   "/",
+  "/index.html",
   "/manifest.webmanifest",
   "/offline.html",
   "/favicon.ico",
   "/assets/icon.png",
   "/assets/adaptive-icon.png",
+  "/assets/og-image.png",
+  "/assets/favicon.png",
   "/robots.txt",
   "/sitemap.xml",
 ];
@@ -39,6 +42,16 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
+    // Immediately claim all clients so the new SW takes over
+    self.clients.claim();
+  }
+  if (event.data?.type === "CACHE_URLS" && Array.isArray(event.data.urls)) {
+    // Pre-cache additional URLs sent from the app at runtime
+    event.waitUntil(
+      caches.open(RUNTIME_CACHE).then((cache) => {
+        return cache.addAll(event.data.urls).catch(() => {});
+      })
+    );
   }
 });
 
@@ -73,7 +86,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Navigation: network-first, fallback to offline page.
+// Navigation: network-first, fallback to offline page.
   if (event.request.mode === "navigate") {
     event.respondWith(
       (async () => {
@@ -86,7 +99,12 @@ self.addEventListener("fetch", (event) => {
           const cached = await caches.match(event.request);
           if (cached) return cached;
           const offline = await caches.match(OFFLINE_URL);
-          return offline || Response.error();
+          // If offline page is cached, return it; otherwise return a basic offline response
+          if (offline) return offline;
+          return new Response(
+            '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title><style>body{font-family:sans-serif;background:#121212;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}h1{font-size:24px;margin-bottom:12px}p{color:#b3b3b3;line-height:1.55}</style></head><body><div><h1>You are offline</h1><p>Please check your internet connection and try again.</p></div></body></html>',
+            { headers: { "Content-Type": "text/html; charset=utf-8" } }
+          );
         }
       })()
     );

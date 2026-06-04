@@ -386,7 +386,7 @@ const styles = StyleSheet.create({
      flex: 1,
   },
   headerActionSlot: {
-    width: 44,
+    flex: 1,
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
