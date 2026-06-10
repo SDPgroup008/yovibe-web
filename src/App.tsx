@@ -301,24 +301,37 @@ function AppContent() {
     console.log("[iOS-NOTIF] User tapped Block");
   };
 
+  // Detect iOS (all browsers on iOS use WebKit, even Chrome)
+  const isIOS = useMemo(() => {
+    if (typeof navigator === 'undefined') return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent);
+  }, []);
+
+  const isStandalone = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia("(display-mode: standalone)").matches || (window.navigator as any).standalone;
+  }, []);
+
   const handleInstallApp = useCallback(async () => {
     const prompt = installPromptRef.current;
     if (!prompt) {
       if (typeof window !== "undefined") {
         // Determine why the install prompt isn't available
         let reason = "";
-        if (!("serviceWorker" in navigator)) {
-          reason = "Your browser does not support installing web apps.";
-        } else if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+        if (isStandalone) {
           reason = "YoVibe is already installed on your device.";
+        } else if (isIOS) {
+          reason = "On iOS, you need to add YoVibe manually.";
+        } else if (!("serviceWorker" in navigator)) {
+          reason = "Your browser does not support installing web apps.";
         } else {
           reason = "The install prompt is not available right now.";
         }
         window.alert(
           `${reason}\n\nTo manually install YoVibe:\n` +
-          "• Chrome/Edge: tap the ⋮ menu → \"Install app\" or \"Cast, save, and share\" → \"Install page as app\"\n" +
-          "• Safari on iOS: tap Share → \"Add to Home Screen\"\n" +
-          "• Firefox/Samsung Internet: tap the menu → \"Add to Home screen\""
+          "• Safari on iOS: tap Share (the square with arrow icon) → \"Add to Home Screen\"\n" +
+          "• Chrome/Android: tap the ⋮ menu → \"Install app\" or \"Add to Home screen\"\n" +
+          "• Samsung Internet: tap the ⋮ menu → \"Add page to\" → \"Home screen\""
         );
       }
       return;
@@ -333,7 +346,7 @@ function AppContent() {
       installPromptRef.current = null;
       setInstallPromptEvent(null);
     }
-  }, []);
+  }, [isIOS, isStandalone]);
 
   const handleApplyUpdate = () => {
     if (!waitingServiceWorker) return;
@@ -349,15 +362,21 @@ function AppContent() {
 
     // Set the button once — handleInstallApp is stable (useCallback with no deps)
     // and reads installPromptRef.current at call time, so it's always fresh.
+    const promptAvailable = !!installPromptEvent;
     setHeaderRight(
-      <TouchableOpacity style={styles.headerInstallButton} onPress={handleInstallApp} activeOpacity={0.8}>
-        <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+      <TouchableOpacity 
+        style={[styles.headerInstallButton, promptAvailable && styles.headerInstallButtonReady]} 
+        onPress={handleInstallApp} 
+        activeOpacity={0.8}
+      >
+        <Ionicons name="download-outline" size={18} color={promptAvailable ? "#00D4FF" : "#FFFFFF"} />
       </TouchableOpacity>
     );
 
     return () => setHeaderRight(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [setHeaderRight]);
+  }, [setHeaderRight, installPromptEvent]);
+>>>>>
 
   if (initializing) {
     return <SkeletonLoader />;
@@ -524,6 +543,15 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(33, 150, 243, 0.16)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  headerInstallButtonReady: {
+    borderColor: "#00D4FF",
+    backgroundColor: "rgba(0, 212, 255, 0.25)",
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 8,
+    elevation: 8,
   },
   updateBanner: {
     position: "absolute",
