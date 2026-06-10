@@ -218,15 +218,61 @@ export async function getWebFcmToken(): Promise<string | null> {
       }
     }
     
+    // Ensure service worker is fully active before requesting token
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        // If SW is not active yet, wait for it
+        if (!registration.active) {
+          console.log("[iOS-NOTIF] Service worker not active yet, waiting...");
+          await new Promise<void>((resolve) => {
+            const handler = () => {
+              if (registration.active) {
+                registration.removeEventListener('activate', handler);
+                resolve();
+              }
+            };
+            registration.addEventListener('activate', handler);
+            // Timeout after 10 seconds
+            setTimeout(() => resolve(), 10000);
+          });
+        }
+        console.log("[iOS-NOTIF] Service worker active state:", !!registration.active);
+      } catch (swErr) {
+        console.warn("[iOS-NOTIF] Service worker check failed:", swErr);
+        // Continue anyway - getToken might still work
+      }
+    }
+    
     console.log("[iOS-NOTIF] Getting FCM token with VAPID key...");
     console.log("[iOS-NOTIF] Using messaging instance:", !!messaging);
-    const token = await getToken(messaging!, {
-      vapidKey:
-        process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
-        "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s",
-    });
-    console.log("[iOS-NOTIF] Token generated successfully:", token ? 'YES' : 'NO');
-    return token || null;
+    
+    // Retry logic: try up to 3 times with 1-second gap for SW to become fully active
+    let lastError: any = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        console.log(`[iOS-NOTIF] Retry attempt ${attempt + 1}/3...`);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+      try {
+        const token = await getToken(messaging!, {
+          vapidKey:
+            process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
+            "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s",
+        });
+        if (token) {
+          console.log("[iOS-NOTIF] Token generated successfully: YES");
+          return token;
+        }
+        console.log("[iOS-NOTIF] Token was empty on attempt", attempt + 1);
+      } catch (err) {
+        lastError = err;
+        console.warn(`[iOS-NOTIF] Token attempt ${attempt + 1}/3 failed:`, err);
+      }
+    }
+    
+    console.error("[iOS-NOTIF] All 3 token attempts failed. Last error:", lastError);
+    return null;
   } catch (err) {
     console.error("[iOS-NOTIF] Error getting web FCM token:", err);
     return null;
