@@ -17,32 +17,26 @@ export interface Ticket {
   qrCode: string
   qrCodeDataUrl?: string
   buyerPhotoUrl?: string
-  status: "active" | "used" | "cancelled" | "refunded" | "expired"
+  status: "active" | "used" | "cancelled" | "refunded" | "expired" | "pending"
   validationHistory: TicketValidation[]
-  // Ticket type/entry fee
   entryFeeType?: string
-  // PesaPal payment details
   paymentId?: string
   paymentStatus?: "pending" | "completed" | "failed"
   paymentReference?: string
   pesapalTransactionId?: string
-  // Late purchase tracking
+  pawapayDepositId?: string
   isLatePurchase: boolean
   isScanned: boolean
   purchaseDeadline: Date
-  // Expiry - tickets expire day after event
   expiresAt: Date
-  // Payout tracking
   payoutEligible: boolean
   payoutStatus: "pending" | "processing" | "paid" | "failed"
   payoutDate?: Date
   scannedAt?: Date
-  // Payment method details
   paymentMethod?: "mobile_money" | "credit_card" | "bank_transfer"
   paymentProvider?: string
   paymentNumber?: string
   paymentName?: string
-  // Security: QR signature
   qrSignature?: string
 }
 

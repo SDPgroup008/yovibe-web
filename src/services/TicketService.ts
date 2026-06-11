@@ -1,9 +1,10 @@
 import supabase from "../config/supabase"
 import PaymentService from "./PaymentService"
 import PesaPalService from "./PesaPalService"
+import PawaPayService from "./PawaPayService"
 import NotificationService from "./NotificationService"
 import { uploadQRCode, uploadBuyerPhoto } from "./R2Service"
-import type { Ticket, TicketValidation } from "../models/Ticket"
+import type { Ticket, TicketValidation, PaymentIntent } from "../models/Ticket"
 import type { Event } from "../models/Event"
 import QRCode from "qrcode"
 
@@ -82,20 +83,34 @@ export class TicketService {
       console.log("   - App Commission (8%):", appCommission)
       console.log("   - Venue Revenue:", venueRevenue)
 
-      // Step 2: Create payment intent for internal tracking (payment already verified)
-      console.log("--- Step 2: Creating payment intent ---")
-      const paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
-      console.log("💳 Payment intent created:")
-      console.log("   - Payment ID:", paymentIntent.id)
-      console.log("   - Amount:", paymentIntent.amount)
-      console.log("   - Currency:", paymentIntent.currency)
-      console.log("   - Status: completed (verified via PesaPal)")
+      let paymentIntent: PaymentIntent
+      let isMobileMoney = paymentDetails?.method === "mobile_money"
 
-      // Step 3: Mark payment as completed since it was verified with PesaPal
-      console.log("--- Step 3: Payment already verified with PesaPal ---")
-      console.log("✅ Payment verified successfully via PesaPal!")
+      if (isMobileMoney) {
+        console.log("--- Step 2: Creating payment intent for mobile money ---")
+        paymentIntent = PaymentService.createPaymentIntent(total, event.id, buyerId)
+        console.log("💳 Payment intent created:")
+        console.log("   - Payment ID:", paymentIntent.id)
+        console.log("   - Amount:", paymentIntent.amount)
+        console.log("   - Currency:", paymentIntent.currency)
+        console.log("   - Status: pending (mobile money verification required)")
+      } else {
+        console.log("--- Step 2: Creating payment intent for card/bank transfer ---")
+        paymentIntent = PaymentService.createPaymentIntent(total, event.id, buyerId)
+        console.log("💳 Payment intent created:")
+        console.log("   - Payment ID:", paymentIntent.id)
+        console.log("   - Amount:", paymentIntent.amount)
+        console.log("   - Currency:", paymentIntent.currency)
+        console.log("   - Status: completed (verified via PesaPal)")
+      }
 
-      // Step 4: Calculate purchase deadline
+      console.log("--- Step 3: Payment verification ---")
+      if (isMobileMoney) {
+        console.log("⏳ Mobile money payment pending - will be verified via PawaPay callback")
+      } else {
+        console.log("✅ Payment verified successfully via PesaPal!")
+      }
+
       console.log("--- Step 4: Calculating purchase deadline ---")
       const purchaseDeadline = new Date(eventStartTime.getTime() - 24 * 60 * 60 * 1000)
       console.log("📅 Purchase deadline:", purchaseDeadline)
@@ -129,21 +144,21 @@ export class TicketService {
         qrSignature: qrCodeResult.qrSignature,
         expiresAt: qrCodeResult.expiresAt,
         buyerPhotoUrl,
-        status: "active",
+        status: isMobileMoney ? "pending" : "active",
         validationHistory: [],
         entryFeeType: (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,
-        payoutEligible: true, // Mark as eligible for payout since payment is verified
+        payoutEligible: true,
         payoutStatus: "pending",
         paymentId: paymentIntent.id,
-        paymentStatus: "completed", // Payment already verified
+        paymentStatus: isMobileMoney ? "pending" : "completed",
         paymentReference: paymentIntent.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        pesapalTransactionId: paymentIntent.paymentId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         paymentMethod: paymentDetails?.method,
         paymentProvider: paymentDetails?.provider,
         paymentNumber: paymentDetails?.number,
         paymentName: paymentDetails?.name,
+        pesapalTransactionId: !isMobileMoney ? paymentIntent.paymentId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined,
       }
 
       console.log("📝 Ticket object created:")

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, View, Text, ActivityIndicator, StyleSheet, TouchableOpacity } from "react-native";
 import SkeletonLoader from "./components/SkeletonLoader";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -376,7 +376,7 @@ function AppContent() {
     return () => setHeaderRight(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setHeaderRight, installPromptEvent]);
->>>>>
+
 
   if (initializing) {
     return <SkeletonLoader />;

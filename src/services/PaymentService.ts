@@ -1,9 +1,22 @@
 import type { PaymentIntent } from "../models/Ticket"
 import PesaPalService from "./PesaPalService"
+import PawaPayService from "./PawaPayService"
+
+export interface PaymentMethod {
+  method: "mobile_money" | "credit_card" | "bank_transfer"
+  provider?: string
+  number?: string
+  name?: string
+}
 
 export class PaymentService {
-  static async createPaymentIntent(amount: number, eventId: string, buyerId: string): Promise<PaymentIntent> {
-    const { appCommission, venueRevenue } = PesaPalService.calculateRevenueSplit(amount)
+  static async createPaymentIntent(
+    amount: number,
+    eventId: string,
+    buyerId: string,
+    paymentMethod?: PaymentMethod
+  ): Promise<PaymentIntent> {
+    const { appCommission, venueRevenue } = PawaPayService.calculateRevenueSplit(amount)
 
     const paymentIntent: PaymentIntent = {
       id: `pi_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -20,7 +33,18 @@ export class PaymentService {
     return paymentIntent
   }
 
-  static async processPayment(paymentIntentId: string): Promise<boolean> {
+  static async processPayment(
+    paymentIntentId: string,
+    paymentMethod: PaymentMethod,
+    amount: number
+  ): Promise<boolean> {
+    if (paymentMethod.method === "mobile_money") {
+      return PawaPayService.initiateMobileMoneyPayment(
+        paymentIntentId,
+        paymentMethod,
+        amount
+      )
+    }
     return PesaPalService.processPayment(paymentIntentId)
   }
 
@@ -29,7 +53,11 @@ export class PaymentService {
   }
 
   static calculateRevenueSplit(totalAmount: number) {
-    return PesaPalService.calculateRevenueSplit(totalAmount)
+    return PawaPayService.calculateRevenueSplit(totalAmount)
+  }
+
+  static getSupportedProviders(countryCode: string): string[] {
+    return PawaPayService.getProvidersForCountry(countryCode)
   }
 }
 

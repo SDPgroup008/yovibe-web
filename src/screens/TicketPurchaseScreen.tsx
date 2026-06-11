@@ -11,6 +11,7 @@ import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
+import PawaPayService from "../services/PawaPayService"
 import SupabaseService from "../services/SupabaseService"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
@@ -117,11 +118,19 @@ const TicketPurchaseScreen: React.FC = () => {
       setLoading(true)
       setShowPaymentModal(false)
 
-      // Verify payment with PesaPal
-      console.log("🔍 Verifying payment with PesaPal...")
-      const verification = await PesaPalService.verifyPayment(paymentOrderId)
+      let verificationResult
+      
+      if (paymentMethod === "mobile_money") {
+        // Verify PawaPay deposit status
+        console.log("🔍 Checking PawaPay deposit status...")
+        verificationResult = await PawaPayService.checkDepositStatus(paymentOrderId)
+      } else {
+        // Verify PesaPal payment
+        console.log("🔍 Verifying payment with PesaPal...")
+        verificationResult = await PesaPalService.verifyPayment(paymentOrderId)
+      }
 
-      if (verification.status === "completed") {
+      if (verificationResult.status === "completed") {
         console.log("✅ Payment verified, creating ticket...")
 
         // Determine buyer details
@@ -162,7 +171,7 @@ const TicketPurchaseScreen: React.FC = () => {
             accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
             ticketType: selectedTicketTypeName,
             paymentReference: paymentOrderId || undefined,
-            pesapalTransactionId: verification.transactionId,
+            pesapalTransactionId: paymentMethod !== "mobile_money" ? verificationResult.transactionId : undefined,
           }
         )
 
@@ -174,12 +183,13 @@ const TicketPurchaseScreen: React.FC = () => {
           navigation.navigate("MyTickets")
         }, 1500)
 
-      } else if (verification.status === "failed") {
+      } else if (verificationResult.status === "failed") {
         setPurchaseStatus("error")
         setStatusMessage("Payment failed. Please try again.")
       } else {
+        // For mobile money, pending means waiting for customer to complete payment
         setPurchaseStatus("error")
-        setStatusMessage("Payment is still processing. Please check back later.")
+        setStatusMessage("Payment is still processing. Please check your mobile money and try again.")
       }
 
     } catch (error: any) {
@@ -293,48 +303,70 @@ const TicketPurchaseScreen: React.FC = () => {
       return
     }
 
-    try {
+try {
       setLoading(true)
 
-      // Step 1: Submit order to PesaPal and get payment URL
-      const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event.name}`
-      const callbackUrl = `${window.location.origin}`
+      if (paymentMethod === "mobile_money") {
+        // Handle mobile money payment via PawaPay
+        const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGX" : "AIRTEL_MOMO_UGX"
+        
+        console.log("💳 Initiating mobile money payment via PawaPay...")
+        const depositResult = await PawaPayService.initiateDeposit(
+          total,
+          "UGX",
+          mobileMoneyNumber,
+          provider
+        )
 
-       console.log("💳 Submitting order to PesaPal...")
-       const orderResult = await PesaPalService.submitOrder(
-         total,
-         description,
-         buyerEmail,
-         buyerPhone,  // use the collected buyer phone
-         callbackUrl,
-         buyerName   // pass buyer name to pre-fill form
-       )
-
-      if (!orderResult.success || !orderResult.paymentUrl) {
-        throw new Error(orderResult.error || "Failed to initialize payment")
-      }
-
-      console.log("✅ PesaPal order created:", orderResult.orderId)
-      console.log("💳 Payment URL:", orderResult.paymentUrl)
-
-      const paymentUrl = orderResult.paymentUrl
-      const orderId = orderResult.orderId!
-
-      if (Platform.OS === "web") {
-        const paymentWindow = window.open("", "_blank")
-        if (paymentWindow) {
-          paymentWindow.location.href = paymentUrl
-        } else {
-          window.location.href = paymentUrl
+        if (!depositResult.success) {
+          throw new Error(depositResult.error || "Failed to initiate mobile money payment")
         }
+
+        console.log("✅ PawaPay deposit initiated:", depositResult.depositId)
+        
+        setPaymentOrderId(depositResult.depositId!)
+        setShowPaymentModal(true)
+        setPaymentStatus("pending")
       } else {
-        await Linking.openURL(paymentUrl)
+        // Handle card/bank transfer via PesaPal
+        const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event.name}`
+        const callbackUrl = typeof window !== "undefined" ? window.location.origin : ""
+
+        console.log("💳 Submitting order to PesaPal...")
+        const orderResult = await PesaPalService.submitOrder(
+          total,
+          description,
+          buyerEmail,
+          buyerPhone,
+          callbackUrl,
+          buyerName
+        )
+
+        if (!orderResult.success || !orderResult.paymentUrl) {
+          throw new Error(orderResult.error || "Failed to initialize payment")
+        }
+
+        console.log("✅ PesaPal order created:", orderResult.orderId)
+        console.log("💳 Payment URL:", orderResult.paymentUrl)
+
+        const paymentUrl = orderResult.paymentUrl
+        const orderId = orderResult.orderId!
+
+        if (Platform.OS === "web") {
+          const paymentWindow = window.open("", "_blank")
+          if (paymentWindow) {
+            paymentWindow.location.href = paymentUrl
+          } else {
+            window.location.href = paymentUrl
+          }
+        } else {
+          await Linking.openURL(paymentUrl)
+        }
+
+        setPaymentUrl(paymentUrl)
+        setPaymentOrderId(orderId)
+        setShowPaymentModal(true)
       }
-
-      setPaymentUrl(paymentUrl)
-      setPaymentOrderId(orderId)
-      setShowPaymentModal(true)
-
     } catch (error: any) {
       console.error("Purchase error:", error)
       const errorMessage = error?.message || "Failed to initialize payment. Please try again."
@@ -772,22 +804,40 @@ const TicketPurchaseScreen: React.FC = () => {
               Complete your payment of UGX {total.toLocaleString()} for {quantity}x ticket(s)
             </Text>
 
-            {paymentUrl && (
-              <View style={styles.paymentIframeContainer}>
-                <Text style={styles.paymentIframeText}>
-                  Processing payment with PesaPal...
-                </Text>
-                {/* For web, we'll use a WebView or redirect */}
-                <TouchableOpacity
-                  style={styles.paymentCompleteButton}
-                  onPress={handlePaymentComplete}
-                >
-                  <Text style={styles.paymentCompleteButtonText}>
-                    I've Completed Payment
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
+{paymentUrl && paymentMethod !== "mobile_money" && (
+               <View style={styles.paymentIframeContainer}>
+                 <Text style={styles.paymentIframeText}>
+                   Processing payment with PesaPal...
+                 </Text>
+                 {/* For web, we'll use a WebView or redirect */}
+                 <TouchableOpacity
+                   style={styles.paymentCompleteButton}
+                   onPress={handlePaymentComplete}
+                 >
+                   <Text style={styles.paymentCompleteButtonText}>
+                     I've Completed Payment
+                   </Text>
+                 </TouchableOpacity>
+               </View>
+             )}
+             {paymentOrderId && paymentMethod === "mobile_money" && (
+               <View style={styles.paymentIframeContainer}>
+                 <Text style={styles.paymentIframeText}>
+                   Waiting for mobile money payment...
+                 </Text>
+                 <Text style={styles.paymentIframeText}>
+                   Check your phone to complete the payment
+                 </Text>
+                 <TouchableOpacity
+                   style={styles.paymentCompleteButton}
+                   onPress={handlePaymentComplete}
+                 >
+                   <Text style={styles.paymentCompleteButtonText}>
+                     I've Completed Payment
+                   </Text>
+                 </TouchableOpacity>
+               </View>
+             )}
           </View>
         </View>
       </Modal>
