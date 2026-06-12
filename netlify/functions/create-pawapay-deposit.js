@@ -55,7 +55,6 @@ exports.handler = async (event, context) => {
     }
 
     console.log("📤 Calling PawaPay API...")
-    const apiKey = getApiKey()
     console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...")
     
     const response = await fetch(`${PAWAPAY_BASE_URL}/deposits`, {
