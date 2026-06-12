@@ -19,7 +19,8 @@
   # IPN Notification ID - Register this once via /register-ipn function
   PESAPAL_NOTIFICATION_ID = "your_ipn_notification_id_here"
   # PawaPay API Configuration (for mobile money payments)
-  PAWAPAY_API_KEY = "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjIyNzE3IiwibWF2IjoiMSIsImV4cCI6MjA5NjgwNDMyNSwiaWF0IjoxNzgxMTg1MTI1LCJwbSI6IkRBRixQQUYiLCJqdGkiOiJmNDg4YzgwMS0zNDA4LTQ4YWMtODM2OC0xN2I0MjI2ODYyZWMifQ.LaGjWAR8HxFnI_CnFqGzO45_aePX-O665otGNnTY6OkRm_2AoSS5WEQBJJKjL-w772AYaSlhDj-fSm-w0Ei54A"
+  # Set PAWAPAY_API_KEY in Netlify environment variables for security
+  # PAWAPAY_API_KEY = "your_pawapay_jwt_token_here"
   # Secrets Scanning Configuration - Omit paths containing expected config values
   SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,src/services/PesaPalService.ts,src/services/PawaPayService.ts,sendNotifications.js,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,netlify/functions/create-pesapal-order.js,netlify/functions/verify-pesapal-payment.js,netlify/functions/process-pesapal-payout.js,netlify/functions/register-ipn.js,netlify/functions/pesapal-ipn.js,netlify/functions/create-pawapay-deposit.js,netlify/functions/verify-pawapay-payment.js,app.json,.gitignore,package.json,package-lock.json"
   # Omit environment variable keys that are public by design or appear in documentation
