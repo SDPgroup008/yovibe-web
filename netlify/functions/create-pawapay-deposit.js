@@ -41,6 +41,12 @@ exports.handler = async (event, context) => {
     const depositId = generateUUID()
     const apiKey = getApiKey()
 
+    // Format phone number: remove leading 0 and add country code
+    let formattedPhone = phoneNumber
+    if (formattedPhone.startsWith("0")) {
+      formattedPhone = "256" + formattedPhone.substring(1)
+    }
+
     const payload = {
       depositId,
       amount: amount.toString(),
@@ -48,7 +54,7 @@ exports.handler = async (event, context) => {
       payer: {
         type: "MMO",
         accountDetails: {
-          phoneNumber,
+          phoneNumber: formattedPhone,
           provider,
         },
       },
