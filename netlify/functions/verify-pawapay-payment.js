@@ -1,11 +1,18 @@
 const PAWAPAY_BASE_URL = "https://api.sandbox.pawapay.io/v2"
-const PAWAPAY_API_KEY = process.env.PAWAPAY_API_KEY || "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjIyNzE3IiwibWF2IjoiMSIsImV4cCI6MjA5NjgwNDMyNSwiaWF0IjoxNzgxMTg1MTI1LCJwbSI6IkRBRixQQUYiLCJqdGkiOiJmNDg4YzgwMS0zNDA4LTQ4YWMtODM2OC0xN2I0MjI2ODYyZWMifQ.LaGjWAR8HxFnI_CnFqGzO45_aePX-O665otGNnTY6OkRm_2AoSS5WEQBJJKjL-w772AYaSlhDj-fSm-w0Ei54A"
+
+const getApiKey = () => {
+  const key = process.env.PAWAPAY_API_KEY || 
+    "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjIyNzE3IiwibWF2IjoiMSIsImV4cCI6MjA5NjgwNDMyNSwiaWF0IjoxNzgxMTg1MTI1LCJwbSI6IkRBRixQQUYiLCJqdGkiOiJmNDg4YzgwMS0zNDA4LTQ4YWMtODM2OC0xN2I0MjI2ODYyZWMifQ.LaGjWAR8HxFnI_CnFqGzO45_aePX-O665otGNnTY6OkRm_2AoSS5WEQBJJKjL-w772AYaSlhDj-fSm-w0Ei54A"
+  console.log("getApiKey: returning key, length:", key.length)
+  return key
+}
 
 exports.handler = async (event, context) => {
   console.log("========================================")
   console.log("🔍 PAWAPAY PAYMENT VERIFICATION (Netlify Functions)")
   console.log("========================================")
   console.log("📋 Event:", event.httpMethod)
+  console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET")
 
   if (event.httpMethod !== "GET") {
     return {
@@ -28,11 +35,11 @@ exports.handler = async (event, context) => {
     console.log("   - Deposit ID:", depositId)
 
     console.log("📤 Calling PawaPay API to check deposit status...")
+    const apiKey = getApiKey()
+    
     const response = await fetch(`${PAWAPAY_BASE_URL}/deposits/${depositId}`, {
       headers: {
-        Authorization: PAWAPAY_API_KEY.startsWith("ey")
-          ? PAWAPAY_API_KEY
-          : `Bearer ${PAWAPAY_API_KEY}`,
+        Authorization: apiKey,
       },
     })
 
