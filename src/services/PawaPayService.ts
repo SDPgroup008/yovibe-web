@@ -1,8 +1,8 @@
 import type { PaymentIntent } from "../models/Ticket"
 
 const PAWAPAY_BASE_URL = "https://api.sandbox.pawapay.io/v2"
-const PAWAPAY_PROVIDERS = {
-  UG: ["MTN_MOMO_UGX", "AIRTEL_MOMO_UGX"],
+const PAWAPAY_PROVIDERS: Record<string, string[]> = {
+  UG: ["MTN_MOMO_UGA", "AIRTEL_OAPI_UGA"],
   RW: ["MTN_MOMO_RWA", "AIRTEL_RWA"],
   KE: ["MPESA_KE"],
   GH: ["MTN_MOMO_GH", "AIRTEL_GH"],
@@ -58,11 +58,12 @@ export class PawaPayService {
       })
 
       const data = await response.json()
+      console.log("PawaPay deposit response:", data)
 
-      if (!response.ok) {
+      if (!data.success && data.error) {
         return {
           success: false,
-          error: data.error || "Failed to initiate deposit",
+          error: data.error,
         }
       }
 

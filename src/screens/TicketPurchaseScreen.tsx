@@ -254,7 +254,7 @@ const TicketPurchaseScreen: React.FC = () => {
     }
   }
 
-  const handlePurchase = async () => {
+const handlePurchase = async () => {
     // Determine buyer ID, name, email, and phone based on auth status
     let buyerId: string
     let buyerName: string
@@ -303,12 +303,12 @@ const TicketPurchaseScreen: React.FC = () => {
       return
     }
 
-try {
+    try {
       setLoading(true)
 
       if (paymentMethod === "mobile_money") {
         // Handle mobile money payment via PawaPay
-        const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGX" : "AIRTEL_MOMO_UGX"
+        const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
         
         console.log("💳 Initiating mobile money payment via PawaPay...")
         const depositResult = await PawaPayService.initiateDeposit(
