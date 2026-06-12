@@ -1,8 +1,8 @@
-const PAWAPAY_BASE_URL = "https://api.sandbox.pawapay.io/v2"
+const PAWAPAY_BASE_URL = "https://api.pawapay.io/v2"
 
 const getApiKey = () => {
   const key = process.env.PAWAPAY_API_KEY || 
-    "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjIyNzE3IiwibWF2IjoiMSIsImV4cCI6MjA5Njg4NzIzMiwiaWF0IjoxNzgxMjY4MDMyLCJwbSI6IkRBRixQQUYiLCJqdGkiOiJhMjcwOWM4Ni1jYjNlLTQ5YzItYjE5Yy01NDdlYWQ0MDM2OWQifQ.iXvNRA3LgmH4MINokDWT9mLKZcFv981-mqjKsn3TaqPPHoUMWa2-72WNvVxh9XGWsiKDkQ90iakSUFbTGBnQ7w"
+    "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjMyMzAiLCJtYXYiOiIxIiwiZXhwIjoyMDk2ODk4NzE5LCJpYXQiOjE3ODEyNzk1MTksInBtIjoiREFGLFBBRiIsImp0aSI6IjU5MDE0Njc2LWEyNTgtNDVhOS05NjI4LTQ4MWQ5YTdjMmUzMiJ9.pxopQYuQqM-QztluHaE9RAq9fgIZCRVdYQ7-XMuzL21UV7qf7M9R2DQ9qeyiXxAJt30gXQ3i3BOm_YdKIVSGYg"
   return key
 }
 

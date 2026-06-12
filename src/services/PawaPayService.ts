@@ -1,6 +1,5 @@
 import type { PaymentIntent } from "../models/Ticket"
 
-const PAWAPAY_BASE_URL = "https://api.sandbox.pawapay.io/v2"
 const PAWAPAY_PROVIDERS: Record<string, string[]> = {
   UG: ["MTN_MOMO_UGA", "AIRTEL_OAPI_UGA"],
   RW: ["MTN_MOMO_RWA", "AIRTEL_RWA"],
