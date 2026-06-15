@@ -128,13 +128,13 @@ const TicketPurchaseScreen: React.FC = () => {
         // Poll for status up to 30 seconds
         let attempts = 0
         const maxAttempts = 15
-        let status = "pending"
+        let status = "PENDING"
         
-        while (attempts < maxAttempts && (status === "pending" || status === "PROCESSING")) {
+        while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
           await new Promise(resolve => setTimeout(resolve, 2000))
           attempts++
           verificationResult = await PawaPayService.checkDepositStatus(paymentOrderId)
-          status = verificationResult.status
+          status = (verificationResult.status || "").toUpperCase()
           console.log(`   Attempt ${attempts}: Status = ${status}`)
         }
         
@@ -144,11 +144,13 @@ const TicketPurchaseScreen: React.FC = () => {
         verificationResult = await PesaPalService.verifyPayment(paymentOrderId)
       }
 
-      if (verificationResult.status === "completed") {
+      const resultStatus = (verificationResult.status || "").toUpperCase()
+      if (resultStatus === "COMPLETED") {
         console.log("✅ Payment verified, creating ticket...")
         await createTicketAndNavigate(isMobileMoney, verificationResult)
-      } else if (verificationResult.status === "failed") {
-        Alert.alert("Payment Failed", "Payment was rejected. Please try again.", [{ text: "OK" }])
+      } else if (resultStatus === "FAILED") {
+        const failMsg = verificationResult.failureMessage || "Payment was rejected. Please try again."
+        Alert.alert("Payment Failed", failMsg, [{ text: "OK" }])
       } else {
         const errorMsg = isMobileMoney 
           ? "Payment is still processing. Please check your mobile money and try again."
@@ -326,8 +328,6 @@ const handlePurchase = async () => {
     }
 
     try {
-      setLoading(true)
-
       if (paymentMethod === "mobile_money") {
         // Handle mobile money payment via PawaPay
         const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
@@ -355,14 +355,14 @@ const handlePurchase = async () => {
           try {
             let attempts = 0
             const maxAttempts = 15
-            let status = "pending"
+            let status = "PENDING"
             let verificationResult: any
             
-            while (attempts < maxAttempts && (status === "pending" || status === "PROCESSING")) {
+            while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
               await new Promise(resolve => setTimeout(resolve, 2000))
               attempts++
               verificationResult = await PawaPayService.checkDepositStatus(depositResult.depositId!)
-              status = verificationResult.status
+              status = (verificationResult.status || "").toUpperCase()
               console.log(`   Attempt ${attempts}: Status = ${status}`)
             }
             
@@ -370,7 +370,8 @@ const handlePurchase = async () => {
             
             setCheckingPayment(false)
             
-            if (verificationResult?.status === "completed") {
+            const resultStatus = (verificationResult?.status || "").toUpperCase()
+            if (resultStatus === "COMPLETED") {
               Alert.alert(
                 "Payment Successful ✅",
                 "Your payment has been received! Your ticket is being created.",
@@ -383,8 +384,9 @@ const handlePurchase = async () => {
                   }
                 ]
               )
-            } else if (verificationResult?.status === "failed") {
-              Alert.alert("Payment Failed ❌", "Your mobile money payment was not completed. Please try again.")
+            } else if (resultStatus === "FAILED") {
+              const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
+              Alert.alert("Payment Failed ❌", failMsg)
             } else {
               Alert.alert(
                 "Still Processing",
@@ -439,6 +441,7 @@ const handlePurchase = async () => {
       }
     } catch (error: any) {
       console.error("Purchase error:", error)
+      setCheckingPayment(false)
       const errorMessage = error?.message || "Failed to initialize payment. Please try again."
       setPurchaseStatus("error")
       setStatusMessage(errorMessage)
@@ -470,6 +473,23 @@ const handlePurchase = async () => {
 
   return (
     <View style={styles.container}>
+      {/* Full-screen loading overlay for mobile money payment - must be outside ScrollView */}
+      {checkingPayment && (
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator color="#00D4FF" size="large" />
+            <Text style={styles.loaderTitle}>
+              Processing Payment
+            </Text>
+            <Text style={styles.loaderSubtitle}>
+              Please check your phone and enter your mobile money PIN to complete the payment.
+            </Text>
+            <Text style={styles.loaderFooter}>
+              Verifying payment status... (up to 30s)
+            </Text>
+          </View>
+        </View>
+      )}
       <ScrollView>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Purchase Tickets</Text>
@@ -850,24 +870,6 @@ const handlePurchase = async () => {
           </View>
         </View>
       </Modal>
-
-      {/* Full-screen loading overlay for mobile money payment */}
-      {checkingPayment && (
-        <View style={styles.fullScreenOverlay}>
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator color="#00D4FF" size="large" />
-            <Text style={styles.loaderTitle}>
-              Processing Payment
-            </Text>
-            <Text style={styles.loaderSubtitle}>
-              Please check your phone and enter your mobile money PIN to complete the payment.
-            </Text>
-            <Text style={styles.loaderFooter}>
-              Verifying payment status... (up to 30s)
-            </Text>
-          </View>
-        </View>
-      )}
 
       {/* Payment Modal (for card/bank transfer) */}
       <Modal
@@ -1379,7 +1381,8 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.95)",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 999,
+    zIndex: 9999,
+    elevation: 9999,
   },
   loaderContainer: {
     alignItems: "center",

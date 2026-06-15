@@ -88,23 +88,37 @@ export class PawaPayService {
     currency?: string
     provider?: string
     phoneNumber?: string
+    failureMessage?: string
   }> {
     try {
       const response = await fetch(`/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`)
+      
+      // Netlify function always returns 200 even on 404/error
       const data = await response.json()
 
       if (!response.ok) {
+        console.error("verify-pawapay-payment returned non-200:", response.status, data)
         return { status: "PENDING" }
       }
 
+      // Normalize status: the Netlify function returns lowercase "completed"/"failed"/"pending"
+      // Map to uppercase to match our return type
+      let mappedStatus: "COMPLETED" | "FAILED" | "PENDING" | "NOT_FOUND" = "PENDING"
+      const rawStatus = (data.status || "").toUpperCase()
+      if (rawStatus === "COMPLETED") mappedStatus = "COMPLETED"
+      else if (rawStatus === "FAILED") mappedStatus = "FAILED"
+      else if (rawStatus === "NOT_FOUND") mappedStatus = "NOT_FOUND"
+
       return {
-        status: data.status as "COMPLETED" | "FAILED" | "PENDING",
+        status: mappedStatus,
         amount: data.amount ? parseFloat(data.amount) : undefined,
         currency: data.currency,
         provider: data.provider,
         phoneNumber: data.phoneNumber,
+        failureMessage: data.failureReason?.failureMessage || data.failureMessage,
       }
-    } catch {
+    } catch (error) {
+      console.error("PawaPayService.checkDepositStatus error:", error)
       return { status: "PENDING" }
     }
   }
