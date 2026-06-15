@@ -347,8 +347,11 @@ const handlePurchase = async () => {
         console.log("✅ PawaPay deposit initiated:", depositResult.depositId)
         
         setPaymentOrderId(depositResult.depositId!)
-        setShowPaymentModal(true)
         setPaymentStatus("pending")
+        
+        // Auto-start polling for mobile money payment status
+        // (small delay to let state update, then check)
+        setTimeout(() => handlePaymentComplete(), 100)
       } else {
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
@@ -828,7 +831,7 @@ const handlePurchase = async () => {
 
 {paymentOrderId && (
                <View style={styles.paymentIframeContainer}>
-                 {checkingPayment ? (
+         {checkingPayment ? (
                    <>
                      <ActivityIndicator color="#00D4FF" size="large" />
                      <Text style={styles.paymentIframeText}>
@@ -839,17 +842,19 @@ const handlePurchase = async () => {
                    <>
                      <Text style={styles.paymentIframeText}>
                        {paymentMethod === "mobile_money" 
-                         ? "Waiting for mobile money payment..." 
+                         ? "Processing mobile money payment..." 
                          : "Processing payment..."}
                      </Text>
-                     <TouchableOpacity
-                       style={styles.paymentCompleteButton}
-                       onPress={handlePaymentComplete}
-                     >
-                       <Text style={styles.paymentCompleteButtonText}>
-                         I've Completed Payment
-                       </Text>
-                     </TouchableOpacity>
+                     {paymentMethod !== "mobile_money" && (
+                       <TouchableOpacity
+                         style={styles.paymentCompleteButton}
+                         onPress={handlePaymentComplete}
+                       >
+                         <Text style={styles.paymentCompleteButtonText}>
+                           I've Completed Payment
+                         </Text>
+                       </TouchableOpacity>
+                     )}
                    </>
                  )}
                </View>
