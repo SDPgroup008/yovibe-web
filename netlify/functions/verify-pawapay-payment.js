@@ -60,11 +60,14 @@ exports.handler = async (event, context) => {
       }
     }
 
-    const data = await response.json()
-    console.log("📥 PawaPay response:", JSON.stringify(data, null, 2))
+    const responseData = await response.json()
+    console.log("📥 PawaPay response:", JSON.stringify(responseData, null, 2))
 
-    const status = data.status === "COMPLETED" ? "completed"
-      : data.status === "FAILED" ? "failed"
+    // PawaPay wraps deposit data in a "data" property
+    const depositData = responseData.data
+
+    const status = depositData?.status === "COMPLETED" ? "completed"
+      : depositData?.status === "FAILED" ? "failed"
       : "pending"
 
     console.log("✅ Verification complete - Status:", status)
@@ -74,12 +77,14 @@ exports.handler = async (event, context) => {
       statusCode: 200,
       body: JSON.stringify({
         status,
-        depositId: data.depositId,
-        amount: data.amount,
-        currency: data.currency,
-        provider: data.payer?.accountDetails?.provider,
-        phoneNumber: data.payer?.accountDetails?.phoneNumber,
-        providerTransactionId: data.providerTransactionId,
+        depositId: depositData?.depositId,
+        amount: depositData?.amount,
+        currency: depositData?.currency,
+        provider: depositData?.payer?.accountDetails?.provider,
+        phoneNumber: depositData?.payer?.accountDetails?.phoneNumber,
+        providerTransactionId: depositData?.providerTransactionId,
+        failureMessage: depositData?.failureReason?.failureMessage,
+        failureCode: depositData?.failureReason?.failureCode,
       }),
     }
   } catch (error) {
