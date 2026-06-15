@@ -185,7 +185,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const includePhoto = securityPhotoEnabled && photoCaptured
 
       const ticket = await TicketService.purchaseTicket(
-        event,
+        event!,
         buyerId,
         buyerName,
         buyerEmail,
@@ -351,7 +351,7 @@ const handlePurchase = async () => {
         setPaymentStatus("pending")
       } else {
         // Handle card/bank transfer via PesaPal
-        const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event.name}`
+        const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
         const callbackUrl = typeof window !== "undefined" ? window.location.origin : ""
 
         console.log("💳 Submitting order to PesaPal...")
@@ -401,9 +401,9 @@ const handlePurchase = async () => {
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading event details...</Text>
+        <Text style={{ color: '#FFFFFF', marginTop: 12, fontSize: 16 }}>Loading event details...</Text>
       </View>
     )
   }
