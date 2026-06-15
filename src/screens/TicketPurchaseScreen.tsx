@@ -368,10 +368,9 @@ const handlePurchase = async () => {
             
             console.log("✅ Final status:", status)
             
-            setCheckingPayment(false)
-            
             const resultStatus = (verificationResult?.status || "").toUpperCase()
             if (resultStatus === "COMPLETED") {
+              setCheckingPayment(false)
               Alert.alert(
                 "Payment Successful ✅",
                 "Your payment has been received! Your ticket is being created.",
@@ -386,8 +385,10 @@ const handlePurchase = async () => {
               )
             } else if (resultStatus === "FAILED") {
               const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
+              setCheckingPayment(false)
               Alert.alert("Payment Failed ❌", failMsg)
             } else {
+              setCheckingPayment(false)
               Alert.alert(
                 "Still Processing",
                 "Your payment is taking longer than expected. Please check your tickets later."
