@@ -85,6 +85,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
+  const [checkingPayment, setCheckingPayment] = useState(false)
   const bannerOpacity = useRef(new Animated.Value(0)).current
 
   // Auto-hide banner after 3 seconds
@@ -115,87 +116,108 @@ const TicketPurchaseScreen: React.FC = () => {
     if (!paymentOrderId) return
 
     try {
-      setLoading(true)
+      setCheckingPayment(true)
       setShowPaymentModal(false)
 
       let verificationResult
+      let isMobileMoney = paymentMethod === "mobile_money"
       
-      if (paymentMethod === "mobile_money") {
-        // Verify PawaPay deposit status
-        console.log("🔍 Checking PawaPay deposit status...")
-        verificationResult = await PawaPayService.checkDepositStatus(paymentOrderId)
+      if (isMobileMoney) {
+        console.log("🔍 Checking PawaPay deposit status (polling)...")
+        
+        // Poll for status up to 30 seconds
+        let attempts = 0
+        const maxAttempts = 15
+        let status = "pending"
+        
+        while (attempts < maxAttempts && (status === "pending" || status === "PROCESSING")) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          attempts++
+          verificationResult = await PawaPayService.checkDepositStatus(paymentOrderId)
+          status = verificationResult.status
+          console.log(`   Attempt ${attempts}: Status = ${status}`)
+        }
+        
+        console.log("✅ Final status:", status)
       } else {
-        // Verify PesaPal payment
         console.log("🔍 Verifying payment with PesaPal...")
         verificationResult = await PesaPalService.verifyPayment(paymentOrderId)
       }
 
       if (verificationResult.status === "completed") {
         console.log("✅ Payment verified, creating ticket...")
-
-        // Determine buyer details
-        let buyerId: string
-        let buyerName: string
-        let buyerEmail: string
-
-        if (user) {
-          buyerId = user.id
-          buyerName = user.displayName || user.email || "Unknown"
-          buyerEmail = user.email || ""
-        } else {
-          buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-          buyerName = visitorName.trim()
-          buyerEmail = visitorEmail.trim()
-        }
-
-        const includePhoto = securityPhotoEnabled && photoCaptured
-
-        // Create ticket with verified payment
-        const ticket = await TicketService.purchaseTicket(
-          event,
-          buyerId,
-          buyerName,
-          buyerEmail,
-          quantity,
-          includePhoto ? buyerPhotoUrl : "",
-          total,
-          {
-            method: paymentMethod || "mobile_money",
-            provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
-            number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
-            name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
-            expiry: paymentMethod === "credit_card" ? cardExpiry : undefined,
-            cardNumber: paymentMethod === "credit_card" ? cardNumber.slice(-4) : undefined,
-            bankName: paymentMethod === "bank_transfer" ? bankName : undefined,
-            accountNumber: paymentMethod === "bank_transfer" ? bankAccountNumber : undefined,
-            accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
-            ticketType: selectedTicketTypeName,
-            paymentReference: paymentOrderId || undefined,
-            pesapalTransactionId: paymentMethod !== "mobile_money" ? verificationResult.transactionId : undefined,
-          }
-        )
-
-        setPurchaseStatus("success")
-        setStatusMessage("Purchase successful. Your ticket can be found in MyTickets.")
-
-        // Navigate to MyTickets after showing success message
-        setTimeout(() => {
-          navigation.navigate("MyTickets")
-        }, 1500)
-
+        await createTicketAndNavigate(isMobileMoney, verificationResult)
       } else if (verificationResult.status === "failed") {
-        setPurchaseStatus("error")
-        setStatusMessage("Payment failed. Please try again.")
+        Alert.alert("Payment Failed", "Payment was rejected. Please try again.", [{ text: "OK" }])
       } else {
-        // For mobile money, pending means waiting for customer to complete payment
-        setPurchaseStatus("error")
-        setStatusMessage("Payment is still processing. Please check your mobile money and try again.")
+        const errorMsg = isMobileMoney 
+          ? "Payment is still processing. Please check your mobile money and try again."
+          : "Payment is still processing. Please check back later."
+        Alert.alert("Processing", errorMsg, [{ text: "OK" }])
       }
 
     } catch (error: any) {
       console.error("Payment completion error:", error)
-      setPurchaseStatus("error")
-      setStatusMessage("Failed to complete purchase. Please contact support.")
+      Alert.alert("Error", "Failed to complete purchase. Please contact support.", [{ text: "OK" }])
+    } finally {
+      setCheckingPayment(false)
+    }
+  }
+
+  const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
+    try {
+      setLoading(true)
+      
+      let buyerId: string
+      let buyerName: string
+      let buyerEmail: string
+
+      if (user) {
+        buyerId = user.id
+        buyerName = user.displayName || user.email || "Unknown"
+        buyerEmail = user.email || ""
+      } else {
+        buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        buyerName = visitorName.trim()
+        buyerEmail = visitorEmail.trim()
+      }
+
+      const includePhoto = securityPhotoEnabled && photoCaptured
+
+      const ticket = await TicketService.purchaseTicket(
+        event,
+        buyerId,
+        buyerName,
+        buyerEmail,
+        quantity,
+        includePhoto ? buyerPhotoUrl : "",
+        total,
+        {
+          method: paymentMethod || "mobile_money",
+          provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
+          number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
+          name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
+          expiry: paymentMethod === "credit_card" ? cardExpiry : undefined,
+          cardNumber: paymentMethod === "credit_card" ? cardNumber.slice(-4) : undefined,
+          bankName: paymentMethod === "bank_transfer" ? bankName : undefined,
+          accountNumber: paymentMethod === "bank_transfer" ? bankAccountNumber : undefined,
+          accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
+          ticketType: selectedTicketTypeName,
+          paymentReference: paymentOrderId || undefined,
+          pesapalTransactionId: !isMobileMoney ? verificationResult.transactionId : undefined,
+        }
+      )
+
+      setPurchaseStatus("success")
+      setStatusMessage("Purchase successful!")
+      
+      setTimeout(() => {
+        navigation.navigate("MyTickets")
+      }, 1000)
+
+    } catch (error: any) {
+      console.error("Ticket creation error:", error)
+      Alert.alert("Error", "Failed to create ticket. Please contact support.", [{ text: "OK" }])
     } finally {
       setLoading(false)
     }
@@ -804,38 +826,32 @@ const handlePurchase = async () => {
               Complete your payment of UGX {total.toLocaleString()} for {quantity}x ticket(s)
             </Text>
 
-{paymentUrl && paymentMethod !== "mobile_money" && (
+{paymentOrderId && (
                <View style={styles.paymentIframeContainer}>
-                 <Text style={styles.paymentIframeText}>
-                   Processing payment with PesaPal...
-                 </Text>
-                 {/* For web, we'll use a WebView or redirect */}
-                 <TouchableOpacity
-                   style={styles.paymentCompleteButton}
-                   onPress={handlePaymentComplete}
-                 >
-                   <Text style={styles.paymentCompleteButtonText}>
-                     I've Completed Payment
-                   </Text>
-                 </TouchableOpacity>
-               </View>
-             )}
-             {paymentOrderId && paymentMethod === "mobile_money" && (
-               <View style={styles.paymentIframeContainer}>
-                 <Text style={styles.paymentIframeText}>
-                   Waiting for mobile money payment...
-                 </Text>
-                 <Text style={styles.paymentIframeText}>
-                   Check your phone to complete the payment
-                 </Text>
-                 <TouchableOpacity
-                   style={styles.paymentCompleteButton}
-                   onPress={handlePaymentComplete}
-                 >
-                   <Text style={styles.paymentCompleteButtonText}>
-                     I've Completed Payment
-                   </Text>
-                 </TouchableOpacity>
+                 {checkingPayment ? (
+                   <>
+                     <ActivityIndicator color="#00D4FF" size="large" />
+                     <Text style={styles.paymentIframeText}>
+                       Checking payment status...
+                     </Text>
+                   </>
+                 ) : (
+                   <>
+                     <Text style={styles.paymentIframeText}>
+                       {paymentMethod === "mobile_money" 
+                         ? "Waiting for mobile money payment..." 
+                         : "Processing payment..."}
+                     </Text>
+                     <TouchableOpacity
+                       style={styles.paymentCompleteButton}
+                       onPress={handlePaymentComplete}
+                     >
+                       <Text style={styles.paymentCompleteButtonText}>
+                         I've Completed Payment
+                       </Text>
+                     </TouchableOpacity>
+                   </>
+                 )}
                </View>
              )}
           </View>
