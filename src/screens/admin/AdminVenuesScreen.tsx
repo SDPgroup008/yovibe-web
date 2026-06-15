@@ -51,10 +51,15 @@ const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => 
       setLoading(true)
       console.log("[AdminVenuesScreen] Deleting venue:", venueId)
       
+      // Delete all events associated with this venue
+      const venueEvents = await SupabaseService.getEventsByVenue(venueId)
+      console.log("[AdminVenuesScreen] Found", venueEvents.length, "events to delete")
+      
+      for (const event of venueEvents) {
+        await SupabaseService.deleteEvent(event.id)
+      }
+      
       await SupabaseService.deleteVenue(venueId)
-
-      // Also delete all events associated with this venue
-      await SupabaseService.deleteEventsByVenue(venueId)
       console.log("[AdminVenuesScreen] Venue and events deleted successfully")
 
       Alert.alert("Success", "Venue and associated events deleted successfully")

@@ -1,17 +1,30 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { RouterProvider } from './utils/routes';
+import { RouterProvider, routes } from './utils/routes';
 import { DesktopLayout, MobileLayout } from './components/Navigation';
-
-// Import notification components (keep existing logic)
 import PermissionBanner from './components/PermissionBanner';
 import NotificationBanner from './components/NotificationBanner';
-
-// Import Firebase services (keep existing logic)
 import { requestNotificationPermission, getWebFcmToken, messaging } from './config/firebase';
 import { onMessage } from 'firebase/messaging';
 import NotificationService from './services/NotificationService';
+import LoginScreen from './screens/auth/LoginScreen';
+
+async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
+  try {
+    const res = await fetch("/.netlify/functions/save-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, userId, userEmail, userName }),
+    });
+    if (!res.ok) {
+      console.error("Failed to save token:", await res.text());
+    }
+  } catch (error) {
+    console.error("Error saving token:", error);
+  }
+}
 
 // Auth flow component (simplified from original)
 const AuthFlow: React.FC = () => {
@@ -80,9 +93,9 @@ const MainApp: React.FC = () => {
           const token = await getWebFcmToken();
           if (token) {
             console.log("Web FCM token retrieved:", token);
-            const userId = user?.uid || null;
+            const userId = user?.uid ?? undefined;
             const userEmail = user?.email;
-            const userName = user?.displayName || null;
+            const userName = user?.displayName ?? undefined;
             await saveTokenToRepo(token, userId, userEmail, userName);
           }
         } catch (tokenErr) {
@@ -130,9 +143,9 @@ const MainApp: React.FC = () => {
           const token = await getWebFcmToken();
           if (token) {
             console.log("[iOS-NOTIF] FCM Token received:", token.substring(0, 20) + "...");
-            const userId = user?.uid || null;
+            const userId = user?.uid ?? undefined;
             const userEmail = user?.email;
-            const userName = user?.displayName || null;
+            const userName = user?.displayName ?? undefined;
             await saveTokenToRepo(token, userId, userEmail, userName);
             await NotificationService.trackNewSubscription();
           }
@@ -161,7 +174,9 @@ const MainApp: React.FC = () => {
       )}
 
       {/* URL-based routing */}
-      <RouterProvider routes={routes} />
+      <RouterProvider routes={routes}>
+        <View style={{ flex: 1 }} />
+      </RouterProvider>
 
       {/* Notification banner */}
       {banner && (
@@ -199,13 +214,3 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
 });
-
-// Import missing components
-import { View, Text, StyleSheet } from 'react-native';
-import { ActivityIndicator } from 'react-native';
-import LoginScreen from './screens/auth/LoginScreen';
-import { useState, useEffect } from 'react';
-import { saveTokenToRepo } from './services/TokenService';
-import { routes } from './utils/routes';
-import PermissionBanner from './components/PermissionBanner';
-import NotificationBanner from './components/NotificationBanner';

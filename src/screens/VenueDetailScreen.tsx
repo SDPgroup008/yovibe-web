@@ -103,14 +103,14 @@ const VenueDetailScreen: React.FC = () => {
         console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId)
         console.log("[VenueDetailScreen] User logged in:", !!user)
 
-        const venueData = await SupabaseService.getVenueById(venueId || route.params?.venueSlug)
+const venueData = await SupabaseService.getVenueById(venueId)
         if (venueData) {
           setVenue(venueData)
           console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
           // Fetch events regardless of user authentication (events are public data)
            console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
-           const venueEvents = await SupabaseService.getEventsByVenue(venueId || route.params?.venueSlug)
+            const venueEvents = await SupabaseService.getEventsByVenue(venueId)
           console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
           setEvents(venueEvents)
 

@@ -1,6 +1,8 @@
 import React from 'react';
 import { useRouter, useNavigation } from '../utils/URLRouter';
 
+export { useRouter };
+
 // Compatibility layer for existing screens
 // This provides the same interface as React Navigation
 

@@ -35,7 +35,7 @@ const responsiveSize = (small: number, medium: number, large: number) => {
 };
 
 interface LoginScreenProps {
-  navigation: any
+  navigation?: any
 }
 
 const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation }) => {

@@ -32,7 +32,7 @@ class ImagePickerService {
       quality: options.quality,
     })
 
-    return result
+    return result as unknown as ImagePickerResult
   }
 
   /**

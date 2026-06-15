@@ -3,6 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 
+declare global {
+  interface Window {
+    __swRegistration?: ServiceWorkerContainer;
+  }
+}
+
 /**
  * PWAUpdateBanner
  *
@@ -24,8 +30,8 @@ const PWAUpdateBanner: React.FC = () => {
   const handleUpdate = () => {
     setShowBanner(false);
     // Tell the service worker to skip waiting and claim clients
-    if (window.__swRegistration && window.__swRegistration.waiting) {
-      window.__swRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+    if (window.__swRegistration && (window.__swRegistration as any).waiting) {
+      (window.__swRegistration as any).waiting.postMessage({ type: "SKIP_WAITING" });
     }
     // Reload the page to ensure the new version is active
     window.location.reload();

@@ -10,8 +10,10 @@ export interface Venue {
   todayImages?: string[]
   latitude: number
   longitude: number
+  phoneNumber?: string
+  coordinates?: { latitude: number; longitude: number }
   weeklyPrograms?: Record<string, string>
   ownerId: string
   createdAt: Date
-  venueType?: "nightlife" | "recreation" // Add venue type
+  venueType?: "nightlife" | "recreation"
 }

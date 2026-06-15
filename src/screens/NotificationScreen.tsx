@@ -19,19 +19,22 @@ import { useNotificationsScroll } from "../hooks/useScrollPersistence"
 export default function NotificationScreen() {
   const { user } = useAuth()
   const navigation = useCompatNavigation()
-  const { data: notifications = [], loading, error, refetch } = useCachedNotifications(user?.uid)
+  const userId = user?.uid ?? ''
+  const { data: notifications, loading, error, refetch } = useCachedNotifications(userId)
   const { scrollRef, onScroll } = useNotificationsScroll()
   const [refreshing, setRefreshing] = useState(false)
+  const [localNotifications, setLocalNotifications] = useState<AppNotification[]>([])
+  const [localLoading, setLocalLoading] = useState(false)
 
   const loadNotifications = async () => {
     try {
-      setLoading(true)
+      setLocalLoading(true)
       const data = await NotificationService.getUserNotifications(user?.uid)
-      setNotifications(data)
+      setLocalNotifications(data)
     } catch (error) {
       console.error("Error loading notifications:", error)
     } finally {
-      setLoading(false)
+      setLocalLoading(false)
     }
   }
 
@@ -42,11 +45,8 @@ export default function NotificationScreen() {
   }
 
   const handleNotificationPress = async (notification: AppNotification) => {
-    // Mark as opened
     await NotificationService.markAsOpened(notification.id, user?.uid)
-    
-    // Update local state
-    setNotifications(prev =>
+    setLocalNotifications(prev =>
       prev.map(n =>
         n.id === notification.id ? { ...n, isRead: true, openedAt: new Date() } : n
       )
@@ -73,7 +73,7 @@ export default function NotificationScreen() {
 
   const handleMarkAllRead = async () => {
     await NotificationService.markAllAsRead(user?.uid)
-    setNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date() })))
+    setLocalNotifications(prev => prev.map(n => ({ ...n, isRead: true, readAt: new Date() })))
   }
 
   const getNotificationIcon = (type: string) => {

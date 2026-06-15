@@ -14,11 +14,13 @@ import type { Ticket } from "../models/Ticket"
 const MyTicketsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { user } = useAuth()
-  const { data: ticketsRaw, loading, error, refetch } = useCachedUserTickets(user?.uid)
+  const { data: ticketsRaw, loading: cacheLoading, error, refetch } = useCachedUserTickets(user?.uid || "")
   const tickets = ticketsRaw || []
   const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
+  const [loading, setLoading] = useState(false)
+  const [localTickets, setLocalTickets] = useState<Ticket[]>([])
 
   const loadUserTickets = async () => {
     if (!user) {
@@ -37,7 +39,7 @@ const MyTicketsScreen: React.FC = () => {
         return dateB - dateA
       })
       
-      setTickets(userTickets)
+      setLocalTickets(userTickets)
       console.log("📋 MyTicketsScreen: Loaded", userTickets.length, "tickets")
     } catch (error) {
       console.error("📋 MyTicketsScreen: Error loading tickets:", error)
@@ -47,7 +49,7 @@ const MyTicketsScreen: React.FC = () => {
     }
   }
 
-  const filteredTickets = (tickets || []).filter((ticket) => {
+  const filteredTickets = (localTickets || []).filter((ticket) => {
     if (filter === "all") return true
     if (filter === "active") return ticket.status === "active" && !ticket.isScanned
     if (filter === "used") return ticket.status === "used" || ticket.isScanned
@@ -113,7 +115,7 @@ const MyTicketsScreen: React.FC = () => {
     loadUserTickets()
   }
 
-  if (loading) {
+  if (loading || cacheLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#00D4FF" />
@@ -149,20 +151,20 @@ const MyTicketsScreen: React.FC = () => {
       {/* Ticket Summary */}
       <View style={styles.summaryContainer}>
         <View style={styles.summaryItem}>
-          <Text style={styles.summaryValue}>{tickets.length}</Text>
+          <Text style={styles.summaryValue}>{localTickets.length}</Text>
           <Text style={styles.summaryLabel}>Total</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
-            {(tickets || []).filter((t) => t.status === "active" && !t.isScanned).length}
+            {(localTickets || []).filter((t) => t.status === "active" && !t.isScanned).length}
           </Text>
           <Text style={styles.summaryLabel}>Active</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
           <Text style={styles.summaryValue}>
-            {(tickets || []).filter((t) => t.status === "used" || t.isScanned).length}
+            {(localTickets || []).filter((t) => t.status === "used" || t.isScanned).length}
           </Text>
           <Text style={styles.summaryLabel}>Used</Text>
         </View>
