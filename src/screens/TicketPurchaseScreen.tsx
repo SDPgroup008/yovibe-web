@@ -348,10 +348,55 @@ const handlePurchase = async () => {
         
         setPaymentOrderId(depositResult.depositId!)
         setPaymentStatus("pending")
-        
-        // Auto-start polling for mobile money payment status
-        // (small delay to let state update, then check)
-        setTimeout(() => handlePaymentComplete(), 100)
+        setCheckingPayment(true)
+
+        // Now poll for payment status (runs async, does not block UI)
+        setTimeout(async () => {
+          try {
+            let attempts = 0
+            const maxAttempts = 15
+            let status = "pending"
+            let verificationResult: any
+            
+            while (attempts < maxAttempts && (status === "pending" || status === "PROCESSING")) {
+              await new Promise(resolve => setTimeout(resolve, 2000))
+              attempts++
+              verificationResult = await PawaPayService.checkDepositStatus(depositResult.depositId!)
+              status = verificationResult.status
+              console.log(`   Attempt ${attempts}: Status = ${status}`)
+            }
+            
+            console.log("✅ Final status:", status)
+            
+            setCheckingPayment(false)
+            
+            if (verificationResult?.status === "completed") {
+              Alert.alert(
+                "Payment Successful ✅",
+                "Your payment has been received! Your ticket is being created.",
+                [
+                  {
+                    text: "OK",
+                    onPress: async () => {
+                      await createTicketAndNavigate(true, verificationResult)
+                    }
+                  }
+                ]
+              )
+            } else if (verificationResult?.status === "failed") {
+              Alert.alert("Payment Failed ❌", "Your mobile money payment was not completed. Please try again.")
+            } else {
+              Alert.alert(
+                "Still Processing",
+                "Your payment is taking longer than expected. Please check your tickets later."
+              )
+            }
+          } catch (error: any) {
+            console.error("Mobile money payment error:", error)
+            setCheckingPayment(false)
+            Alert.alert("Error", "Failed to verify payment. Please contact support.")
+          }
+        }, 500)
       } else {
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
@@ -806,19 +851,37 @@ const handlePurchase = async () => {
         </View>
       </Modal>
 
-      {/* Payment Modal */}
+      {/* Full-screen loading overlay for mobile money payment */}
+      {checkingPayment && (
+        <View style={styles.fullScreenOverlay}>
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator color="#00D4FF" size="large" />
+            <Text style={styles.loaderTitle}>
+              Processing Payment
+            </Text>
+            <Text style={styles.loaderSubtitle}>
+              Please check your phone and enter your mobile money PIN to complete the payment.
+            </Text>
+            <Text style={styles.loaderFooter}>
+              Verifying payment status... (up to 30s)
+            </Text>
+          </View>
+        </View>
+      )}
+
+      {/* Payment Modal (for card/bank transfer) */}
       <Modal
         visible={showPaymentModal}
         transparent
         animationType="fade"
         onRequestClose={() => setShowPaymentModal(false)}
       >
-        <View style={styles.paymentModalOverlay}>
+        <View style={styles.modalOverlay}>
           <View style={styles.paymentModalContent}>
-            <View style={styles.paymentModalHeader}>
-              <Text style={styles.paymentModalTitle}>Complete Payment</Text>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Complete Payment</Text>
               <TouchableOpacity
-                style={styles.paymentModalCloseButton}
+                style={styles.modalCloseButton}
                 onPress={() => setShowPaymentModal(false)}
               >
                 <Ionicons name="close" size={24} color="#FFFFFF" />
@@ -829,36 +892,21 @@ const handlePurchase = async () => {
               Complete your payment of UGX {total.toLocaleString()} for {quantity}x ticket(s)
             </Text>
 
-{paymentOrderId && (
-               <View style={styles.paymentIframeContainer}>
-         {checkingPayment ? (
-                   <>
-                     <ActivityIndicator color="#00D4FF" size="large" />
-                     <Text style={styles.paymentIframeText}>
-                       Checking payment status...
-                     </Text>
-                   </>
-                 ) : (
-                   <>
-                     <Text style={styles.paymentIframeText}>
-                       {paymentMethod === "mobile_money" 
-                         ? "Processing mobile money payment..." 
-                         : "Processing payment..."}
-                     </Text>
-                     {paymentMethod !== "mobile_money" && (
-                       <TouchableOpacity
-                         style={styles.paymentCompleteButton}
-                         onPress={handlePaymentComplete}
-                       >
-                         <Text style={styles.paymentCompleteButtonText}>
-                           I've Completed Payment
-                         </Text>
-                       </TouchableOpacity>
-                     )}
-                   </>
-                 )}
-               </View>
-             )}
+            {paymentOrderId && (
+              <View style={styles.paymentIframeContainer}>
+                <Text style={styles.paymentIframeText}>
+                  Processing payment...
+                </Text>
+                <TouchableOpacity
+                  style={styles.paymentCompleteButton}
+                  onPress={handlePaymentComplete}
+                >
+                  <Text style={styles.paymentCompleteButtonText}>
+                    I've Completed Payment
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1321,6 +1369,42 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
   },
+  // Full screen overlay for mobile money payment checking
+  fullScreenOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.95)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 999,
+  },
+  loaderContainer: {
+    alignItems: "center",
+    padding: 32,
+    maxWidth: 350,
+  },
+  loaderTitle: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "bold",
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  loaderSubtitle: {
+    color: "#CCCCCC",
+    fontSize: 15,
+    textAlign: "center",
+    lineHeight: 22,
+    marginBottom: 20,
+  },
+  loaderFooter: {
+    color: "#888888",
+    fontSize: 13,
+    fontStyle: "italic",
+  },
   paymentModalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.9)",
@@ -1333,23 +1417,6 @@ const styles = StyleSheet.create({
     width: "90%",
     maxWidth: 400,
     padding: 20,
-  },
-  paymentModalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333333",
-  },
-  paymentModalTitle: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  paymentModalCloseButton: {
-    padding: 5,
   },
   paymentModalSubtitle: {
     color: "#CCCCCC",
