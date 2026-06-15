@@ -369,30 +369,19 @@ const handlePurchase = async () => {
             console.log("✅ Final status:", status)
             
             const resultStatus = (verificationResult?.status || "").toUpperCase()
+            setCheckingPayment(false)
             if (resultStatus === "COMPLETED") {
-              setCheckingPayment(false)
-              Alert.alert(
-                "Payment Successful ✅",
-                "Your payment has been received! Your ticket is being created.",
-                [
-                  {
-                    text: "OK",
-                    onPress: async () => {
-                      await createTicketAndNavigate(true, verificationResult)
-                    }
-                  }
-                ]
-              )
+              setPurchaseStatus("success")
+              setStatusMessage("Payment successful! Creating your ticket...")
+              // Create ticket and navigate
+              await createTicketAndNavigate(true, verificationResult)
             } else if (resultStatus === "FAILED") {
               const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
-              setCheckingPayment(false)
-              Alert.alert("Payment Failed ❌", failMsg)
+              setPurchaseStatus("error")
+              setStatusMessage(failMsg)
             } else {
-              setCheckingPayment(false)
-              Alert.alert(
-                "Still Processing",
-                "Your payment is taking longer than expected. Please check your tickets later."
-              )
+              setPurchaseStatus("error")
+              setStatusMessage("Payment is taking longer than expected. Please check your tickets later.")
             }
           } catch (error: any) {
             console.error("Mobile money payment error:", error)
