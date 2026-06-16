@@ -2,7 +2,12 @@
 
 const APP_CACHE = "yovibe-app-v1";
 const RUNTIME_CACHE = "yovibe-runtime-v1";
+const DYNAMIC_CACHE = "yovibe-dynamic-v1";
 const OFFLINE_URL = "/offline.html";
+
+// Maximum items in runtime cache before eviction
+const MAX_RUNTIME_ITEMS = 100;
+const MAX_DYNAMIC_ITEMS = 50;
 
 const APP_SHELL = [
   "/",
@@ -10,6 +15,7 @@ const APP_SHELL = [
   "/manifest.webmanifest",
   "/offline.html",
   "/favicon.ico",
+  "/favicon.png",
   "/assets/icon.png",
   "/assets/adaptive-icon.png",
   "/assets/og-image.png",
@@ -18,9 +24,35 @@ const APP_SHELL = [
   "/sitemap.xml",
 ];
 
+/**
+ * Limit the number of entries in a cache to prevent unbounded growth.
+ */
+const trimCache = async (cacheName, maxItems) => {
+  try {
+    const cache = await caches.open(cacheName);
+    const keys = await cache.keys();
+    if (keys.length > maxItems) {
+      // Delete oldest entries (they're sorted by insertion order)
+      await cache.delete(keys[0]);
+      // Recursively trim
+      await trimCache(cacheName, maxItems);
+    }
+  } catch (error) {
+    console.warn("[SW] Error trimming cache:", error);
+  }
+};
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(APP_CACHE).then((cache) => cache.addAll(APP_SHELL)).catch(() => undefined)
+    (async () => {
+      try {
+        const cache = await caches.open(APP_CACHE);
+        await cache.addAll(APP_SHELL);
+        console.log("[SW] App shell cached successfully");
+      } catch (error) {
+        console.warn("[SW] App shell caching error:", error);
+      }
+    })()
   );
   self.skipWaiting();
 });
@@ -28,10 +60,11 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
+      // Delete old cache versions
       const keys = await caches.keys();
       await Promise.all(
         keys
-          .filter((key) => key !== APP_CACHE && key !== RUNTIME_CACHE)
+          .filter((key) => key !== APP_CACHE && key !== RUNTIME_CACHE && key !== DYNAMIC_CACHE)
           .map((key) => caches.delete(key))
       );
       await self.clients.claim();
@@ -42,16 +75,20 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("message", (event) => {
   if (event.data?.type === "SKIP_WAITING") {
     self.skipWaiting();
-    // Immediately claim all clients so the new SW takes over
     self.clients.claim();
   }
   if (event.data?.type === "CACHE_URLS" && Array.isArray(event.data.urls)) {
-    // Pre-cache additional URLs sent from the app at runtime
     event.waitUntil(
-      caches.open(RUNTIME_CACHE).then((cache) => {
-        return cache.addAll(event.data.urls).catch(() => {});
-      })
+      (async () => {
+        const cache = await caches.open(DYNAMIC_CACHE);
+        await cache.addAll(event.data.urls).catch(() => {});
+        await trimCache(DYNAMIC_CACHE, MAX_DYNAMIC_ITEMS);
+      })()
     );
+  }
+  // Check if SW is alive (for app status checks)
+  if (event.data?.type === "PING") {
+    event.ports?.[0]?.postMessage({ type: "PONG" });
   }
 });
 
@@ -69,7 +106,8 @@ const isStaticAsset = (requestUrl) => {
     path.endsWith(".svg") ||
     path.endsWith(".ico") ||
     path.endsWith(".woff") ||
-    path.endsWith(".woff2")
+    path.endsWith(".woff2") ||
+    path.endsWith(".json")
   );
 };
 
@@ -86,7 +124,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-// Navigation: network-first, fallback to offline page.
+  // Navigation: network-first, fallback to offline page.
   if (event.request.mode === "navigate") {
     event.respondWith(
       (async () => {
@@ -94,15 +132,24 @@ self.addEventListener("fetch", (event) => {
           const response = await fetch(event.request);
           const cache = await caches.open(RUNTIME_CACHE);
           cache.put(event.request, response.clone());
+          await trimCache(RUNTIME_CACHE, MAX_RUNTIME_ITEMS);
           return response;
         } catch {
+          // Try to return cached version of the page
           const cached = await caches.match(event.request);
           if (cached) return cached;
+
+          // Try app shell index
+          const appShell = await caches.match("/index.html");
+          if (appShell) return appShell;
+
+          // Return offline page as last resort
           const offline = await caches.match(OFFLINE_URL);
-          // If offline page is cached, return it; otherwise return a basic offline response
           if (offline) return offline;
+
+          // Inline offline response if nothing cached at all
           return new Response(
-            '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title><style>body{font-family:sans-serif;background:#121212;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}h1{font-size:24px;margin-bottom:12px}p{color:#b3b3b3;line-height:1.55}</style></head><body><div><h1>You are offline</h1><p>Please check your internet connection and try again.</p></div></body></html>',
+            '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Offline</title><style>body{font-family:sans-serif;background:#121212;color:#fff;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;text-align:center}h1{font-size:24px;margin-bottom:12px}p{color:#b3b3b3;line-height:1.55}.retry{cursor:pointer;display:inline-block;margin-top:24px;padding:12px 28px;background:#2196F3;color:#fff;border-radius:8px;text-decoration:none;font-weight:600}</style></head><body><div><h1>You are offline</h1><p>Please check your internet connection and try again.</p><a class="retry" onclick="location.reload()">Retry</a></div></body></html>',
             { headers: { "Content-Type": "text/html; charset=utf-8" } }
           );
         }
@@ -118,8 +165,11 @@ self.addEventListener("fetch", (event) => {
         const cached = await caches.match(event.request);
         if (cached) return cached;
         const response = await fetch(event.request);
-        const cache = await caches.open(RUNTIME_CACHE);
-        cache.put(event.request, response.clone());
+        if (response.ok) {
+          const cache = await caches.open(RUNTIME_CACHE);
+          cache.put(event.request, response.clone());
+          await trimCache(RUNTIME_CACHE, MAX_RUNTIME_ITEMS);
+        }
         return response;
       })()
     );
@@ -131,18 +181,56 @@ self.addEventListener("fetch", (event) => {
     (async () => {
       try {
         const response = await fetch(event.request);
-        const cache = await caches.open(RUNTIME_CACHE);
-        cache.put(event.request, response.clone());
+        if (response.ok) {
+          const cache = await caches.open(DYNAMIC_CACHE);
+          cache.put(event.request, response.clone());
+          await trimCache(DYNAMIC_CACHE, MAX_DYNAMIC_ITEMS);
+        }
         return response;
       } catch {
-        return (await caches.match(event.request)) || Response.error();
+        const cached = await caches.match(event.request);
+        return cached || Response.error();
       }
     })()
   );
 });
 
+// Background sync: retry failed requests when back online
+self.addEventListener("sync", (event) => {
+  console.log("[SW] Background sync event:", event.tag);
+  // Tag-based sync handlers can be added here
+  // For example, retrying failed ticket purchases or event creations
+  if (event.tag === "sync-purchases") {
+    event.waitUntil(
+      (async () => {
+        // Retrieve queued requests from IndexedDB and retry them
+        // This is a placeholder for future implementation
+        console.log("[SW] Processing queued purchases...");
+      })()
+    );
+  }
+  if (event.tag === "sync-events") {
+    event.waitUntil(
+      (async () => {
+        console.log("[SW] Processing queued events...");
+      })()
+    );
+  }
+});
+
+// Periodic cleanup: trim caches every hour
+self.addEventListener("periodicsync", (event) => {
+  if (event.tag === "cleanup-caches") {
+    event.waitUntil(
+      (async () => {
+        await trimCache(RUNTIME_CACHE, MAX_RUNTIME_ITEMS);
+        await trimCache(DYNAMIC_CACHE, MAX_DYNAMIC_ITEMS);
+      })()
+    );
+  }
+});
+
 // Firebase Cloud Messaging support for background notifications.
-// Keep compat SDK in service worker for broad browser support.
 try {
   importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js");
   importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
@@ -171,7 +259,6 @@ try {
     self.registration.showNotification(title, options);
   });
 } catch (error) {
-  // If Firebase SDK fails to load in SW, keep PWA offline behavior working.
   console.warn("[SW] Firebase messaging unavailable:", error);
 }
 

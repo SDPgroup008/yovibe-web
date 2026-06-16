@@ -588,19 +588,19 @@ class SupabaseService {
           created_at: new Date().toISOString(),
           is_deleted: false,
         })
-        .select("id")
+        .select("slug")
         .single();
 
       if (error) throw error;
 
-      return data.id;
+      return data.slug;
     } catch (error) {
       console.error("SupabaseService: Error adding venue:", error);
       throw error;
     }
   }
 
-  async updateVenue(venueId: string, data: Partial<Venue>): Promise<void> {
+  async updateVenue(venueSlug: string, data: Partial<Venue>): Promise<void> {
     try {
       const updateData: any = {};
 
@@ -618,7 +618,7 @@ class SupabaseService {
       const { error } = await supabase
         .from("venues")
         .update(updateData)
-        .eq("id", venueId);
+        .eq("slug", venueSlug);
 
       if (error) throw error;
     } catch (error) {
@@ -1262,7 +1262,7 @@ class SupabaseService {
         .update({
           owner_id: userId,
         })
-        .eq("id", venueId);
+        .eq("slug", venueId);
 
       // Update request status
       await supabase
