@@ -668,10 +668,10 @@ export class TicketService {
   static async getEventTickets(eventId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId)
-      const { data: tickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
+      const { data: tickets } = await supabase.from("tickets_api").select("*").eq("event_slug", eventId)
       const ticketList = tickets || []
       console.log("✅ Found", ticketList.length, "tickets")
-      return ticketList
+      return ticketList as Ticket[]
     } catch (error) {
       console.error("Error getting event tickets:", error)
       return []
@@ -681,10 +681,10 @@ export class TicketService {
   static async getUserTickets(userId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId)
-      const { data: tickets } = await supabase.from("tickets").select("*").eq("buyer_id", userId)
+      const { data: tickets } = await supabase.from("tickets_api").select("*").eq("buyerId", userId)
       const ticketList = tickets || []
       console.log("✅ Found", ticketList.length, "tickets")
-      return ticketList
+      return ticketList as Ticket[]
     } catch (error) {
       console.error("Error getting user tickets:", error)
       return []
