@@ -194,7 +194,12 @@ const MyTicketsScreen: React.FC = () => {
         </View>
       </View>
 
-      <ScrollView ref={scrollRef} style={styles.ticketList} showsVerticalScrollIndicator={false} onScroll={onScroll}>
+      <ScrollView 
+        ref={scrollRef} 
+        style={styles.ticketList} 
+        showsVerticalScrollIndicator={false} 
+        onScroll={onScroll}
+      >
         {filteredTickets.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="ticket-outline" size={64} color="#444444" />
@@ -422,7 +427,8 @@ const styles = StyleSheet.create({
   },
   ticketList: {
     flex: 1,
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   emptyState: {
     alignItems: "center",
@@ -515,7 +521,7 @@ const styles = StyleSheet.create({
   modalContent: {
     flex: 1,
     marginTop: 48,
-    marginBottom: 100,
+    marginBottom: 0,
   },
   modalHeader: {
     flexDirection: "row",
