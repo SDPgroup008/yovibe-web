@@ -184,7 +184,7 @@ export class TicketService {
 
       // Step 8: Save ticket to database
       console.log("--- Step 8: Saving ticket to Supabase ---")
-      const { data: savedTicket, error: saveError } = await supabase.from("tickets").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
+      const { data: savedTicket, error: saveError } = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
       if (saveError) throw saveError
       const ticketId = savedTicket.id
       console.log("✅ Ticket saved to database!")
