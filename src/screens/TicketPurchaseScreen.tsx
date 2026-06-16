@@ -91,17 +91,18 @@ const TicketPurchaseScreen: React.FC = () => {
   // Auto-hide banner after 3 seconds
   useEffect(() => {
     if (purchaseStatus !== null) {
+      console.log("[BANNER] purchaseStatus changed to:", purchaseStatus, "message:", statusMessage)
       Animated.timing(bannerOpacity, {
         toValue: 1,
         duration: 300,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start()
 
       const timeout = setTimeout(() => {
         Animated.timing(bannerOpacity, {
           toValue: 0,
           duration: 300,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }).start(() => {
           setPurchaseStatus(null)
           setStatusMessage("")
@@ -350,45 +351,50 @@ const handlePurchase = async () => {
         setPaymentStatus("pending")
         setCheckingPayment(true)
 
-        // Now poll for payment status (runs async, does not block UI)
-        setTimeout(async () => {
-          try {
-            let attempts = 0
-            const maxAttempts = 15
-            let status = "PENDING"
-            let verificationResult: any
-            
-            while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
-              await new Promise(resolve => setTimeout(resolve, 2000))
-              attempts++
-              verificationResult = await PawaPayService.checkDepositStatus(depositResult.depositId!)
-              status = (verificationResult.status || "").toUpperCase()
-              console.log(`   Attempt ${attempts}: Status = ${status}`)
-            }
-            
-            console.log("✅ Final status:", status)
-            
-            const resultStatus = (verificationResult?.status || "").toUpperCase()
-            setCheckingPayment(false)
-            if (resultStatus === "COMPLETED") {
-              setPurchaseStatus("success")
-              setStatusMessage("Payment successful! Creating your ticket...")
-              // Create ticket and navigate
-              await createTicketAndNavigate(true, verificationResult)
-            } else if (resultStatus === "FAILED") {
-              const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
-              setPurchaseStatus("error")
-              setStatusMessage(failMsg)
-            } else {
-              setPurchaseStatus("error")
-              setStatusMessage("Payment is taking longer than expected. Please check your tickets later.")
-            }
-          } catch (error: any) {
-            console.error("Mobile money payment error:", error)
-            setCheckingPayment(false)
-            Alert.alert("Error", "Failed to verify payment. Please contact support.")
+        // Now poll for payment status in foreground
+        let attempts = 0
+        const maxAttempts = 15
+        let status = "PENDING"
+        let verificationResult: any
+        
+        while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          attempts++
+          verificationResult = await PawaPayService.checkDepositStatus(depositResult.depositId!)
+          status = (verificationResult.status || "").toUpperCase()
+          console.log(`   Attempt ${attempts}: Status = ${status}`)
+        }
+        
+        console.log("✅ Final status:", status)
+        console.log("[DEBUG] Verification result object:", JSON.stringify(verificationResult, null, 2))
+        
+        const resultStatus = (verificationResult?.status || "").toUpperCase()
+        console.log("[DEBUG] ResultStatus after toUpperCase:", resultStatus)
+        console.log("[DEBUG] Verification failureMessage:", verificationResult?.failureMessage)
+        
+        // First remove the overlay
+        setCheckingPayment(false)
+        
+        if (resultStatus === "COMPLETED") {
+          console.log("[DEBUG] COMPLETED - showing success banner and creating ticket")
+          setPurchaseStatus("success")
+          setStatusMessage("Payment successful! Creating your ticket...")
+          await createTicketAndNavigate(true, verificationResult)
+        } else if (resultStatus === "FAILED") {
+          const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
+          console.log("[DEBUG] FAILED - showing error banner with message:", failMsg)
+          setPurchaseStatus("error")
+          setStatusMessage(failMsg)
+          // On web, also show a browser alert since React Native Alert doesn't work on web
+          if (typeof window !== 'undefined') {
+            window.alert("Payment Failed\n\n" + failMsg)
           }
-        }, 500)
+        } else {
+          console.log("[DEBUG] Still pending after max attempts")
+          setPurchaseStatus("error")
+          setStatusMessage("Payment is taking longer than expected. Please check your tickets later.")
+        }
+        return // Exit early so we don't hit the "else" card/bank transfer branch
       } else {
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
