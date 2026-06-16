@@ -88,7 +88,7 @@ export class TicketService {
 
       if (isMobileMoney) {
         console.log("--- Step 2: Creating payment intent for mobile money ---")
-        paymentIntent = PaymentService.createPaymentIntent(total, event.id, buyerId)
+        paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
         console.log("💳 Payment intent created:")
         console.log("   - Payment ID:", paymentIntent.id)
         console.log("   - Amount:", paymentIntent.amount)
@@ -96,7 +96,7 @@ export class TicketService {
         console.log("   - Status: pending (mobile money verification required)")
       } else {
         console.log("--- Step 2: Creating payment intent for card/bank transfer ---")
-        paymentIntent = PaymentService.createPaymentIntent(total, event.id, buyerId)
+        paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
         console.log("💳 Payment intent created:")
         console.log("   - Payment ID:", paymentIntent.id)
         console.log("   - Amount:", paymentIntent.amount)
@@ -669,8 +669,9 @@ export class TicketService {
     try {
       console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId)
       const { data: tickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
-      console.log("✅ Found", tickets.length, "tickets")
-      return tickets
+      const ticketList = tickets || []
+      console.log("✅ Found", ticketList.length, "tickets")
+      return ticketList
     } catch (error) {
       console.error("Error getting event tickets:", error)
       return []
@@ -681,8 +682,9 @@ export class TicketService {
     try {
       console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId)
       const { data: tickets } = await supabase.from("tickets").select("*").eq("buyer_id", userId)
-      console.log("✅ Found", tickets.length, "tickets")
-      return tickets
+      const ticketList = tickets || []
+      console.log("✅ Found", ticketList.length, "tickets")
+      return ticketList
     } catch (error) {
       console.error("Error getting user tickets:", error)
       return []
