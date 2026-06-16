@@ -1592,19 +1592,67 @@ class SupabaseService {
 
       if (error) throw error;
 
+      // Map snake_case DB rows to camelCase Ticket objects
+      const mapRow = (row: any): any => {
+        if (!row) return row;
+        return {
+          id: row.id,
+          eventId: row.event_id || row.eventId,
+          eventName: row.event_name || row.eventName,
+          buyerId: row.buyer_id || row.buyerId,
+          buyerName: row.buyer_name || row.buyerName,
+          buyerEmail: row.buyer_email || row.buyerEmail,
+          buyerPhone: row.buyer_phone || row.buyerPhone,
+          quantity: row.quantity,
+          totalAmount: row.total_amount ?? row.totalAmount ?? 0,
+          basePrice: row.base_price ?? row.basePrice ?? 0,
+          lateFee: row.late_fee ?? row.lateFee ?? 0,
+          venueRevenue: row.venue_revenue ?? row.venueRevenue ?? 0,
+          appCommission: row.app_commission ?? row.appCommission ?? 0,
+          purchaseDate: row.purchase_date || row.purchaseDate ? new Date(row.purchase_date || row.purchaseDate) : new Date(),
+          eventStartTime: row.event_start_time || row.eventStartTime ? new Date(row.event_start_time || row.eventStartTime) : new Date(),
+          purchaseDeadline: row.purchase_deadline || row.purchaseDeadline ? new Date(row.purchase_deadline || row.purchaseDeadline) : new Date(),
+          qrCode: row.qr_code || row.qrCode,
+          qrCodeDataUrl: row.qr_code_data_url || row.qrCodeDataUrl,
+          qrSignature: row.qr_signature || row.qrSignature,
+          buyerPhotoUrl: row.buyer_photo_url || row.buyerPhotoUrl,
+          status: row.status || "pending",
+          validationHistory: row.validation_history || row.validationHistory || [],
+          entryFeeType: row.entry_fee_type || row.entryFeeType,
+          isLatePurchase: row.is_late_purchase ?? row.isLatePurchase ?? false,
+          isScanned: row.is_scanned ?? row.isScanned ?? false,
+          expiresAt: row.expires_at || row.expiresAt ? new Date(row.expires_at || row.expiresAt) : new Date(),
+          payoutEligible: row.payout_eligible ?? row.payoutEligible ?? false,
+          payoutStatus: row.payout_status || row.payoutStatus || "pending",
+          payoutDate: row.payout_date || row.payoutDate ? new Date(row.payout_date || row.payoutDate) : undefined,
+          scannedAt: row.scanned_at || row.scannedAt ? new Date(row.scanned_at || row.scannedAt) : undefined,
+          paymentId: row.payment_id || row.paymentId,
+          paymentStatus: row.payment_status || row.paymentStatus || "pending",
+          paymentReference: row.payment_reference || row.paymentReference,
+          paymentMethod: row.payment_method || row.paymentMethod,
+          paymentProvider: row.payment_provider || row.paymentProvider,
+          paymentNumber: row.payment_number || row.paymentNumber,
+          paymentName: row.payment_name || row.paymentName,
+          pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
+          pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
+          purchase_date: row.purchase_date,
+          created_at: row.created_at,
+        };
+      };
+
+      const tickets = (data || []).map(mapRow);
+
       const getTime = (ticket: any): number => {
         const candidate =
           ticket.purchase_date ??
           ticket.created_at ??
-          ticket.createdAt ??
-          ticket.updated_at ??
-          ticket.event_start_time;
+          ticket.purchaseDate;
 
         const parsed = candidate ? new Date(candidate).getTime() : 0;
         return Number.isFinite(parsed) ? parsed : 0;
       };
 
-      return (data || []).sort((a, b) => getTime(b) - getTime(a));
+      return tickets.sort((a, b) => getTime(b) - getTime(a));
     } catch (error) {
       console.error("SupabaseService: Error getting tickets by user:", error);
       return [];

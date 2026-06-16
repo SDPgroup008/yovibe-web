@@ -665,13 +665,61 @@ export class TicketService {
     }
   }
 
+  /**
+   * Convert a snake_case database row to a camelCase Ticket object.
+   */
+  private static rowToTicket(row: any): Ticket {
+    if (!row) return row
+    return {
+      id: row.id,
+      eventId: row.event_id || row.eventId,
+      eventName: row.event_name || row.eventName,
+      buyerId: row.buyer_id || row.buyerId,
+      buyerName: row.buyer_name || row.buyerName,
+      buyerEmail: row.buyer_email || row.buyerEmail,
+      buyerPhone: row.buyer_phone || row.buyerPhone,
+      quantity: row.quantity,
+      totalAmount: row.total_amount ?? row.totalAmount ?? 0,
+      basePrice: row.base_price ?? row.basePrice ?? 0,
+      lateFee: row.late_fee ?? row.lateFee ?? 0,
+      venueRevenue: row.venue_revenue ?? row.venueRevenue ?? 0,
+      appCommission: row.app_commission ?? row.appCommission ?? 0,
+      purchaseDate: row.purchase_date || row.purchaseDate ? new Date(row.purchase_date || row.purchaseDate) : new Date(),
+      eventStartTime: row.event_start_time || row.eventStartTime ? new Date(row.event_start_time || row.eventStartTime) : new Date(),
+      purchaseDeadline: row.purchase_deadline || row.purchaseDeadline ? new Date(row.purchase_deadline || row.purchaseDeadline) : new Date(),
+      qrCode: row.qr_code || row.qrCode,
+      qrCodeDataUrl: row.qr_code_data_url || row.qrCodeDataUrl,
+      qrSignature: row.qr_signature || row.qrSignature,
+      buyerPhotoUrl: row.buyer_photo_url || row.buyerPhotoUrl,
+      status: row.status || "pending",
+      validationHistory: row.validation_history || row.validationHistory || [],
+      entryFeeType: row.entry_fee_type || row.entryFeeType,
+      isLatePurchase: row.is_late_purchase ?? row.isLatePurchase ?? false,
+      isScanned: row.is_scanned ?? row.isScanned ?? false,
+      expiresAt: row.expires_at || row.expiresAt ? new Date(row.expires_at || row.expiresAt) : new Date(),
+      payoutEligible: row.payout_eligible ?? row.payoutEligible ?? false,
+      payoutStatus: row.payout_status || row.payoutStatus || "pending",
+      payoutDate: row.payout_date || row.payoutDate ? new Date(row.payout_date || row.payoutDate) : undefined,
+      scannedAt: row.scanned_at || row.scannedAt ? new Date(row.scanned_at || row.scannedAt) : undefined,
+      paymentId: row.payment_id || row.paymentId,
+      paymentStatus: row.payment_status || row.paymentStatus || "pending",
+      paymentReference: row.payment_reference || row.paymentReference,
+      paymentMethod: row.payment_method || row.paymentMethod,
+      paymentProvider: row.payment_provider || row.paymentProvider,
+      paymentNumber: row.payment_number || row.paymentNumber,
+      paymentName: row.payment_name || row.paymentName,
+      pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
+      pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
+    }
+  }
+
   static async getEventTickets(eventId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId)
-      const { data: tickets } = await supabase.from("tickets_api").select("*").eq("event_slug", eventId)
-      const ticketList = tickets || []
+      const { data: rows } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
+      const ticketList = (rows || []).map(this.rowToTicket)
       console.log("✅ Found", ticketList.length, "tickets")
-      return ticketList as Ticket[]
+      return ticketList
     } catch (error) {
       console.error("Error getting event tickets:", error)
       return []
@@ -681,10 +729,10 @@ export class TicketService {
   static async getUserTickets(userId: string): Promise<Ticket[]> {
     try {
       console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId)
-      const { data: tickets } = await supabase.from("tickets_api").select("*").eq("buyerId", userId)
-      const ticketList = tickets || []
+      const { data: rows } = await supabase.from("tickets").select("*").eq("buyer_id", userId)
+      const ticketList = (rows || []).map(this.rowToTicket)
       console.log("✅ Found", ticketList.length, "tickets")
-      return ticketList as Ticket[]
+      return ticketList
     } catch (error) {
       console.error("Error getting user tickets:", error)
       return []

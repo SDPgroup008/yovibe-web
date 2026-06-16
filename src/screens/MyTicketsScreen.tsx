@@ -19,8 +19,18 @@ const MyTicketsScreen: React.FC = () => {
   const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
+
+  // Load tickets on mount and when user changes
+  useEffect(() => {
+    if (user) {
+      console.log("📋 MyTicketsScreen: useEffect triggered, calling loadUserTickets")
+      loadUserTickets()
+    } else {
+      setLoading(false)
+    }
+  }, [user])
 
   const loadUserTickets = async () => {
     if (!user) {
@@ -32,15 +42,28 @@ const MyTicketsScreen: React.FC = () => {
       console.log("📋 MyTicketsScreen: Loading tickets for user:", user.id)
       const userTickets = await SupabaseService.getTicketsByUser(user.id)
       
+      console.log("📋 MyTicketsScreen: Raw response length:", userTickets?.length)
+      if (userTickets && userTickets.length > 0) {
+        const t = userTickets[0]
+        console.log("📋 MyTicketsScreen: First ticket keys:", Object.keys(t))
+        console.log("📋 MyTicketsScreen: First ticket totalAmount:", t.totalAmount, "type:", typeof t.totalAmount)
+        console.log("📋 MyTicketsScreen: First ticket eventName:", t.eventName)
+        console.log("📋 MyTicketsScreen: First ticket status:", t.status)
+        console.log("📋 MyTicketsScreen: First ticket purchaseDate:", t.purchaseDate)
+        console.log("📋 MyTicketsScreen: First ticket eventStartTime:", t.eventStartTime)
+      } else {
+        console.log("📋 MyTicketsScreen: No tickets returned from SupabaseService.getTicketsByUser")
+      }
+      
       // Sort by purchase date (newest first)
-      userTickets.sort((a, b) => {
-        const dateA = a.purchaseDate instanceof Date ? a.purchaseDate.getTime() : new Date(a.purchaseDate).getTime()
-        const dateB = b.purchaseDate instanceof Date ? b.purchaseDate.getTime() : new Date(b.purchaseDate).getTime()
+      const sorted = (userTickets || []).sort((a, b) => {
+        const dateA = a.purchaseDate instanceof Date ? a.purchaseDate.getTime() : new Date(a.purchaseDate || 0).getTime()
+        const dateB = b.purchaseDate instanceof Date ? b.purchaseDate.getTime() : new Date(b.purchaseDate || 0).getTime()
         return dateB - dateA
       })
       
-      setLocalTickets(userTickets)
-      console.log("📋 MyTicketsScreen: Loaded", userTickets.length, "tickets")
+      setLocalTickets(sorted)
+      console.log("📋 MyTicketsScreen: Set", sorted.length, "tickets in state")
     } catch (error) {
       console.error("📋 MyTicketsScreen: Error loading tickets:", error)
       Alert.alert("Error", "Failed to load tickets")
@@ -112,6 +135,7 @@ const MyTicketsScreen: React.FC = () => {
 
   const handleRefresh = () => {
     setLoading(true)
+    refetch() // clear cache
     loadUserTickets()
   }
 
@@ -216,7 +240,7 @@ const MyTicketsScreen: React.FC = () => {
                 <View style={styles.ticketDetailRow}>
                   <Ionicons name="wallet-outline" size={16} color="#888888" />
                   <Text style={styles.ticketDetailText}>
-                    UGX {ticket.totalAmount.toLocaleString()}
+                    UGX {(ticket.totalAmount || 0).toLocaleString()}
                   </Text>
                 </View>
               </View>
@@ -284,7 +308,7 @@ const MyTicketsScreen: React.FC = () => {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Amount Paid</Text>
-                <Text style={styles.infoValueHighlight}>UGX {selectedTicket.totalAmount.toLocaleString()}</Text>
+                <Text style={styles.infoValueHighlight}>UGX {(selectedTicket.totalAmount || 0).toLocaleString()}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Ticket ID</Text>
