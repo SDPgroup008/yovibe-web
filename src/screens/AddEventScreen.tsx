@@ -102,11 +102,14 @@ const AddEventScreen: React.FC<any> = (props) => {
     if (user && user.userType !== "club_owner") {
       loadVenues()
     } else if (user && user.userType === "club_owner") {
-      // Fetch venue name for club owner
+      // Auto-select the venue for club owners
       const fetchVenueName = async () => {
         try {
-          const venue = await SupabaseService.getVenueById(route.params?.venueId ?? "")
+          const venueId = route.params?.venueId || user.venueId
+          if (!venueId) return
+          const venue = await SupabaseService.getVenueById(venueId)
           if (venue) {
+            setSelectedVenueId(venue.slug || venue.id)
             setSelectedVenueName(venue.name)
           }
         } catch (error) {
