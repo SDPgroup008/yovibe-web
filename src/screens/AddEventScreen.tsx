@@ -98,27 +98,36 @@ const AddEventScreen: React.FC<any> = (props) => {
     entryFees?: string
   }>({})
 
+  // Load venues and auto-select for club owners
   useEffect(() => {
-    if (user && user.userType !== "club_owner") {
-      loadVenues()
-    } else if (user && user.userType === "club_owner") {
-      // Auto-select the venue for club owners
-      const fetchVenueName = async () => {
+    const loadAndSelectVenue = async () => {
+      // If route params include venue info, use them directly
+      if (route.params?.venueId && route.params?.venueName) {
+        setSelectedVenueId(route.params.venueId)
+        setSelectedVenueName(route.params.venueName)
+        return
+      }
+      
+      // For club_owners, fetch their venue by owner ID
+      if (user?.userType === "club_owner") {
         try {
-          const venueId = route.params?.venueId || user.venueId
-          if (!venueId) return
-          const venue = await SupabaseService.getVenueById(venueId)
-          if (venue) {
+          const ownedVenues = await SupabaseService.getVenuesByOwner(user.id)
+          if (ownedVenues.length > 0) {
+            const venue = ownedVenues[0]
             setSelectedVenueId(venue.slug || venue.id)
             setSelectedVenueName(venue.name)
+            return
           }
         } catch (error) {
-          console.error("Error fetching venue name:", error)
+          console.error("Error fetching owned venues:", error)
         }
       }
-      fetchVenueName()
+      
+      // Otherwise load all venues for selection
+      loadVenues()
     }
-  }, [user, route.params?.venueId])
+    loadAndSelectVenue()
+  }, [user, route.params?.venueId, route.params?.venueName])
 
   useEffect(() => {
     if (useCustomVenue) {
