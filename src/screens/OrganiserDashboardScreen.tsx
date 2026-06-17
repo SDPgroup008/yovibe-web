@@ -1,5 +1,7 @@
+"use client"
+
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   View,
   Text,
@@ -19,12 +21,11 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
+import { supabase } from "../config/supabase"
 import SupabaseService from "../services/SupabaseService"
 import TicketService from "../services/TicketService"
 import PesaPalService from "../services/PesaPalService"
 import { useAuth } from "../contexts/AuthContext"
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
-import { db } from "../config/firebase"
 import type { Event } from "../models/Event"
 import type {
   VenuesStackParamList,
@@ -116,6 +117,152 @@ const OrganiserDashboardScreen: React.FC = () => {
     }
   }
 
+  /**
+   * Convert a snake_case database row to camelCase for processing
+   */
+  const rowToTicket = (row: any): any => {
+    if (!row) return row
+    return {
+      id: row.id,
+      eventId: row.event_id || row.eventId,
+      eventName: row.event_name || row.eventName,
+      entryFeeType: row.entry_fee_type || row.entryFeeType || "Standard",
+      ticketType: row.ticket_type || row.ticketType || "Standard",
+      totalAmount: row.total_amount ?? row.totalAmount ?? 0,
+      venueRevenue: row.venue_revenue ?? row.venueRevenue ?? 0,
+      appCommission: row.app_commission ?? row.appCommission ?? 0,
+      isLatePurchase: row.is_late_purchase ?? row.isLatePurchase ?? false,
+      isScanned: row.is_scanned ?? row.isScanned ?? false,
+      status: row.status || "pending",
+      payoutEligible: row.payout_eligible ?? row.payoutEligible ?? false,
+      payoutStatus: row.payout_status || row.payoutStatus || "pending",
+      purchaseDate: row.purchase_date || row.purchaseDate,
+      created_at: row.created_at,
+    }
+  }
+
+  /**
+   * Process an array of ticket rows into sales stats
+   */
+  const processTicketData = useCallback((tickets: any[]) => {
+    let earlyCount = 0
+    let lateCount = 0
+    let totalRevenue = 0
+    let eligibleTotal = 0
+    const salesByType: TicketSalesByType = {}
+
+    if (event?.entryFees) {
+      event.entryFees.forEach((fee: { name: string; amount: string }) => {
+        salesByType[fee.name] = {
+          early: { count: 0, revenue: 0 },
+          late: { count: 0, revenue: 0 },
+          scanned: { count: 0, revenue: 0 },
+        }
+      })
+    }
+
+    tickets.forEach((ticket) => {
+      const t = rowToTicket(ticket)
+      const ticketType = t.entryFeeType || t.ticketType || "Standard"
+      const amount = t.totalAmount || 0
+      const isLate = t.isLatePurchase
+      const isScanned = t.isScanned || t.status === "used"
+      const isEligible = t.payoutEligible === true && t.payoutStatus === "pending"
+
+      if (isLate) lateCount++
+      else earlyCount++
+      totalRevenue += amount
+
+      if (isEligible) {
+        eligibleTotal += t.venueRevenue || 0
+      }
+
+      if (!salesByType[ticketType]) {
+        salesByType[ticketType] = {
+          early: { count: 0, revenue: 0 },
+          late: { count: 0, revenue: 0 },
+          scanned: { count: 0, revenue: 0 },
+        }
+      }
+
+      if (isLate) {
+        salesByType[ticketType].late.count++
+        salesByType[ticketType].late.revenue += amount
+      } else {
+        salesByType[ticketType].early.count++
+        salesByType[ticketType].early.revenue += amount
+      }
+
+      if (isScanned) {
+        if (!salesByType[ticketType].scanned) {
+          salesByType[ticketType].scanned = { count: 0, revenue: 0 }
+        }
+        salesByType[ticketType].scanned.count++
+        salesByType[ticketType].scanned.revenue += amount
+      }
+    })
+
+    setTicketSalesEarly(earlyCount)
+    setTicketSalesLate(lateCount)
+    setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
+    setEligiblePayoutTotal(eligibleTotal)
+    setTicketSalesByType(salesByType)
+  }, [event])
+
+  /**
+   * Fetch all tickets for this event from Supabase and process them
+   */
+  const fetchTicketData = useCallback(async () => {
+    if (!eventId) return
+    try {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("*")
+        .eq("event_slug", eventId)
+
+      if (error) throw error
+      const rows = data || []
+
+      // Sort by purchase date (newest first)
+      rows.sort((a, b) => {
+        const dateA = a.purchase_date || a.created_at || ""
+        const dateB = b.purchase_date || b.created_at || ""
+        return dateB.localeCompare(dateA)
+      })
+
+      processTicketData(rows)
+    } catch (error) {
+      console.error("OrganiserDashboardScreen: Error fetching tickets:", error)
+    }
+  }, [eventId, processTicketData])
+
+  /**
+   * Fetch scan/validation logs from Supabase
+   */
+  const fetchScanLogs = useCallback(async () => {
+    if (!eventId) return
+    try {
+      const { data, error } = await supabase
+        .from("ticket_validations")
+        .select("*")
+        .eq("event_slug", eventId)
+        .order("validated_at", { ascending: false })
+        .limit(10)
+
+      if (error) throw error
+
+      const logs = (data || []).map((v: any) => ({
+        time: v.validated_at ? new Date(v.validated_at).toLocaleTimeString() : "",
+        ticketId: v.ticket_id ? v.ticket_id.substring(0, 8) + "..." : "Unknown",
+        status: v.status === "granted" ? "Valid" : "Invalid",
+      }))
+
+      setScanLogs(logs)
+    } catch (error) {
+      console.error("OrganiserDashboardScreen: Error fetching scan logs:", error)
+    }
+  }, [eventId])
+
   useEffect(() => {
     const loadEvent = async () => {
       try {
@@ -131,31 +278,10 @@ const OrganiserDashboardScreen: React.FC = () => {
     loadEvent()
   }, [eventId])
 
-  // Load scan/validation logs for this specific event
+  // Load scan/validation logs
   useEffect(() => {
-    const loadScanLogs = async () => {
-      if (!eventId) return
-      
-      try {
-        console.log("Loading scan logs for event:", eventId)
-        const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
-        
-        // Convert to scanLogs format
-        const logs = validations.map((v) => ({
-          time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
-          ticketId: v.ticketId || "",
-          status: v.status === "granted" ? "Valid" : "Invalid",
-        }))
-        
-        setScanLogs(logs)
-        console.log("Loaded", logs.length, "scan logs for event:", eventId)
-      } catch (error) {
-        console.error("Error loading scan logs:", error)
-      }
-    }
-
-    loadScanLogs()
-  }, [eventId])
+    fetchScanLogs()
+  }, [fetchScanLogs])
 
   useEffect(() => {
     const loadRelatedPaymentDetails = async () => {
@@ -170,126 +296,54 @@ const OrganiserDashboardScreen: React.FC = () => {
     loadRelatedPaymentDetails()
   }, [user, event])
 
+  // Supabase realtime subscription for tickets
   useEffect(() => {
     if (!eventId) return
 
-    const ticketsQuery = query(
-      collection(db, "YoVibe/data/tickets"),
-      where("eventId", "==", eventId)
-    )
+    // Initial fetch
+    fetchTicketData()
 
-    const unsubscribeTickets = onSnapshot(ticketsQuery, (snapshot) => {
-      let earlyCount = 0
-      let lateCount = 0
-      let totalRevenue = 0
-      let eligibleTotal = 0
-      const salesByType: TicketSalesByType = {}
-
-      if (event?.entryFees) {
-        event.entryFees.forEach((fee: { name: string; amount: string }) => {
-          salesByType[fee.name] = {
-            early: { count: 0, revenue: 0 },
-            late: { count: 0, revenue: 0 },
-            scanned: { count: 0, revenue: 0 },
-          }
-        })
-      }
-
-      const tickets: any[] = []
-      snapshot.forEach((doc) => {
-        tickets.push(doc.data())
-      })
-      tickets.sort((a, b) => {
-        const dateA = a.purchaseDate?.seconds || 0
-        const dateB = b.purchaseDate?.seconds || 0
-        return dateB - dateA
-      })
-
-      tickets.forEach((ticket) => {
-        const ticketType = ticket.entryFeeType || ticket.ticketType || "Standard"
-        const amount = ticket.totalAmount || 0
-        const isLate = ticket.isLatePurchase
-        const isScanned = ticket.isScanned || ticket.status === "used"
-        
-        // Ticket is eligible if:
-        // 1. payoutEligible is true AND
-        // 2. payoutStatus is "pending" (not already paid out)
-        const isEligible = ticket.payoutEligible === true && ticket.payoutStatus === "pending"
-
-        if (isLate) {
-          lateCount++
-        } else {
-          earlyCount++
+    // Subscribe to realtime changes on tickets table for this event
+    const ticketChannel = supabase
+      .channel(`tickets-${eventId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tickets',
+          filter: `event_slug=eq.${eventId}`,
+        },
+        () => {
+          // Refetch tickets on any change
+          fetchTicketData()
         }
-        totalRevenue += amount
+      )
+      .subscribe()
 
-        if (isEligible) {
-          eligibleTotal += ticket.venueRevenue || 0
-          console.log("   - Eligible ticket:", ticket.id?.substring(0, 8), "venueRevenue:", ticket.venueRevenue)
+    // Subscribe to realtime changes on ticket_validations table for this event
+    const validationChannel = supabase
+      .channel(`validations-${eventId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'ticket_validations',
+          filter: `event_slug=eq.${eventId}`,
+        },
+        () => {
+          // Refetch scan logs on any change
+          fetchScanLogs()
         }
-
-        if (!salesByType[ticketType]) {
-          salesByType[ticketType] = {
-            early: { count: 0, revenue: 0 },
-            late: { count: 0, revenue: 0 },
-            scanned: { count: 0, revenue: 0 },
-          }
-        }
-
-        if (isLate) {
-          salesByType[ticketType].late.count++
-          salesByType[ticketType].late.revenue += amount
-        } else {
-          salesByType[ticketType].early.count++
-          salesByType[ticketType].early.revenue += amount
-        }
-
-        if (isScanned) {
-          if (!salesByType[ticketType].scanned) {
-            salesByType[ticketType].scanned = { count: 0, revenue: 0 }
-          }
-          salesByType[ticketType].scanned.count++
-          salesByType[ticketType].scanned.revenue += amount
-        }
-      })
-
-      setTicketSalesEarly(earlyCount)
-      setTicketSalesLate(lateCount)
-      setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
-      console.log("📊 Setting eligible payout total:", eligibleTotal)
-      setEligiblePayoutTotal(eligibleTotal)
-      setTicketSalesByType(salesByType)
-    }, (error) => {
-      console.error("OrganiserDashboardScreen ticket listener error:", error)
-    })
-
-    const validationsQuery = query(
-      collection(db, "YoVibe/data/ticketValidations"),
-      orderBy("validatedAt", "desc")
-    )
-
-    const unsubscribeValidations = onSnapshot(validationsQuery, (snapshot) => {
-      const logs: Array<{ time: string; ticketId: string; status: string }> = []
-
-      snapshot.forEach((doc) => {
-        const validation = doc.data()
-        logs.push({
-          time: validation.validatedAt ? new Date(validation.validatedAt.seconds * 1000).toLocaleTimeString() : new Date().toLocaleTimeString(),
-          ticketId: validation.ticketId ? validation.ticketId.substring(0, 8) + "..." : "Unknown",
-          status: validation.status === "granted" ? "Valid" : "Invalid",
-        })
-      })
-
-      setScanLogs(logs.slice(0, 10))
-    }, (error) => {
-      console.error("OrganiserDashboardScreen validation listener error:", error)
-    })
+      )
+      .subscribe()
 
     return () => {
-      unsubscribeTickets()
-      unsubscribeValidations()
+      supabase.removeChannel(ticketChannel)
+      supabase.removeChannel(validationChannel)
     }
-  }, [event, eventId])
+  }, [eventId, fetchTicketData, fetchScanLogs])
 
   const handleScanTicket = async () => {
     try {
@@ -342,28 +396,18 @@ const OrganiserDashboardScreen: React.FC = () => {
                     return
                   }
                   
-                  // For tickets without photo, grant entry immediately and refresh logs from Firestore
+                  // For tickets without photo, grant entry immediately
                   Alert.alert("✅ Entry Granted", "Ticket validated successfully. Entry granted.", [{ text: "OK" }])
                   
-                  // Refresh scan logs from database
-                  const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
-                  const logs = validations.map((v) => ({
-                    time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
-                    ticketId: v.ticketId || "",
-                    status: v.status === "granted" ? "Valid" : "Invalid",
-                  }))
-                  setScanLogs(logs)
+                  // Refresh scan logs
+                  fetchScanLogs()
+                  fetchTicketData()
                 } else {
                   Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
                   
-                  // Refresh scan logs from database
-                  const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
-                  const logs = validations.map((v) => ({
-                    time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
-                    ticketId: v.ticketId || "",
-                    status: v.status === "granted" ? "Valid" : "Invalid",
-                  }))
-                  setScanLogs(logs)
+                  // Refresh scan logs
+                  fetchScanLogs()
+                  fetchTicketData()
                 }
               } catch (error) {
                 console.error("Error during validation:", error)
@@ -409,19 +453,9 @@ const OrganiserDashboardScreen: React.FC = () => {
             [{ text: "OK" }]
           )
           
-          // Reload scan logs after confirmation
-          const validations = await SupabaseService.getTicketValidationsByEvent(eventId)
-          const logs = validations.map((v) => ({
-            time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
-            ticketId: v.ticketId || "",
-            status: v.status === "granted" ? "Valid" : "Invalid",
-          }))
-          setScanLogs(logs)
-          Alert.alert(
-            "✅ Entry Granted",
-            `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`,
-            [{ text: "OK" }]
-          )
+          // Refresh data
+          fetchScanLogs()
+          fetchTicketData()
         } else {
           Alert.alert(
             "❌ Entry Denied",
@@ -1003,7 +1037,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                         )}
                         {event.paymentMethods.bankAccounts && event.paymentMethods.bankAccounts.length > 0 && (
                           <>
-                            <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
+                            <Text style={[styles.dashboardLabel, { marginTop: 8 }]}>Bank Account</Text>
                             {event.paymentMethods.bankAccounts.map((bank, index) => (
                               <View key={index} style={styles.paymentDetailRow}>
                                 <Text style={styles.paymentDetailText}>{bank.bankName} - {bank.accountNumber}</Text>
@@ -1014,12 +1048,9 @@ const OrganiserDashboardScreen: React.FC = () => {
                         )}
                       </View>
                     ) : (
-                      <Text style={styles.noDataText}>No payment methods configured for this event</Text>
+                      <Text style={styles.noDataText}>No payment details configured</Text>
                     )}
-                    <TouchableOpacity
-                      style={[styles.editButton, { marginTop: 16 }]}
-                      onPress={handleEditPayment}
-                    >
+                    <TouchableOpacity style={styles.editButton} onPress={handleEditPayment}>
                       <Text style={styles.editButtonText}>Edit Payment Details</Text>
                     </TouchableOpacity>
                   </View>
@@ -1028,604 +1059,307 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
           </>
         ) : (
-          <>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>Monitor All Events</Text>
-              <View style={styles.dashboardCard}>
-                <View style={styles.dashboardRow}>
-                  <Text style={styles.dashboardLabel}>Total Events</Text>
-                  <Text style={styles.dashboardValue}>24</Text>
+          // Admin tab - event creator payment details
+          <View style={styles.dashboardSection}>
+            <Text style={styles.dashboardSectionTitle}>Event Creator Payment Details</Text>
+            <View style={styles.dashboardCard}>
+              {eventCreatorPaymentDetails ? (
+                <View>
+                  {eventCreatorPaymentDetails.mobileMoney && (
+                    <>
+                      <Text style={styles.dashboardLabel}>Mobile Money</Text>
+                      <View style={styles.paymentDetailRow}>
+                        <Text style={styles.paymentDetailText}>
+                          {eventCreatorPaymentDetails.mobileMoney.provider?.toUpperCase()} - {eventCreatorPaymentDetails.mobileMoney.phoneNumber}
+                        </Text>
+                        <Text style={styles.paymentDetailSubtext}>{eventCreatorPaymentDetails.mobileMoney.accountName}</Text>
+                      </View>
+                    </>
+                  )}
+                  {eventCreatorPaymentDetails.bankAccount && (
+                    <>
+                      <Text style={[styles.dashboardLabel, { marginTop: 8 }]}>Bank Account</Text>
+                      <View style={styles.paymentDetailRow}>
+                        <Text style={styles.paymentDetailText}>
+                          {eventCreatorPaymentDetails.bankAccount.bankName} - {eventCreatorPaymentDetails.bankAccount.accountNumber}
+                        </Text>
+                        <Text style={styles.paymentDetailSubtext}>{eventCreatorPaymentDetails.bankAccount.accountName}</Text>
+                      </View>
+                    </>
+                  )}
                 </View>
-                <View style={styles.dashboardRow}>
-                  <Text style={styles.dashboardLabel}>Active Events</Text>
-                  <Text style={styles.dashboardValue}>12</Text>
-                </View>
-              </View>
+              ) : (
+                <Text style={styles.noDataText}>No payment details found for event creator</Text>
+              )}
             </View>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>Revenue Analytics</Text>
-              <View style={styles.dashboardCard}>
-                {revenueAnalytics.length > 0 ? (
-                  revenueAnalytics.map((item, index) => (
-                    <View key={index} style={styles.dashboardRow}>
-                      <Text style={styles.dashboardLabel}>{item.label}</Text>
-                      <Text style={styles.dashboardValue}>UGX {item.value.toLocaleString()}</Text>
-                    </View>
-                  ))
-                ) : (
-                  <>
-                    <View style={styles.dashboardRow}>
-                      <Text style={styles.dashboardLabel}>Today's Revenue</Text>
-                      <Text style={styles.dashboardValue}>UGX 0</Text>
-                    </View>
-                    <View style={styles.dashboardRow}>
-                      <Text style={styles.dashboardLabel}>This Week</Text>
-                      <Text style={styles.dashboardValue}>UGX 0</Text>
-                    </View>
-                    <View style={styles.dashboardRow}>
-                      <Text style={styles.dashboardLabel}>This Month</Text>
-                      <Text style={styles.dashboardValue}>UGX 0</Text>
-                    </View>
-                  </>
-                )}
-              </View>
-            </View>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>Wallet Balance</Text>
-              <View style={styles.walletCard}>
-                <Ionicons name="wallet-outline" size={32} color="#00D4FF" />
-                <Text style={styles.walletBalance}>{walletBalance}</Text>
-                <TouchableOpacity style={styles.manualPayoutButton}>
-                  <Text style={styles.manualPayoutText}>Manual Payout Override</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>Fraud Detection Logs</Text>
-              <View style={styles.dashboardCard}>
-                <Text style={styles.noDataText}>No fraud alerts detected</Text>
-              </View>
-            </View>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>Organizer Payment Details</Text>
-              <View style={styles.dashboardCard}>
-                {event?.paymentMethods ? (
-                  <View>
-                    <Text style={styles.dashboardLabel}>Event Organizer</Text>
-                    <Text style={styles.dashboardValue}>{event.createdBy}</Text>
-                    {event.paymentMethods.mobileMoney && event.paymentMethods.mobileMoney.length > 0 && (
-                      <>
-                        <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Mobile Money</Text>
-                        {event.paymentMethods.mobileMoney.map((mm, index) => (
-                          <View key={index} style={styles.paymentDetailRow}>
-                            <Text style={styles.paymentDetailText}>{mm.provider.toUpperCase()} - {mm.number}</Text>
-                            <Text style={styles.paymentDetailSubtext}>{mm.name}</Text>
-                          </View>
-                        ))}
-                      </>
-                    )}
-                    {event.paymentMethods.bankAccounts && event.paymentMethods.bankAccounts.length > 0 && (
-                      <>
-                        <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
-                        {event.paymentMethods.bankAccounts.map((bank, index) => (
-                          <View key={index} style={styles.paymentDetailRow}>
-                            <Text style={styles.paymentDetailText}>{bank.bankName} - {bank.accountNumber}</Text>
-                            <Text style={styles.paymentDetailSubtext}>{bank.accountName}</Text>
-                          </View>
-                        ))}
-                      </>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.noDataText}>No payment methods configured for this event</Text>
-                )}
-              </View>
-            </View>
-          </>
+          </View>
         )}
       </ScrollView>
-
-      <Modal visible={showWithdrawModal} transparent={true} animationType="fade" onRequestClose={() => setShowWithdrawModal(false)}>
-        <View style={[styles.fullImageModal, { zIndex: 9999 }]}>
-          <View style={styles.withdrawModalContent}>
-            <Text style={styles.withdrawModalTitle}>Withdraw Earnings</Text>
-            <Text style={styles.withdrawModalSubtitle}>Available: UGX {eligiblePayoutTotal.toLocaleString()}</Text>
-            <TextInput
-              style={styles.withdrawInput}
-              value={withdrawAmount}
-              onChangeText={setWithdrawAmount}
-              placeholder="Enter amount"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-            <View style={styles.withdrawModalButtons}>
-              <TouchableOpacity
-                style={styles.withdrawCancelButton}
-                onPress={() => {
-                  setShowWithdrawModal(false)
-                  setWithdrawAmount("")
-                }}
-              >
-                <Text style={styles.withdrawCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.withdrawConfirmButton, withdrawLoading && styles.withdrawButtonDisabled]}
-                onPress={handleWithdraw}
-                disabled={withdrawLoading || !withdrawAmount || parseInt(withdrawAmount) <= 0 || parseInt(withdrawAmount) > eligiblePayoutTotal}
-              >
-                {withdrawLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.withdrawConfirmText}>Withdraw</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showScannerModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowScannerModal(false)}
-      >
-        <View style={[styles.scannerModalOverlay, { zIndex: 9999 }]}>
-          <View style={styles.scannerModalContent}>
-            <Text style={styles.scannerModalTitle}>Scan Ticket</Text>
-            <Text style={styles.scannerModalSubtitle}>Enter ticket ID or scan QR code</Text>
-            <TextInput
-              style={styles.scannerModalInput}
-              value={scannerInput}
-              onChangeText={setScannerInput}
-              placeholder="Enter ticket ID..."
-              placeholderTextColor="#666"
-              autoFocus
-              onSubmitEditing={handleScannerSubmit}
-            />
-            <View style={styles.scannerModalButtons}>
-              <TouchableOpacity
-                style={styles.scannerModalCancelButton}
-                onPress={() => {
-                  setShowScannerModal(false)
-                  setScannerInput("")
-                }}
-              >
-                <Text style={styles.scannerModalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.scannerModalValidateButton} onPress={handleScannerSubmit} disabled={!scannerInput.trim()}>
-                <Text style={styles.scannerModalValidateText}>Validate</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Photo Verification Modal */}
-      <Modal
-        visible={showPhotoVerification}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setShowPhotoVerification(false)}
-      >
-        <View style={styles.photoVerificationOverlay}>
-          <View style={styles.photoVerificationContent}>
-            <Text style={styles.photoVerificationTitle}>Photo Verification Required</Text>
-            <Text style={styles.photoVerificationSubtitle}>
-              Compare the photo below with the person presenting the ticket
-            </Text>
-            
-            {/* Buyer Photo */}
-            <View style={styles.photoContainer}>
-              {buyerPhotoUrl ? (
-                <Image 
-                  source={{ uri: buyerPhotoUrl }} 
-                  style={styles.buyerPhoto}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Ionicons name="person" size={60} color="#666" />
-                </View>
-              )}
-              <Text style={styles.buyerNameText}>{buyerName}</Text>
-              <Text style={styles.buyerLabel}>Ticket Buyer</Text>
-            </View>
-
-            {/* Verification Question */}
-            <Text style={styles.verificationQuestion}>
-              Does the person presenting the ticket match this photo?
-            </Text>
-
-            {/* Verification Buttons */}
-            <View style={styles.verificationButtons}>
-              <TouchableOpacity 
-                style={styles.denyButton}
-                onPress={() => handlePhotoConfirm(false)}
-              >
-                <Ionicons name="close-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.denyButtonText}>No - Deny Entry</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.confirmButton}
-                onPress={() => handlePhotoConfirm(true)}
-              >
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.confirmButtonText}>Yes - Grant Entry</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.verificationNote}>
-              Entry will only be granted after photo confirmation
-            </Text>
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  // Dashboard Styles
   dashboardContainer: {
     flex: 1,
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#000000",
+  },
+  dashboardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    paddingTop: 48,
+  },
+  dashboardTitle: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "bold",
+  },
+  dashboardContent: {
+    flex: 1,
+    paddingBottom: 80,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#0D0D0D",
+    backgroundColor: "#000000",
   },
   loadingText: {
-    fontSize: responsiveSize(16, 18, 20),
     color: "#FFFFFF",
-    textAlign: "center",
-  },
-  dashboardHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: responsiveSize(16, 20, 24),
-    paddingTop: responsiveSize(50, 60, 70),
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(0, 212, 255, 0.2)",
-  },
-  dashboardTitle: {
-    fontSize: responsiveSize(22, 26, 30),
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  dashboardContent: {
-    flex: 1,
-    padding: responsiveSize(16, 20, 24),
+    fontSize: 16,
+    marginTop: 12,
   },
   dashboardTabs: {
     flexDirection: "row",
-    marginBottom: responsiveSize(20, 24, 28),
-    backgroundColor: "#1A1A1A",
-    borderRadius: responsiveSize(10, 12, 14),
-    padding: 4,
+    margin: 16,
   },
   dashboardTab: {
     flex: 1,
-    paddingVertical: responsiveSize(10, 12, 14),
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: "#2a2a2a",
     alignItems: "center",
-    borderRadius: responsiveSize(8, 10, 12),
   },
   dashboardTabActive: {
     backgroundColor: "#00D4FF",
   },
   dashboardTabText: {
-    fontSize: responsiveSize(14, 16, 18),
-    fontWeight: "600",
     color: "#888888",
+    fontSize: 14,
+    fontWeight: "600",
   },
   dashboardTabTextActive: {
-    color: "#0D0D0D",
+    color: "#FFFFFF",
   },
   dashboardSection: {
-    marginBottom: responsiveSize(20, 24, 28),
+    marginBottom: 16,
+    marginHorizontal: 16,
   },
   dashboardSectionTitle: {
-    fontSize: responsiveSize(16, 18, 20),
-    fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: responsiveSize(10, 12, 14),
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
   },
   dashboardCard: {
-    backgroundColor: "#1A1A1A",
-    borderRadius: responsiveSize(10, 12, 14),
-    padding: responsiveSize(14, 16, 18),
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.15)",
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 16,
   },
   dashboardRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: responsiveSize(8, 10, 12),
   },
   dashboardLabel: {
-    fontSize: responsiveSize(14, 15, 16),
-    color: "#CCCCCC",
-  },
-  dashboardValue: {
-    fontSize: responsiveSize(14, 15, 16),
-    fontWeight: "bold",
-    color: "#00D4FF",
-  },
-  toggleSwitch: {
-    width: responsiveSize(48, 52, 56),
-    height: responsiveSize(26, 28, 30),
-    borderRadius: responsiveSize(13, 14, 15),
-    backgroundColor: "#333333",
-    padding: 2,
-    justifyContent: "center",
-  },
-  toggleSwitchActive: {
-    backgroundColor: "#00D4FF",
-  },
-  toggleThumb: {
-    width: responsiveSize(22, 24, 26),
-    height: responsiveSize(22, 24, 26),
-    borderRadius: responsiveSize(11, 12, 13),
-    backgroundColor: "#FFFFFF",
-  },
-  toggleThumbActive: {
-    alignSelf: "flex-end",
+    color: "#888888",
+    fontSize: 14,
+    marginBottom: 8,
   },
   statsRow: {
     flexDirection: "row",
-    gap: responsiveSize(10, 12, 14),
+    justifyContent: "space-between",
+    gap: 12,
   },
   statCard: {
     flex: 1,
-    backgroundColor: "#1A1A1A",
-    borderRadius: responsiveSize(10, 12, 14),
-    padding: responsiveSize(16, 18, 20),
+    backgroundColor: "#1a1a1a",
+    padding: 16,
+    borderRadius: 12,
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.15)",
   },
   statValue: {
-    fontSize: responsiveSize(24, 28, 32),
-    fontWeight: "bold",
     color: "#FFFFFF",
-    marginTop: responsiveSize(8, 10, 12),
+    fontSize: 32,
+    fontWeight: "bold",
+    marginTop: 8,
   },
   statLabel: {
-    fontSize: responsiveSize(12, 14, 16),
     color: "#888888",
-    marginTop: responsiveSize(4, 6, 8),
+    fontSize: 12,
+    marginTop: 4,
   },
-  scanLogItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: responsiveSize(8, 10, 12),
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  scanLogTime: {
-    fontSize: responsiveSize(12, 13, 14),
-    color: "#888888",
-    flex: 1,
-  },
-  scanLogTicketId: {
-    fontSize: responsiveSize(12, 13, 14),
-    color: "#CCCCCC",
-    flex: 1,
-    textAlign: "center",
-  },
-  scanLogStatus: {
-    fontSize: responsiveSize(12, 13, 14),
-    fontWeight: "bold",
-    flex: 1,
-    textAlign: "right",
-  },
-  scanLogValid: {
-    color: "#4CAF50",
-  },
-  scanLogInvalid: {
-    color: "#FF3B30",
-  },
-  noDataText: {
-    fontSize: responsiveSize(13, 14, 15),
-    color: "#666666",
-    textAlign: "center",
-    paddingVertical: responsiveSize(16, 20, 24),
-  },
-  // Sales Table Styles
   salesTable: {
-    backgroundColor: "#252525",
-    borderRadius: 8,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 12,
     overflow: "hidden",
   },
   salesTableHeader: {
     flexDirection: "row",
-    backgroundColor: "#333333",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
+    paddingBottom: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#444444",
+    borderBottomColor: "#333333",
   },
   salesTableHeaderText: {
     color: "#888888",
-    fontSize: 11,
-    fontWeight: "600",
-    textAlign: "center",
-  },
-  salesTableCell1: {
-    flex: 1.5,
-    textAlign: "left",
-  },
-  salesTableCell2: {
-    flex: 1,
-    alignItems: "center",
+    fontSize: 12,
+    fontWeight: "bold",
+    textTransform: "uppercase",
   },
   salesTableRow: {
     flexDirection: "row",
     paddingVertical: 10,
-    paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#333333",
+    borderBottomColor: "#2a2a2a",
+  },
+  salesTableCell1: {
+    flex: 1.5,
+  },
+  salesTableCell2: {
+    flex: 1,
+    alignItems: "center",
   },
   salesTableCellText: {
     color: "#FFFFFF",
     fontSize: 13,
   },
   salesTableCountText: {
-    color: "#00D4FF",
-    fontSize: 13,
+    color: "#FFFFFF",
+    fontSize: 14,
     fontWeight: "bold",
   },
   salesTableRevenueText: {
-    color: "#888888",
-    fontSize: 10,
+    color: "#00D4FF",
+    fontSize: 11,
     marginTop: 2,
   },
   salesTableSummary: {
     flexDirection: "row",
-    backgroundColor: "#444444",
-    paddingVertical: 12,
-    paddingHorizontal: 8,
-    borderBottomWidth: 0,
+    paddingTop: 12,
+    borderTopWidth: 2,
+    borderTopColor: "#00D4FF",
   },
   salesTableSummaryText: {
-    color: "#FFFFFF",
-    fontSize: 14,
+    color: "#00D4FF",
+    fontSize: 13,
     fontWeight: "bold",
   },
   salesTableSummaryCount: {
-    color: "#00FF9F",
+    color: "#00D4FF",
     fontSize: 14,
     fontWeight: "bold",
-    textAlign: "center",
   },
   salesTableSummaryRevenue: {
-    color: "#00FF9F",
+    color: "#00D4FF",
     fontSize: 11,
-    fontWeight: "bold",
     marginTop: 2,
-    textAlign: "center",
   },
-  withdrawButton: {
+  noDataText: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    paddingVertical: 20,
+  },
+  scanLogItem: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    paddingVertical: responsiveSize(14, 16, 18),
-    borderRadius: responsiveSize(8, 10, 12),
-    marginTop: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2a2a2a",
   },
-  withdrawButtonDisabled: {
-    opacity: 0.5,
+  scanLogTime: {
+    color: "#888888",
+    fontSize: 12,
+    flex: 1,
   },
-  withdrawButtonText: {
+  scanLogTicketId: {
     color: "#FFFFFF",
-    fontSize: responsiveSize(15, 16, 17),
+    fontSize: 12,
+    flex: 1,
+    fontFamily: "monospace",
+  },
+  scanLogStatus: {
+    fontSize: 12,
     fontWeight: "bold",
-    marginLeft: responsiveSize(8, 10, 12),
+    width: 60,
+    textAlign: "right",
+  },
+  scanLogValid: {
+    color: "#4CAF50",
+  },
+  scanLogInvalid: {
+    color: "#FF6B6B",
   },
   eligibleInfo: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 16,
   },
   eligibleLabel: {
-    fontSize: responsiveSize(14, 15, 16),
     color: "#888888",
+    fontSize: 14,
   },
   eligibleAmount: {
-    fontSize: responsiveSize(18, 20, 22),
+    color: "#4CAF50",
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#00D4FF",
   },
-  withdrawModalContent: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 16,
-    padding: 24,
-    width: "85%",
-    maxWidth: 400,
-  },
-  withdrawModalTitle: {
-    fontSize: responsiveSize(18, 20, 22),
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  withdrawModalSubtitle: {
-    fontSize: responsiveSize(14, 15, 16),
-    color: "#888888",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  withdrawInput: {
-    backgroundColor: "#2A2A2A",
-    borderRadius: 8,
-    padding: 14,
-    fontSize: responsiveSize(16, 18, 20),
-    color: "#FFFFFF",
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#444",
-  },
-  withdrawModalButtons: {
+  withdrawButton: {
     flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  withdrawCancelButton: {
-    flex: 1,
-    backgroundColor: "#333",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
     paddingVertical: 14,
     borderRadius: 8,
-    marginRight: 8,
   },
-  withdrawCancelText: {
+  withdrawButtonDisabled: {
+    backgroundColor: "#444444",
+  },
+  withdrawButtonText: {
     color: "#FFFFFF",
-    fontSize: responsiveSize(15, 16, 17),
-    textAlign: "center",
+    fontSize: 16,
     fontWeight: "bold",
-  },
-  withdrawConfirmButton: {
-    flex: 1,
-    backgroundColor: "#4CAF50",
-    paddingVertical: 14,
-    borderRadius: 8,
     marginLeft: 8,
-  },
-  withdrawConfirmText: {
-    color: "#FFFFFF",
-    fontSize: responsiveSize(15, 16, 17),
-    textAlign: "center",
-    fontWeight: "bold",
   },
   payoutItem: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: responsiveSize(8, 10, 12),
+    paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    borderBottomColor: "#2a2a2a",
   },
   payoutDate: {
-    fontSize: responsiveSize(12, 13, 14),
     color: "#888888",
+    fontSize: 12,
     flex: 1,
   },
   payoutAmount: {
-    fontSize: responsiveSize(12, 13, 14),
-    fontWeight: "bold",
     color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "bold",
     flex: 1,
     textAlign: "center",
   },
   payoutStatus: {
-    fontSize: responsiveSize(12, 13, 14),
+    fontSize: 12,
     fontWeight: "bold",
-    flex: 1,
+    width: 80,
     textAlign: "right",
   },
   payoutCompleted: {
@@ -1634,131 +1368,71 @@ const styles = StyleSheet.create({
   payoutPending: {
     color: "#FF9800",
   },
-  walletCard: {
-    backgroundColor: "#1A1A1A",
-    borderRadius: responsiveSize(10, 12, 14),
-    padding: responsiveSize(20, 24, 28),
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.15)",
-  },
-  walletBalance: {
-    fontSize: responsiveSize(28, 32, 36),
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginTop: responsiveSize(12, 14, 16),
-  },
-  manualPayoutButton: {
-    marginTop: responsiveSize(16, 20, 24),
-    paddingVertical: responsiveSize(10, 12, 14),
-    paddingHorizontal: responsiveSize(16, 20, 24),
-    backgroundColor: "rgba(0, 212, 255, 0.15)",
-    borderRadius: responsiveSize(6, 8, 10),
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.3)",
-  },
-  manualPayoutText: {
-    color: "#00D4FF",
-    fontSize: responsiveSize(13, 14, 15),
-    fontWeight: "600",
-  },
   inputContainer: {
     flexDirection: "row",
-    gap: 8,
+    gap: 10,
     marginBottom: 12,
   },
   providerButton: {
     flex: 1,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    backgroundColor: "#1E1E1E",
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#333333",
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#333",
-    alignItems: "center",
+    borderColor: "transparent",
   },
   providerButtonActive: {
-    backgroundColor: "#00D4FF",
-    borderColor: "#00D4FF",
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
   },
   providerButtonText: {
     color: "#FFFFFF",
-    fontSize: 12,
     fontWeight: "600",
   },
   input: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: "#333333",
     color: "#FFFFFF",
-    fontSize: 14,
-    borderWidth: 1,
-    borderColor: "#333",
+    padding: 12,
+    borderRadius: 8,
     marginBottom: 12,
+    fontSize: 14,
   },
   buttonRow: {
     flexDirection: "row",
-    gap: 12,
-    marginTop: 12,
+    justifyContent: "space-between",
+    gap: 10,
+    marginTop: 8,
   },
   actionButtonSmall: {
     flex: 1,
-    paddingVertical: 12,
+    padding: 12,
     borderRadius: 8,
     alignItems: "center",
   },
   actionButtonSmallText: {
     color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  paymentDetailRow: {
-    backgroundColor: "#1E1E1E",
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  paymentDetailText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  paymentDetailSubtext: {
-    color: "#888888",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  editButton: {
-    backgroundColor: "#00D4FF",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  editButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
     fontWeight: "600",
   },
   scannerButton: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 12,
+    padding: 24,
     alignItems: "center",
-    padding: 20,
-    backgroundColor: "rgba(0, 212, 255, 0.1)",
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.3)",
+    borderWidth: 2,
+    borderColor: "#00D4FF",
+    borderStyle: "dashed",
   },
   scannerButtonTitle: {
-    fontSize: 20,
+    color: "#00D4FF",
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#FFFFFF",
     marginTop: 12,
   },
   scannerButtonText: {
-    fontSize: 13,
-    color: "#AAAAAA",
-    textAlign: "center",
-    marginTop: 6,
-    marginBottom: 12,
+    color: "#888888",
+    fontSize: 14,
+    marginTop: 4,
   },
   scannerButtonArrow: {
     position: "absolute",
@@ -1766,186 +1440,49 @@ const styles = StyleSheet.create({
     top: "50%",
     marginTop: -12,
   },
-  fullImageModal: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.95)",
+  toggleSwitch: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: "#444444",
+    padding: 3,
     justifyContent: "center",
-    alignItems: "center",
   },
-  // Scanner Modal Styles
-  scannerModalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    justifyContent: "center",
-    alignItems: "center",
+  toggleSwitchActive: {
+    backgroundColor: "#00FF9F",
   },
-  scannerModalContent: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 24,
-    width: "85%",
-    maxWidth: 400,
+  toggleThumb: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
   },
-  scannerModalTitle: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 8,
+  toggleThumbActive: {
+    alignSelf: "flex-end",
   },
-  scannerModalSubtitle: {
-    color: "#888888",
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  scannerModalInput: {
-    backgroundColor: "#333333",
-    color: "#FFFFFF",
-    padding: 16,
-    borderRadius: 8,
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  scannerModalButtons: {
-    flexDirection: "row",
-    gap: 12,
-  },
-  scannerModalCancelButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: "#333333",
-    alignItems: "center",
-  },
-  scannerModalCancelText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  scannerModalValidateButton: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 8,
-    backgroundColor: "#00D4FF",
-    alignItems: "center",
-  },
-  scannerModalValidateText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  // Photo Verification Styles
-  photoVerificationOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  photoVerificationContent: {
-    backgroundColor: "#1a1a1a",
-    borderRadius: 16,
-    padding: 24,
-    width: "100%",
-    maxWidth: 400,
-    alignItems: "center",
-  },
-  photoVerificationTitle: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  photoVerificationSubtitle: {
-    color: "#888888",
-    fontSize: 14,
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  photoContainer: {
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  buyerPhoto: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    borderWidth: 3,
-    borderColor: "#00D4FF",
-    marginBottom: 12,
-  },
-  photoPlaceholder: {
-    width: 180,
-    height: 180,
-    borderRadius: 90,
-    backgroundColor: "#333",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 3,
-    borderColor: "#666",
-    marginBottom: 12,
-  },
-  buyerNameText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
+  paymentDetailRow: {
     marginBottom: 4,
   },
-  buyerLabel: {
+  paymentDetailText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+  },
+  paymentDetailSubtext: {
     color: "#888888",
     fontSize: 12,
+    marginTop: 2,
   },
-  verificationQuestion: {
-    color: "#FFD700",
-    fontSize: 16,
+  editButton: {
+    marginTop: 12,
+    padding: 10,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  editButtonText: {
+    color: "#00D4FF",
+    fontSize: 14,
     fontWeight: "600",
-    textAlign: "center",
-    marginBottom: 20,
-  },
-  verificationButtons: {
-    flexDirection: "row",
-    gap: 16,
-    marginBottom: 16,
-  },
-  denyButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#FF4444",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  denyButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "bold",
-    marginLeft: 6,
-  },
-  confirmButton: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#4CAF50",
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-  },
-  confirmButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "bold",
-    marginLeft: 6,
-  },
-  verificationNote: {
-    color: "#666666",
-    fontSize: 12,
-    textAlign: "center",
-    fontStyle: "italic",
   },
 })
 
