@@ -21,8 +21,11 @@ const TicketScannerScreen: React.FC = () => {
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
-  const scannerRef = useRef<any>(null)
-  const scriptLoadedRef = useRef(false)
+  
+  const streamRef = useRef<MediaStream | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const rafRef = useRef<number | null>(null)
   
   // Photo verification state
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
@@ -37,91 +40,113 @@ const TicketScannerScreen: React.FC = () => {
     }
   }, [user, navigation])
 
-  // Clean up scanner on unmount
   useEffect(() => {
     return () => {
-      stopScanner()
+      stopCamera()
     }
   }, [])
 
-  const ensureScriptLoaded = (): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      if (scriptLoadedRef.current) return resolve()
-      const win = window as any
-      if (win.Html5Qrcode) {
-        scriptLoadedRef.current = true
-        return resolve()
-      }
-      const script = document.createElement("script")
-      script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
-      script.async = true
-      script.onload = () => {
-        scriptLoadedRef.current = true
-        resolve()
-      }
-      script.onerror = () => reject(new Error("Failed to load QR scanner library"))
-      document.body.appendChild(script)
-    })
+  const stopCamera = () => {
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
   }
 
-  const stopScanner = () => {
-    if (scannerRef.current) {
-      try { scannerRef.current.stop() } catch {}
-      scannerRef.current = null
+  const jsqrRef = useRef<any>(null)
+  const [libLoaded, setLibLoaded] = useState(false)
+
+  useEffect(() => {
+    // Load jsQR from CDN
+    if (typeof window !== "undefined" && !(window as any).jsQR) {
+      const script = document.createElement("script")
+      script.src = "https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"
+      script.async = true
+      script.onload = () => setLibLoaded(true)
+      document.body.appendChild(script)
+    } else if (typeof window !== "undefined" && (window as any).jsQR) {
+      setLibLoaded(true)
     }
+  }, [])
+
+  const scanLoop = () => {
+    if (!videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const jsQR = (window as any).jsQR
+    
+    if (!jsQR) {
+      rafRef.current = requestAnimationFrame(scanLoop)
+      return
+    }
+    
+    if (video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) {
+      rafRef.current = requestAnimationFrame(scanLoop)
+      return
+    }
+    
+    // Use smaller scan region for performance - center of frame
+    const scanW = Math.min(video.videoWidth, 320)
+    const scanH = Math.min(video.videoHeight, 320)
+    const offX = Math.max(0, (video.videoWidth - scanW) / 2)
+    const offY = Math.max(0, (video.videoHeight - scanH) / 2)
+    
+    canvas.width = scanW
+    canvas.height = scanH
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.drawImage(video, offX, offY, scanW, scanH, 0, 0, scanW, scanH)
+    
+    const imageData = ctx.getImageData(0, 0, scanW, scanH)
+    const code = jsQR(imageData.data, scanW, scanH, { inversionAttempts: "dontInvert" })
+    
+    if (code && code.data) {
+      onQrDetected(code.data)
+      return
+    }
+    
+    rafRef.current = requestAnimationFrame(scanLoop)
+  }
+
+  const onQrDetected = (decodedText: string) => {
+    stopCamera()
+    setScanning(false)
+    let ticketId = decodedText
+    try { const p = JSON.parse(decodedText); ticketId = p.id || decodedText } catch {}
+    handleValidateTicket(ticketId)
   }
 
   const startScanner = async () => {
     try {
-      await ensureScriptLoaded()
-      
-      const win = window as any
-      const Html5Qrcode = win.Html5Qrcode
-      
-      // Wait briefly for the div to be in DOM
-      await new Promise(r => setTimeout(r, 50))
-      
-      const scanner = new Html5Qrcode("qr-reader")
-      scannerRef.current = scanner
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
+      })
+      streamRef.current = stream
 
-      await scanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText: string) => {
-          stopScanner()
-          setScanning(false)
-          let ticketId = decodedText
-          try { const p = JSON.parse(decodedText); ticketId = p.id || decodedText } catch {}
-          handleValidateTicket(ticketId)
-        },
-        () => {}
-      )
-      
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current!.play()
+          scanLoop()
+        }
+      }
       setScanning(true)
     } catch (error: any) {
-      console.error("Scanner error:", error)
-      stopScanner()
+      console.error("Camera error:", error)
       setScanning(false)
-      Alert.alert("Scanner Error", error?.message || "Failed to start camera. Please ensure camera access is allowed.")
+      Alert.alert("Camera Error", error?.message?.includes("permission") ? "Permission denied." : "Could not start camera.")
     }
   }
 
   const handleScanTicket = () => {
-    if (scanning) {
-      stopScanner()
-      setScanning(false)
-    } else {
-      startScanner()
-    }
+    if (scanning) { stopCamera(); setScanning(false) }
+    else { startScanner() }
   }
 
   const handleValidateTicket = async (qrCodeData: string) => {
-    stopScanner()
+    stopCamera()
     if (!user) return
 
     try {
       setValidating(true)
-
       const result = await TicketService.validateTicket(qrCodeData, user.id, eventName || "Event Entrance")
       
       setScanHistory((prev) => [{
@@ -140,15 +165,12 @@ const TicketScannerScreen: React.FC = () => {
           setValidating(false)
           return
         }
-        Alert.alert("✅ Entry Granted", `Ticket is valid for ${eventName}. Entry granted.`, [{ text: "OK" }])
+        Alert.alert("✅ Entry Granted", `Ticket is valid. Entry granted.`, [{ text: "OK" }])
       } else {
         Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
       }
     } catch (error: any) {
-      setScanHistory((prev) => [{
-        ticketId: qrCodeData.substring(0, 12) + "...", status: "Invalid",
-        time: new Date().toLocaleTimeString(), reason: error?.message || "Failed"
-      }, ...prev].slice(0, 10))
+      setScanHistory((prev) => [{ ticketId: qrCodeData.substring(0, 12) + "...", status: "Invalid", time: new Date().toLocaleTimeString(), reason: error?.message || "Failed" }, ...prev].slice(0, 10))
       Alert.alert("Error", error?.message || "Failed to validate ticket")
     } finally {
       setValidating(false)
@@ -162,7 +184,7 @@ const TicketScannerScreen: React.FC = () => {
     try {
       if (confirmed) {
         const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user.id, eventName || "Event Entrance", eventId)
-        if (r.success) Alert.alert("✅ Entry Granted", `Photo verified! Confirmed for ${buyerName}.`, [{ text: "OK" }])
+        if (r.success) Alert.alert("✅ Entry Granted", `Photo verified for ${buyerName}.`, [{ text: "OK" }])
         else Alert.alert("❌ Entry Denied", r.reason || "Failed to confirm", [{ text: "OK" }])
       } else {
         Alert.alert("❌ Entry Denied", "The person does not match the photo on file.", [{ text: "OK" }])
@@ -185,17 +207,21 @@ const TicketScannerScreen: React.FC = () => {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.scannerArea}>
-          <div id="qr-reader" style={{ width: "100%", height: scanning ? 300 : 0, overflow: "hidden" }} />
-          {!scanning && (
-            <View style={styles.scannerOverlay}>
+          {scanning ? (
+            <View style={styles.scannerContainer}>
+              {/* Hidden video element receives camera stream */}
+              <video ref={videoRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 300, objectFit: "cover" }} playsInline muted />
+              {/* Hidden canvas captures frames for BarcodeDetector */}
+              <canvas ref={canvasRef} style={{ display: "none" }} />
+              <TouchableOpacity style={styles.stopCameraButton} onPress={() => { stopCamera(); setScanning(false) }}>
+                <Text style={styles.stopCameraButtonText}>Stop Scanning</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
               <Ionicons name="qr-code-outline" size={120} color="#2196F3" />
               <Text style={styles.scannerText}>Point camera at ticket QR code to validate</Text>
-            </View>
-          )}
-          {scanning && (
-            <TouchableOpacity style={styles.stopCameraButton} onPress={() => { stopScanner(); setScanning(false) }}>
-              <Text style={styles.stopCameraButtonText}>Stop Scanning</Text>
-            </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -258,11 +284,11 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 14, color: "#00D4FF", marginTop: 2 },
   content: { flex: 1, padding: 16 },
   contentContainer: { paddingBottom: 40 },
-  scannerArea: { position: "relative", alignItems: "center", justifyContent: "center", backgroundColor: "#1E1E1E", borderRadius: 12, overflow: "hidden", minHeight: 200, marginBottom: 24 },
-  scannerOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", pointerEvents: "none" },
-  stopCameraButton: { backgroundColor: "#FF6B6B", paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, marginTop: 16 },
-  stopCameraButtonText: { color: "#FFF", fontWeight: "bold" },
+  scannerArea: { alignItems: "center", justifyContent: "center", backgroundColor: "#1E1E1E", borderRadius: 12, overflow: "hidden", minHeight: 200, marginBottom: 24 },
+  scannerContainer: { width: "100%" },
   scannerText: { fontSize: 16, color: "#DDD", textAlign: "center", marginTop: 16, lineHeight: 24 },
+  stopCameraButton: { backgroundColor: "#FF6B6B", paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, alignSelf: "center", margin: 16 },
+  stopCameraButtonText: { color: "#FFF", fontWeight: "bold" },
   instructions: { backgroundColor: "#1E1E1E", borderRadius: 12, padding: 16, marginBottom: 24 },
   instructionTitle: { fontSize: 18, fontWeight: "bold", color: "#FFF", marginBottom: 12 },
   instructionText: { fontSize: 14, color: "#DDD", lineHeight: 22 },
