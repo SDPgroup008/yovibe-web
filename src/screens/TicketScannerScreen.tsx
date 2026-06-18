@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef, useCallback } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal } from "react-native"
+import { useState, useEffect, useRef } from "react"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
@@ -21,24 +21,14 @@ const TicketScannerScreen: React.FC = () => {
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
-  const [hasCamera, setHasCamera] = useState(true)
-  const scannerRef = useRef<any>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const scanTimerRef = useRef<number | null>(null)
 
-  // Load html5-qrcode from CDN (avoids Metro bundler issues with Node.js dependencies)
-  const loadHtml5Qrcode = useCallback(async () => {
-    const win = window as any
-    if (win.Html5Qrcode) return win.Html5Qrcode
-    
-    return new Promise((resolve, reject) => {
-      const script = document.createElement("script")
-      script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
-      script.async = true
-      script.onload = () => resolve(win.Html5Qrcode)
-      script.onerror = () => reject(new Error("Failed to load QR scanner library"))
-      document.body.appendChild(script)
-    })
-  }, [])
+  // Manual ticket ID input (fallback when camera/barcode not available)
+  const [manualInput, setManualInput] = useState("")
+  const [showManualInput, setShowManualInput] = useState(false)
   
   // Photo verification state
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
@@ -53,78 +43,110 @@ const TicketScannerScreen: React.FC = () => {
     }
   }, [user, navigation])
 
-  // Clean up scanner on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (scannerRef.current) {
-        try { scannerRef.current.stop() } catch {}
-      }
+      stopCamera()
     }
   }, [])
 
-  const startScanner = async () => {
-    try {
-      // Load html5-qrcode from CDN at runtime (avoids Metro bundler compatibility issues)
-      const Html5Qrcode = await loadHtml5Qrcode()
-      
-      const scanner = new Html5Qrcode("qr-reader")
-      scannerRef.current = scanner
-      
-      await scanner.start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-        },
-        (decodedText: string) => {
-          scanner.stop().catch(() => {})
-          setScanning(false)
-          
-          // Extract ticket ID from QR data
-          let ticketId = decodedText
-          try {
-            const parsed = JSON.parse(decodedText)
-            ticketId = parsed.id || decodedText
-          } catch {}
-          handleValidateTicket(ticketId)
-        },
-        () => {} // ignore scan failure
-      )
-      
-      setScanning(true)
-      setHasCamera(true)
-    } catch (error: any) {
-      console.error("Camera error:", error)
-      setHasCamera(false)
-      setScanning(false)
-      Alert.alert(
-        "Camera Error",
-        error?.message?.includes("permission") 
-          ? "Camera permission denied. Please allow camera access."
-          : error?.message || "Could not access camera. Please use a device with a camera."
-      )
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    if (scanTimerRef.current) {
+      cancelAnimationFrame(scanTimerRef.current)
+      scanTimerRef.current = null
     }
   }
 
-  const stopScanner = async () => {
-    if (scannerRef.current) {
-      try { await scannerRef.current.stop() } catch {}
-      scannerRef.current = null
+  const scanFrame = async () => {
+    if (!videoRef.current || !canvasRef.current) return
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+
+    canvas.width = video.videoWidth || 640
+    canvas.height = video.videoHeight || 480
+    ctx.drawImage(video, 0, 0)
+
+    try {
+      const detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] })
+      const codes = await detector.detect(canvas)
+      
+      if (codes.length > 0) {
+        const decodedText = codes[0].rawValue
+        stopCamera()
+        setScanning(false)
+        
+        let ticketId = decodedText
+        try {
+          const parsed = JSON.parse(decodedText)
+          ticketId = parsed.id || decodedText
+        } catch {}
+        handleValidateTicket(ticketId)
+        return
+      }
+    } catch {}
+    
+    scanTimerRef.current = requestAnimationFrame(scanFrame)
+  }
+
+  const startScanner = async () => {
+    try {
+      // Check if browser supports BarcodeDetector API
+      if (!("BarcodeDetector" in window)) {
+        setShowManualInput(true)
+        return
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment", width: 640, height: 480 }
+      })
+      streamRef.current = stream
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current?.play()
+          scanTimerRef.current = requestAnimationFrame(scanFrame)
+        }
+      }
+      setScanning(true)
+    } catch (error: any) {
+      console.error("Camera error:", error)
+      setScanning(false)
+      const msg = error?.message || ""
+      if (msg.includes("permission") || msg.includes("Permission") || msg.includes("denied")) {
+        Alert.alert("Camera Permission Denied", "Please allow camera access and try again.")
+      } else {
+        // Fallback to manual input
+        setShowManualInput(true)
+      }
     }
-    setScanning(false)
+  }
+
+  const handleManualSubmit = () => {
+    if (!manualInput.trim()) return
+    const input = manualInput.trim()
+    setManualInput("")
+    setShowManualInput(false)
+    handleValidateTicket(input)
   }
 
   const handleScanTicket = async () => {
     if (scanning) {
-      await stopScanner()
+      stopCamera()
+      setScanning(false)
     } else {
       await startScanner()
     }
   }
 
   const handleValidateTicket = async (qrCodeData: string) => {
-    await stopScanner()
-    
+    if (scanning) stopCamera()
     if (!user) return
 
     try {
@@ -168,41 +190,23 @@ const TicketScannerScreen: React.FC = () => {
   }
 
   const handlePhotoConfirm = async (confirmed: boolean) => {
-    if (!user || !pendingTicketDocId) {
-      setShowPhotoVerification(false)
-      return
-    }
-
+    if (!user || !pendingTicketDocId) { setShowPhotoVerification(false); return }
     setShowPhotoVerification(false)
     setValidating(true)
-
     try {
       if (confirmed) {
-        const result = await TicketService.confirmTicketUsage(
-          pendingTicketDocId, user.id, eventName || "Event Entrance", eventId
-        )
-        if (result.success) {
-          Alert.alert("✅ Entry Granted", `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`, [{ text: "OK" }])
-        } else {
-          Alert.alert("❌ Entry Denied", `Failed to confirm ticket: ${result.reason}`, [{ text: "OK" }])
-        }
+        const result = await TicketService.confirmTicketUsage(pendingTicketDocId, user.id, eventName || "Event Entrance", eventId)
+        if (result.success) Alert.alert("✅ Entry Granted", `Photo verified! Ticket confirmed for ${buyerName}. Entry granted.`, [{ text: "OK" }])
+        else Alert.alert("❌ Entry Denied", `Failed to confirm ticket: ${result.reason}`, [{ text: "OK" }])
       } else {
-        setScanHistory((prev) => [{
-          ticketId: pendingTicketDocId.substring(0, 12) + "...",
-          status: "Invalid",
-          time: new Date().toLocaleTimeString(),
-          reason: "Photo verification denied"
-        }, ...prev].slice(0, 10))
-        Alert.alert("❌ Entry Denied", "The person presenting the ticket does not match the photo on file.", [{ text: "OK" }])
+        setScanHistory((prev) => [{ ticketId: pendingTicketDocId.substring(0, 12) + "...", status: "Invalid", time: new Date().toLocaleTimeString(), reason: "Photo denied" }, ...prev].slice(0, 10))
+        Alert.alert("❌ Entry Denied", "The person does not match the photo on file.", [{ text: "OK" }])
       }
     } catch (error: any) {
       console.error("Photo verification error:", error)
       Alert.alert("Error", "Failed to process photo verification")
     } finally {
-      setPendingTicketDocId(null)
-      setBuyerPhotoUrl("")
-      setBuyerName("")
-      setValidating(false)
+      setPendingTicketDocId(null); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false)
     }
   }
 
@@ -219,45 +223,28 @@ const TicketScannerScreen: React.FC = () => {
         <View style={styles.scannerArea}>
           {scanning ? (
             <View style={styles.scannerContainer}>
-              <div id="qr-reader" style={{ width: "100%", minHeight: 300 }} />
-              <TouchableOpacity style={styles.stopCameraButton} onPress={() => stopScanner()}>
+              <video ref={videoRef} style={{ width: "100%", height: 300, objectFit: "cover" }} playsInline muted />
+              <canvas ref={canvasRef} style={{ display: "none" }} />
+              <TouchableOpacity style={styles.stopCameraButton} onPress={() => { stopCamera(); setScanning(false) }}>
                 <Text style={styles.stopCameraButtonText}>Stop Scanning</Text>
               </TouchableOpacity>
             </View>
           ) : (
             <>
               <Ionicons name="qr-code-outline" size={120} color="#2196F3" />
-              <Text style={styles.scannerText}>
-                Point camera at ticket QR code to validate
-              </Text>
+              <Text style={styles.scannerText}>Point camera at ticket QR code to validate</Text>
             </>
           )}
         </View>
 
         <View style={styles.instructions}>
           <Text style={styles.instructionTitle}>How to Validate:</Text>
-          <Text style={styles.instructionText}>
-            1. Tap Scan QR to activate camera{"\n"}
-            2. Point camera at ticket QR code{"\n"}
-            3. System automatically validates{"\n"}
-            4. Grant or deny entry based on result
-          </Text>
+          <Text style={styles.instructionText}>1. Tap Scan QR to activate camera{"\n"}2. Point camera at ticket QR code{"\n"}3. System automatically validates{"\n"}4. Grant or deny entry based on result</Text>
         </View>
 
         <View style={styles.buttonRow}>
-          <TouchableOpacity
-            style={[styles.scanButton, (scanning || validating) && styles.scanButtonDisabled]}
-            onPress={handleScanTicket}
-            disabled={validating}
-          >
-            {scanning || validating ? (
-              <ActivityIndicator color="#FFFFFF" />
-            ) : (
-              <>
-                <Ionicons name="scan" size={24} color="#FFFFFF" />
-                <Text style={styles.scanButtonText}>Scan QR</Text>
-              </>
-            )}
+          <TouchableOpacity style={[styles.scanButton, (scanning || validating) && styles.scanButtonDisabled]} onPress={handleScanTicket} disabled={validating}>
+            {scanning || validating ? <ActivityIndicator color="#FFFFFF" /> : <><Ionicons name="scan" size={24} color="#FFFFFF" /><Text style={styles.scanButtonText}>Scan QR</Text></>}
           </TouchableOpacity>
         </View>
 
@@ -269,9 +256,7 @@ const TicketScannerScreen: React.FC = () => {
                 <Text style={styles.historyTime}>{scan.time}</Text>
                 <Text style={styles.historyId}>{scan.ticketId}</Text>
                 <View style={[styles.historyStatus, scan.status === "Valid" ? styles.historyValid : styles.historyInvalid]}>
-                  <Text style={[styles.historyStatusText, scan.status === "Valid" ? styles.historyValidText : styles.historyInvalidText]}>
-                    {scan.status}
-                  </Text>
+                  <Text style={[styles.historyStatusText, scan.status === "Valid" ? styles.historyValidText : styles.historyInvalidText]}>{scan.status}</Text>
                 </View>
               </View>
             ))}
@@ -279,31 +264,52 @@ const TicketScannerScreen: React.FC = () => {
         )}
       </ScrollView>
 
+      {/* Manual Input Modal */}
+      <Modal visible={showManualInput} transparent animationType="fade" onRequestClose={() => setShowManualInput(false)}>
+        <View style={styles.photoVerificationOverlay}>
+          <View style={styles.photoVerificationContent}>
+            <Text style={styles.photoVerificationTitle}>Enter Ticket ID</Text>
+            <Text style={styles.photoVerificationSubtitle}>Camera not available. Paste the ticket ID or QR code data below.</Text>
+            <TextInput
+              style={{ backgroundColor: "#333", color: "#FFF", padding: 16, borderRadius: 8, fontSize: 16, width: "100%", marginBottom: 20, fontFamily: "monospace" }}
+              value={manualInput}
+              onChangeText={setManualInput}
+              placeholder="Paste ticket ID here..."
+              placeholderTextColor="#666"
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <View style={styles.verificationButtons}>
+              <TouchableOpacity style={[styles.denyButton, { flex: 1 }]} onPress={() => setShowManualInput(false)}>
+                <Text style={styles.denyButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.confirmButton, { flex: 1 }]} onPress={handleManualSubmit}>
+                <Text style={styles.confirmButtonText}>Validate</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Photo Verification Modal */}
       <Modal visible={showPhotoVerification} transparent animationType="fade" onRequestClose={() => setShowPhotoVerification(false)}>
         <View style={styles.photoVerificationOverlay}>
           <View style={styles.photoVerificationContent}>
             <Text style={styles.photoVerificationTitle}>Photo Verification Required</Text>
             <Text style={styles.photoVerificationSubtitle}>Compare the photo below with the person presenting the ticket</Text>
             <View style={styles.photoContainer}>
-              {buyerPhotoUrl ? (
-                <Image source={{ uri: buyerPhotoUrl }} style={styles.buyerPhoto} resizeMode="cover" />
-              ) : (
-                <View style={styles.photoPlaceholder}>
-                  <Ionicons name="person" size={60} color="#666" />
-                </View>
-              )}
+              {buyerPhotoUrl ? <Image source={{ uri: buyerPhotoUrl }} style={styles.buyerPhoto} resizeMode="cover" /> : <View style={styles.photoPlaceholder}><Ionicons name="person" size={60} color="#666" /></View>}
               <Text style={styles.buyerNameText}>{buyerName}</Text>
               <Text style={styles.buyerLabel}>Ticket Buyer</Text>
             </View>
             <Text style={styles.verificationQuestion}>Does the person presenting the ticket match this photo?</Text>
             <View style={styles.verificationButtons}>
               <TouchableOpacity style={styles.denyButton} onPress={() => handlePhotoConfirm(false)}>
-                <Ionicons name="close-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.denyButtonText}>No</Text>
+                <Ionicons name="close-circle" size={24} color="#FFFFFF" /><Text style={styles.denyButtonText}>No</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.confirmButton} onPress={() => handlePhotoConfirm(true)}>
-                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
-                <Text style={styles.confirmButtonText}>Yes</Text>
+                <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" /><Text style={styles.confirmButtonText}>Yes</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -339,11 +345,8 @@ const styles = StyleSheet.create({
   historyTime: { color: "#888888", fontSize: 12, width: 80 },
   historyId: { color: "#FFFFFF", fontSize: 12, flex: 1, fontFamily: "monospace" },
   historyStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
-  historyValid: { backgroundColor: "#1B5E20" },
-  historyInvalid: { backgroundColor: "#B71C1C" },
-  historyStatusText: { fontSize: 11, fontWeight: "bold" },
-  historyValidText: { color: "#4CAF50" },
-  historyInvalidText: { color: "#FF6B6B" },
+  historyValid: { backgroundColor: "#1B5E20" }, historyInvalid: { backgroundColor: "#B71C1C" },
+  historyStatusText: { fontSize: 11, fontWeight: "bold" }, historyValidText: { color: "#4CAF50" }, historyInvalidText: { color: "#FF6B6B" },
   photoVerificationOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.9)", justifyContent: "center", alignItems: "center", padding: 20 },
   photoVerificationContent: { backgroundColor: "#1a1a1a", borderRadius: 16, padding: 24, width: "100%", maxWidth: 400, alignItems: "center" },
   photoVerificationTitle: { color: "#FFFFFF", fontSize: 22, fontWeight: "bold", textAlign: "center", marginBottom: 8 },
@@ -351,8 +354,7 @@ const styles = StyleSheet.create({
   photoContainer: { alignItems: "center", marginBottom: 20 },
   buyerPhoto: { width: 180, height: 180, borderRadius: 90, borderWidth: 3, borderColor: "#00D4FF", marginBottom: 12 },
   photoPlaceholder: { width: 180, height: 180, borderRadius: 90, backgroundColor: "#333", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#666", marginBottom: 12 },
-  buyerNameText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
-  buyerLabel: { color: "#888888", fontSize: 12 },
+  buyerNameText: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 }, buyerLabel: { color: "#888888", fontSize: 12 },
   verificationQuestion: { color: "#FFD700", fontSize: 16, fontWeight: "600", textAlign: "center", marginBottom: 20 },
   verificationButtons: { flexDirection: "row", gap: 16, marginBottom: 16 },
   denyButton: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#FF4444", paddingVertical: 14, borderRadius: 8 },
