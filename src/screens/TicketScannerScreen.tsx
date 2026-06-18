@@ -185,12 +185,12 @@ const TicketScannerScreen: React.FC = () => {
 
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.scannerArea}>
-          <div id="qr-reader" style={{ width: scanning ? "100%" : 0, height: scanning ? 300 : 0, overflow: "hidden" }} />
+          <div id="qr-reader" style={{ width: "100%", height: scanning ? 300 : 0, overflow: "hidden" }} />
           {!scanning && (
-            <>
+            <View style={styles.scannerOverlay}>
               <Ionicons name="qr-code-outline" size={120} color="#2196F3" />
               <Text style={styles.scannerText}>Point camera at ticket QR code to validate</Text>
-            </>
+            </View>
           )}
           {scanning && (
             <TouchableOpacity style={styles.stopCameraButton} onPress={() => { stopScanner(); setScanning(false) }}>
@@ -258,7 +258,8 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 14, color: "#00D4FF", marginTop: 2 },
   content: { flex: 1, padding: 16 },
   contentContainer: { paddingBottom: 40 },
-  scannerArea: { alignItems: "center", justifyContent: "center", backgroundColor: "#1E1E1E", borderRadius: 12, overflow: "hidden", minHeight: 200, marginBottom: 24 },
+  scannerArea: { position: "relative", alignItems: "center", justifyContent: "center", backgroundColor: "#1E1E1E", borderRadius: 12, overflow: "hidden", minHeight: 200, marginBottom: 24 },
+  scannerOverlay: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, alignItems: "center", justifyContent: "center", pointerEvents: "none" },
   stopCameraButton: { backgroundColor: "#FF6B6B", paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, marginTop: 16 },
   stopCameraButtonText: { color: "#FFF", fontWeight: "bold" },
   scannerText: { fontSize: 16, color: "#DDD", textAlign: "center", marginTop: 16, lineHeight: 24 },
