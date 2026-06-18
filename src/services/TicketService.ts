@@ -264,36 +264,31 @@ export class TicketService {
         return { success: false, reason: "Invalid QR code - ticket not found" }
       }
 
+      // Map snake_case DB row to camelCase Ticket object
+      const t = this.rowToTicket(ticket)
+
       console.log("✅ Ticket found:")
-      console.log("   - Ticket ID:", ticket.id)
-      console.log("   - Event ID:", ticket.eventId)
-      console.log("   - Event:", ticket.eventName)
-      console.log("   - Buyer:", ticket.buyerName)
-      console.log("   - Buyer Photo URL:", ticket.buyerPhotoUrl || "None")
-      console.log("   - Current Status:", ticket.status)
-      console.log("   - QR Code:", ticket.qrCode)
-      console.log("   - Expires At:", ticket.expiresAt)
+      console.log("   - Ticket ID:", t.id)
+      console.log("   - Event ID:", t.eventId)
+      console.log("   - Event:", t.eventName)
+      console.log("   - Buyer:", t.buyerName)
+      console.log("   - Buyer Photo URL:", t.buyerPhotoUrl || "None")
+      console.log("   - Current Status:", t.status)
+      console.log("   - QR Code:", t.qrCode)
+      console.log("   - Expires At:", t.expiresAt)
 
       // Step 2: Check if ticket is expired
       console.log("--- Step 2: Checking ticket expiry ---")
       const now = new Date()
-      if (ticket.expiresAt && new Date(ticket.expiresAt) < now) {
+      if (t.expiresAt && new Date(t.expiresAt) < now) {
         console.log("❌ Ticket has expired")
         
-        await supabase.from("tickets").update({ status: "expired" }).eq("id", ticket.id)
-        
-        const validation: TicketValidation = {
-          id: `val_${Date.now()}`,
-          ticketId: ticket.id,
-          eventId: ticket.eventId,
-          validatedAt: now,
-          validatedBy: validatorId,
-          location,
-          status: "denied",
-          reason: "Ticket has expired",
-        }
-        await this.logValidation(validation)
-        
+        await supabase.from("tickets").update({ status: "expired" }).eq("id", t.id)
+        await this.logValidation({
+          id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId,
+          validatedAt: now, validatedBy: validatorId, location,
+          status: "denied", reason: "Ticket has expired",
+        })
         console.log("========================================")
         console.log("🔍 TICKET VALIDATION FAILED - EXPIRED")
         console.log("========================================")
@@ -302,28 +297,20 @@ export class TicketService {
 
       // Step 3: Check ticket status
       console.log("--- Step 3: Validating ticket status ---")
-      if (ticket.status !== "active") {
-        console.log("❌ Ticket is not active. Status:", ticket.status)
+      // Accept "pending" (mobile money) and "active" as valid
+      if (t.status !== "active" && t.status !== "pending") {
+        console.log("❌ Ticket is not valid. Status:", t.status)
         
-        const reason = ticket.status === "used" ? "Ticket already used" : 
-                       ticket.status === "cancelled" ? "Ticket was cancelled" :
-                       ticket.status === "refunded" ? "Ticket was refunded" :
-                       ticket.status === "expired" ? "Ticket has expired" : "Invalid ticket status"
+        const reason = t.status === "used" ? "Ticket already used" : 
+                       t.status === "cancelled" ? "Ticket was cancelled" :
+                       t.status === "refunded" ? "Ticket was refunded" :
+                       t.status === "expired" ? "Ticket has expired" : "Invalid ticket status"
         
-        const validation: TicketValidation = {
-          id: `val_${Date.now()}`,
-          ticketId: ticket.id,
-          eventId: ticket.eventId,
-          validatedAt: now,
-          validatedBy: validatorId,
-          location,
-          status: "denied",
-          reason,
-        }
-
-        await this.logValidation(validation)
-        console.log("--- Step 4: Logging failed validation ---")
-        
+        await this.logValidation({
+          id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId,
+          validatedAt: now, validatedBy: validatorId, location,
+          status: "denied", reason,
+        })
         console.log("========================================")
         console.log("🔍 TICKET VALIDATION FAILED")
         console.log("========================================")
@@ -332,23 +319,16 @@ export class TicketService {
 
       // Step 4: Verify event ID matches (if provided)
       console.log("--- Step 4: Verifying event ID ---")
-      if (scanningEventId && ticket.eventId !== scanningEventId) {
+      if (scanningEventId && t.eventId !== scanningEventId) {
         console.log("❌ Event ID mismatch")
         console.log("   - Scanner Event:", scanningEventId)
-        console.log("   - Ticket Event:", ticket.eventId)
+        console.log("   - Ticket Event:", t.eventId)
         
-        const validation: TicketValidation = {
-          id: `val_${Date.now()}`,
-          ticketId: ticket.id,
-          eventId: ticket.eventId,
-          validatedAt: now,
-          validatedBy: validatorId,
-          location,
-          status: "denied",
-          reason: "Ticket is for a different event",
-        }
-        await this.logValidation(validation)
-        
+        await this.logValidation({
+          id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId,
+          validatedAt: now, validatedBy: validatorId, location,
+          status: "denied", reason: "Ticket is for a different event",
+        })
         console.log("========================================")
         console.log("🔍 TICKET VALIDATION FAILED - WRONG EVENT")
         console.log("========================================")
@@ -357,21 +337,13 @@ export class TicketService {
 
       // Step 5: Verify QR code exists
       console.log("--- Step 5: Verifying QR code ---")
-      if (!ticket.qrCode) {
+      if (!t.qrCode) {
         console.log("❌ QR code missing")
-        
-        const validation: TicketValidation = {
-          id: `val_${Date.now()}`,
-          ticketId: ticket.id,
-          eventId: ticket.eventId,
-          validatedAt: now,
-          validatedBy: validatorId,
-          location,
-          status: "denied",
-          reason: "Invalid ticket - no QR code",
-        }
-        await this.logValidation(validation)
-        
+        await this.logValidation({
+          id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId,
+          validatedAt: now, validatedBy: validatorId, location,
+          status: "denied", reason: "Invalid ticket - no QR code",
+        })
         console.log("========================================")
         console.log("🔍 TICKET VALIDATION FAILED - NO QR")
         console.log("========================================")
@@ -379,36 +351,30 @@ export class TicketService {
       }
 
       console.log("✅ All security checks passed")
-      console.log("   - Status: active")
+      console.log("   - Status:", t.status)
       console.log("   - Not expired")
       console.log("   - QR code valid")
       
-      // Check if this ticket has a buyer photo - if so, need photo verification
-      const needsPhotoVerification = !!ticket.buyerPhotoUrl
+      // Check if this ticket has a buyer photo
+      const needsPhotoVerification = !!t.buyerPhotoUrl
       console.log("--- Step 6: Photo verification check ---")
       console.log("   - Has buyer photo:", needsPhotoVerification)
       
-      // Store ticket document ID for later use when marking as used
-      const ticketDocId = ticket.id
+      const ticketDocId = t.id
 
-      // If ticket has buyer photo, DON'T mark as used yet - need photo verification first
       if (needsPhotoVerification) {
-        console.log("   - Ticket needs photo verification - returning for confirmation")
-        console.log("========================================")
-        console.log("🔍 TICKET VALIDATION - PHOTO VERIFICATION REQUIRED")
-        console.log("========================================")
-        
+        console.log("   - Ticket needs photo verification")
         return { 
           success: true, 
           needsPhotoVerification: true,
-          buyerPhotoUrl: ticket.buyerPhotoUrl,
-          buyerName: ticket.buyerName,
-          ticketDocId: ticketDocId,
+          buyerPhotoUrl: t.buyerPhotoUrl,
+          buyerName: t.buyerName,
+          ticketDocId,
         }
       }
 
-      // Step 6: Mark ticket as used — scanned tickets are eligible for payout
-      console.log("--- Step 6: Marking ticket as used (eligible for payout) ---")
+      // Step 7: Mark ticket as used
+      console.log("--- Step 7: Marking ticket as used ---")
       try {
         await supabase.from("tickets").update({
           status: "used",
@@ -416,40 +382,23 @@ export class TicketService {
           scanned_at: now.toISOString(),
           payout_eligible: true,
           payout_status: "pending",
-        }).eq("id", ticket.id)
+        }).eq("id", t.id)
         console.log("✅ Ticket status updated to: USED")
       } catch (updateError: any) {
-        console.log("⚠️ Ticket update issue - continuing validation")
+        console.log("⚠️ Ticket update issue - continuing")
       }
 
-      // Step 8: Log successful validation
+      // Step 8: Log validation
       console.log("--- Step 8: Logging successful validation ---")
-      const validation: TicketValidation = {
-        id: `val_${Date.now()}`,
-        ticketId: ticket.id,
-        eventId: ticket.eventId,
-        validatedAt: now,
-        validatedBy: validatorId,
-        location,
+      await this.logValidation({
+        id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId,
+        validatedAt: now, validatedBy: validatorId, location,
         status: "granted",
-      }
-
-      await this.logValidation(validation)
-      console.log("✅ Validation logged to database")
+      })
 
       console.log("========================================")
       console.log("🔍 TICKET VALIDATION SUCCESSFUL")
       console.log("========================================")
-      console.log("📋 Validation Details:")
-      console.log("   - Ticket ID:", ticket.id)
-      console.log("   - Event:", ticket.eventName)
-      console.log("   - Buyer:", ticket.buyerName)
-      console.log("   - Validated By:", validatorId)
-      console.log("   - Location:", location || "N/A")
-      console.log("   - New Status: USED")
-      console.log("   - Payout Eligible:", payoutEligible)
-      console.log("========================================")
-
       return { success: true }
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error)
