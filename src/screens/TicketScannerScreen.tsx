@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
@@ -24,6 +24,21 @@ const TicketScannerScreen: React.FC = () => {
   const [hasCamera, setHasCamera] = useState(true)
   const scannerRef = useRef<any>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  // Load html5-qrcode from CDN (avoids Metro bundler issues with Node.js dependencies)
+  const loadHtml5Qrcode = useCallback(async () => {
+    const win = window as any
+    if (win.Html5Qrcode) return win.Html5Qrcode
+    
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script")
+      script.src = "https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"
+      script.async = true
+      script.onload = () => resolve(win.Html5Qrcode)
+      script.onerror = () => reject(new Error("Failed to load QR scanner library"))
+      document.body.appendChild(script)
+    })
+  }, [])
   
   // Photo verification state
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
@@ -49,7 +64,8 @@ const TicketScannerScreen: React.FC = () => {
 
   const startScanner = async () => {
     try {
-      const Html5Qrcode = (await import("html5-qrcode")).Html5Qrcode
+      // Load html5-qrcode from CDN at runtime (avoids Metro bundler compatibility issues)
+      const Html5Qrcode = await loadHtml5Qrcode()
       
       const scanner = new Html5Qrcode("qr-reader")
       scannerRef.current = scanner
@@ -85,7 +101,7 @@ const TicketScannerScreen: React.FC = () => {
         "Camera Error",
         error?.message?.includes("permission") 
           ? "Camera permission denied. Please allow camera access."
-          : "Could not access camera. Please use a device with a camera."
+          : error?.message || "Could not access camera. Please use a device with a camera."
       )
     }
   }
