@@ -121,13 +121,20 @@ const TicketScannerScreen: React.FC = () => {
       })
       streamRef.current = stream
 
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        videoRef.current.onloadedmetadata = () => {
-          videoRef.current!.play()
-          scanLoop()
+      // Use a short timeout to ensure DOM elements are created before accessing refs
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          videoRef.current.onloadedmetadata = () => {
+            videoRef.current!.play().catch(() => {})
+            scanLoop()
+          }
+          // Ensure video plays even if onloadedmetadata doesn't fire
+          videoRef.current.oncanplay = () => {
+            videoRef.current!.play().catch(() => {})
+          }
         }
-      }
+      }, 100)
       setScanning(true)
     } catch (error: any) {
       console.error("Camera error:", error)
@@ -209,10 +216,26 @@ const TicketScannerScreen: React.FC = () => {
         <View style={styles.scannerArea}>
           {scanning ? (
             <View style={styles.scannerContainer}>
-              {/* Hidden video element receives camera stream */}
-              <video ref={videoRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: 300, objectFit: "cover" }} playsInline muted />
-              {/* Hidden canvas captures frames for BarcodeDetector */}
-              <canvas ref={canvasRef} style={{ display: "none" }} />
+              <div
+                ref={(el) => {
+                  if (el && !videoRef.current) {
+                    // Create video element directly via DOM (bypasses React Native Web issues)
+                    const video = document.createElement("video")
+                    video.setAttribute("playsinline", "")
+                    video.setAttribute("muted", "")
+                    video.style.cssText = "width:100%;height:260px;object-fit:cover;border-radius:8px;display:block;background:#000"
+                    el.appendChild(video)
+                    videoRef.current = video
+                    
+                    // Create hidden canvas
+                    const canvas = document.createElement("canvas")
+                    canvas.style.display = "none"
+                    el.appendChild(canvas)
+                    canvasRef.current = canvas
+                  }
+                }}
+                style={{ width: "100%" }}
+              />
               <TouchableOpacity style={styles.stopCameraButton} onPress={() => { stopCamera(); setScanning(false) }}>
                 <Text style={styles.stopCameraButtonText}>Stop Scanning</Text>
               </TouchableOpacity>
@@ -285,7 +308,7 @@ const styles = StyleSheet.create({
   content: { flex: 1, padding: 16 },
   contentContainer: { paddingBottom: 40 },
   scannerArea: { alignItems: "center", justifyContent: "center", backgroundColor: "#1E1E1E", borderRadius: 12, overflow: "hidden", minHeight: 200, marginBottom: 24 },
-  scannerContainer: { width: "100%" },
+  scannerContainer: { width: "100%", overflow: "hidden", borderRadius: 8, backgroundColor: "#000" },
   scannerText: { fontSize: 16, color: "#DDD", textAlign: "center", marginTop: 16, lineHeight: 24 },
   stopCameraButton: { backgroundColor: "#FF6B6B", paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8, alignSelf: "center", margin: 16 },
   stopCameraButtonText: { color: "#FFF", fontWeight: "bold" },
