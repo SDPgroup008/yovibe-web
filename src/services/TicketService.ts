@@ -149,7 +149,7 @@ export class TicketService {
         entryFeeType: (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,
-        payoutEligible: true,
+        payoutEligible: false,
         payoutStatus: "pending",
         paymentId: paymentIntent.id,
         paymentStatus: isMobileMoney ? "pending" : "completed",
@@ -407,31 +407,14 @@ export class TicketService {
         }
       }
 
-      // Step 6: Calculate payout eligibility
-      console.log("--- Step 6: Calculating payout eligibility ---")
-      const isLatePurchase = ticket.isLatePurchase
-      
-      let payoutEligible = false
-      if (!isLatePurchase) {
-        payoutEligible = true
-        console.log("   - Early ticket: Immediately eligible for payout")
-      } else {
-        if (ticket.eventStartTime) {
-          const hoursSinceEventStart = (now.getTime() - ticket.eventStartTime.getTime()) / (1000 * 60 * 60)
-          payoutEligible = hoursSinceEventStart >= 24
-          console.log("   - Late ticket - Hours since event:", hoursSinceEventStart.toFixed(2))
-          console.log("   - Eligible after 24 hours:", payoutEligible)
-        }
-      }
-
-      // Step 7: Mark ticket as used immediately (prevent double-use)
-      console.log("--- Step 7: Marking ticket as used ---")
+      // Step 6: Mark ticket as used — scanned tickets are eligible for payout
+      console.log("--- Step 6: Marking ticket as used (eligible for payout) ---")
       try {
         await supabase.from("tickets").update({
           status: "used",
           is_scanned: true,
           scanned_at: now.toISOString(),
-          payout_eligible: payoutEligible,
+          payout_eligible: true,
           payout_status: "pending",
         }).eq("id", ticket.id)
         console.log("✅ Ticket status updated to: USED")
@@ -510,26 +493,13 @@ export class TicketService {
         return { success: false, reason: "Ticket already used" }
       }
 
-      // Calculate payout eligibility
-      const isLatePurchase = ticket.isLatePurchase
-      let payoutEligible = false
-      
-      if (!isLatePurchase) {
-        payoutEligible = true
-      } else {
-        if (ticket.eventStartTime) {
-          const hoursSinceEventStart = (now.getTime() - ticket.eventStartTime.getTime()) / (1000 * 60 * 60)
-          payoutEligible = hoursSinceEventStart >= 24
-        }
-      }
-
-      // Mark ticket as used
-      console.log("--- Marking ticket as used ---")
+      // Mark ticket as used — scanned tickets are eligible for payout
+      console.log("--- Marking ticket as used (eligible for payout) ---")
       await supabase.from("tickets").update({
         status: "used",
         is_scanned: true,
         scanned_at: now.toISOString(),
-        payout_eligible: payoutEligible,
+        payout_eligible: true,
         payout_status: "pending",
       }).eq("id", ticketDocId)
       console.log("✅ Ticket status updated to: USED")
