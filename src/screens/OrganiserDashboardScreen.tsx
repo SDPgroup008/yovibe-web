@@ -638,6 +638,18 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
 
             <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>📷 Ticket Scanner</Text>
+              <TouchableOpacity style={styles.scannerButton} onPress={handleScanTicket} disabled={scanning || validating}>
+                <Ionicons name="qr-code-outline" size={48} color="#00D4FF" />
+                <Text style={styles.scannerButtonTitle}>Scan Tickets</Text>
+                <Text style={styles.scannerButtonText}>Tap to scan and validate tickets at event entrances</Text>
+                <View style={styles.scannerButtonArrow}>
+                  <Ionicons name="chevron-forward" size={24} color="#00D4FF" />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.dashboardSection}>
               <Text style={styles.dashboardSectionTitle}>🔍 Scan Logs</Text>
               <View style={styles.dashboardCard}>
                 {scanLogs.length > 0 ? scanLogs.map((log, i) => (
