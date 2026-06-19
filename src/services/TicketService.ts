@@ -664,9 +664,10 @@ export class TicketService {
       console.log("   - Ticket ID:", validation.ticketId)
       console.log("   - Status:", validation.status)
       console.log("   - Validated By:", validation.validatedBy)
+      console.log("   - Event ID:", validation.eventId)
       
-      await supabase.from("ticket_validations").insert({
-        id: validation.id,
+      // Don't insert id — let DB auto-generate (avoids TEXT vs UUID mismatch)
+      const { error } = await supabase.from("ticket_validations").insert({
         ticketId: validation.ticketId,
         eventId: validation.eventId,
         validatedAt: validation.validatedAt.toISOString(),
@@ -676,7 +677,14 @@ export class TicketService {
         reason: validation.reason || null,
         event_slug: validation.eventId,
       })
-      console.log("✅ Validation logged successfully")
+      
+      if (error) {
+        console.error("❌ Validation insert failed:", error)
+        console.error("❌ Error code:", error.code)
+        console.error("❌ Error message:", error.message)
+      } else {
+        console.log("✅ Validation logged successfully")
+      }
     } catch (error) {
       console.error("Error logging validation:", error)
     }
