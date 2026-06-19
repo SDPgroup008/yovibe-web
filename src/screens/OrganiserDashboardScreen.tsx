@@ -246,14 +246,14 @@ const OrganiserDashboardScreen: React.FC = () => {
         .from("ticket_validations")
         .select("*")
         .eq("event_slug", eventId)
-        .order("validated_at", { ascending: false })
+        .order("validatedAt", { ascending: false, nullsFirst: false })
         .limit(10)
 
       if (error) throw error
 
       const logs = (data || []).map((v: any) => ({
-        time: v.validated_at ? new Date(v.validated_at).toLocaleTimeString() : "",
-        ticketId: v.ticket_id ? v.ticket_id.substring(0, 8) + "..." : "Unknown",
+        time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+        ticketId: v.ticketId ? v.ticketId.substring(0, 8) + "..." : "Unknown",
         status: v.status === "granted" ? "Valid" : "Invalid",
       }))
 
