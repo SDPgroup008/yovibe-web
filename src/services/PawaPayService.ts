@@ -204,36 +204,32 @@ export class PawaPayService {
     status?: string
     error?: string
   }> {
-    const payoutId = "payout_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9)
-
-    const payload = {
-      payoutId,
-      amount: amount.toString(),
-      currency,
-      recipient: {
-        type: "MMO",
-        accountDetails: {
-          phoneNumber,
-          provider,
-        },
-      },
-    }
-
     try {
-      const response = await fetch(`${PAWAPAY_BASE_URL}/payouts`, {
+      console.log("📤 Calling Netlify function for payout...")
+      console.log("   - Amount:", amount, currency)
+      console.log("   - Phone:", phoneNumber)
+      console.log("   - Provider:", provider)
+
+      const response = await fetch("/.netlify/functions/create-pawapay-payout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          amount,
+          currency,
+          phoneNumber,
+          provider,
+        }),
       })
 
       const data = await response.json()
+      console.log("📥 Netlify function response:", data)
 
-      if (!response.ok) {
+      if (!data.success) {
         return {
           success: false,
-          error: data.failureReason?.failureMessage || "Failed to initiate payout",
+          error: data.error || "Failed to initiate payout",
         }
       }
 
@@ -243,6 +239,7 @@ export class PawaPayService {
         status: data.status,
       }
     } catch (error: any) {
+      console.error("❌ Payout error:", error)
       return {
         success: false,
         error: error.message || "Network error",
@@ -257,21 +254,21 @@ export class PawaPayService {
     error?: string
   }> {
     try {
-      const response = await fetch(`${PAWAPAY_BASE_URL}/payouts/${payoutId}`)
-
-      if (!response.ok) {
-        if (response.status === 404) {
-          return { status: "NOT_FOUND" }
-        }
-        return { status: "PENDING" }
-      }
-
+      const response = await fetch(`/.netlify/functions/verify-pawapay-payout?payoutId=${encodeURIComponent(payoutId)}`)
       const data = await response.json()
 
+      const rawStatus = (data.status || "").toUpperCase()
+      let mappedStatus: "COMPLETED" | "FAILED" | "PENDING" | "ENQUEUED" | "NOT_FOUND" = "PENDING"
+      if (rawStatus === "COMPLETED") mappedStatus = "COMPLETED"
+      else if (rawStatus === "FAILED") mappedStatus = "FAILED"
+      else if (rawStatus === "NOT_FOUND") mappedStatus = "NOT_FOUND"
+      else if (rawStatus === "ENQUEUED") mappedStatus = "ENQUEUED"
+
       return {
-        status: data.status as "COMPLETED" | "FAILED" | "PENDING" | "ENQUEUED",
-        amount: parseFloat(data.amount),
+        status: mappedStatus,
+        amount: data.amount ? parseFloat(data.amount) : undefined,
         currency: data.currency,
+        error: data.failureMessage,
       }
     } catch {
       return { status: "PENDING" }
