@@ -81,6 +81,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [bankAccountName, setBankAccountName] = useState("")
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
+  const [pawaPayDepositId, setPawaPayDepositId] = useState<string | null>(null)
   const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
@@ -347,7 +348,9 @@ const handlePurchase = async () => {
 
         console.log("✅ PawaPay deposit initiated:", depositResult.depositId)
         
-        setPaymentOrderId(depositResult.depositId!)
+        const depositId = depositResult.depositId!
+        setPaymentOrderId(depositId)
+        setPawaPayDepositId(depositId)
         setPaymentStatus("pending")
         setCheckingPayment(true)
 
@@ -356,45 +359,43 @@ const handlePurchase = async () => {
         const maxAttempts = 15
         let status = "PENDING"
         let verificationResult: any
+        let networkError = false
         
         while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          attempts++
-          verificationResult = await PawaPayService.checkDepositStatus(depositResult.depositId!)
-          status = (verificationResult.status || "").toUpperCase()
-          console.log(`   Attempt ${attempts}: Status = ${status}`)
+          try {
+            await new Promise(resolve => setTimeout(resolve, 2000))
+            attempts++
+            verificationResult = await PawaPayService.checkDepositStatus(depositId)
+            status = (verificationResult.status || "").toUpperCase()
+            console.log(`   Attempt ${attempts}: Status = ${status}`)
+            networkError = false
+          } catch (err) {
+            console.log(`⚠️ Network error attempt ${attempts}:`, err)
+            networkError = true
+            // Continue retrying even on network errors
+          }
         }
         
         console.log("✅ Final status:", status)
-        console.log("[DEBUG] Verification result object:", JSON.stringify(verificationResult, null, 2))
-        
-        const resultStatus = (verificationResult?.status || "").toUpperCase()
-        console.log("[DEBUG] ResultStatus after toUpperCase:", resultStatus)
-        console.log("[DEBUG] Verification failureMessage:", verificationResult?.failureMessage)
-        
-        // First remove the overlay
-        setCheckingPayment(false)
+        const resultStatus = verificationResult ? (verificationResult.status || "").toUpperCase() : "PENDING"
         
         if (resultStatus === "COMPLETED") {
-          console.log("[DEBUG] COMPLETED - showing success banner and creating ticket")
+          setCheckingPayment(false)
           setPurchaseStatus("success")
           setStatusMessage("Payment successful! Creating your ticket...")
           await createTicketAndNavigate(true, verificationResult)
         } else if (resultStatus === "FAILED") {
-          const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed. Please try again."
-          console.log("[DEBUG] FAILED - showing error banner with message:", failMsg)
+          setCheckingPayment(false)
+          const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed."
           setPurchaseStatus("error")
           setStatusMessage(failMsg)
-          // On web, also show a browser alert since React Native Alert doesn't work on web
-          if (typeof window !== 'undefined') {
-            window.alert("Payment Failed\n\n" + failMsg)
-          }
         } else {
-          console.log("[DEBUG] Still pending after max attempts")
-          setPurchaseStatus("error")
-          setStatusMessage("Payment is taking longer than expected. Please check your tickets later.")
+          // Still pending or network error – keep overlay visible with recheck button
+          // Do NOT set checkingPayment(false) – the overlay stays
+          setStatusMessage("Payment is taking longer. Check your mobile money PIN prompt or tap recheck.")
+          // Don't return – the overlay remains with the recheck button
         }
-        return // Exit early so we don't hit the "else" card/bank transfer branch
+        return
       } else {
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
@@ -470,19 +471,58 @@ const handlePurchase = async () => {
   return (
     <View style={styles.container}>
       {/* Full-screen loading overlay for mobile money payment - must be outside ScrollView */}
+      {/* Retry recheck function */}
       {checkingPayment && (
         <View style={styles.fullScreenOverlay}>
           <View style={styles.loaderContainer}>
             <ActivityIndicator color="#00D4FF" size="large" />
             <Text style={styles.loaderTitle}>
-              Processing Payment
+              ⏳ Payment Pending
             </Text>
             <Text style={styles.loaderSubtitle}>
-              Please check your phone and enter your mobile money PIN to complete the payment.
+              {statusMessage || "Please check your phone and enter your mobile money PIN to complete the payment."}
             </Text>
-            <Text style={styles.loaderFooter}>
-              Verifying payment status... (up to 30s)
-            </Text>
+            
+            {/* If we have a depositId and payment is still pending, show recheck button */}
+            {pawaPayDepositId && (
+              <TouchableOpacity
+                style={styles.recheckButton}
+                onPress={async () => {
+                  setStatusMessage("Rechecking payment status...")
+                  try {
+                    const result = await PawaPayService.checkDepositStatus(pawaPayDepositId)
+                    const status = (result.status || "").toUpperCase()
+                    if (status === "COMPLETED") {
+                      setCheckingPayment(false)
+                      setPurchaseStatus("success")
+                      setStatusMessage("Payment successful! Creating your ticket...")
+                      await createTicketAndNavigate(true, result)
+                    } else if (status === "FAILED") {
+                      setCheckingPayment(false)
+                      setPurchaseStatus("error")
+                      setStatusMessage(result.failureMessage || "Payment failed.")
+                    } else {
+                      setStatusMessage("Still pending. Make sure you entered your mobile money PIN. Tap recheck again.")
+                    }
+                  } catch (err) {
+                    setStatusMessage("Network error. Check your connection and tap recheck.")
+                  }
+                }}
+              >
+                <Ionicons name="refresh" size={20} color="#FFF" />
+                <Text style={styles.recheckButtonText}>Recheck Payment</Text>
+              </TouchableOpacity>
+            )}
+            
+            <TouchableOpacity
+              style={styles.cancelPaymentButton}
+              onPress={() => {
+                setCheckingPayment(false)
+                setPawaPayDepositId(null)
+              }}
+            >
+              <Text style={styles.cancelPaymentText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       )}
@@ -1398,6 +1438,32 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 22,
     marginBottom: 20,
+  },
+  recheckButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 212, 255, 0.15)",
+    borderWidth: 1,
+    borderColor: "#00D4FF",
+    paddingVertical: 14,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 12,
+    width: "100%",
+  },
+  recheckButtonText: {
+    color: "#00D4FF",
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  cancelPaymentButton: {
+    paddingVertical: 10,
+  },
+  cancelPaymentText: {
+    color: "#888888",
+    fontSize: 14,
   },
   loaderFooter: {
     color: "#888888",
