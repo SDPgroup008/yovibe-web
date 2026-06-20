@@ -1585,6 +1585,19 @@ class SupabaseService {
 
   async getTicketsByUser(userId: string): Promise<any[]> {
     try {
+      // First get all events for venue name lookup
+      const { data: allEvents } = await supabase
+        .from("events")
+        .select("id, venue_name, name, event_slug");
+
+      const eventVenueMap: Record<string, string> = {}
+      if (allEvents) {
+        allEvents.forEach((evt: any) => {
+          const key = evt.event_slug || evt.id
+          eventVenueMap[key] = evt.venue_name || "Venue TBA"
+        })
+      }
+
       const { data, error } = await supabase
         .from("tickets")
         .select("*")
@@ -1595,10 +1608,13 @@ class SupabaseService {
       // Map snake_case DB rows to camelCase Ticket objects
       const mapRow = (row: any): any => {
         if (!row) return row;
+        // Determine event key for venue lookup
+        const eventKey = row.event_slug || row.event_id || row.eventId
         return {
           id: row.id,
           eventId: row.event_id || row.eventId,
           eventName: row.event_name || row.eventName,
+          venueName: eventVenueMap[eventKey] || "Venue TBA",
           buyerId: row.buyer_id || row.buyerId,
           buyerName: row.buyer_name || row.buyerName,
           buyerEmail: row.buyer_email || row.buyerEmail,

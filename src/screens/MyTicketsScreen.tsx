@@ -11,6 +11,13 @@ import { useAuth } from "../contexts/AuthContext"
 import SupabaseService from "../services/SupabaseService"
 import type { Ticket } from "../models/Ticket"
 
+// Generate short ticket reference like YV-2026-X5RD
+const shortTicketRef = (id: string): string => {
+  const year = new Date().getFullYear()
+  const suffix = (id.match(/[A-Za-z0-9]{4}$/) || ["XXXX"])[0].toUpperCase()
+  return `YV-${year}-${suffix}`
+}
+
 const MyTicketsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { user } = useAuth()
@@ -217,42 +224,39 @@ const MyTicketsScreen: React.FC = () => {
               style={styles.ticketCard}
               onPress={() => handleViewTicket(ticket)}
             >
-              <View style={styles.ticketHeader}>
-                <View style={styles.ticketEventInfo}>
-                  <Text style={styles.ticketEventName} numberOfLines={1}>{ticket.eventName}</Text>
-                  <Text style={styles.ticketType}>{ticket.entryFeeType || "Standard"}</Text>
-                </View>
-                <View style={[styles.ticketStatusBadge, { backgroundColor: getStatusColor(ticket.status, ticket.isScanned) + "20" }]}>
-                  <Text style={[styles.ticketStatusText, { color: getStatusColor(ticket.status, ticket.isScanned) }]}>
-                    {getStatusLabel(ticket)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.ticketDetails}>
-                <View style={styles.ticketDetailRow}>
-                  <Ionicons name="calendar-outline" size={16} color="#888888" />
-                  <Text style={styles.ticketDetailText}>
-                    {formatDate(ticket.eventStartTime)}
-                  </Text>
-                </View>
-                <View style={styles.ticketDetailRow}>
-                  <Ionicons name="time-outline" size={16} color="#888888" />
-                  <Text style={styles.ticketDetailText}>
-                    {formatTime(ticket.eventStartTime)}
-                  </Text>
-                </View>
-                <View style={styles.ticketDetailRow}>
-                  <Ionicons name="wallet-outline" size={16} color="#888888" />
-                  <Text style={styles.ticketDetailText}>
-                    UGX {(ticket.totalAmount || 0).toLocaleString()}
-                  </Text>
+              <View style={styles.ticketCardHeader}>
+                <View style={styles.ticketRefRow}>
+                  <Text style={styles.ticketRefBadge}>{shortTicketRef(ticket.id)}</Text>
+                  <View style={[styles.ticketStatusBadgeSmall, { backgroundColor: getStatusColor(ticket.status, ticket.isScanned) + "20" }]}>
+                    <Text style={[styles.ticketStatusTextSmall, { color: getStatusColor(ticket.status, ticket.isScanned) }]}>
+                      {getStatusLabel(ticket)}
+                    </Text>
+                  </View>
                 </View>
               </View>
 
-              <View style={styles.ticketFooter}>
-                <Text style={styles.ticketId}>ID: {ticket.id.substring(0, 12)}...</Text>
-                <Ionicons name="chevron-forward" size={20} color="#666666" />
+              {/* Event name – big */}
+              <Text style={styles.cardEventName} numberOfLines={1}>{ticket.eventName}</Text>
+
+              {/* Venue & attendee – medium */}
+              <View style={styles.cardMetaRow}>
+                <Ionicons name="location-outline" size={14} color="#00D4FF" />
+                <Text style={styles.cardMetaText} numberOfLines={1}>{ticket.venueName || "Venue TBA"}</Text>
+              </View>
+              {ticket.buyerName && (
+                <View style={styles.cardMetaRow}>
+                  <Ionicons name="person-outline" size={14} color="#888" />
+                  <Text style={styles.cardMetaText}>{ticket.buyerName}</Text>
+                </View>
+              )}
+
+              {/* Date/time + price – small */}
+              <View style={styles.cardFooterRow}>
+                <View style={styles.cardMetaRow}>
+                  <Ionicons name="calendar-outline" size={12} color="#666" />
+                  <Text style={styles.cardMetaSmall}>{formatDate(ticket.eventStartTime)}</Text>
+                </View>
+                <Text style={styles.cardPrice}>UGX {(ticket.totalAmount || 0).toLocaleString()}</Text>
               </View>
             </TouchableOpacity>
           ))
@@ -449,66 +453,74 @@ const styles = StyleSheet.create({
   },
   ticketCard: {
     backgroundColor: "#1a1a1a",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    borderLeftWidth: 4,
-    borderLeftColor: "#00D4FF",
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.12)",
+    shadowColor: "#00D4FF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
   },
-  ticketHeader: {
+  ticketCardHeader: {
+    marginBottom: 10,
+  },
+  ticketRefRow: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
+    alignItems: "center",
   },
-  ticketEventInfo: {
-    flex: 1,
-    marginRight: 12,
-  },
-  ticketEventName: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  ticketType: {
+  ticketRefBadge: {
     color: "#00D4FF",
     fontSize: 12,
-    marginTop: 4,
+    fontWeight: "700",
+    letterSpacing: 1,
+    fontFamily: "monospace",
   },
-  ticketStatusBadge: {
+  ticketStatusBadgeSmall: {
     paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
-  ticketStatusText: {
-    fontSize: 11,
+  ticketStatusTextSmall: {
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  cardEventName: {
+    color: "#FFFFFF",
+    fontSize: 20,
     fontWeight: "bold",
+    marginBottom: 10,
   },
-  ticketDetails: {
-    marginBottom: 12,
-  },
-  ticketDetailRow: {
+  cardMetaRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    gap: 6,
+    marginBottom: 4,
   },
-  ticketDetailText: {
-    color: "#888888",
+  cardMetaText: {
+    color: "#CCC",
     fontSize: 13,
-    marginLeft: 8,
   },
-  ticketFooter: {
+  cardMetaSmall: {
+    color: "#666",
+    fontSize: 11,
+  },
+  cardFooterRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginTop: 10,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: "#333333",
-    paddingTop: 12,
+    borderTopColor: "rgba(255,255,255,0.06)",
   },
-  ticketId: {
-    color: "#666666",
-    fontSize: 11,
-    fontFamily: "monospace",
+  cardPrice: {
+    color: "#4CAF50",
+    fontSize: 15,
+    fontWeight: "700",
   },
   modalOverlay: {
     position: "absolute",
