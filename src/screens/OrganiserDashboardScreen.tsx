@@ -57,15 +57,14 @@ const PayoutSlider: React.FC<{
   const [trackWidth, setTrackWidth] = useState(SLIDER_WIDTH)
   const total = value * price
 
-  const stepSize = max > 1 ? trackWidth / (max - 1) : trackWidth
-  const dotPos = max > 1 ? (value / (max - 1)) * trackWidth : 0
+  const dotPos = max > 0 ? (value / max) * trackWidth : 0
 
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
     onPanResponderMove: (_, gesture) => {
       const rawX = Math.max(0, Math.min(trackWidth, gesture.moveX - 16))
-      const stepped = Math.round((rawX / trackWidth) * (max - 1))
+      const stepped = Math.round((rawX / trackWidth) * max)
       onChange(Math.max(0, Math.min(max, stepped)))
     },
   })

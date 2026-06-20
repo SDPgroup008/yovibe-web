@@ -11,7 +11,7 @@ const PAWAPAY_PROVIDERS: Record<string, string[]> = {
 }
 
 export class PawaPayService {
-  private static APP_COMMISSION_RATE = 0.08
+  private static APP_COMMISSION_RATE = 0.15
 
   static calculateRevenueSplit(totalAmount: number): {
     appCommission: number
