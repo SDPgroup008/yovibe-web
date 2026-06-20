@@ -782,12 +782,12 @@ const handlePurchase = async () => {
         )}
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>YoVibe Fee (8%):</Text>
+          <Text style={styles.summaryLabel}>YoVibe Fee (15%):</Text>
           <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
         </View>
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Venue Revenue:</Text>
+          <Text style={styles.summaryLabel}>Event Revenue:</Text>
           <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
         </View>
 

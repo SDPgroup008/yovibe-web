@@ -146,7 +146,6 @@ export class TicketService {
         buyerPhotoUrl,
         status: isMobileMoney ? "pending" : "active",
         validationHistory: [],
-        ticketType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
         isLatePurchase,
         isScanned: false,

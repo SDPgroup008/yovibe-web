@@ -246,7 +246,6 @@ const OrganiserDashboardScreen: React.FC = () => {
       eventId: row.event_id || row.eventId,
       eventName: row.event_name || row.eventName,
       entryFeeType: row.entry_fee_type || row.entryFeeType || "Standard",
-      ticketType: row.ticket_type || row.ticketType || "Standard",
       totalAmount: row.total_amount ?? row.totalAmount ?? 0,
       venueRevenue: row.venue_revenue ?? row.venueRevenue ?? 0,
       appCommission: row.app_commission ?? row.appCommission ?? 0,
@@ -274,7 +273,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
     tickets.forEach((ticket) => {
       const t = rowToTicket(ticket)
-      const ticketType = t.entryFeeType || t.ticketType || "Standard"
+      const ticketType = t.entryFeeType || "Standard"
       const amount = t.totalAmount || 0
       const isLate = t.isLatePurchase
       const isScanned = t.isScanned || t.status === "used"
