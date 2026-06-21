@@ -274,6 +274,31 @@ const MyTicketsScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
+            {/* Ticket Reference Badge */}
+            <View style={styles.modalRefRow}>
+              <Text style={styles.modalRefBadge}>{shortTicketRef(selectedTicket.id)}</Text>
+              <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(selectedTicket.status, selectedTicket.isScanned) + "20" }]}>
+                <Text style={[styles.modalStatusText, { color: getStatusColor(selectedTicket.status, selectedTicket.isScanned) }]}>
+                  {getStatusLabel(selectedTicket)}
+                </Text>
+              </View>
+            </View>
+
+            {/* Event Name – big */}
+            <Text style={styles.modalEventName}>{selectedTicket.eventName}</Text>
+
+            {/* Venue & Attendee – medium */}
+            <View style={styles.modalMetaRow}>
+              <Ionicons name="location-outline" size={15} color="#00D4FF" />
+              <Text style={styles.modalMetaText}>{selectedTicket.venueName || "Venue TBA"}</Text>
+            </View>
+            {selectedTicket.buyerName && (
+              <View style={styles.modalMetaRow}>
+                <Ionicons name="person-outline" size={15} color="#888" />
+                <Text style={styles.modalMetaText}>{selectedTicket.buyerName}</Text>
+              </View>
+            )}
+
             {/* QR Code Display */}
             <View style={styles.qrContainer}>
               {selectedTicket.qrCodeDataUrl ? (
@@ -293,23 +318,15 @@ const MyTicketsScreen: React.FC = () => {
               </Text>
             </View>
 
-            {/* Ticket Information */}
+            {/* Ticket Information – small details */}
             <View style={styles.ticketInfoCard}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Event</Text>
-                <Text style={styles.infoValue}>{selectedTicket.eventName}</Text>
-              </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Ticket Type</Text>
                 <Text style={styles.infoValue}>{selectedTicket.entryFeeType || "Standard"}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Date</Text>
-                <Text style={styles.infoValue}>{formatDate(selectedTicket.eventStartTime)}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Time</Text>
-                <Text style={styles.infoValue}>{formatTime(selectedTicket.eventStartTime)}</Text>
+                <Text style={styles.infoLabel}>Date & Time</Text>
+                <Text style={styles.infoValue}>{formatDate(selectedTicket.eventStartTime)} • {formatTime(selectedTicket.eventStartTime)}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Quantity</Text>
@@ -321,19 +338,11 @@ const MyTicketsScreen: React.FC = () => {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Ticket ID</Text>
-                <Text style={styles.infoValueMono}>{selectedTicket.id}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Status</Text>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedTicket.status, selectedTicket.isScanned) + "20" }]}>
-                  <Text style={[styles.statusText, { color: getStatusColor(selectedTicket.status, selectedTicket.isScanned) }]}>
-                    {getStatusLabel(selectedTicket)}
-                  </Text>
-                </View>
+                <Text style={styles.infoValueMono}>{shortTicketRef(selectedTicket.id)}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Purchase Date</Text>
-                <Text style={styles.infoValue}>{formatDate(selectedTicket.purchaseDate)}</Text>
+                <Text style={styles.infoValueSmall}>{formatDate(selectedTicket.purchaseDate)}</Text>
               </View>
             </View>
 
@@ -545,6 +554,51 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 20,
     fontWeight: "bold",
+  },
+  modalRefRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  modalRefBadge: {
+    color: "#00D4FF",
+    fontSize: 14,
+    fontWeight: "700",
+    letterSpacing: 1,
+    fontFamily: "monospace",
+  },
+  modalStatusBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  modalStatusText: {
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  modalEventName: {
+    color: "#FFFFFF",
+    fontSize: 24,
+    fontWeight: "bold",
+    paddingHorizontal: 16,
+    marginBottom: 8,
+  },
+  modalMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  modalMetaText: {
+    color: "#CCC",
+    fontSize: 14,
+  },
+  infoValueSmall: {
+    color: "#888888",
+    fontSize: 12,
   },
   qrContainer: {
     alignItems: "center",

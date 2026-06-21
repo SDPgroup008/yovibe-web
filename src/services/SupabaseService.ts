@@ -1556,9 +1556,22 @@ class SupabaseService {
 
   async updateTicket(ticketId: string, data: any): Promise<void> {
     try {
+      // Map camelCase to snake_case
+      const dbData: any = {};
+      if (data.payoutStatus) dbData.payout_status = data.payoutStatus;
+      if (data.payoutDate) dbData.payout_date = data.payoutDate;
+      if (data.payoutEligible !== undefined) dbData.payout_eligible = data.payoutEligible;
+      if (data.status) dbData.status = data.status;
+      if (data.isScanned !== undefined) dbData.is_scanned = data.isScanned;
+      if (data.scannedAt) dbData.scanned_at = data.scannedAt;
+      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined) {
+        // No mapped fields found, use raw data as fallback
+        Object.assign(dbData, data);
+      }
+
       const { error } = await supabase
         .from("tickets")
-        .update(data)
+        .update(dbData)
         .eq("id", ticketId);
 
       if (error) throw error;

@@ -342,6 +342,24 @@ const OrganiserDashboardScreen: React.FC = () => {
     return () => { supabase.removeChannel(tc); supabase.removeChannel(vc) }
   }, [eventId, fetchTicketData, fetchScanLogs])
 
+  // Load payout history from Supabase on mount
+  useEffect(() => {
+    if (!user) return
+    const loadPayouts = async () => {
+      try {
+        const payouts = await SupabaseService.getPayoutsByOrganizer(user.id)
+        if (payouts && payouts.length > 0) {
+          setPayoutHistory(payouts.map((p: any) => ({
+            date: new Date(p.request_date || p.processed_date).toLocaleDateString(),
+            amount: `UGX ${(p.amount || 0).toLocaleString()}`,
+            status: p.status === "Completed" ? "Completed" : "Pending",
+          })))
+        }
+      } catch {}
+    }
+    loadPayouts()
+  }, [user, eventId])
+
   // Initialize default selections when payout types change
   useEffect(() => {
     const initial: Record<string, number> = {}
@@ -461,10 +479,37 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       console.log("✅ Payout initiated:", payoutResult.payoutId)
 
-      // Mark tickets as paid
+      // Mark tickets as paid + set payout_eligible to false
       for (const tid of selectedTicketIds) {
-        try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date() }) } catch {}
+        try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date(), payoutEligible: false }) } catch {}
       }
+
+      // Save payout to Supabase payouts table
+      try {
+        await SupabaseService.savePayout({
+          organizer_id: user.id,
+          ticket_ids: selectedTicketIds,
+          amount: totalAmount,
+          status: "Completed",
+          processed_date: new Date().toISOString(),
+          transaction_reference: payoutResult.payoutId,
+          payout_method: "mobile_money",
+          recipient_name: user.displayName || user.email || "",
+          recipient_phone_number: payoutPhone,
+        })
+      } catch (err) { console.error("Failed to save payout record:", err) }
+
+      // Update organizer wallet
+      try {
+        const wallet = await SupabaseService.getOrganizerWallet(user.id)
+        if (wallet) {
+          await SupabaseService.createOrUpdateOrganizerWallet(user.id, {
+            available_balance: (wallet.available_balance || 0) - totalAmount,
+            total_payouts: (wallet.total_payouts || 0) + totalAmount,
+            last_payout_date: new Date().toISOString(),
+          })
+        }
+      } catch (err) { console.error("Failed to update wallet:", err) }
 
       setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
       setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
