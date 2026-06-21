@@ -27,9 +27,9 @@ export type RedirectIntent = {
 
 interface AuthContextType {
   user: User | null;
-  /** legacy name kept for existing consumers */
+  authError: string | null;
+  clearAuthError: () => void;
   isLoading: boolean;
-  /** new/alternate name some consumers expect */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (
@@ -62,7 +62,10 @@ const AUTH_PROFILE_TIMEOUT_MS = 15000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const clearAuthError = () => setAuthError(null);
 
   // Track whether we've completed the initial auth resolution
   const initializedRef = useRef(false);
@@ -121,9 +124,18 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setUser(userProfile);
             } catch (profileError) {
               console.error("AuthContext: Failed to ensure user profile:", profileError);
-              // Last resort fallback
-              const basicProfile = createFallbackProfile(session.user);
-              setUser(basicProfile);
+              // On network/timeout error: show banner and stay unauthenticated
+              const msg = profileError instanceof Error ? profileError.message : "Network error"
+              if (msg.includes("timed out") || msg.includes("Network") || msg.includes("network")) {
+                setAuthError("Login failed due to a network error. Please check your connection and try again.")
+                setUser(null)
+                // Sign out the auth session since we couldn't load the profile
+                try { await supabase.auth.signOut() } catch {}
+              } else {
+                // For other errors, keep the fallback profile
+                const basicProfile = createFallbackProfile(session.user);
+                setUser(basicProfile);
+              }
             }
           } else {
             // No session
@@ -286,8 +298,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     user,
+    authError,
+    clearAuthError,
     isLoading,
-    // Provide the alternate property name expected elsewhere
     loading: isLoading,
     signIn,
     signUp,
