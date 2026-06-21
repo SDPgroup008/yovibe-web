@@ -27,9 +27,9 @@ export type RedirectIntent = {
 
 interface AuthContextType {
   user: User | null;
-  authError: string | null;
-  clearAuthError: () => void;
+  /** legacy name kept for existing consumers */
   isLoading: boolean;
+  /** new/alternate name some consumers expect */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (
@@ -62,10 +62,7 @@ const AUTH_PROFILE_TIMEOUT_MS = 15000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [authError, setAuthError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  const clearAuthError = () => setAuthError(null);
 
   // Track whether we've completed the initial auth resolution
   const initializedRef = useRef(false);
@@ -113,29 +110,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             // Authenticated: load profile and set user
             console.log("AuthContext: User authenticated, loading profile for UID:", session.user.id);
             try {
-              // Try to load the profile without a timeout
-              const userProfile = await SupabaseService.getUserProfileOrNull(session.user.id);
-              if (userProfile) {
-                console.log("AuthContext: User profile loaded:", userProfile?.email);
-                setUser(userProfile);
-              } else {
-                // Profile doesn't exist yet — create it
-                try {
-                  const newProfile = await SupabaseService.ensureUserProfile(session.user);
-                  console.log("AuthContext: User profile created:", newProfile?.email);
-                  setUser(newProfile);
-                } catch (createError) {
-                  console.error("AuthContext: Failed to create user profile:", createError);
-                  setAuthError("Login failed due to a network error. Please check your connection and try again.")
-                  setUser(null)
-                  try { await supabase.auth.signOut() } catch {}
-                }
-              }
+              // Use ensureUserProfile so that a missing row in public.users is automatically created.
+              // This prevents the endless loading issue after signup or when resuming a session.
+              const userProfile = await withTimeout(
+                SupabaseService.ensureUserProfile(session.user),
+                AUTH_PROFILE_TIMEOUT_MS,
+                `Auth profile resolution timed out after ${AUTH_PROFILE_TIMEOUT_MS}ms`
+              );
+              console.log("AuthContext: User profile ensured/loaded:", userProfile?.email);
+              setUser(userProfile);
             } catch (profileError) {
-              console.error("AuthContext: Failed to load user profile:", profileError);
-              setAuthError("Login failed due to a network error. Please check your connection and try again.")
-              setUser(null)
-              try { await supabase.auth.signOut() } catch {}
+              console.error("AuthContext: Failed to ensure user profile:", profileError);
+              // Last resort fallback
+              const basicProfile = createFallbackProfile(session.user);
+              setUser(basicProfile);
             }
           } else {
             // No session
@@ -298,9 +286,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const value: AuthContextType = {
     user,
-    authError,
-    clearAuthError,
     isLoading,
+    // Provide the alternate property name expected elsewhere
     loading: isLoading,
     signIn,
     signUp,
