@@ -58,7 +58,7 @@ interface AuthProviderProps {
 }
 
 const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
-const AUTH_PROFILE_TIMEOUT_MS = 4000;
+const AUTH_PROFILE_TIMEOUT_MS = 15000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
