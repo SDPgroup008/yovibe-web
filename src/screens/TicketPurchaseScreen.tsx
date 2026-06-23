@@ -15,6 +15,7 @@ import PawaPayService from "../services/PawaPayService"
 import SupabaseService from "../services/SupabaseService"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
+import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
 
 const TicketPurchaseScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -207,8 +208,29 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
+    let fulfillmentId: string | null = null
+    
     try {
       setLoading(true)
+      
+      const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
+      const buyerEmailFinal = visitorEmail.trim() || buyerEmails[0]?.trim()
+      const buyerNameFinal = visitorName.trim()
+      
+      fulfillmentId = await TicketService.createPendingFulfillment({
+        paymentId,
+        pawapayDepositId: isMobileMoney ? verificationResult.depositId : undefined,
+        buyerEmail: buyerEmailFinal,
+        buyerName: buyerNameFinal,
+        buyerId: user?.id,
+        eventId: event!.id,
+        eventName: event!.name,
+        quantity: actualTicketCount,
+        amount: total,
+      })
+      console.log("✅ Created pending fulfillment:", fulfillmentId)
+      
+      await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
       
       const includePhoto = securityPhotoEnabled && photoCaptured
       const buyerNamesList = getBuyerNames()
@@ -241,41 +263,43 @@ const TicketPurchaseScreen: React.FC = () => {
         }
       )
 
-      // Fire-and-forget email sending
-      setTimeout(async () => {
-        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
-        
-        for (const ticket of tickets) {
-          try {
-            const photoUploadLink = ticket.photoUploadToken 
-              ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
-              : undefined
-            
-            await fetch(`/.netlify/functions/send-ticket-email`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                buyerEmail: ticket.buyerEmail,
-                buyerName: ticket.buyerName,
-                eventName: ticket.eventName,
-                ticketType: ticket.entryFeeType,
-                venue: ticket.venueName,
-                date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-                time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                quantity: ticket.quantity,
-                amountPaid: `UGX ${ticket.totalAmount.toLocaleString()}`,
-                ticketRef: ticket.id,
-                qrCodeDataUrl: ticket.qrCodeDataUrl,
-                photoUploadLink,
-              }),
-            })
-            console.log(`Email sent for ticket ${ticket.id}`)
-          } catch (err) {
-            console.error(`Failed to send email for ticket ${ticket.id}:`, err)
-            Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy — you can always find it under My Tickets.")
-          }
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      
+      for (const ticket of tickets) {
+        try {
+          const photoUploadLink = ticket.photoUploadToken 
+            ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
+            : undefined
+          
+          await fetch(`/.netlify/functions/send-ticket-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              buyerEmail: ticket.buyerEmail,
+              buyerName: ticket.buyerName,
+              eventName: ticket.eventName,
+              ticketType: ticket.entryFeeType,
+              venue: ticket.venueName,
+              date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+              time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              quantity: ticket.quantity,
+              amountPaid: `UGX ${ticket.totalAmount.toLocaleString()}`,
+              ticketRef: ticket.id,
+              qrCodeDataUrl: ticket.qrCodeDataUrl,
+              photoUploadLink,
+            }),
+          })
+          console.log(`Email sent for ticket ${ticket.id}`)
+        } catch (err) {
+          console.error(`Failed to send email for ticket ${ticket.id}:`, err)
+          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy — you can always find it under My Tickets.")
         }
-      }, 100)
+      }
+
+      await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
+        ticketIds: tickets.map(t => t.id),
+      })
+      console.log("✅ Fulfillment completed successfully")
 
       setPurchaseStatus("success")
       setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
@@ -286,7 +310,26 @@ const TicketPurchaseScreen: React.FC = () => {
 
     } catch (error: any) {
       console.error("Ticket creation error:", error)
-      Alert.alert("Error", "Failed to create ticket. Please contact support.", [{ text: "OK" }])
+      
+      if (fulfillmentId) {
+        await TicketService.updateFulfillmentStatus(fulfillmentId, "failed", {
+          lastError: error.message || "Unknown error during ticket fulfillment",
+          attemptCount: 1,
+        })
+      }
+      
+      const referenceMsg = fulfillmentId 
+        ? `If you don't receive your ticket within 30 minutes, contact support with this reference: ${fulfillmentId}`
+        : "Please contact support with your payment reference."
+      
+      Alert.alert(
+        "Payment Received",
+        `Your payment was successful. We're finalizing your ticket and will email it shortly. If you don't receive it within 30 minutes, contact support.`,
+        [{ text: "OK", onPress: () => navigation.navigate("MyTickets") }]
+      )
+      
+      setPurchaseStatus("success")
+      setStatusMessage("Payment received — finalizing ticket...")
     } finally {
       setLoading(false)
     }

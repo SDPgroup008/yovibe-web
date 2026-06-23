@@ -7,7 +7,29 @@ import { uploadQRCode, uploadBuyerPhoto } from "./R2Service"
 import { v4 as uuidv4 } from "uuid"
 import type { Ticket, TicketValidation, PaymentIntent } from "../models/Ticket"
 import type { Event } from "../models/Event"
+import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: { maxAttempts?: number; baseDelayMs?: number } = {}
+): Promise<T> {
+  const { maxAttempts = 3, baseDelayMs = 1000 } = options
+  let lastError: any
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      console.warn(`Attempt ${attempt}/${maxAttempts} failed:`, (err as Error)?.message || err)
+      if (attempt < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, baseDelayMs * attempt))
+      }
+    }
+  }
+  throw lastError
+}
 
 export class TicketService {
   static async purchaseTickets(
@@ -316,22 +338,34 @@ private static async createSingleTicket(
     console.log("--- Step 7: Uploading files to R2 ---")
     if (ticket.qrCodeDataUrl) {
       console.log("📤 Uploading QR code to R2...")
-      const qrUploadResult = await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
+      const qrUploadResult = await withRetry(
+        () => uploadQRCode(ticket.qrCodeDataUrl!, ticket.id),
+        { maxAttempts: 3, baseDelayMs: 500 }
+      )
       ticket.qrCodeDataUrl = qrUploadResult.url
       console.log("✅ QR code uploaded to R2:", qrUploadResult.url)
     }
 
     if (ticket.buyerPhotoUrl) {
       console.log("📤 Uploading buyer photo to R2...")
-      const photoUploadResult = await uploadBuyerPhoto(ticket.buyerPhotoUrl, ticket.id)
+      const photoUploadResult = await withRetry(
+        () => uploadBuyerPhoto(ticket.buyerPhotoUrl!, ticket.id),
+        { maxAttempts: 3, baseDelayMs: 500 }
+      )
       ticket.buyerPhotoUrl = photoUploadResult.url
       console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url)
     }
 
     console.log("--- Step 8: Saving ticket to Supabase ---")
-    const { data: savedTicket, error: saveError } = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
-    if (saveError) throw saveError
-    const ticketId = savedTicket.id
+    const savedTicket = await withRetry(
+      async () => {
+        const result = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
+        if (result.error) throw result.error
+        return result.data
+      },
+      { maxAttempts: 3, baseDelayMs: 1000 }
+    )
+    const ticketId = (savedTicket as any).id
     console.log("✅ Ticket saved to database!")
     console.log("   - Supabase ID:", ticketId)
 
@@ -873,6 +907,108 @@ private static async createSingleTicket(
     } catch (error) {
       console.error("❌ Error adding security photo:", error)
       return { success: false, error: "Failed to add security photo" }
+    }
+  }
+
+  // ============ Pending Fulfillment Safety Net ============
+
+  static async createPendingFulfillment(input: CreateFulfillmentInput): Promise<string> {
+    const fulfillment: PendingFulfillment = {
+      id: `pf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      paymentId: input.paymentId,
+      pawapayDepositId: input.pawapayDepositId,
+      buyerEmail: input.buyerEmail,
+      buyerName: input.buyerName,
+      buyerId: input.buyerId,
+      eventId: input.eventId,
+      eventName: input.eventName,
+      quantity: input.quantity ?? 1,
+      amount: input.amount,
+      status: "payment_confirmed",
+      ticketIds: [],
+      attemptCount: 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }
+
+    const { data, error } = await supabase
+      .from("pending_ticket_fulfillments")
+      .insert({
+        id: fulfillment.id,
+        payment_id: fulfillment.paymentId,
+        pawapay_deposit_id: fulfillment.pawapayDepositId,
+        buyer_email: fulfillment.buyerEmail,
+        buyer_name: fulfillment.buyerName,
+        buyer_id: fulfillment.buyerId,
+        event_id: fulfillment.eventId,
+        event_name: fulfillment.eventName,
+        quantity: fulfillment.quantity,
+        amount: fulfillment.amount,
+        status: fulfillment.status,
+        ticket_ids: fulfillment.ticketIds,
+        attempt_count: fulfillment.attemptCount,
+        created_at: fulfillment.createdAt.toISOString(),
+        updated_at: fulfillment.updatedAt.toISOString(),
+      })
+      .select("id")
+      .single()
+
+    if (error) throw error
+    return fulfillment.id
+  }
+
+  static async updateFulfillmentStatus(
+    id: string,
+    status: PendingFulfillment["status"],
+    updates?: Partial<Pick<PendingFulfillment, "ticketIds" | "lastError" | "attemptCount">>
+  ) {
+    const updateData: any = {
+      status,
+      updated_at: new Date().toISOString(),
+    }
+    
+    if (updates?.ticketIds !== undefined) updateData.ticket_ids = updates.ticketIds
+    if (updates?.lastError !== undefined) updateData.last_error = updates.lastError
+    if (updates?.attemptCount !== undefined) updateData.attempt_count = updates.attemptCount
+
+    const { error } = await supabase
+      .from("pending_ticket_fulfillments")
+      .update(updateData)
+      .eq("id", id)
+
+    if (error) throw error
+  }
+
+  static async getPendingFulfillmentsByStatus(status: PendingFulfillment["status"]): Promise<PendingFulfillment[]> {
+    const { data, error } = await supabase
+      .from("pending_ticket_fulfillments")
+      .select("*")
+      .eq("status", status)
+      .order("created_at", { ascending: false })
+
+    if (error) throw error
+
+    return (data || []).map(this.rowToFulfillment)
+  }
+
+  private static rowToFulfillment(row: any): PendingFulfillment {
+    return {
+      id: row.id,
+      paymentId: row.payment_id,
+      pawapayDepositId: row.pawapay_deposit_id,
+      buyerEmail: row.buyer_email,
+      buyerName: row.buyer_name,
+      buyerId: row.buyer_id,
+      eventId: row.event_id,
+      eventName: row.event_name,
+      quantity: row.quantity,
+      amount: row.amount,
+      status: row.status,
+      ticketIds: row.ticket_ids,
+      lastError: row.last_error,
+      attemptCount: row.attempt_count,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
     }
   }
 }

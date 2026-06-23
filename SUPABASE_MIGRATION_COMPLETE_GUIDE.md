@@ -339,6 +339,32 @@ CREATE INDEX idx_tickets_qr_code ON tickets(qr_code);
 CREATE INDEX idx_tickets_table_group_id ON tickets(table_group_id);
 ```
 
+### Pending Ticket Fulfillments Table (Purchase Resilience)
+```sql
+CREATE TABLE pending_ticket_fulfillments (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  payment_id TEXT NOT NULL,
+  pawapay_deposit_id TEXT,
+  buyer_email TEXT NOT NULL,
+  buyer_name TEXT,
+  buyer_id UUID,
+  event_id TEXT NOT NULL,
+  event_name TEXT,
+  quantity INTEGER NOT NULL DEFAULT 1,
+  amount FLOAT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'payment_confirmed' CHECK (status IN ('payment_confirmed', 'fulfilling', 'fulfilled', 'failed')),
+  ticket_ids TEXT[],
+  last_error TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMP DEFAULT now(),
+  updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX idx_pending_fulfillments_status ON pending_ticket_fulfillments(status);
+```
+
+**Migration file:** `netlify/migrations/20241201_pending_fulfillments.sql`
+
 ### Notifications Table
 ```sql
 CREATE TABLE notifications (
