@@ -172,9 +172,9 @@ email-ticket-implementation-prompt.md
 
 # Temporary/development files
 subscribeTokens.js
-send-ticket-email.js
+# send-ticket-email.js
 netlify/functions/save-token.js
 netlify/functions/package.json
 
 # Netlify functions (auto-generated)
-netlify/functions/*.js
+# netlify/functions/*.js
