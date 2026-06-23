@@ -62,9 +62,11 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [location, setLocation] = useState("")
   const [isFreeEntry, setIsFreeEntry] = useState(false)
   const [showFeeForm, setShowFeeForm] = useState(false)
-  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string }>>([])
+  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
+  const [newFeeIsTable, setNewFeeIsTable] = useState(false)
+  const [newTableSize, setNewTableSize] = useState("")
   const [showContactForm, setShowContactForm] = useState(false)
   const [ticketContacts, setTicketContacts] = useState<Array<{ number: string; type: "call" | "whatsapp" }>>([])
   const [newContactNumber, setNewContactNumber] = useState("")
@@ -225,9 +227,24 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Error", "Please enter both a fee name and amount")
       return
     }
-    setEntryFees([...entryFees, { name: newFeeName, amount: newFeeAmount }])
+    const fee: { name: string; amount: string; isTable?: boolean; tableSize?: number } = {
+      name: newFeeName,
+      amount: newFeeAmount,
+    }
+    if (newFeeIsTable) {
+      const size = parseInt(newTableSize)
+      if (isNaN(size) || size < 1) {
+        Alert.alert("Error", "Please enter a valid number of people for the table")
+        return
+      }
+      fee.isTable = true
+      fee.tableSize = size
+    }
+    setEntryFees([...entryFees, fee])
     setNewFeeName("")
     setNewFeeAmount("")
+    setNewFeeIsTable(false)
+    setNewTableSize("")
     setShowFeeForm(false)
   }
 
@@ -478,7 +495,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         venueSlug: venueId,
         venueName,
         posterImageUrl: imageUrl || "",
-        isFeatured,
+        isFeatured: paymentMethods.mobileMoney.length > 0 || paymentMethods.bankAccounts.length > 0,
         location: location.toUpperCase(),
         ticketContacts,
         paymentMethods,
@@ -772,7 +789,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                 <Ionicons name="square-outline" size={24} color="#FFFFFF" />
               )}
             </TouchableOpacity>
-            <Text style={styles.checkboxLabel}>Feature this event</Text>
+            <Text style={styles.checkboxLabel}>Feature this event manually</Text>
           </View>
         )}
 
@@ -821,7 +838,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                   style={[styles.input, styles.feeNameInput]}
                   value={newFeeName}
                   onChangeText={setNewFeeName}
-                  placeholder="Fee name (e.g. VIP, Regular)"
+                  placeholder="Fee name (e.g. VIP, Table 1)"
                   placeholderTextColor="#999"
                 />
                 <TextInput
@@ -831,6 +848,26 @@ const AddEventScreen: React.FC<any> = (props) => {
                   placeholder="Amount (e.g. 20,000 UGX)"
                   placeholderTextColor="#999"
                 />
+                <View style={styles.checkboxContainer}>
+                  <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeIsTable(!newFeeIsTable)}>
+                    {newFeeIsTable ? (
+                      <Ionicons name="checkbox" size={24} color="#2196F3" />
+                    ) : (
+                      <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.checkboxLabel}>This is a Table Entry</Text>
+                </View>
+                {newFeeIsTable && (
+                  <TextInput
+                    style={styles.input}
+                    value={newTableSize}
+                    onChangeText={setNewTableSize}
+                    placeholder="Number of people at table (e.g. 5)"
+                    placeholderTextColor="#999"
+                    keyboardType="numeric"
+                  />
+                )}
                 <TouchableOpacity style={styles.addButton} onPress={addFee}>
                   <Ionicons name="add" size={20} color="#FFFFFF" />
                   <Text style={styles.addButtonText}>Submit</Text>
@@ -839,9 +876,12 @@ const AddEventScreen: React.FC<any> = (props) => {
             )}
             {entryFees.map((fee, index) => (
               <View key={index} style={styles.feeItem}>
-                <Text style={styles.feeText}>
-                  {fee.name}: {fee.amount}
-                </Text>
+                <View>
+                  <Text style={styles.feeText}>
+                    {fee.name}{fee.isTable ? ` (Table: ${fee.tableSize} pax)` : ""}
+                  </Text>
+                  <Text style={styles.feeAmountText}>UGX {fee.amount}</Text>
+                </View>
                 <TouchableOpacity onPress={() => removeFee(index)}>
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </TouchableOpacity>
@@ -1417,6 +1457,27 @@ const styles = StyleSheet.create({
   },
   locationField: {
     width: isSmallDevice ? "100%" : "48%",
+  },
+  feeAmountText: {
+    color: "#888888",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  tableCheckboxContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(0, 212, 255, 0.05)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  tableLabel: {
+    color: "#00D4FF",
+    fontSize: 14,
+    fontWeight: "600",
   },
 })
 

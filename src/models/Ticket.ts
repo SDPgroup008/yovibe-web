@@ -2,12 +2,15 @@ export interface Ticket {
   id: string
   eventId: string
   eventName: string
+  venueName?: string
   buyerId: string
   buyerName: string
   buyerEmail: string
   buyerPhone?: string
   quantity: number
   totalAmount: number
+  tableTotalAmount?: number
+  tableGroupId?: string
   basePrice: number
   lateFee: number
   venueRevenue: number
@@ -17,6 +20,8 @@ export interface Ticket {
   qrCode: string
   qrCodeDataUrl?: string
   buyerPhotoUrl?: string
+  photoUploadToken?: string
+  photoUploadTokenExpiresAt?: Date
   status: "active" | "used" | "cancelled" | "refunded" | "expired" | "pending"
   validationHistory: TicketValidation[]
   entryFeeType?: string

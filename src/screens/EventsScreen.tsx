@@ -419,7 +419,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           - Visible to authenticated users of type 'user' or 'admin'
           - Hidden for authenticated 'club_owner' users
       */}
-      {(!user || user.userType === "user" || user.userType === "admin") && (
+      {(!user || user.userType === "regular_user" || user.userType === "admin") && (
         <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddEvent}>
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>

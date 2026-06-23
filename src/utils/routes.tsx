@@ -24,6 +24,8 @@ import TicketScannerScreen from '../screens/TicketScannerScreen';
 import MyTicketsScreen from '../screens/MyTicketsScreen';
 import NotificationScreen from '../screens/NotificationScreen';
 import PaymentCallbackScreen from '../screens/PaymentCallbackScreen';
+import ResendTicketScreen from '../screens/ResendTicketScreen';
+import AddPhotoScreen from '../screens/AddPhotoScreen';
 
 // Admin screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -315,6 +317,16 @@ export const routes: RouteDefinition[] = [
   {
     path: '/profile/my-tickets',
     component: withCompatNavigation(MyTicketsScreen),
+    exact: true
+  },
+  {
+    path: '/profile/resend-ticket',
+    component: withCompatNavigation(ResendTicketScreen),
+    exact: true
+  },
+  {
+    path: '/add-photo',
+    component: withCompatNavigation(AddPhotoScreen),
     exact: true
   },
 

@@ -63,10 +63,48 @@ const TicketPurchaseScreen: React.FC = () => {
   // Get ticket types from event entry fees
   const ticketTypes = event?.entryFees && event.entryFees.length > 0 ? event.entryFees : []
   
+  // Get the selected ticket type name
+  const selectedTicketTypeName = selectedTicketType?.name || (ticketTypes.length > 0 ? ticketTypes[0].name : "Standard")
+
+  // Calculate table entry details
+  const selectedEntryFee = ticketTypes.length > 0 ? ticketTypes.find(t => t.name === selectedTicketTypeName) : null
+  const isTableEntry = selectedEntryFee?.isTable ?? false
+  const tableSize = selectedEntryFee?.tableSize ?? 1
+  const actualTicketCount = isTableEntry ? quantity * tableSize : quantity
+
   // Visitor info for unauthenticated users
   const [visitorName, setVisitorName] = useState("")
   const [visitorEmail, setVisitorEmail] = useState("")
   const [visitorPhone, setVisitorPhone] = useState("")
+  
+  // Buyer names for each ticket (when quantity > 1)
+  const [buyerNames, setBuyerNames] = useState<string[]>(() => {
+    const initialCount = actualTicketCount
+    return Array(initialCount).fill("")
+  })
+  const [buyerEmails, setBuyerEmails] = useState<string[]>(() => {
+    const initialCount = actualTicketCount
+    return Array(initialCount).fill("")
+  })
+  const [emailDistribution, setEmailDistribution] = useState<"single" | "multiple">("single")
+  
+  // Initialize buyer names/emails when actualTicketCount changes
+  useEffect(() => {
+    setBuyerNames(prev => {
+      const newNames = [...prev]
+      while (newNames.length < actualTicketCount) {
+        newNames.push("")
+      }
+      return newNames.slice(0, actualTicketCount)
+    })
+    setBuyerEmails(prev => {
+      const newEmails = [...prev]
+      while (newEmails.length < actualTicketCount) {
+        newEmails.push("")
+      }
+      return newEmails.slice(0, actualTicketCount)
+    })
+  }, [actualTicketCount])
   
   // Payment method state
   const [paymentMethod, setPaymentMethod] = useState<"mobile_money" | "credit_card" | "bank_transfer" | null>(null)
@@ -172,27 +210,18 @@ const TicketPurchaseScreen: React.FC = () => {
     try {
       setLoading(true)
       
-      let buyerId: string
-      let buyerName: string
-      let buyerEmail: string
-
-      if (user) {
-        buyerId = user.id
-        buyerName = user.displayName || user.email || "Unknown"
-        buyerEmail = user.email || ""
-      } else {
-        buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        buyerName = visitorName.trim()
-        buyerEmail = visitorEmail.trim()
-      }
-
       const includePhoto = securityPhotoEnabled && photoCaptured
+      const buyerNamesList = getBuyerNames()
+      const buyerEmailsList = getBuyerEmails()
+      const ticketCount = actualTicketCount
 
-      const ticket = await TicketService.purchaseTicket(
+      const tickets = await TicketService.purchaseTicketsForTable(
         event!,
-        buyerId,
-        buyerName,
-        buyerEmail,
+        buyerNamesList,
+        buyerEmailsList,
+        ticketCount,
+        isTableEntry,
+        tableSize,
         quantity,
         includePhoto ? buyerPhotoUrl : "",
         total,
@@ -212,8 +241,44 @@ const TicketPurchaseScreen: React.FC = () => {
         }
       )
 
+      // Fire-and-forget email sending
+      setTimeout(async () => {
+        const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+        
+        for (const ticket of tickets) {
+          try {
+            const photoUploadLink = ticket.photoUploadToken 
+              ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
+              : undefined
+            
+            await fetch(`/.netlify/functions/send-ticket-email`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                buyerEmail: ticket.buyerEmail,
+                buyerName: ticket.buyerName,
+                eventName: ticket.eventName,
+                ticketType: ticket.entryFeeType,
+                venue: ticket.venueName,
+                date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+                time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                quantity: ticket.quantity,
+                amountPaid: `UGX ${ticket.totalAmount.toLocaleString()}`,
+                ticketRef: ticket.id,
+                qrCodeDataUrl: ticket.qrCodeDataUrl,
+                photoUploadLink,
+              }),
+            })
+            console.log(`Email sent for ticket ${ticket.id}`)
+          } catch (err) {
+            console.error(`Failed to send email for ticket ${ticket.id}:`, err)
+            Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy — you can always find it under My Tickets.")
+          }
+        }
+      }, 100)
+
       setPurchaseStatus("success")
-      setStatusMessage("Purchase successful!")
+      setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
       
       setTimeout(() => {
         navigation.navigate("MyTickets")
@@ -228,26 +293,56 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   // Get base price from selected ticket type or event entry fees
-  const basePrice = selectedTicketType
+  // For table entries, calculate price per person from total table price
+  const rawBasePrice = selectedTicketType
     ? Number.parseInt(selectedTicketType.amount?.replace(/[^0-9]/g, "") || "0")
     : event && event.entryFees && event.entryFees.length > 0
       ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
       : 0
-
-  // Get the selected ticket type name
-  const selectedTicketTypeName = selectedTicketType?.name || (ticketTypes.length > 0 ? ticketTypes[0].name : "Standard")
+  
+  // For table entries: divide total table price by number of people
+  const basePrice = isTableEntry && tableSize > 0 ? rawBasePrice / tableSize : rawBasePrice
 
   // Calculate prices with late fee using useMemo for efficiency
   const pricing = useMemo(() => {
     if (!event || !event.date) {
       return { subtotal: 0, lateFee: 0, total: 0, isLatePurchase: false }
     }
-    return PesaPalService.calculateTicketPrice(basePrice, quantity, event.date)
-  }, [basePrice, quantity, event?.date])
+    return PesaPalService.calculateTicketPrice(basePrice, actualTicketCount, event.date)
+  }, [basePrice, actualTicketCount, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
-
+  
+const updateBuyerName = (index: number, name: string) => {
+    setBuyerNames(prev => {
+      const newNames = [...prev]
+      newNames[index] = name
+      return newNames
+    })
+  }
+  
+  const updateBuyerEmail = (index: number, email: string) => {
+    setBuyerEmails(prev => {
+      const newEmails = [...prev]
+      newEmails[index] = email
+      return newEmails
+    })
+  }
+  
+  const getBuyerNames = (): string[] => {
+    return buyerNames.slice(0, actualTicketCount).map(name => name.trim() || visitorName.trim())
+  }
+  
+  const getBuyerEmails = (): string[] => {
+    if (emailDistribution === "single") {
+      const singleEmail = visitorEmail.trim() || buyerEmails[0]?.trim()
+      if (!singleEmail) return Array(actualTicketCount).fill("")
+      return Array(actualTicketCount).fill(singleEmail)
+    }
+    return buyerEmails.slice(0, actualTicketCount).map(email => email.trim())
+  }
+  
   const handleCapturePhoto = async () => {
     try {
       setLoading(true)
@@ -281,7 +376,18 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
 const handlePurchase = async () => {
-    // Determine buyer ID, name, email, and phone based on auth status
+    // Validate names for each ticket
+    const buyerNamesList = getBuyerNames()
+    const ticketCount = actualTicketCount
+    
+    for (let i = 0; i < ticketCount; i++) {
+      if (!buyerNamesList[i]?.trim()) {
+        Alert.alert("Name Required", `Please enter name for person ${i + 1}`)
+        return
+      }
+    }
+
+    // Determine buyer ID, email, and phone based on auth status
     let buyerId: string
     let buyerName: string
     let buyerEmail: string
@@ -328,7 +434,7 @@ const handlePurchase = async () => {
       Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
       return
     }
-
+    
     try {
       if (paymentMethod === "mobile_money") {
         // Handle mobile money payment via PawaPay
@@ -538,7 +644,7 @@ const handlePurchase = async () => {
       </View>
 
       {/* Purchase Status Banner */}
-      {purchaseStatus !== null && (
+{purchaseStatus !== null && (
         <Animated.View 
           style={[
             styles.banner, 
@@ -549,40 +655,6 @@ const handlePurchase = async () => {
           <Text style={styles.bannerText}>{statusMessage}</Text>
         </Animated.View>
       )}
-
-       {/* Show visitor info form for unauthenticated users */}
-       {!user && (
-         <View style={styles.visitorSection}>
-           <Text style={styles.sectionTitle}>Your Information</Text>
-           <Text style={styles.visitorInfo}>
-             Please provide your details for ticket purchase
-           </Text>
-           <TextInput
-             style={styles.input}
-             value={visitorName}
-             onChangeText={setVisitorName}
-             placeholder="Full Name"
-             placeholderTextColor="#999"
-           />
-           <TextInput
-             style={styles.input}
-             value={visitorEmail}
-             onChangeText={setVisitorEmail}
-             placeholder="Email Address"
-             placeholderTextColor="#999"
-             keyboardType="email-address"
-             autoCapitalize="none"
-           />
-           <TextInput
-             style={styles.input}
-             value={visitorPhone}
-             onChangeText={setVisitorPhone}
-             placeholder="Phone Number (e.g., 0705928046)"
-             placeholderTextColor="#999"
-             keyboardType="phone-pad"
-           />
-         </View>
-       )}
 
       <View style={styles.ticketSection}>
         <Text style={styles.sectionTitle}>Select Ticket Type</Text>
@@ -600,7 +672,7 @@ const handlePurchase = async () => {
                   {selectedTicketTypeName}
                 </Text>
                 <Text style={styles.ticketTypeSelectorPrice}>
-                  UGX {basePrice.toLocaleString()}
+                  UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
                 </Text>
               </View>
             </View>
@@ -610,10 +682,19 @@ const handlePurchase = async () => {
           <Text style={styles.noTicketsText}>No ticket types available</Text>
         )}
 
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Price per ticket:</Text>
-          <Text style={styles.priceValue}>UGX {basePrice.toLocaleString()}</Text>
-        </View>
+        {!isTableEntry && (
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Price per ticket:</Text>
+            <Text style={styles.priceValue}>UGX {basePrice.toLocaleString()}</Text>
+          </View>
+        )}
+
+        {isTableEntry && (
+          <View style={styles.priceRow}>
+            <Text style={styles.priceLabel}>Table price:</Text>
+            <Text style={styles.priceValue}>UGX {(basePrice * tableSize).toLocaleString()}</Text>
+          </View>
+        )}
 
         <View style={styles.quantitySection}>
           <Text style={styles.quantityLabel}>Quantity:</Text>
@@ -632,6 +713,77 @@ const handlePurchase = async () => {
             </TouchableOpacity>
           </View>
         </View>
+      </View>
+
+      {/* Buyer Names Section - One input per ticket */}
+      <View style={styles.buyerNamesSection}>
+        <Text style={styles.sectionTitle}>
+          Names ({actualTicketCount} ticket{actualTicketCount > 1 ? "s" : ""})
+        </Text>
+        {!user && (
+          <Text style={styles.sectionSubtitle}>Each ticket requires a unique name</Text>
+        )}
+        {Array.from({ length: actualTicketCount }).map((_, index) => (
+          <TextInput
+            key={index}
+            style={styles.input}
+            value={buyerNames[index] || ""}
+            onChangeText={(text) => updateBuyerName(index, text)}
+            placeholder={`Person ${index + 1} Name`}
+            placeholderTextColor="#999"
+          />
+        ))}
+      </View>
+
+      {/* Email Distribution Section */}
+      <View style={styles.emailDistributionSection}>
+        <Text style={styles.sectionTitle}>Email Distribution</Text>
+        <View style={styles.radioContainer}>
+          <TouchableOpacity
+            style={[styles.radioButton, emailDistribution === "single" && styles.radioButtonSelected]}
+            onPress={() => setEmailDistribution("single")}
+          >
+            <View style={[styles.radioCircle, emailDistribution === "single" && styles.radioCircleSelected]}>
+              {emailDistribution === "single" && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.radioLabel}>Send all tickets to one email</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={[styles.radioButton, emailDistribution === "multiple" && styles.radioButtonSelected]}
+            onPress={() => setEmailDistribution("multiple")}
+          >
+            <View style={[styles.radioCircle, emailDistribution === "multiple" && styles.radioCircleSelected]}>
+              {emailDistribution === "multiple" && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.radioLabel}>Send each ticket to different email</Text>
+          </TouchableOpacity>
+        </View>
+
+        {emailDistribution === "single" ? (
+          <TextInput
+            style={styles.input}
+            value={visitorEmail}
+            onChangeText={setVisitorEmail}
+            placeholder="Enter email address"
+            placeholderTextColor="#999"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        ) : (
+          Array.from({ length: actualTicketCount }).map((_, index) => (
+            <TextInput
+              key={index}
+              style={styles.input}
+              value={buyerEmails[index] || ""}
+              onChangeText={(text) => updateBuyerEmail(index, text)}
+              placeholder={`Person ${index + 1} Email`}
+              placeholderTextColor="#999"
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+          ))
+        )}
       </View>
 
       <View style={styles.securitySection}>
@@ -810,7 +962,9 @@ const handlePurchase = async () => {
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
         <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Tickets ({quantity}x):</Text>
+          <Text style={styles.summaryLabel}>
+            Tickets ({quantity}x){isTableEntry && tableSize > 1 ? ` (${tableSize} pax/table)` : ""}
+          </Text>
           <Text style={styles.summaryValue}>UGX {subtotal.toLocaleString()}</Text>
         </View>
 
@@ -892,7 +1046,7 @@ const handlePurchase = async () => {
                     <View style={styles.ticketTypeItemContent}>
                       <Text style={styles.ticketTypeItemName}>{item.name}</Text>
                       <Text style={styles.ticketTypeItemPrice}>
-                        UGX {itemPrice.toLocaleString()}
+                        UGX {Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0").toLocaleString()}
                       </Text>
                     </View>
                     {isSelected && (
@@ -987,106 +1141,145 @@ const styles = StyleSheet.create({
     color: "#2196F3",
     marginBottom: 4,
   },
-  eventDate: {
+eventDate: {
     fontSize: 14,
     color: "#DDDDDD",
-  },
-  visitorSection: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
-    margin: 16,
-    marginTop: 0,
-    borderRadius: 12,
-  },
-  visitorInfo: {
-    fontSize: 14,
-    color: "#DDDDDD",
-    marginBottom: 16,
-    lineHeight: 20,
   },
   ticketSection: {
     padding: 16,
     backgroundColor: "#1E1E1E",
     margin: 16,
     borderRadius: 12,
+    marginTop: 0,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#FFFFFF",
+    marginBottom: 16,
+  },
+  sectionSubtitle: {
+    fontSize: 14,
+    color: "#888888",
+    marginBottom: 16,
+    lineHeight: 20,
+  },
+  ticketTypeSelector: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#00D4FF",
+  },
+  ticketTypeSelectorContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  ticketTypeSelectorText: {
+    flexDirection: "column",
+  },
+  ticketTypeSelectorLabel: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  ticketTypeSelectorPrice: {
+    color: "#00D4FF",
+    fontSize: 14,
+    marginTop: 2,
+  },
+  noTicketsText: {
+    color: "#888888",
+    fontSize: 14,
+    textAlign: "center",
+    padding: 16,
     marginBottom: 16,
   },
   priceRow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 16,
   },
   priceLabel: {
-    fontSize: 16,
-    color: "#DDDDDD",
+    fontSize: 14,
+    color: "#888888",
   },
   priceValue: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#4CAF50",
+    color: "#FFFFFF",
   },
   quantitySection: {
-    marginBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 8,
   },
   quantityLabel: {
-    fontSize: 16,
-    color: "#DDDDDD",
-    marginBottom: 8,
+    fontSize: 14,
+    color: "#888888",
   },
   quantityControls: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  quantityButton: {
-    backgroundColor: "#2196F3",
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    justifyContent: "center",
-    alignItems: "center",
+    gap: 8,
   },
   quantityInput: {
     backgroundColor: "#333333",
     color: "#FFFFFF",
-    fontSize: 18,
-    fontWeight: "bold",
+    padding: 8,
+    borderRadius: 6,
+    width: 50,
     textAlign: "center",
-    marginHorizontal: 16,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    minWidth: 60,
+    fontSize: 16,
+  },
+  quantityButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#333333",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+buyerNamesSection: {
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    marginTop: 0,
+    borderRadius: 12,
   },
   securitySection: {
     padding: 16,
     backgroundColor: "#1E1E1E",
     margin: 16,
+    marginTop: 0,
     borderRadius: 12,
   },
   securityInfo: {
+    color: "#888888",
     fontSize: 14,
-    color: "#DDDDDD",
-    lineHeight: 20,
     marginBottom: 16,
+    lineHeight: 20,
   },
   toggleButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    padding: 12,
     backgroundColor: "#333333",
-    padding: 16,
     borderRadius: 8,
+    marginBottom: 16,
     borderWidth: 1,
     borderColor: "transparent",
   },
   toggleButtonActive: {
-    borderColor: "#00FF9F",
-    backgroundColor: "rgba(0, 255, 159, 0.1)",
+    borderColor: "#00D4FF",
+    backgroundColor: "rgba(0, 212, 255, 0.1)",
   },
   toggleContent: {
     flexDirection: "row",
@@ -1098,16 +1291,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   toggleText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#888888",
+    color: "#FFFFFF",
+    fontSize: 14,
   },
   toggleTextActive: {
     color: "#00FF9F",
   },
   toggleSubtext: {
+    color: "#888888",
     fontSize: 12,
-    color: "#666666",
     marginTop: 2,
   },
   toggleSwitch: {
@@ -1158,6 +1350,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
     marginLeft: 8,
+  },
+  emailDistributionSection: {
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    marginTop: 0,
+    borderRadius: 12,
+  },
+  radioContainer: {
+    flexDirection: "column",
+    gap: 12,
+    marginBottom: 16,
+  },
+  radioButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  radioButtonSelected: {
+    borderColor: "#00D4FF",
+    backgroundColor: "rgba(0, 212, 255, 0.1)",
+  },
+  radioCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#888888",
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  radioCircleSelected: {
+    borderColor: "#00D4FF",
+  },
+  radioDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#00D4FF",
+  },
+  radioLabel: {
+    color: "#FFFFFF",
+    fontSize: 14,
   },
   summarySection: {
     padding: 16,  
@@ -1293,42 +1533,7 @@ const styles = StyleSheet.create({
   cardHalfInput: {
     flex: 1,
   },
-  ticketTypeSelector: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "#333333",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: "#00D4FF",
-  },
-  ticketTypeSelectorContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  ticketTypeSelectorText: {
-    flexDirection: "column",
-  },
-  ticketTypeSelectorLabel: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  ticketTypeSelectorPrice: {
-    color: "#00D4FF",
-    fontSize: 14,
-    marginTop: 2,
-  },
-  noTicketsText: {
-    color: "#888888",
-    fontSize: 14,
-    textAlign: "center",
-    padding: 16,
-    marginBottom: 16,
-  },
+  // Modal styles
   modalOverlay: {
     flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",

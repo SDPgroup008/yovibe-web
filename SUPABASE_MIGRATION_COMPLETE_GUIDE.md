@@ -199,7 +199,7 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   uid TEXT UNIQUE NOT NULL,
   email TEXT UNIQUE NOT NULL,
-  user_type TEXT NOT NULL, -- 'user', 'club_owner', 'admin'
+  user_type TEXT NOT NULL CHECK (user_type IN ('regular_user', 'club_owner', 'admin', 'viber')), -- 'viber' for unauthenticated visitors
   display_name TEXT,
   photo_url TEXT,
   venue_id UUID,
@@ -265,6 +265,78 @@ CREATE TABLE events (
   FOREIGN KEY(venue_id) REFERENCES venues(id),
   FOREIGN KEY(created_by) REFERENCES users(id)
 );
+```
+
+### Notifications Table
+```sql
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  type TEXT NOT NULL,
+  data JSONB DEFAULT '{}',
+  image_url TEXT,
+  deep_link TEXT,
+  is_read BOOLEAN DEFAULT false,
+  read_at TIMESTAMP,
+  opened_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT now(),
+  FOREIGN KEY(user_id) REFERENCES users(id)
+);
+```
+
+### Tickets Table (Updated)
+```sql
+CREATE TABLE tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id TEXT NOT NULL REFERENCES events(slug),
+  event_name TEXT NOT NULL,
+  buyer_id UUID NOT NULL REFERENCES users(id),
+  buyer_name TEXT NOT NULL,
+  buyer_email TEXT NOT NULL,
+  buyer_phone TEXT,
+  quantity INTEGER NOT NULL,
+  total_amount FLOAT NOT NULL,
+  base_price FLOAT NOT NULL,
+  late_fee FLOAT DEFAULT 0,
+  venue_revenue FLOAT NOT NULL,
+  app_commission FLOAT NOT NULL,
+  qr_code TEXT NOT NULL UNIQUE,
+  qr_code_data_url TEXT,
+  buyer_photo_url TEXT,
+  table_total_amount FLOAT,
+  table_group_id TEXT,
+  photo_upload_token TEXT,
+  photo_upload_token_expires_at TIMESTAMP,
+  status TEXT NOT NULL CHECK (status IN ('active', 'used', 'cancelled', 'refunded', 'expired')),
+  entry_fee_type TEXT,
+  payment_id TEXT,
+  payment_status TEXT CHECK (payment_status IN ('pending', 'completed', 'failed')),
+  payment_reference TEXT,
+  pesapal_transaction_id TEXT,
+  is_late_purchase BOOLEAN DEFAULT FALSE,
+  is_scanned BOOLEAN DEFAULT FALSE,
+  purchase_deadline TIMESTAMP NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  payout_eligible BOOLEAN DEFAULT FALSE,
+  payout_status TEXT DEFAULT 'pending' CHECK (payout_status IN ('pending', 'processing', 'paid', 'failed')),
+  scanned_at TIMESTAMP,
+  payout_date TIMESTAMP,
+  payment_method TEXT CHECK (payment_method IN ('mobile_money', 'credit_card', 'bank_transfer')),
+  payment_provider TEXT,
+  payment_number TEXT,
+  payment_name TEXT,
+  qr_signature TEXT,
+  purchase_date TIMESTAMP DEFAULT now(),
+  event_start_time TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_tickets_event_id ON tickets(event_id);
+CREATE INDEX idx_tickets_buyer_id ON tickets(buyer_id);
+CREATE INDEX idx_tickets_status ON tickets(status);
+CREATE INDEX idx_tickets_qr_code ON tickets(qr_code);
+CREATE INDEX idx_tickets_table_group_id ON tickets(table_group_id);
 ```
 
 ### Notifications Table

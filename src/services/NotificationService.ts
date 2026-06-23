@@ -332,6 +332,36 @@ export class NotificationService {
     }
   }
 
+  // Send security photo upload notification
+  async sendSecurityPhotoNotification(
+    userId: string,
+    ticketId: string,
+    eventName: string,
+  ): Promise<void> {
+    try {
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      const photoUrl = `${baseUrl}/add-photo?ticket=${ticketId}`
+
+      await this.saveNotification({
+        userId,
+        title: "🔒 Add Security Photo (Optional)",
+        body: `Add a quick photo to your ${eventName} ticket for extra security at the gate`,
+        type: "ticket_purchase",
+        data: {
+          ticketId,
+          eventName,
+          photoUploadUrl: photoUrl,
+        },
+        deepLink: photoUrl,
+        isRead: false,
+      })
+
+      console.log("NotificationService: Security photo notification saved")
+    } catch (error) {
+      console.error("NotificationService: Error sending security photo notification:", error)
+    }
+  }
+
   // Notification listeners for real-time updates
   private notificationListeners: Array<() => void> = []
 

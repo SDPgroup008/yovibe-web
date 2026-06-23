@@ -48,7 +48,7 @@ class SupabaseService {
 
   // ============ Auth Methods ============
 
-  async signUp(email: string, password: string, userType: UserType): Promise<void> {
+  async signUp(email: string, password: string, userType: "regular_user" | "club_owner" | "admin"): Promise<void> {
     try {
       console.log("SupabaseService.signUp: Starting sign up for:", email);
 
@@ -110,11 +110,8 @@ class SupabaseService {
 
       console.log("SupabaseService.signIn: Sign in successful, UID:", data.user.id);
 
-      // Update last login
-      await supabase
-        .from("users")
-        .update({ last_login_at: new Date().toISOString() })
-        .eq("uid", data.user.id);
+      // Ensure profile exists (handles edge case where profile was never created)
+      await this.ensureUserProfile(data.user);
     } catch (error) {
       console.error("SupabaseService.signIn: Error signing in:", error);
       throw error;
@@ -218,7 +215,13 @@ class SupabaseService {
     }
 
     // Get user_type from metadata (set during signup in SignUpScreen)
-    const userType = authUser.user_metadata?.user_type || 'regular_user';
+    // If missing, log the user out and throw error - treat as unauthenticated
+    const userType = authUser.user_metadata?.user_type as UserType | undefined;
+    if (!userType) {
+      console.warn("SupabaseService.ensureUserProfile: No user_type in metadata - signing out user");
+      await supabase.auth.signOut();
+      throw new Error("User type not found. Please sign up again.");
+    }
 
     const profileData = {
       uid: authUser.id,

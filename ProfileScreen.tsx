@@ -182,7 +182,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         <Text style={styles.emailText}>{user?.email}</Text>
         {displayName && <Text style={styles.displayNameText}>{displayName}</Text>}
         <Text style={styles.userTypeText}>
-          {user?.userType === "user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : "Admin"}
+          {user?.userType === "regular_user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : "Admin"}
         </Text>
       </View>
 

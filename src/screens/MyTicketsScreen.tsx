@@ -9,12 +9,22 @@ import { useCachedUserTickets } from "../hooks/useDataCache"
 import { useMyTicketsScroll } from "../hooks/useScrollPersistence"
 import { useAuth } from "../contexts/AuthContext"
 import SupabaseService from "../services/SupabaseService"
+import * as Printing from "expo-print"
+import * as Sharing from "expo-sharing"
+import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 
-// Generate short ticket reference like YV-2026-X5RD
-const shortTicketRef = (id: string): string => {
+// Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
+const shortTicketRef = (ticket: Ticket): string => {
   const year = new Date().getFullYear()
-  const suffix = (id.match(/[A-Za-z0-9]{4}$/) || ["XXXX"])[0].toUpperCase()
+  const suffix = (ticket.id.match(/[A-Za-z0-9]{4}$/) || ["XXXX"])[0].toUpperCase()
+  
+  // For table tickets, show the group ID
+  if (ticket.tableGroupId) {
+    return ticket.tableGroupId
+  }
+  
+  // For regular tickets, use the existing format
   return `YV-${year}-${suffix}`
 }
 
@@ -140,6 +150,66 @@ const MyTicketsScreen: React.FC = () => {
     setSelectedTicket(null)
   }
 
+  const handleDownloadTicket = async (ticket: Ticket) => {
+    try {
+      const htmlContent = `
+        <html>
+          <head>
+            <meta charset="UTF-8" />
+            <style>
+              body { font-family: system-ui; padding: 20px; background: #121212; color: #fff; }
+              h1 { color: #00D4FF; }
+              h2 { color: #fff; }
+              p { color: #CCCCCC; margin: 8px 0; }
+              .highlight { color: #4CAF50; font-weight: bold; }
+              .mono { font-family: monospace; color: #00D4FF; }
+              hr { border: 1px solid #333; margin: 20px 0; }
+            </style>
+          </head>
+          <body>
+            <h1>🎫 Your Ticket</h1>
+            <h2>${ticket.eventName}</h2>
+            <p>Ticket Reference: <b class="mono">${shortTicketRef(ticket)}</b></p>
+            <hr />
+            <p><b>Buyer:</b> ${ticket.buyerName}</p>
+            <p><b>Venue:</b> ${ticket.venueName || "Venue TBA"}</p>
+            <p><b>Date:</b> ${formatDate(ticket.eventStartTime)}</p>
+            <p><b>Time:</b> ${formatTime(ticket.eventStartTime)}</p>
+            <p><b>Ticket Type:</b> ${ticket.entryFeeType || "Standard"}</p>
+            ${ticket.tableTotalAmount ? `<p class="highlight">UGX ${ticket.tableTotalAmount.toLocaleString()} (Table Total)</p>` : `<p class="highlight">UGX ${(ticket.totalAmount || 0).toLocaleString()}</p>`}
+            <hr />
+            <p class="mono">Ticket ID: ${ticket.id}</p>
+            <p class="mono">Purchase Date: ${formatDate(ticket.purchaseDate)}</p>
+            <hr />
+            <p style="color: #00D4FF; font-style: italic;">This ticket is verified and secured by YoVibe.</p>
+          </body>
+        </html>
+      `
+
+      const result = await Printing.printToFileAsync({
+        html: htmlContent,
+      }) as any
+
+      const pdfUrl: string = result.uri || result.url
+
+      if (Platform.OS === "web") {
+        const link = document.createElement("a")
+        link.href = pdfUrl
+        link.download = `ticket-${shortTicketRef(ticket)}.pdf`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        Alert.alert("Downloaded", "Ticket PDF saved to your downloads")
+      } else {
+        await Sharing.shareAsync(pdfUrl as any)
+        Alert.alert("Downloaded", "Ticket PDF saved to your files")
+      }
+    } catch (error: any) {
+      console.error("Error generating PDF:", error)
+      Alert.alert("Error", "Failed to generate ticket PDF. Please try again.")
+    }
+  }
+
   const handleRefresh = () => {
     setLoading(true)
     refetch() // clear cache
@@ -159,9 +229,14 @@ const MyTicketsScreen: React.FC = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Tickets</Text>
-        <TouchableOpacity onPress={handleRefresh}>
-          <Ionicons name="refresh" size={24} color="#00D4FF" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => navigation.navigate("ResendTicket")}>
+            <Text style={styles.resendLink}>Resend Ticket</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleRefresh}>
+            <Ionicons name="refresh" size={24} color="#00D4FF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Filter Tabs */}
@@ -226,7 +301,7 @@ const MyTicketsScreen: React.FC = () => {
             >
               <View style={styles.ticketCardHeader}>
                 <View style={styles.ticketRefRow}>
-                  <Text style={styles.ticketRefBadge}>{shortTicketRef(ticket.id)}</Text>
+                  <Text style={styles.ticketRefBadge}>{shortTicketRef(ticket)}</Text>
                   <View style={[styles.ticketStatusBadgeSmall, { backgroundColor: getStatusColor(ticket.status, ticket.isScanned) + "20" }]}>
                     <Text style={[styles.ticketStatusTextSmall, { color: getStatusColor(ticket.status, ticket.isScanned) }]}>
                       {getStatusLabel(ticket)}
@@ -276,7 +351,7 @@ const MyTicketsScreen: React.FC = () => {
 
             {/* Ticket Reference Badge */}
             <View style={styles.modalRefRow}>
-              <Text style={styles.modalRefBadge}>{shortTicketRef(selectedTicket.id)}</Text>
+              <Text style={styles.modalRefBadge}>{shortTicketRef(selectedTicket)}</Text>
               <View style={[styles.modalStatusBadge, { backgroundColor: getStatusColor(selectedTicket.status, selectedTicket.isScanned) + "20" }]}>
                 <Text style={[styles.modalStatusText, { color: getStatusColor(selectedTicket.status, selectedTicket.isScanned) }]}>
                   {getStatusLabel(selectedTicket)}
@@ -338,7 +413,7 @@ const MyTicketsScreen: React.FC = () => {
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Ticket ID</Text>
-                <Text style={styles.infoValueMono}>{shortTicketRef(selectedTicket.id)}</Text>
+                <Text style={styles.infoValueMono}>{shortTicketRef(selectedTicket)}</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Purchase Date</Text>
@@ -351,6 +426,12 @@ const MyTicketsScreen: React.FC = () => {
               <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
               <Text style={styles.securityText}>This ticket is verified and secured by YoVibe</Text>
             </View>
+
+            {/* Download Button */}
+            <TouchableOpacity style={styles.downloadButton} onPress={() => handleDownloadTicket(selectedTicket)}>
+              <Ionicons name="download-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.downloadButtonText}>Download Ticket PDF</Text>
+            </TouchableOpacity>
           </ScrollView>
         </View>
       )}
@@ -690,6 +771,31 @@ const styles = StyleSheet.create({
     color: "#4CAF50",
     fontSize: 12,
     marginLeft: 8,
+  },
+downloadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 16,
+    borderRadius: 12,
+    marginHorizontal: 16,
+    marginBottom: 32,
+  },
+  downloadButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 16,
+  },
+  resendLink: {
+    color: "#00D4FF",
+    fontSize: 14,
+    fontWeight: "500",
   },
 })
 

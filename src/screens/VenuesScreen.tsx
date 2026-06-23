@@ -278,7 +278,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
     }
 
     // If logged in as a regular 'user', do nothing (button should be hidden)
-    if (user.userType === "user") {
+    if (user.userType === "regular_user") {
       return;
     }
 

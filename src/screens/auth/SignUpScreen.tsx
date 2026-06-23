@@ -45,7 +45,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [userType, setUserType] = useState<UserType>("user")
+  const [userType, setUserType] = useState<UserType>("regular_user")
   const [loading, setLoading] = useState(false)
   const [adminDotsPressed, setAdminDotsPressed] = useState(0)
 
@@ -189,11 +189,11 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
             <Text style={styles.accountTypeLabel}>Account Type:</Text>
             <View style={styles.buttonGroup}>
               <TouchableOpacity
-                style={[styles.typeButton, userType === "user" && styles.selectedButton]}
-                onPress={() => setUserType("user")}
+                style={[styles.typeButton, userType === "regular_user" && styles.selectedButton]}
+                onPress={() => setUserType("regular_user")}
               >
-                <Ionicons name="person" size={20} color={userType === "user" ? "#FFFFFF" : "#BBBBBB"} />
-                <Text style={[styles.typeButtonText, userType === "user" && styles.selectedButtonText]}>
+                <Ionicons name="person" size={20} color={userType === "regular_user" ? "#FFFFFF" : "#BBBBBB"} />
+                <Text style={[styles.typeButtonText, userType === "regular_user" && styles.selectedButtonText]}>
                   Regular User
                 </Text>
               </TouchableOpacity>

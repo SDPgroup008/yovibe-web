@@ -16,13 +16,12 @@ export interface Event {
   createdAt: Date
   createdBy?: string
   createdByType?: UserType
-  location?: string // Added for city/location display
-  priceIndicator?: number // Added for price indicator (1-3)
+  location?: string
+  priceIndicator?: number
   isFreeEntry: boolean
-  entryFees: Array<{ name: string; amount: string }>
+  entryFees: Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
-  attendees?: string[] // Added to track users who are going
-  // Payment methods from event creation
+  attendees?: string[]
   paymentMethods?: {
     mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
     bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
@@ -46,7 +45,7 @@ export interface FirestoreEvent {
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
-  entryFees: Array<{ name: string; amount: string }>
+  entryFees: Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
   attendees?: string[]
 }

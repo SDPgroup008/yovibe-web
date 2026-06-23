@@ -142,7 +142,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
       : email
     
     const avatarLetter = email ? email.charAt(0).toUpperCase() : '?'
-    const userTypeLabel = item.userType === "user" ? "Regular User" : item.userType === "club_owner" ? "Club Owner" : item.userType === "admin" ? "Admin" : "Unknown"
+    const userTypeLabel = item.userType === "regular_user" ? "Regular User" : item.userType === "club_owner" ? "Club Owner" : item.userType === "admin" ? "Admin" : "Unknown"
     const joinDate = item.createdAt ? item.createdAt.toDateString() : (item.lastLoginAt ? item.lastLoginAt.toDateString() : 'Unknown')
     
     return (

@@ -158,3 +158,20 @@ meta-server.js
 
 # Local Netlify folder
 .netlify
+
+# Documentation files (generated/temporary)
+SUPABASE_MIGRATION_SETUP_GUIDE.md
+SUPABASE_MIGRATION_COMPLETE_GUIDE.md
+SEO_IMPLEMENTATION_GUIDE.md
+META_TAGS_README.md
+privacy-policy.md
+plans/
+ANALYTICS_README.md
+SEO_AUDIT_REPORT.md
+email-ticket-implementation-prompt.md
+
+# Temporary/development files
+subscribeTokens.js
+send-ticket-email.js
+netlify/functions/save-token.js
+netlify/functions/package.json

@@ -280,7 +280,7 @@ const ProfileScreen: React.FC = () => {
         <Text style={styles.emailText}>{user?.email}</Text>
         {displayName && <Text style={styles.displayNameText}>{displayName}</Text>}
         <Text style={styles.userTypeText}>
-          {user?.userType === "user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : user?.userType === "admin" ? "Admin" : "Vibe Master"}
+          {user?.userType === "regular_user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : user?.userType === "admin" ? "Admin" : "Vibe Master"}
         </Text>
       </View>
 

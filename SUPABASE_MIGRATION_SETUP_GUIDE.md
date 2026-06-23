@@ -52,7 +52,7 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   uid TEXT UNIQUE NOT NULL,  -- Firebase UID or mapped identifier
   email TEXT UNIQUE NOT NULL,
-  user_type TEXT NOT NULL CHECK (user_type IN ('user', 'club_owner', 'admin')),
+  user_type TEXT NOT NULL CHECK (user_type IN ('regular_user', 'club_owner', 'admin', 'viber')),
   display_name TEXT,
   photo_url TEXT,
   venue_id TEXT REFERENCES venues(slug),
@@ -146,6 +146,10 @@ CREATE TABLE tickets (
   qr_code TEXT NOT NULL UNIQUE,
   qr_code_data_url TEXT,
   buyer_photo_url TEXT,
+  table_total_amount FLOAT,
+  table_group_id TEXT,
+  photo_upload_token TEXT,
+  photo_upload_token_expires_at TIMESTAMP WITH TIME ZONE,
   status TEXT NOT NULL CHECK (status IN ('active', 'used', 'cancelled', 'refunded', 'expired')),
   entry_fee_type TEXT,
   payment_id TEXT,
@@ -173,6 +177,7 @@ CREATE INDEX idx_tickets_event_id ON tickets(event_id);
 CREATE INDEX idx_tickets_buyer_id ON tickets(buyer_id);
 CREATE INDEX idx_tickets_status ON tickets(status);
 CREATE INDEX idx_tickets_qr_code ON tickets(qr_code);
+CREATE INDEX idx_tickets_table_group_id ON tickets(table_group_id);
 ```
 
 #### **Table 5: ticket_validations**

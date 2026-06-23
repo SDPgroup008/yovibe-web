@@ -490,14 +490,14 @@ const EventDetailScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Ticket Contact Button - Now above Buy Tickets */}
+        {/* Ticket Contact Button */}
         <TouchableOpacity style={styles.button} onPress={handleViewTicketContacts}>
           <Ionicons name="call-outline" size={20} color="#FFFFFF" />
           <Text style={styles.buttonText}>Ticket Contact</Text>
         </TouchableOpacity>
 
-        {/* Buy Tickets Button - Only visible to Admins */}
-        {user?.userType === "admin" && (
+        {/* Buy Tickets Button - For featured events with ticket contacts (all users) */}
+        {event.isFeatured && event.ticketContacts && event.ticketContacts.length > 0 && (
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
           <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
           <Text style={styles.buttonText}>Buy Tickets</Text>

@@ -1,4 +1,4 @@
-export type UserType = "user" | "club_owner" | "admin"
+export type UserType = "regular_user" | "club_owner" | "admin" | "viber"
 
 export interface User {
   id: string

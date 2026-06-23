@@ -4,11 +4,108 @@ import PesaPalService from "./PesaPalService"
 import PawaPayService from "./PawaPayService"
 import NotificationService from "./NotificationService"
 import { uploadQRCode, uploadBuyerPhoto } from "./R2Service"
+import { v4 as uuidv4 } from "uuid"
 import type { Ticket, TicketValidation, PaymentIntent } from "../models/Ticket"
 import type { Event } from "../models/Event"
 import QRCode from "qrcode"
 
 export class TicketService {
+  static async purchaseTickets(
+    event: Event,
+    buyerNames: string[],
+    buyerEmail: string,
+    quantity: number,
+    buyerPhotoUrl: string,
+    totalAmount: number,
+    paymentDetails?: {
+      method: "mobile_money" | "credit_card" | "bank_transfer"
+      provider?: string
+      number?: string
+      name?: string
+      cardNumber?: string
+      expiry?: string
+      bankName?: string
+      accountNumber?: string
+      accountName?: string
+      ticketType?: string
+      paymentReference?: string
+      pesapalTransactionId?: string
+    },
+  ): Promise<Ticket[]> {
+    return this.purchaseTicketsForTable(event, buyerNames, [buyerEmail], quantity, false, 1, quantity, buyerPhotoUrl, totalAmount, paymentDetails)
+  }
+
+  static async purchaseTicketsForTable(
+    event: Event,
+    buyerNames: string[],
+    buyerEmails: string[],
+    totalTickets: number,
+    isTableEntry: boolean,
+    tableSize: number,
+    quantity: number,
+    buyerPhotoUrl: string,
+    totalAmount: number,
+    paymentDetails?: {
+      method: "mobile_money" | "credit_card" | "bank_transfer"
+      provider?: string
+      number?: string
+      name?: string
+      cardNumber?: string
+      expiry?: string
+      bankName?: string
+      accountNumber?: string
+      accountName?: string
+      ticketType?: string
+      paymentReference?: string
+      pesapalTransactionId?: string
+    },
+  ): Promise<Ticket[]> {
+    try {
+      console.log("========================================")
+      console.log("🎫 BULK TICKET PURCHASE FLOW STARTED")
+      console.log("========================================")
+      console.log("📋 TicketService.purchaseTickets: Creating", totalTickets, "individual tickets")
+      console.log("📋 Event:", event.name, "ID:", event.id)
+      console.log("📋 Buyer Names:", buyerNames)
+      console.log("📋 Buyer Emails:", buyerEmails)
+      console.log("📋 Is Table Entry:", isTableEntry, "Table Size:", tableSize, "Quantity:", quantity)
+
+      const createdTickets: Ticket[] = []
+      const ticketsPerPurchase = totalTickets
+      const tableTotal = isTableEntry ? totalAmount : undefined
+      const tableGroupId = isTableEntry ? `YVG-${event.id.slice(-6)}-${Date.now().toString().slice(-6)}` : undefined
+
+      for (let i = 0; i < buyerNames.length; i++) {
+        const buyerName = buyerNames[i]
+        const buyerEmail = buyerEmails[i] || ""
+        console.log(`\n--- Creating ticket ${i + 1}/${totalTickets} for ${buyerName} (${buyerEmail}) ---`)
+
+        const ticket = await this.createSingleTicket(
+          event,
+          buyerName,
+          buyerEmail,
+          1,
+          buyerPhotoUrl,
+          totalAmount / ticketsPerPurchase,
+          paymentDetails,
+          i === 0,
+          tableTotal,
+          tableGroupId
+        )
+        createdTickets.push(ticket)
+      }
+
+      console.log("\n========================================")
+      console.log("🎫 BULK TICKET PURCHASE COMPLETED")
+      console.log("========================================")
+
+      return createdTickets
+    } catch (error) {
+      console.error("❌ Error in bulk ticket purchase:", error)
+      throw error
+    }
+  }
+
   static async purchaseTicket(
     event: Event,
     buyerId: string,
@@ -43,51 +140,95 @@ export class TicketService {
       console.log("📋 Buyer Email:", buyerEmail)
       console.log("📋 Quantity:", quantity)
 
-      // Step 1: Get base price from event entry fees
-      console.log("--- Step 1: Calculating ticket price ---")
-      const basePrice = event.entryFees && event.entryFees.length > 0
-        ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
-        : 0
-      console.log("💰 Base price:", basePrice)
+      const ticket = await this.createSingleTicket(
+        event,
+        buyerName,
+        buyerEmail,
+        quantity,
+        buyerPhotoUrl,
+        totalAmount,
+        paymentDetails
+      )
 
-      // Calculate price with late fee
-      const eventStartTime = event.date || new Date()
-      console.log("📅 Event start time:", eventStartTime)
-      
-      // Use provided totalAmount or calculate it
-      let pricing
-      if (totalAmount !== undefined && totalAmount > 0) {
-        const basePrice = totalAmount / quantity
-        const lateFeePercent = 0.15 // 15% late fee
-        const isLatePurchase = eventStartTime.getTime() - Date.now() < 24 * 60 * 60 * 1000
-        const lateFee = isLatePurchase ? basePrice * lateFeePercent : 0
-        pricing = { 
-          subtotal: basePrice, 
-          lateFee, 
-          total: totalAmount, 
-          isLatePurchase 
-        }
-        console.log("💰 Using provided totalAmount:", totalAmount)
-      } else {
-        pricing = PesaPalService.calculateTicketPrice(basePrice, quantity, eventStartTime)
+      console.log("========================================")
+      console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
+      console.log("========================================")
+
+      return ticket
+    } catch (error) {
+      console.error("❌ Error purchasing ticket:", error)
+      throw error
+    }
+  }
+
+private static async createSingleTicket(
+    event: Event,
+    buyerName: string,
+    buyerEmail: string,
+    quantity: number,
+    buyerPhotoUrl: string,
+    totalAmount: number | undefined,
+    paymentDetails?: {
+      method: "mobile_money" | "credit_card" | "bank_transfer"
+      provider?: string
+      number?: string
+      name?: string
+      cardNumber?: string
+      expiry?: string
+      bankName?: string
+      accountNumber?: string
+      accountName?: string
+      ticketType?: string
+      paymentReference?: string
+      pesapalTransactionId?: string
+    },
+    shouldCreatePaymentIntent: boolean = true,
+    tableTotalAmount?: number,
+    tableGroupId?: string,
+  ): Promise<Ticket> {
+    console.log("--- Step 1: Calculating ticket price ---")
+    const basePrice = event.entryFees && event.entryFees.length > 0
+      ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
+      : 0
+    console.log("💰 Base price:", basePrice)
+
+    const eventStartTime = event.date || new Date()
+    console.log("📅 Event start time:", eventStartTime)
+    
+    let pricing
+    if (totalAmount !== undefined && totalAmount > 0) {
+      const perTicketBasePrice = totalAmount
+      const lateFeePercent = 0.15
+      const isLatePurchase = eventStartTime.getTime() - Date.now() < 24 * 60 * 60 * 1000
+      const lateFee = isLatePurchase ? perTicketBasePrice * lateFeePercent : 0
+      pricing = { 
+        subtotal: perTicketBasePrice, 
+        lateFee, 
+        total: totalAmount, 
+        isLatePurchase 
       }
-      
-      const { subtotal, lateFee, total, isLatePurchase } = pricing
-      const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
+      console.log("💰 Using provided totalAmount:", totalAmount)
+    } else {
+      pricing = PesaPalService.calculateTicketPrice(basePrice, 1, eventStartTime)
+    }
+    
+    const { subtotal, lateFee, total, isLatePurchase } = pricing
+    const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
 
-      console.log("💰 Pricing calculated:")
-      console.log("   - Subtotal:", subtotal)
-      console.log("   - Late Fee:", lateFee)
-      console.log("   - Total:", total)
-      console.log("   - Is Late Purchase:", isLatePurchase)
-      console.log("   - App Commission (8%):", appCommission)
-      console.log("   - Venue Revenue:", venueRevenue)
+    console.log("💰 Pricing calculated:")
+    console.log("   - Subtotal:", subtotal)
+    console.log("   - Late Fee:", lateFee)
+    console.log("   - Total:", total)
+    console.log("   - Is Late Purchase:", isLatePurchase)
+    console.log("   - App Commission (8%):", appCommission)
+    console.log("   - Venue Revenue:", venueRevenue)
 
-      let paymentIntent: PaymentIntent
-      let isMobileMoney = paymentDetails?.method === "mobile_money"
+    let paymentIntent: PaymentIntent | undefined
 
-      if (isMobileMoney) {
+    if (shouldCreatePaymentIntent) {
+      if (paymentDetails?.method === "mobile_money") {
         console.log("--- Step 2: Creating payment intent for mobile money ---")
+        const buyerId = `buyer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
         console.log("💳 Payment intent created:")
         console.log("   - Payment ID:", paymentIntent.id)
@@ -96,123 +237,122 @@ export class TicketService {
         console.log("   - Status: pending (mobile money verification required)")
       } else {
         console.log("--- Step 2: Creating payment intent for card/bank transfer ---")
-        paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
+        paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerName)
         console.log("💳 Payment intent created:")
         console.log("   - Payment ID:", paymentIntent.id)
         console.log("   - Amount:", paymentIntent.amount)
         console.log("   - Currency:", paymentIntent.currency)
         console.log("   - Status: completed (verified via PesaPal)")
       }
-
-      console.log("--- Step 3: Payment verification ---")
-      if (isMobileMoney) {
-        console.log("⏳ Mobile money payment pending - will be verified via PawaPay callback")
-      } else {
-        console.log("✅ Payment verified successfully via PesaPal!")
-      }
-
-      console.log("--- Step 4: Calculating purchase deadline ---")
-      const purchaseDeadline = new Date(eventStartTime.getTime() - 24 * 60 * 60 * 1000)
-      console.log("📅 Purchase deadline:", purchaseDeadline)
-
-      // Step 5: Generate secure QR code with event binding and expiry
-      console.log("--- Step 5: Generating secure QR code ---")
-      const qrCodeResult = await this.generateSecureQRCode(event.id, eventStartTime)
-      console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
-      console.log("🔒 Expires at:", qrCodeResult.expiresAt)
-
-      // Step 6: Create ticket object
-      console.log("--- Step 6: Creating ticket object ---")
-      const ticket: Ticket = {
-        id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        eventId: event.id,
-        eventName: event.name,
-        buyerId,
-        buyerName,
-        buyerEmail,
-        quantity,
-        totalAmount: total,
-        basePrice: subtotal,
-        lateFee: lateFee,
-        venueRevenue,
-        appCommission,
-        purchaseDate: new Date(),
-        eventStartTime,
-        purchaseDeadline,
-        qrCode: qrCodeResult.qrCode,
-        qrCodeDataUrl: qrCodeResult.qrCodeDataUrl,
-        qrSignature: qrCodeResult.qrSignature,
-        expiresAt: qrCodeResult.expiresAt,
-        buyerPhotoUrl,
-        status: isMobileMoney ? "pending" : "active",
-        validationHistory: [],
-        entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
-        isLatePurchase,
-        isScanned: false,
-        payoutEligible: false,
-        payoutStatus: "pending",
-        paymentId: paymentIntent.id,
-        paymentStatus: isMobileMoney ? "pending" : "completed",
-        paymentReference: paymentIntent.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        paymentMethod: paymentDetails?.method,
-        paymentProvider: paymentDetails?.provider,
-        paymentNumber: paymentDetails?.number,
-        paymentName: paymentDetails?.name,
-        pesapalTransactionId: !isMobileMoney ? paymentIntent.paymentId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined,
-      }
-
-      console.log("📝 Ticket object created:")
-      console.log("   - Ticket ID:", ticket.id)
-      console.log("   - Status:", ticket.status)
-      console.log("   - QR Code:", ticket.qrCode)
-
-      // Step 7: Upload QR code and buyer photo to R2
-      console.log("--- Step 7: Uploading files to R2 ---")
-      if (ticket.qrCodeDataUrl) {
-        console.log("📤 Uploading QR code to R2...")
-        const qrUploadResult = await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
-        ticket.qrCodeDataUrl = qrUploadResult.url
-        console.log("✅ QR code uploaded to R2:", qrUploadResult.url)
-      }
-
-      if (ticket.buyerPhotoUrl) {
-        console.log("📤 Uploading buyer photo to R2...")
-        const photoUploadResult = await uploadBuyerPhoto(ticket.buyerPhotoUrl, ticket.id)
-        ticket.buyerPhotoUrl = photoUploadResult.url
-        console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url)
-      }
-
-      // Step 8: Save ticket to database
-      console.log("--- Step 8: Saving ticket to Supabase ---")
-      const { data: savedTicket, error: saveError } = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
-      if (saveError) throw saveError
-      const ticketId = savedTicket.id
-      console.log("✅ Ticket saved to database!")
-      console.log("   - Supabase ID:", ticketId)
-
-      // Step 9: Send notification to event owner
-      console.log("--- Step 9: Sending notification to event owner ---")
-      await NotificationService.notifyTicketPurchase(event, ticket)
-      console.log("✅ Notification sent to event owner")
-
-      console.log("========================================")
-      console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
-      console.log("========================================")
-      console.log("📋 Final Ticket Details:")
-      console.log("   - Ticket ID:", ticket.id)
-      console.log("   - Event:", event.name)
-      console.log("   - Buyer:", buyerName, `(${buyerEmail})`)
-      console.log("   - Quantity:", quantity)
-      console.log("   - Total Paid:", total, "UGX")
-      console.log("   - QR Code:", ticket.qrCode)
-      console.log("   - Status:", ticket.status)
-      console.log("========================================")
-
-      return ticket
-    } catch (error) {
-      console.error("❌ Error purchasing ticket:", error)
-      throw error
+    } else {
+      console.log("--- Step 2: Skipping payment intent creation (bulk purchase) ---")
     }
+
+    console.log("--- Step 3: Payment verification ---")
+    if (paymentDetails?.method === "mobile_money") {
+      console.log("⏳ Mobile money payment pending - will be verified via PawaPay callback")
+    } else {
+      console.log("✅ Payment verified successfully via PesaPal!")
+    }
+
+    console.log("--- Step 4: Calculating purchase deadline ---")
+    const purchaseDeadline = new Date(eventStartTime.getTime() - 24 * 60 * 60 * 1000)
+    console.log("📅 Purchase deadline:", purchaseDeadline)
+
+    console.log("--- Step 5: Generating secure QR code ---")
+    const qrCodeResult = await this.generateSecureQRCode(event.id, eventStartTime)
+    console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
+    console.log("🔒 Expires at:", qrCodeResult.expiresAt)
+
+    console.log("--- Step 6: Creating ticket object ---")
+    const photoUploadToken = uuidv4()
+    const ticket: Ticket = {
+      id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      eventId: event.id,
+      eventName: event.name,
+      buyerId: `buyer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      buyerName,
+      buyerEmail,
+      quantity: 1,
+      totalAmount: total,
+      tableTotalAmount: tableTotalAmount,
+      tableGroupId: tableGroupId,
+      basePrice: subtotal,
+      lateFee: lateFee,
+      venueRevenue,
+      appCommission,
+      purchaseDate: new Date(),
+      eventStartTime,
+      purchaseDeadline,
+      qrCode: qrCodeResult.qrCode,
+      qrCodeDataUrl: qrCodeResult.qrCodeDataUrl,
+      qrSignature: qrCodeResult.qrSignature,
+      expiresAt: qrCodeResult.expiresAt,
+      buyerPhotoUrl,
+      photoUploadToken,
+      photoUploadTokenExpiresAt: eventStartTime,
+      status: paymentDetails?.method === "mobile_money" ? "pending" : "active",
+      validationHistory: [],
+      entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
+      isLatePurchase,
+      isScanned: false,
+      payoutEligible: false,
+      payoutStatus: "pending",
+      paymentId: paymentIntent?.id,
+      paymentStatus: paymentDetails?.method === "mobile_money" ? "pending" : "completed",
+      paymentReference: paymentIntent?.paymentReference || paymentDetails?.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      paymentMethod: paymentDetails?.method,
+      paymentProvider: paymentDetails?.provider,
+      paymentNumber: paymentDetails?.number,
+      paymentName: paymentDetails?.name,
+      pesapalTransactionId: paymentDetails?.method !== "mobile_money" ? paymentIntent?.paymentId || paymentDetails?.pesapalTransactionId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined,
+    }
+
+    console.log("📝 Ticket object created:")
+    console.log("   - Ticket ID:", ticket.id)
+    console.log("   - Status:", ticket.status)
+    console.log("   - QR Code:", ticket.qrCode)
+
+    console.log("--- Step 7: Uploading files to R2 ---")
+    if (ticket.qrCodeDataUrl) {
+      console.log("📤 Uploading QR code to R2...")
+      const qrUploadResult = await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
+      ticket.qrCodeDataUrl = qrUploadResult.url
+      console.log("✅ QR code uploaded to R2:", qrUploadResult.url)
+    }
+
+    if (ticket.buyerPhotoUrl) {
+      console.log("📤 Uploading buyer photo to R2...")
+      const photoUploadResult = await uploadBuyerPhoto(ticket.buyerPhotoUrl, ticket.id)
+      ticket.buyerPhotoUrl = photoUploadResult.url
+      console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url)
+    }
+
+    console.log("--- Step 8: Saving ticket to Supabase ---")
+    const { data: savedTicket, error: saveError } = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
+    if (saveError) throw saveError
+    const ticketId = savedTicket.id
+    console.log("✅ Ticket saved to database!")
+    console.log("   - Supabase ID:", ticketId)
+
+    console.log("--- Step 9: Sending notification to event owner ---")
+    await NotificationService.notifyTicketPurchase(event, ticket)
+    console.log("✅ Notification sent to event owner")
+
+    console.log("========================================")
+    console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
+    console.log("========================================")
+    console.log("📋 Final Ticket Details:")
+    console.log("   - Ticket ID:", ticket.id)
+    console.log("   - Event:", event.name)
+    console.log("   - Buyer:", buyerName, `(${buyerEmail})`)
+    console.log("   - Quantity:", 1)
+    console.log("   - Total Paid:", total, "UGX")
+    console.log("   - QR Code:", ticket.qrCode)
+    console.log("   - Status:", ticket.status)
+    console.log("========================================")
+
+    return ticket
   }
 
   static async validateTicket(
@@ -587,6 +727,10 @@ export class TicketService {
       paymentName: row.payment_name || row.paymentName,
       pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
       pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
+      tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
+      tableGroupId: row.table_group_id || row.tableGroupId,
+      photoUploadToken: row.photo_upload_token || row.photoUploadToken,
+      photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,
     }
   }
 
@@ -612,6 +756,19 @@ export class TicketService {
       return ticketList
     } catch (error) {
       console.error("Error getting user tickets:", error)
+      return []
+    }
+  }
+
+  static async getTicketsByEmail(email: string): Promise<Ticket[]> {
+    try {
+      console.log("📋 TicketService.getTicketsByEmail: Fetching tickets for email:", email)
+      const { data: rows } = await supabase.from("tickets").select("*").eq("buyer_email", email)
+      const ticketList = (rows || []).map(this.rowToTicket)
+      console.log("✅ Found", ticketList.length, "tickets")
+      return ticketList
+    } catch (error) {
+      console.error("Error getting tickets by email:", error)
       return []
     }
   }
@@ -687,6 +844,35 @@ export class TicketService {
       }
     } catch (error) {
       console.error("Error logging validation:", error)
+    }
+  }
+
+  static async addSecurityPhoto(
+    ticketId: string,
+    token: string,
+    photoUrl: string
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      console.log("🔒 TicketService.addSecurityPhoto: Adding security photo")
+      console.log("   - Ticket ID:", ticketId)
+      console.log("   - Token:", token ? "present" : "missing")
+
+      const { data, error } = await supabase.rpc("add_ticket_security_photo", {
+        p_ticket_id: ticketId,
+        p_token: token,
+        p_photo_url: photoUrl,
+      })
+
+      if (error) {
+        console.error("❌ RPC error:", error)
+        return { success: false, error: error.message }
+      }
+
+      console.log("✅ Security photo added successfully")
+      return { success: data }
+    } catch (error) {
+      console.error("❌ Error adding security photo:", error)
+      return { success: false, error: "Failed to add security photo" }
     }
   }
 }

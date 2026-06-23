@@ -32,10 +32,10 @@ interface AuthContextType {
   /** new/alternate name some consumers expect */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (
+signUp: (
     email: string,
     password: string,
-    userType: "user" | "club_owner" | "admin"
+    userType: "regular_user" | "club_owner" | "admin"
   ) => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
@@ -86,19 +86,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const createFallbackProfile = (authUser: { id: string; email?: string | null; user_metadata?: any }) => ({
-    id: authUser.id,
-    uid: authUser.id,
-    email: authUser.email || '',
-    userType: 'user' as const,
-    displayName: authUser.user_metadata?.display_name || authUser.email?.split('@')[0] || 'User',
-    photoURL: authUser.user_metadata?.photo_url || authUser.user_metadata?.avatar_url || undefined,
-    venueId: undefined,
-    isFrozen: false,
-    createdAt: new Date(),
-    lastLoginAt: new Date(),
-  });
-
   useEffect(() => {
     console.log("AuthContext: Setting up auth state listener");
 
@@ -121,9 +108,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setUser(userProfile);
             } catch (profileError) {
               console.error("AuthContext: Failed to ensure user profile:", profileError);
-              // Last resort fallback
-              const basicProfile = createFallbackProfile(session.user);
-              setUser(basicProfile);
+              // If user_type is missing, the user should be logged out and treated as viber
+              // Clear user state entirely - don't fall back to a profile
+              setUser(null);
             }
           } else {
             // No session
@@ -214,15 +201,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signUp = async (
     email: string,
     password: string,
-    userType: "user" | "club_owner" | "admin"
+    userType: "regular_user" | "club_owner" | "admin"
   ) => {
+    if (!userType) {
+      throw new Error("User type is required. Please select a user type during signup.")
+    }
     setIsLoading(true);
     try {
       await SupabaseService.signUp(email, password, userType);
-      // console.log("AuthContext: Sign up successful");
-      // onAuthStateChange will populate user
     } catch (error) {
-      // console.error("AuthContext: Sign up failed:", error);
       throw error;
     } finally {
       setIsLoading(false);
