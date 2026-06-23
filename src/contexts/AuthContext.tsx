@@ -58,7 +58,7 @@ interface AuthProviderProps {
 }
 
 const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
-const AUTH_PROFILE_TIMEOUT_MS = 15000;
+const AUTH_PROFILE_TIMEOUT_MS = 25000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -108,6 +108,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setUser(userProfile);
             } catch (profileError) {
               console.error("AuthContext: Failed to ensure user profile:", profileError);
+
+              const isTimeout = profileError instanceof Error && profileError.message?.includes('timed out');
+
+              if (isTimeout) {
+                console.warn("AuthContext: Profile resolution timed out — retrying once before giving up");
+                try {
+                  const retriedProfile = await withTimeout(
+                    SupabaseService.ensureUserProfile(session.user),
+                    AUTH_PROFILE_TIMEOUT_MS,
+                    `Auth profile resolution timed out after ${AUTH_PROFILE_TIMEOUT_MS}ms (retry)`
+                  );
+                  console.log("AuthContext: Retry succeeded, profile loaded:", retriedProfile?.email);
+                  setUser(retriedProfile);
+                  return;
+                } catch (retryError) {
+                  console.error("AuthContext: Retry also failed — treating as genuine failure:", retryError);
+                }
+              }
+
               // If user_type is missing, the user should be logged out and treated as viber
               // Clear user state entirely - don't fall back to a profile
               setUser(null);

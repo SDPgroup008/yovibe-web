@@ -169,6 +169,7 @@ plans/
 ANALYTICS_README.md
 SEO_AUDIT_REPORT.md
 email-ticket-implementation-prompt.md
+auth-timeout-false-logout-prompt.md
 
 # Temporary/development files
 subscribeTokens.js
