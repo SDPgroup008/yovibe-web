@@ -70,6 +70,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Track analytics session
   const sessionIdRef = useRef<string | null>(null);
 
+  // Prevent overlapping concurrent fetches for the same UID
+  const profileFetchInFlightRef = useRef<string | null>(null);
+
   const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, errorMessage: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
@@ -94,9 +97,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         console.log("AuthContext: Auth state changed, event:", event, "session:", !!session);
         try {
           if (session?.user) {
-            // Authenticated: load profile and set user
-            console.log("AuthContext: User authenticated, loading profile for UID:", session.user.id);
+            // Skip re-fetching when the profile for this exact UID is already loaded
+            if (user && user.uid === session.user.id) {
+              console.log("AuthContext: Profile already loaded for this UID — skipping redundant fetch");
+              if (!initializedRef.current) initializedRef.current = true;
+              setIsLoading(false);
+              return;
+            }
+
+            // Prevent overlapping concurrent fetches for the same UID
+            if (profileFetchInFlightRef.current === session.user.id) {
+              console.log("AuthContext: Fetch already in flight for this UID — skipping duplicate request");
+              return;
+            }
+
+            profileFetchInFlightRef.current = session.user.id;
+
             try {
+              // Authenticated: load profile and set user
+              console.log("AuthContext: User authenticated, loading profile for UID:", session.user.id);
               // Use ensureUserProfile so that a missing row in public.users is automatically created.
               // This prevents the endless loading issue after signup or when resuming a session.
               const userProfile = await withTimeout(
@@ -108,28 +127,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               setUser(userProfile);
             } catch (profileError) {
               console.error("AuthContext: Failed to ensure user profile:", profileError);
-
-              const isTimeout = profileError instanceof Error && profileError.message?.includes('timed out');
-
-              if (isTimeout) {
-                console.warn("AuthContext: Profile resolution timed out — retrying once before giving up");
-                try {
-                  const retriedProfile = await withTimeout(
-                    SupabaseService.ensureUserProfile(session.user),
-                    AUTH_PROFILE_TIMEOUT_MS,
-                    `Auth profile resolution timed out after ${AUTH_PROFILE_TIMEOUT_MS}ms (retry)`
-                  );
-                  console.log("AuthContext: Retry succeeded, profile loaded:", retriedProfile?.email);
-                  setUser(retriedProfile);
-                  return;
-                } catch (retryError) {
-                  console.error("AuthContext: Retry also failed — treating as genuine failure:", retryError);
-                }
-              }
-
               // If user_type is missing, the user should be logged out and treated as viber
               // Clear user state entirely - don't fall back to a profile
               setUser(null);
+            } finally {
+              profileFetchInFlightRef.current = null;
             }
           } else {
             // No session
