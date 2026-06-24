@@ -910,11 +910,10 @@ private static async createSingleTicket(
     }
   }
 
-  // ============ Pending Fulfillment Safety Net ============
+ // ============ Pending Fulfillment Safety Net ============
 
   static async createPendingFulfillment(input: CreateFulfillmentInput): Promise<string> {
-    const fulfillment: PendingFulfillment = {
-      id: `pf_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    const fulfillment: Omit<PendingFulfillment, "id"> = {
       paymentId: input.paymentId,
       pawapayDepositId: input.pawapayDepositId,
       buyerEmail: input.buyerEmail,
@@ -931,10 +930,14 @@ private static async createSingleTicket(
       updatedAt: new Date(),
     }
 
+    // NOTE: `id` is intentionally NOT set here. The `pending_ticket_fulfillments.id`
+    // column is a strict Postgres `uuid` with `default gen_random_uuid()` — supplying
+    // our own custom-format string (e.g. "pf_<timestamp>_<random>") causes a
+    // 22P02 "invalid input syntax for type uuid" error, since that format isn't a
+    // valid UUID. Let Postgres generate it, then read the real value back via .select().
     const { data, error } = await supabase
       .from("pending_ticket_fulfillments")
       .insert({
-        id: fulfillment.id,
         payment_id: fulfillment.paymentId,
         pawapay_deposit_id: fulfillment.pawapayDepositId,
         buyer_email: fulfillment.buyerEmail,
@@ -954,7 +957,10 @@ private static async createSingleTicket(
       .single()
 
     if (error) throw error
-    return fulfillment.id
+
+    // data.id is the real, Postgres-generated UUID — this is what every later
+    // updateFulfillmentStatus(id, ...) call must use, not a client-generated string.
+    return data.id
   }
 
   static async updateFulfillmentStatus(
@@ -966,7 +972,7 @@ private static async createSingleTicket(
       status,
       updated_at: new Date().toISOString(),
     }
-    
+
     if (updates?.ticketIds !== undefined) updateData.ticket_ids = updates.ticketIds
     if (updates?.lastError !== undefined) updateData.last_error = updates.lastError
     if (updates?.attemptCount !== undefined) updateData.attempt_count = updates.attemptCount
