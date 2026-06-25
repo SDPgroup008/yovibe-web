@@ -382,9 +382,8 @@ private static async createSingleTicket(
       },
       { maxAttempts: 3, baseDelayMs: 1000 }
     )
-    const ticketId = (savedTicket as any).id
     console.log("✅ Ticket saved to database!")
-    console.log("   - Supabase ID:", ticketId)
+    console.log("   - Supabase ID:", savedTicket.id)
 
     console.log("--- Step 9: Sending notification to event owner ---")
     await NotificationService.notifyTicketPurchase(event, ticket)
