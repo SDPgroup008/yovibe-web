@@ -499,17 +499,29 @@ const OrganiserDashboardScreen: React.FC = () => {
         })
       } catch (err) { console.error("Failed to save payout record:", err) }
 
-      // Update organizer wallet
+      // Update organizer wallet (get-or-create pattern)
       try {
-        const wallet = await SupabaseService.getOrganizerWallet(user.id)
-        if (wallet) {
+        let wallet = await SupabaseService.getOrganizerWallet(user.id)
+
+        if (!wallet) {
+          console.log("No existing wallet for organizer — creating one before applying payout")
           await SupabaseService.createOrUpdateOrganizerWallet(user.id, {
-            available_balance: (wallet.available_balance || 0) - totalAmount,
-            total_payouts: (wallet.total_payouts || 0) + totalAmount,
-            last_payout_date: new Date().toISOString(),
+            available_balance: 0,
+            pending_balance: 0,
+            total_earnings: 0,
+            total_payouts: 0,
           })
+          wallet = await SupabaseService.getOrganizerWallet(user.id)
         }
-      } catch (err) { console.error("Failed to update wallet:", err) }
+
+        await SupabaseService.createOrUpdateOrganizerWallet(user.id, {
+          available_balance: (wallet?.available_balance || 0) - totalAmount,
+          total_payouts: (wallet?.total_payouts || 0) + totalAmount,
+          last_payout_date: new Date().toISOString(),
+        })
+      } catch (err) {
+        console.error("Failed to update wallet after successful payout:", err)
+      }
 
       setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
       setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))

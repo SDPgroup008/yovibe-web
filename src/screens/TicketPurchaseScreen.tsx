@@ -128,6 +128,26 @@ const TicketPurchaseScreen: React.FC = () => {
   const [checkingPayment, setCheckingPayment] = useState(false)
   const bannerOpacity = useRef(new Animated.Value(0)).current
 
+  // ===========================================================================
+  // FIX: Security-photo branch logic, computed ONCE at component scope so it's
+  // visible both to the JSX render below AND to handlePurchase/createTicketAndNavigate.
+  // Previously this was declared separately inside handlePurchase AND inside
+  // createTicketAndNavigate (in the latter case, even referencing deliveryEmails/
+  // payerEmail before those were defined) — neither of those inner copies was
+  // visible to the JSX, which is what caused:
+  //   "ReferenceError: showManualPhotoCapture is not defined"
+  // Do not redeclare these inside handlePurchase or createTicketAndNavigate —
+  // both functions now just reference these component-scope values directly.
+  // ===========================================================================
+  const payerEmailForPhotoCheck = visitorEmail.trim() || buyerEmails[0]?.trim() || user?.email || ""
+  const deliveryEmailsForPhotoCheck = emailDistribution === "single"
+    ? Array(actualTicketCount).fill(payerEmailForPhotoCheck)
+    : buyerEmails.slice(0, actualTicketCount).map(e => e.trim())
+
+  const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmailsForPhotoCheck[0] === payerEmailForPhotoCheck
+  const showManualPhotoCapture = isBuyingForSelf
+  const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
+
   // Auto-hide banner after 3 seconds
   useEffect(() => {
     if (purchaseStatus !== null) {
@@ -234,9 +254,11 @@ const TicketPurchaseScreen: React.FC = () => {
       
       const includePhoto = securityPhotoEnabled && photoCaptured
 
-      const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmails[0] === payerEmail
-      const showManualPhotoCapture = isBuyingForSelf
-      const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
+      // FIX: isBuyingForSelf / showManualPhotoCapture / securityPhotoForcedViaEmail
+      // are no longer redeclared here — they're computed once at component scope
+      // above (see the comment block near the top of the component). This also
+      // fixes a separate ordering bug where this block previously referenced
+      // deliveryEmails/payerEmail before those were declared further down.
 
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
@@ -486,10 +508,11 @@ const handlePurchase = async () => {
       return
     }
 
-    const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmails[0] === payerEmail
-    const showManualPhotoCapture = isBuyingForSelf
-    const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
-    
+    // FIX: isBuyingForSelf / showManualPhotoCapture / securityPhotoForcedViaEmail
+    // are no longer redeclared here — they're computed once at component scope
+    // (see the comment block near the top of the component) and referenced
+    // directly below.
+
     if (showManualPhotoCapture && securityPhotoEnabled && !photoCaptured) {
       Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
       return
