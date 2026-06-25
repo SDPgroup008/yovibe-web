@@ -233,6 +233,11 @@ const TicketPurchaseScreen: React.FC = () => {
       await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
       
       const includePhoto = securityPhotoEnabled && photoCaptured
+
+      const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmails[0] === payerEmail
+      const showManualPhotoCapture = isBuyingForSelf
+      const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
+
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
@@ -275,7 +280,9 @@ const TicketPurchaseScreen: React.FC = () => {
       
       for (const ticket of tickets) {
         try {
-          const photoUploadLink = ticket.photoUploadToken 
+          const payerEmailMatchesDelivery = ticket.deliveryEmail === payerEmail
+          const shouldIncludePhotoLink = ticket.photoUploadToken && (!ticket.buyerPhotoUrl || !payerEmailMatchesDelivery)
+          const photoUploadLink = shouldIncludePhotoLink 
             ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
             : undefined
           
@@ -479,9 +486,11 @@ const handlePurchase = async () => {
       return
     }
 
-    // Validate security photo if enabled
-    const includePhoto = securityPhotoEnabled && photoCaptured
-    if (securityPhotoEnabled && !photoCaptured) {
+    const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmails[0] === payerEmail
+    const showManualPhotoCapture = isBuyingForSelf
+    const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
+    
+    if (showManualPhotoCapture && securityPhotoEnabled && !photoCaptured) {
       Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
       return
     }
@@ -843,41 +852,53 @@ const handlePurchase = async () => {
           Enable security photo to add an extra layer of verification to your ticket. This will help verify your identity at the event entrance.
         </Text>
 
-        <TouchableOpacity
-          style={[styles.toggleButton, securityPhotoEnabled && styles.toggleButtonActive]}
-          onPress={() => setSecurityPhotoEnabled(!securityPhotoEnabled)}
-        >
-          <View style={styles.toggleContent}>
-            <Ionicons name={securityPhotoEnabled ? "shield-checkmark" : "shield-outline"} size={24} color={securityPhotoEnabled ? "#00FF9F" : "#888888"} />
-            <View style={styles.toggleTextContainer}>
-              <Text style={[styles.toggleText, securityPhotoEnabled && styles.toggleTextActive]}>
-                {securityPhotoEnabled ? "Security Photo Enabled" : "Enable Security Photo"}
-              </Text>
-              <Text style={styles.toggleSubtext}>
-                {securityPhotoEnabled ? "Photo will be added to your ticket" : "Add photo verification to your ticket"}
-              </Text>
-            </View>
-          </View>
-          <View style={[styles.toggleSwitch, securityPhotoEnabled && styles.toggleSwitchActive]}>
-            <View style={[styles.toggleKnob, securityPhotoEnabled && styles.toggleKnobActive]} />
-          </View>
-        </TouchableOpacity>
-
-        {securityPhotoEnabled && (
-          <View style={styles.photoSection}>
-            <Text style={styles.photoSectionText}>
-              {photoCaptured ? "Photo added to ticket" : "Tap below to capture your security photo"}
-            </Text>
+        {showManualPhotoCapture && (
+          <>
             <TouchableOpacity
-              style={[styles.photoButton, photoCaptured && styles.photoButtonCaptured]}
-              onPress={handleCapturePhoto}
-              disabled={loading}
+              style={[styles.toggleButton, securityPhotoEnabled && styles.toggleButtonActive]}
+              onPress={() => setSecurityPhotoEnabled(!securityPhotoEnabled)}
             >
-              <Ionicons name={photoCaptured ? "checkmark-circle" : "camera"} size={24} color="#FFFFFF" />
-              <Text style={styles.photoButtonText}>
-                {photoCaptured ? "Photo Captured" : "Capture Photo"}
-              </Text>
+              <View style={styles.toggleContent}>
+                <Ionicons name={securityPhotoEnabled ? "shield-checkmark" : "shield-outline"} size={24} color={securityPhotoEnabled ? "#00FF9F" : "#888888"} />
+                <View style={styles.toggleTextContainer}>
+                  <Text style={[styles.toggleText, securityPhotoEnabled && styles.toggleTextActive]}>
+                    {securityPhotoEnabled ? "Security Photo Enabled" : "Enable Security Photo"}
+                  </Text>
+                  <Text style={styles.toggleSubtext}>
+                    {securityPhotoEnabled ? "Photo will be added to your ticket" : "Add photo verification to your ticket"}
+                  </Text>
+                </View>
+              </View>
+              <View style={[styles.toggleSwitch, securityPhotoEnabled && styles.toggleSwitchActive]}>
+                <View style={[styles.toggleKnob, securityPhotoEnabled && styles.toggleKnobActive]} />
+              </View>
             </TouchableOpacity>
+
+            {securityPhotoEnabled && (
+              <View style={styles.photoSection}>
+                <Text style={styles.photoSectionText}>
+                  {photoCaptured ? "Photo added to ticket" : "Tap below to capture your security photo"}
+                </Text>
+                <TouchableOpacity
+                  style={[styles.photoButton, photoCaptured && styles.photoButtonCaptured]}
+                  onPress={handleCapturePhoto}
+                  disabled={loading}
+                >
+                  <Ionicons name={photoCaptured ? "checkmark-circle" : "camera"} size={24} color="#FFFFFF" />
+                  <Text style={styles.photoButtonText}>
+                    {photoCaptured ? "Photo Captured" : "Capture Photo"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
+
+        {securityPhotoForcedViaEmail && !showManualPhotoCapture && (
+          <View style={styles.infoBox}>
+            <Text style={styles.infoText}>
+              A security photo link will be emailed to each attendee for them to add their photo.
+            </Text>
           </View>
         )}
       </View>
@@ -1661,6 +1682,19 @@ buyerNamesSection: {
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "bold",
+    textAlign: "center",
+  },
+  infoBox: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#00D4FF",
+  },
+  infoText: {
+    color: "#CCCCCC",
+    fontSize: 12,
     textAlign: "center",
   },
   // Full screen overlay for mobile money payment checking

@@ -173,6 +173,7 @@ auth-timeout-false-logout-prompt.md
 auth-dedup-fix-prompt.md
 commission-ticketref-admin-recovery-prompt.md
 buyer-delivery-email-alignment-prompt.md
+conditional-security-photo-prompt.md
 
 # Temporary/development files
 subscribeTokens.js
