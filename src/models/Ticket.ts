@@ -3,9 +3,11 @@ export interface Ticket {
   eventId: string
   eventName: string
   venueName?: string
-  buyerId: string
+  buyerId?: string
   buyerName: string
   buyerEmail: string
+  deliveryEmail?: string
+  ticketRef?: string
   buyerPhone?: string
   quantity: number
   totalAmount: number

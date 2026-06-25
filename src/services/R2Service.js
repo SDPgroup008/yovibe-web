@@ -1,0 +1,286 @@
+"use strict";
+// Web-compatible R2 upload service
+// In browser: calls Netlify function
+// In Node.js: uses AWS SDK directly
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.uploadToR2 = uploadToR2;
+exports.deleteFromR2 = deleteFromR2;
+exports.getR2PublicUrl = getR2PublicUrl;
+exports.uploadQRCode = uploadQRCode;
+exports.uploadBuyerPhoto = uploadBuyerPhoto;
+exports.uploadBatch = uploadBatch;
+const isServerSide = typeof window === 'undefined';
+const BUCKET = process.env.R2_BUCKET_NAME || process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'yovibe';
+const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
+const FUNCTIONS_BASE_URL = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+    process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    '';
+const UPLOAD_TIMEOUT_MS = 20000;
+function resolveFunctionUrl(functionName) {
+    const normalizedBase = FUNCTIONS_BASE_URL.replace(/\/$/, '');
+    if (normalizedBase) {
+        return `${normalizedBase}/.netlify/functions/${functionName}`;
+    }
+    if (!isServerSide && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
+        // In expo web dev, local server does not host Netlify functions by default.
+        // Route to deployed function host unless an explicit base URL is provided.
+        return `https://yovibe.net/.netlify/functions/${functionName}`;
+    }
+    return `/.netlify/functions/${functionName}`;
+}
+/**
+ * Upload file to R2 and return public URL
+ * Works in both browser and Node.js environments
+ */
+async function uploadToR2(options) {
+    try {
+        const { contentType, path, filename, body } = options;
+        const key = `${path}/${filename}`;
+        if (isServerSide) {
+            // Server-side: use AWS SDK directly
+            return await uploadToR2Server(key, body, contentType);
+        }
+        else {
+            // Browser-side: call Netlify function
+            return await uploadToR2Browser(key, body, contentType, path, filename);
+        }
+    }
+    catch (error) {
+        console.error('[R2Service] Upload error:', error);
+        throw error;
+    }
+}
+/**
+ * Server-side upload to R2 using AWS SDK
+ */
+async function uploadToR2Server(key, body, contentType) {
+    const { S3Client, PutObjectCommand } = await Promise.resolve().then(() => __importStar(require('@aws-sdk/client-s3')));
+    const s3Client = new S3Client({
+        region: 'auto',
+        endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
+        credentials: {
+            accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+            secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+        },
+        forcePathStyle: true,
+    });
+    let uploadBody;
+    if (typeof body === 'string') {
+        // Handle data URLs
+        if (body.startsWith('data:')) {
+            const base64Data = body.replace(/^data:[\w\/\-]+;base64,/, '');
+            uploadBody = Buffer.from(base64Data, 'base64');
+        }
+        else {
+            uploadBody = body;
+        }
+    }
+    else if (body instanceof Blob) {
+        const arrayBuffer = await body.arrayBuffer();
+        uploadBody = Buffer.from(arrayBuffer);
+    }
+    else {
+        uploadBody = body;
+    }
+    const command = new PutObjectCommand({
+        Bucket: BUCKET,
+        Key: key,
+        Body: uploadBody,
+        ContentType: contentType,
+        ACL: 'public-read',
+    });
+    await s3Client.send(command);
+    const url = `${PUBLIC_URL}/${key}`;
+    return { url, key };
+}
+/**
+ * Browser-side upload to R2 via Netlify function
+ */
+async function uploadToR2Browser(key, body, contentType, path, filename) {
+    let fileData;
+    const blobToDataUrl = (blob) => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(new Error('Failed to read file for upload'));
+            reader.readAsDataURL(blob);
+        });
+    };
+    if (typeof body === 'string') {
+        fileData = body.startsWith('data:') ? body.replace(/^data:[^;]+;base64,/, '') : body;
+    }
+    else if (body instanceof Blob) {
+        const dataUrl = await blobToDataUrl(body);
+        fileData = dataUrl.replace(/^data:[^;]+;base64,/, '');
+    }
+    else if (Buffer.isBuffer(body)) {
+        fileData = body.toString('base64');
+    }
+    else {
+        fileData = body;
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
+    let response;
+    try {
+        response = await fetch(resolveFunctionUrl('uploadR2'), {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            signal: controller.signal,
+            body: JSON.stringify({
+                file: fileData,
+                filename,
+                contentType,
+                path,
+                type: 'media',
+            }),
+        });
+    }
+    catch (error) {
+        if (error?.name === 'AbortError') {
+            throw new Error(`Upload request timed out after ${UPLOAD_TIMEOUT_MS / 1000}s. ` +
+                `If running locally, set NEXT_PUBLIC_FUNCTIONS_BASE_URL or run via netlify dev.`);
+        }
+        throw error;
+    }
+    finally {
+        clearTimeout(timeoutId);
+    }
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }));
+        // Provide helpful error message for configuration issues
+        if (errorData.error?.includes('R2 storage not configured')) {
+            throw new Error('R2 storage is not configured. Please set up Cloudflare R2 credentials in your Netlify environment variables:\n' +
+                '- R2_ACCESS_KEY_ID\n' +
+                '- R2_SECRET_ACCESS_KEY\n' +
+                '- R2_ACCOUNT_ID\n' +
+                '- R2_BUCKET_NAME\n' +
+                '- R2_ENDPOINT\n' +
+                '- R2_PUBLIC_URL\n\n' +
+                'See: https://developers.cloudflare.com/r2/api/s3/tokens/');
+        }
+        throw new Error(`Upload failed: ${errorData.error || response.statusText}`);
+    }
+    const result = await response.json();
+    return { url: result.url, key };
+}
+/**
+ * Delete file from R2
+ */
+async function deleteFromR2(key) {
+    if (!isServerSide) {
+        throw new Error('R2 delete operation only available on server side');
+    }
+    try {
+        const { S3Client, DeleteObjectCommand } = await Promise.resolve().then(() => __importStar(require('@aws-sdk/client-s3')));
+        const s3Client = new S3Client({
+            region: 'auto',
+            endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
+            credentials: {
+                accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
+                secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
+            },
+            forcePathStyle: true,
+        });
+        const command = new DeleteObjectCommand({
+            Bucket: BUCKET,
+            Key: key,
+        });
+        await s3Client.send(command);
+    }
+    catch (error) {
+        console.error('[R2Service] Delete error:', error);
+        throw error;
+    }
+}
+/**
+ * Get public URL for R2 key
+ */
+function getR2PublicUrl(key) {
+    return `${PUBLIC_URL}/${key}`;
+}
+/**
+ * Upload QR code data URL to R2
+ */
+async function uploadQRCode(qrCodeDataUrl, ticketId) {
+    try {
+        return await uploadToR2({
+            path: 'qr-codes',
+            filename: `${ticketId}.png`,
+            contentType: 'image/png',
+            body: qrCodeDataUrl,
+        });
+    }
+    catch (error) {
+        console.error('[R2Service] QR Code upload error:', error);
+        throw error;
+    }
+}
+/**
+ * Upload buyer photo to R2
+ */
+async function uploadBuyerPhoto(photoUri, ticketId) {
+    try {
+        return await uploadToR2({
+            path: 'buyer-photos',
+            filename: `${ticketId}.jpg`,
+            contentType: 'image/jpeg',
+            body: photoUri,
+        });
+    }
+    catch (error) {
+        console.error('[R2Service] Buyer photo upload error:', error);
+        throw error;
+    }
+}
+/**
+ * Batch upload multiple files to R2
+ */
+async function uploadBatch(files) {
+    const results = await Promise.allSettled(files.map(file => uploadToR2(file)));
+    return results.map((result, index) => {
+        if (result.status === 'fulfilled') {
+            return { ...result.value, success: true };
+        }
+        else {
+            console.error(`[R2Service] Batch upload failed for ${files[index].filename}:`, result.reason);
+            return { url: '', key: files[index].filename, success: false };
+        }
+    });
+}

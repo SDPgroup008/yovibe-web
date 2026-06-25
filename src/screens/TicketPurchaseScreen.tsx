@@ -237,6 +237,11 @@ const TicketPurchaseScreen: React.FC = () => {
       const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
 
+      const payerEmail = visitorEmail.trim() || buyerEmails[0]?.trim()
+      const deliveryEmails = emailDistribution === "single" 
+        ? Array(actualTicketCount).fill(payerEmail)
+        : buyerEmailsList
+
       const tickets = await TicketService.purchaseTicketsForTable(
         event!,
         buyerNamesList,
@@ -260,7 +265,10 @@ const TicketPurchaseScreen: React.FC = () => {
           ticketType: selectedTicketTypeName,
           paymentReference: paymentOrderId || undefined,
           pesapalTransactionId: !isMobileMoney ? verificationResult.transactionId : undefined,
-        }
+        },
+        user?.id ?? null,
+        payerEmail,
+        deliveryEmails,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
@@ -275,7 +283,7 @@ const TicketPurchaseScreen: React.FC = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              buyerEmail: ticket.buyerEmail,
+              buyerEmail: ticket.deliveryEmail ?? ticket.buyerEmail,
               buyerName: ticket.buyerName,
               eventName: ticket.eventName,
               ticketType: ticket.entryFeeType,

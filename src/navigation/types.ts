@@ -83,6 +83,7 @@ export type ProfileStackParamList = {
   AdminEvents: undefined
   AdminOwnershipRequests: undefined
   AdminDashboard: undefined
+  AdminStrandedPurchases: undefined
   Notification: undefined
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }
@@ -165,3 +166,4 @@ export type AdminVenuesScreenProps = NativeStackScreenProps<ProfileStackParamLis
 export type AdminEventsScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminEvents">
 export type AdminOwnershipRequestsScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminOwnershipRequests">
 export type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminDashboard">
+export type AdminStrandedPurchasesScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminStrandedPurchases">

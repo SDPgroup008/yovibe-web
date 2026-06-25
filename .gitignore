@@ -171,6 +171,8 @@ SEO_AUDIT_REPORT.md
 email-ticket-implementation-prompt.md
 auth-timeout-false-logout-prompt.md
 auth-dedup-fix-prompt.md
+commission-ticketref-admin-recovery-prompt.md
+buyer-delivery-email-alignment-prompt.md
 
 # Temporary/development files
 subscribeTokens.js

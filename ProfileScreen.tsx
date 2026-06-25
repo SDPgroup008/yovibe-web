@@ -89,6 +89,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
     }
   }
 
+  const navigateToAdminStrandedPurchases = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminStrandedPurchases")
+    }
+  }
+
   const handleToggleEditProfile = () => {
     setShowEditProfile(!showEditProfile)
   }
@@ -219,6 +225,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminEvents}>
               <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
               <Text style={styles.menuText}>Manage Events</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminStrandedPurchases}>
+              <Ionicons name="alert-circle-outline" size={24} color="#FF6B6B" />
+              <Text style={styles.menuText}>Stranded Purchases</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
           </>

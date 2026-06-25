@@ -13,6 +13,8 @@ export interface PendingFulfillment {
   ticketIds?: string[]
   lastError?: string
   attemptCount: number
+  adminResolvedBy?: string
+  adminResolvedAt?: Date
   createdAt: Date
   updatedAt: Date
 }

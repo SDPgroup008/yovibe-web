@@ -40,6 +40,7 @@ import AdminVenuesScreen from "../screens/admin/AdminVenuesScreen"
 import AdminEventsScreen from "../screens/admin/AdminEventsScreen"
 import AdminOwnershipRequestsScreen from "../screens/admin/AdminOwnershipRequestsScreen"
 import AdminDashboardScreen from "../screens/admin/AdminDashboardScreen"
+import AdminStrandedPurchasesScreen from "../screens/admin/AdminStrandedPurchasesScreen"
 import OrganiserDashboardScreen from "../screens/OrganiserDashboardScreen"
 
 // Types
@@ -502,6 +503,7 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminVenues" component={AdminVenuesScreen} options={{ title: "Manage Venues" }} />
       <ProfileStack.Screen name="AdminEvents" component={AdminEventsScreen} options={{ title: "Manage Events" }} />
       <ProfileStack.Screen name="AdminOwnershipRequests" component={AdminOwnershipRequestsScreen} options={{ title: "Ownership Requests" }} />
+      <ProfileStack.Screen name="AdminStrandedPurchases" component={AdminStrandedPurchasesScreen} options={{ title: "Stranded Purchases" }} />
       <ProfileStack.Screen name="AddVibe" component={AddVibeScreen} options={{ title: "Add Vibe" }} />
       <ProfileStack.Screen name="TodaysVibe" component={TodaysVibeScreenWrapper} options={{ title: "Today's Vibe" }} />
       <ProfileStack.Screen

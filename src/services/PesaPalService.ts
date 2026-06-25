@@ -14,7 +14,7 @@ const generateOrderId = (): string => {
 }
 
 export class PesaPalService {
-  private static APP_COMMISSION_RATE = 0.08 // 8%
+  private static APP_COMMISSION_RATE = 0.15 // 15%
   private static LATE_FEE_PERCENTAGE = 0.15 // 15%
 
 

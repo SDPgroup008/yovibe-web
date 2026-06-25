@@ -175,6 +175,12 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToAdminStrandedPurchases = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminStrandedPurchases");
+    }
+  };
+
   const navigateToAdminDashboard = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminDashboard");
@@ -347,6 +353,12 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminOwnershipRequests}>
               <Ionicons name="swap-horizontal-outline" size={24} color="#FFFFFF" />
               <Text style={styles.menuText}>Ownership Requests</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminStrandedPurchases}>
+              <Ionicons name="alert-circle-outline" size={24} color="#FF6B6B" />
+              <Text style={styles.menuText}>Stranded Purchases</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
           </>

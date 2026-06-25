@@ -33,6 +33,7 @@ import AdminUsersScreen from '../screens/admin/AdminUsersScreen';
 import AdminVenuesScreen from '../screens/admin/AdminVenuesScreen';
 import AdminEventsScreen from '../screens/admin/AdminEventsScreen';
 import AdminOwnershipRequestsScreen from '../screens/admin/AdminOwnershipRequestsScreen';
+import AdminStrandedPurchasesScreen from '../screens/admin/AdminStrandedPurchasesScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
 
 // Import compatibility wrapper
@@ -287,6 +288,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/profile/admin/ownership-requests',
     component: withCompatNavigation(AdminOwnershipRequestsScreen),
+    exact: true
+  },
+  {
+    path: '/profile/admin/stranded-purchases',
+    component: withCompatNavigation(AdminStrandedPurchasesScreen),
     exact: true
   },
   {

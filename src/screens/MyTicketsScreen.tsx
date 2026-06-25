@@ -16,6 +16,10 @@ import type { Ticket } from "../models/Ticket"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
 const shortTicketRef = (ticket: Ticket): string => {
+  if (ticket.ticketRef) {
+    return ticket.ticketRef
+  }
+  
   const year = new Date().getFullYear()
   const suffix = (ticket.id.match(/[A-Za-z0-9]{4}$/) || ["XXXX"])[0].toUpperCase()
   

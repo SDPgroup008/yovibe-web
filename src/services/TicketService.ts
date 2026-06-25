@@ -9,6 +9,7 @@ import type { Ticket, TicketValidation, PaymentIntent } from "../models/Ticket"
 import type { Event } from "../models/Event"
 import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
+import { deriveTicketRef } from "../utils/ticketRef"
 
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -81,6 +82,9 @@ export class TicketService {
       paymentReference?: string
       pesapalTransactionId?: string
     },
+    buyerId?: string | null,
+    payerEmail?: string,
+    deliveryEmails?: string[],
   ): Promise<Ticket[]> {
     try {
       console.log("========================================")
@@ -97,22 +101,27 @@ export class TicketService {
       const tableTotal = isTableEntry ? totalAmount : undefined
       const tableGroupId = isTableEntry ? `YVG-${event.id.slice(-6)}-${Date.now().toString().slice(-6)}` : undefined
 
+      const payerEmailFinal = payerEmail ?? buyerEmails[0] ?? ""
+
       for (let i = 0; i < buyerNames.length; i++) {
-        const buyerName = buyerNames[i]
-        const buyerEmail = buyerEmails[i] || ""
-        console.log(`\n--- Creating ticket ${i + 1}/${totalTickets} for ${buyerName} (${buyerEmail}) ---`)
+        const attendeeName = buyerNames[i]
+        const attendeeEmail = buyerEmails[i] || ""
+        const deliveryEmail = deliveryEmails?.[i] ?? attendeeEmail
+        console.log(`\n--- Creating ticket ${i + 1}/${totalTickets} for ${attendeeName} (${attendeeEmail}) ---`)
 
         const ticket = await this.createSingleTicket(
           event,
-          buyerName,
-          buyerEmail,
+          attendeeName,
+          payerEmailFinal,
           1,
           buyerPhotoUrl,
           totalAmount / ticketsPerPurchase,
           paymentDetails,
           i === 0,
           tableTotal,
-          tableGroupId
+          tableGroupId,
+          buyerId ?? null,
+          deliveryEmail,
         )
         createdTickets.push(ticket)
       }
@@ -207,6 +216,8 @@ private static async createSingleTicket(
     shouldCreatePaymentIntent: boolean = true,
     tableTotalAmount?: number,
     tableGroupId?: string,
+    buyerId?: string | null,
+    deliveryEmail?: string,
   ): Promise<Ticket> {
     console.log("--- Step 1: Calculating ticket price ---")
     const basePrice = event.entryFees && event.entryFees.length > 0
@@ -242,7 +253,7 @@ private static async createSingleTicket(
     console.log("   - Late Fee:", lateFee)
     console.log("   - Total:", total)
     console.log("   - Is Late Purchase:", isLatePurchase)
-    console.log("   - App Commission (8%):", appCommission)
+    console.log("   - App Commission (15%):", appCommission)
     console.log("   - Venue Revenue:", venueRevenue)
 
     let paymentIntent: PaymentIntent | undefined
@@ -288,13 +299,19 @@ private static async createSingleTicket(
 
     console.log("--- Step 6: Creating ticket object ---")
     const photoUploadToken = uuidv4()
+    const ticketId = `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const isTableEntry = !!tableGroupId
+    const ticketRef = deriveTicketRef(ticketId, isTableEntry)
+    
     const ticket: Ticket = {
-      id: `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: ticketId,
       eventId: event.id,
       eventName: event.name,
-      buyerId: `buyer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      buyerId: buyerId ?? undefined,
       buyerName,
       buyerEmail,
+      deliveryEmail: deliveryEmail ?? buyerEmail,
+      ticketRef,
       quantity: 1,
       totalAmount: total,
       tableTotalAmount: tableTotalAmount,
@@ -966,7 +983,7 @@ private static async createSingleTicket(
   static async updateFulfillmentStatus(
     id: string,
     status: PendingFulfillment["status"],
-    updates?: Partial<Pick<PendingFulfillment, "ticketIds" | "lastError" | "attemptCount">>
+    updates?: Partial<Pick<PendingFulfillment, "ticketIds" | "lastError" | "attemptCount" | "adminResolvedBy" | "adminResolvedAt">>
   ) {
     const updateData: any = {
       status,
@@ -976,6 +993,8 @@ private static async createSingleTicket(
     if (updates?.ticketIds !== undefined) updateData.ticket_ids = updates.ticketIds
     if (updates?.lastError !== undefined) updateData.last_error = updates.lastError
     if (updates?.attemptCount !== undefined) updateData.attempt_count = updates.attemptCount
+    if (updates?.adminResolvedBy !== undefined) updateData.admin_resolved_by = updates.adminResolvedBy
+    if (updates?.adminResolvedAt !== undefined) updateData.admin_resolved_at = updates.adminResolvedAt
 
     const { error } = await supabase
       .from("pending_ticket_fulfillments")
