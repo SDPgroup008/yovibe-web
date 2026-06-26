@@ -36,8 +36,22 @@ function buildTicketEmailHtml({
   ticketRef,
   qrCodeDataUrl,
   buyerName,
+  photoUploadLink,
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
+
+  const photoLinkSection = photoUploadLink
+    ? `
+      <div style="margin-top:20px; padding:16px; background:#1a1a1a; border-radius:10px; border:1px solid #2a2a2a; text-align:center;">
+        <p style="margin:0 0 12px; font-size:13px; color:#cfcfcf;">
+          Add a quick photo to this ticket for extra security at the gate.
+        </p>
+        <a href="${escapeHtml(photoUploadLink)}" style="display:inline-block; background:#ff3b3b; color:#ffffff; text-decoration:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600;">
+          Add Security Photo
+        </a>
+      </div>
+    `
+    : "";
 
   return `
   <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#0b0b0b; padding:24px; color:#f5f5f5;">
@@ -73,6 +87,7 @@ function buildTicketEmailHtml({
           This ticket is verified and secured by YoVibe
         </p>
       </div>
+      ${photoLinkSection}
     </div>
   </div>
   `;
@@ -289,6 +304,7 @@ exports.handler = async function (event) {
     amountPaid,
     ticketRef,
     qrCodeDataUrl,
+    photoUploadLink,
   } = payload;
 
   // Required fields — fail fast with a clear message rather than a vague 500 later
@@ -321,6 +337,7 @@ exports.handler = async function (event) {
     ticketRef,
     qrCodeDataUrl,
     buyerName,
+    photoUploadLink,
   });
 
   let pdfBytes;

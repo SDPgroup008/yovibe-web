@@ -33,6 +33,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [photoCaptured, setPhotoCaptured] = useState(false)
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState("")
   const [securityPhotoEnabled, setSecurityPhotoEnabled] = useState(false)
+  const [buyingForSomeoneElse, setBuyingForSomeoneElse] = useState(false)
   
   // Ticket type selection state
   const [selectedTicketType, setSelectedTicketType] = useState<{ name: string; amount: string } | null>(null)
@@ -252,14 +253,6 @@ const TicketPurchaseScreen: React.FC = () => {
       
       await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
       
-      const includePhoto = securityPhotoEnabled && photoCaptured
-
-      // FIX: isBuyingForSelf / showManualPhotoCapture / securityPhotoForcedViaEmail
-      // are no longer redeclared here — they're computed once at component scope
-      // above (see the comment block near the top of the component). This also
-      // fixes a separate ordering bug where this block previously referenced
-      // deliveryEmails/payerEmail before those were declared further down.
-
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
@@ -268,6 +261,10 @@ const TicketPurchaseScreen: React.FC = () => {
       const deliveryEmails = emailDistribution === "single" 
         ? Array(actualTicketCount).fill(payerEmail)
         : buyerEmailsList
+
+      const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
+      const showManualPhotoCapture = isBuyingForSelf
+      const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
 
       const tickets = await TicketService.purchaseTicketsForTable(
         event!,
@@ -508,12 +505,10 @@ const handlePurchase = async () => {
       return
     }
 
-    // FIX: isBuyingForSelf / showManualPhotoCapture / securityPhotoForcedViaEmail
-    // are no longer redeclared here — they're computed once at component scope
-    // (see the comment block near the top of the component) and referenced
-    // directly below.
+    const isBuyingForSelfValidation = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
+    const showManualPhotoCaptureValidation = isBuyingForSelfValidation
 
-    if (showManualPhotoCapture && securityPhotoEnabled && !photoCaptured) {
+    if (showManualPhotoCaptureValidation && securityPhotoEnabled && !photoCaptured) {
       Alert.alert("Photo Required", "Please capture your security photo or disable the security option")
       return
     }
@@ -866,6 +861,18 @@ const handlePurchase = async () => {
               autoCapitalize="none"
             />
           ))
+        )}
+
+        {actualTicketCount === 1 && !isTableEntry && emailDistribution === "single" && (
+          <TouchableOpacity
+            style={[styles.radioButton, buyingForSomeoneElse && styles.radioButtonSelected]}
+            onPress={() => setBuyingForSomeoneElse(!buyingForSomeoneElse)}
+          >
+            <View style={[styles.radioCircle, buyingForSomeoneElse && styles.radioCircleSelected]}>
+              {buyingForSomeoneElse && <View style={styles.radioDot} />}
+            </View>
+            <Text style={styles.radioLabel}>I'm buying this for someone else</Text>
+          </TouchableOpacity>
         )}
       </View>
 
