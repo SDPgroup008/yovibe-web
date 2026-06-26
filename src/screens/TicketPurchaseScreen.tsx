@@ -252,6 +252,8 @@ const TicketPurchaseScreen: React.FC = () => {
       console.log("✅ Created pending fulfillment:", fulfillmentId)
       
       await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
+
+      const includePhoto = securityPhotoEnabled && photoCaptured
       
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
