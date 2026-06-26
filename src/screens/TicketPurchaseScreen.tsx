@@ -241,7 +241,7 @@ const TicketPurchaseScreen: React.FC = () => {
       fulfillmentId = await TicketService.createPendingFulfillment({
         paymentId,
         pawapayDepositId: isMobileMoney ? verificationResult.depositId : undefined,
-        buyerEmail: buyerEmailFinal,
+        buyerEmail: user?.email || visitorEmail.trim() || buyerEmails[0]?.trim(),
         buyerName: buyerNameFinal,
         buyerId: user?.id,
         eventId: event!.id,
