@@ -3,6 +3,7 @@ import PaymentService from "./PaymentService"
 import PesaPalService from "./PesaPalService"
 import PawaPayService from "./PawaPayService"
 import NotificationService from "./NotificationService"
+import SupabaseService from "./SupabaseService"
 import { uploadQRCode, uploadBuyerPhoto } from "./R2Service"
 import { v4 as uuidv4 } from "uuid"
 import type { Ticket, TicketValidation, PaymentIntent } from "../models/Ticket"
@@ -10,6 +11,12 @@ import type { Event } from "../models/Event"
 import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
 import { deriveTicketRef } from "../utils/ticketRef"
+
+const FUNCTIONS_BASE_URL =
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  ""
 
 async function withRetry<T>(
   fn: () => Promise<T>,
@@ -942,15 +949,11 @@ private static async createSingleTicket(
       status: "payment_confirmed",
       ticketIds: [],
       attemptCount: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      attendeeNames: input.attendeeNames,
+      created_at: new Date(),
+      updated_at: new Date(),
     }
 
-    // NOTE: `id` is intentionally NOT set here. The `pending_ticket_fulfillments.id`
-    // column is a strict Postgres `uuid` with `default gen_random_uuid()` — supplying
-    // our own custom-format string (e.g. "pf_<timestamp>_<random>") causes a
-    // 22P02 "invalid input syntax for type uuid" error, since that format isn't a
-    // valid UUID. Let Postgres generate it, then read the real value back via .select().
     const { data, error } = await supabase
       .from("pending_ticket_fulfillments")
       .insert({
@@ -966,23 +969,22 @@ private static async createSingleTicket(
         status: fulfillment.status,
         ticket_ids: fulfillment.ticketIds,
         attempt_count: fulfillment.attemptCount,
-        created_at: fulfillment.createdAt.toISOString(),
-        updated_at: fulfillment.updatedAt.toISOString(),
+        attendee_names: fulfillment.attendeeNames,
+        created_at: fulfillment.created_at.toISOString(),
+        updated_at: fulfillment.updated_at.toISOString(),
       })
       .select("id")
       .single()
 
     if (error) throw error
-
-    // data.id is the real, Postgres-generated UUID — this is what every later
-    // updateFulfillmentStatus(id, ...) call must use, not a client-generated string.
     return data.id
   }
 
   static async updateFulfillmentStatus(
     id: string,
     status: PendingFulfillment["status"],
-    updates?: Partial<Pick<PendingFulfillment, "ticketIds" | "lastError" | "attemptCount" | "adminResolvedBy" | "adminResolvedAt">>
+    updates?: Partial<Pick<PendingFulfillment, "ticketIds" | "lastError" | "attemptCount" | "adminResolvedBy" | "adminResolvedAt" | "attendeeNames">>,
+    appendError?: string
   ) {
     const updateData: any = {
       status,
@@ -990,10 +992,15 @@ private static async createSingleTicket(
     }
 
     if (updates?.ticketIds !== undefined) updateData.ticket_ids = updates.ticketIds
-    if (updates?.lastError !== undefined) updateData.last_error = updates.lastError
+    if (updates?.lastError !== undefined || appendError) {
+      updateData.last_error = appendError
+        ? `${updates?.lastError ? updates.lastError + " | " : ""}${appendError}`
+        : updates?.lastError
+    }
     if (updates?.attemptCount !== undefined) updateData.attempt_count = updates.attemptCount
     if (updates?.adminResolvedBy !== undefined) updateData.admin_resolved_by = updates.adminResolvedBy
     if (updates?.adminResolvedAt !== undefined) updateData.admin_resolved_at = updates.adminResolvedAt
+    if (updates?.attendeeNames !== undefined) updateData.attendee_names = updates.attendeeNames
 
     const { error } = await supabase
       .from("pending_ticket_fulfillments")
@@ -1031,8 +1038,132 @@ private static async createSingleTicket(
       ticketIds: row.ticket_ids,
       lastError: row.last_error,
       attemptCount: row.attempt_count,
-      createdAt: new Date(row.created_at),
-      updatedAt: new Date(row.updated_at),
+      adminResolvedBy: row.admin_resolved_by,
+      adminResolvedAt: row.admin_resolved_at ? new Date(row.admin_resolved_at) : undefined,
+      attendeeNames: row.attendee_names,
+      created_at: new Date(row.created_at),
+      updated_at: new Date(row.updated_at),
+    }
+  }
+
+  static async recoverTicket(
+    fulfillment: PendingFulfillment,
+    adminEmail: string,
+    attendeeNames?: string[]
+  ): Promise<{ success: boolean; ticketIds: string[]; error?: string }> {
+    const fulfillmentId = fulfillment.id
+    console.log(`[ManualRecovery:${fulfillmentId}] Stage: starting — manual recovery initiated`)
+
+    try {
+      const event = await SupabaseService.getEventById(fulfillment.eventId)
+      if (!event) {
+        throw new Error(`Event not found: ${fulfillment.eventId}`)
+      }
+
+      const namesToUse = attendeeNames ?? fulfillment.attendeeNames ?? [fulfillment.buyerName || "Attendee"]
+      const ticketsToCreate = fulfillment.quantity
+      const createdTickets: Ticket[] = []
+      const createdTicketIds: string[] = []
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — starting (${ticketsToCreate} tickets)`)
+
+      for (let i = 0; i < ticketsToCreate; i++) {
+        const ticket = await this.createSingleTicket(
+          event,
+          namesToUse[i] || namesToUse[0] || "Attendee",
+          fulfillment.buyerEmail,
+          1,
+          "",
+          fulfillment.amount / ticketsToCreate,
+          undefined,
+          false,
+          undefined,
+          undefined,
+          fulfillment.buyerId ?? undefined,
+          fulfillment.buyerEmail
+        )
+        createdTickets.push(ticket)
+        createdTicketIds.push(ticket.id)
+        console.log(`[ManualRecovery:${fulfillmentId}] Ticket created: ${ticket.id}`)
+      }
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: qr-upload — starting (${createdTickets.length} QR codes)`)
+
+      for (let i = 0; i < createdTickets.length; i++) {
+        const ticket = createdTickets[i]
+        try {
+          if (ticket.qrCodeDataUrl) {
+            await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
+            console.log(`[ManualRecovery:${fulfillmentId}] QR code uploaded for ticket ${ticket.id}`)
+          }
+        } catch (err) {
+          const errorMsg = `QR upload failed for ticket ${ticket.id}: ${err}`
+          console.error(`[ManualRecovery:${fulfillmentId}] Stage: qr-upload — FAILED`, err)
+          await this.updateFulfillmentStatus(fulfillmentId, "failed", {
+            attemptCount: fulfillment.attemptCount + 1,
+          }, errorMsg)
+          return { success: false, ticketIds: createdTicketIds, error: errorMsg }
+        }
+      }
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails)`)
+
+      for (const ticket of createdTickets) {
+        try {
+          const emailPayload = {
+            buyerEmail: fulfillment.buyerEmail,
+            buyerName: ticket.buyerName,
+            eventName: event.name,
+            ticketType: ticket.entryFeeType || "Standard",
+            venue: event.venueName,
+            date: event.date.toISOString().split("T")[0],
+            time: event.time,
+            quantity: 1,
+            amountPaid: ticket.totalAmount.toLocaleString(),
+            ticketRef: ticket.ticketRef,
+            qrCodeDataUrl: ticket.qrCodeDataUrl,
+            photoUploadLink: ticket.photoUploadToken ? `${FUNCTIONS_BASE_URL}/.netlify/functions/upload-buyer-photo?ticketId=${ticket.id}&token=${ticket.photoUploadToken}` : undefined,
+          }
+
+          const response = await fetch(`${FUNCTIONS_BASE_URL}/.netlify/functions/send-ticket-email`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(emailPayload),
+          })
+
+          if (!response.ok) {
+            throw new Error(`Email send failed: ${response.status}`)
+          }
+          console.log(`[ManualRecovery:${fulfillmentId}] Email sent for ticket ${ticket.id}`)
+        } catch (err) {
+          const errorMsg = `Email send failed for ticket ${ticket.id}: ${err}`
+          console.error(`[ManualRecovery:${fulfillmentId}] Stage: email-send — FAILED`, err)
+          await this.updateFulfillmentStatus(fulfillmentId, "failed", {
+            attemptCount: fulfillment.attemptCount + 1,
+          }, errorMsg)
+          return { success: false, ticketIds: createdTicketIds, error: errorMsg }
+        }
+      }
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: fulfillment — completing (${createdTicketIds.length} tickets)`)
+
+      await this.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
+        ticketIds: createdTicketIds,
+        attemptCount: fulfillment.attemptCount + 1,
+        adminResolvedBy: adminEmail,
+        adminResolvedAt: new Date(),
+      })
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: completed — success`)
+      return { success: true, ticketIds: createdTicketIds }
+
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      console.error(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — FAILED`, error)
+      await this.updateFulfillmentStatus(fulfillmentId, "failed", {
+        attemptCount: fulfillment.attemptCount + 1,
+      }, errorMsg)
+      return { success: false, ticketIds: [], error: errorMsg }
     }
   }
 }

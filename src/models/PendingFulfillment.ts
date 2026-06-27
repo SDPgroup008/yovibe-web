@@ -15,8 +15,9 @@ export interface PendingFulfillment {
   attemptCount: number
   adminResolvedBy?: string
   adminResolvedAt?: Date
-  createdAt: Date
-  updatedAt: Date
+  attendeeNames?: string[]
+  created_at: Date
+  updated_at: Date
 }
 
 export type FulfillmentStatus = PendingFulfillment["status"]
@@ -31,4 +32,5 @@ export interface CreateFulfillmentInput {
   eventName?: string
   quantity?: number
   amount: number
+  attendeeNames?: string[]
 }

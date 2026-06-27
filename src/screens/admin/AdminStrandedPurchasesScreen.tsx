@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../../contexts/AuthContext"
 import TicketService from "../../services/TicketService"
@@ -37,8 +37,13 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
   const { user } = useAuth()
   const [fulfillments, setFulfillments] = useState<PendingFulfillment[]>([])
   const [loading, setLoading] = useState(true)
-  const [selectedFulfillment, setSelectedFulfillment] = useState<PendingFulfillment | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [recoveryState, setRecoveryState] = useState<{
+    fulfillmentId: string | null
+    status: "idle" | "running" | "success" | "failed"
+    message: string
+    attendeeNames: string[]
+  }>({ fulfillmentId: null, status: "idle", message: "", attendeeNames: [] })
 
   useEffect(() => {
     if (user?.userType !== "admin") {
@@ -70,9 +75,25 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
     return "#00D4FF"
   }
 
+  const renderStatusBanner = () => {
+    if (recoveryState.status === "idle") return null
+    
+    const isSuccess = recoveryState.status === "success"
+    const isRunning = recoveryState.status === "running"
+    
+    return (
+      <View style={[styles.statusBanner, isSuccess ? styles.statusSuccess : isRunning ? styles.statusRunning : styles.statusFailed]}>
+        <Text style={styles.statusBannerText}>
+          {isSuccess ? "✅ " : isRunning ? "⏳ " : "❌ "}
+          {recoveryState.message}
+        </Text>
+      </View>
+    )
+  }
+
   const renderItem = ({ item }: { item: PendingFulfillment }) => {
     const isExpanded = expandedId === item.id
-    const stageColor = getStageColor(item.status, item.createdAt)
+    const stageColor = getStageColor(item.status, item.created_at)
 
     return (
       <View style={styles.card} key={item.id}>
@@ -90,7 +111,7 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
           </View>
           <Text style={styles.amount}>UGX {item.amount.toLocaleString()}</Text>
           <Text style={styles.timeAgo}>
-            Stuck for {formatDistanceToNow(new Date(item.createdAt))}
+            Stuck for {formatDistanceToNow(new Date(item.created_at))}
           </Text>
         </TouchableOpacity>
 
@@ -127,23 +148,50 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
   }
 
   const handleManualRetry = async (fulfillment: PendingFulfillment) => {
-    Alert.alert(
-      "Complete Manually",
-      `This will re-attempt ticket creation for ${fulfillment.buyerName || fulfillment.buyerEmail}. Continue?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        { text: "Retry", onPress: () => performManualRecovery(fulfillment) },
-      ]
-    )
+    const needsAttendeeNames = !fulfillment.attendeeNames || fulfillment.attendeeNames.length < fulfillment.quantity
+    
+    if (needsAttendeeNames) {
+      const names: string[] = Array(fulfillment.quantity).fill(null).map(() => "")
+      setRecoveryState({
+        fulfillmentId: fulfillment.id,
+        status: "idle",
+        message: "",
+        attendeeNames: names,
+      })
+      setExpandedId(null)
+      setTimeout(() => {
+        Alert.alert(
+          "Enter Attendee Names",
+          `Please enter names for all ${fulfillment.quantity} attendee(s)`,
+          [
+            { text: "Cancel", style: "cancel" },
+            { text: "Submit", onPress: () => performManualRecoveryWithNames(fulfillment, names) },
+          ],
+          { textInput: { placeholder: "Enter attendee name", value: names[0] || "" } }
+        )
+      }, 100)
+      return
+    }
+
+    performManualRecovery(fulfillment)
   }
 
-  const performManualRecovery = async (fulfillment: PendingFulfillment) => {
-    try {
-      await TicketService.updateFulfillmentStatus(fulfillment.id, "fulfilling")
+  const performManualRecoveryWithNames = (fulfillment: PendingFulfillment, names: string[]) => {
+    setRecoveryState({ ...recoveryState, status: "running", message: "Starting manual recovery...", fulfillmentId: fulfillment.id })
+    performManualRecovery(fulfillment, names)
+  }
+
+  const performManualRecovery = async (fulfillment: PendingFulfillment, attendeeNames?: string[]) => {
+    const adminEmail = user?.email || "unknown"
+    setRecoveryState({ ...recoveryState, status: "running", message: "Starting manual recovery...", fulfillmentId: fulfillment.id })
+
+    const result = await TicketService.recoverTicket(fulfillment, adminEmail, attendeeNames)
+
+    if (result.success) {
+      setRecoveryState({ ...recoveryState, status: "success", message: `✅ Successfully recovered ${result.ticketIds.length} ticket(s)`, fulfillmentId: fulfillment.id })
       loadFulfillments()
-    } catch (error) {
-      console.error("Recovery error:", error)
-      Alert.alert("Error", "Manual recovery failed")
+    } else {
+      setRecoveryState({ ...recoveryState, status: "failed", message: `❌ Failed: ${result.error}`, fulfillmentId: fulfillment.id })
     }
   }
 
@@ -158,6 +206,7 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      {renderStatusBanner()}
       <View style={styles.header}>
         <Text style={styles.title}>Stranded Purchases</Text>
         <TouchableOpacity onPress={loadFulfillments}>
@@ -208,6 +257,11 @@ const styles = StyleSheet.create({
   emptyState: { alignItems: "center", paddingVertical: 60 },
   emptyTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "bold", marginTop: 16 },
   emptyText: { color: "#888", textAlign: "center", marginTop: 8, paddingHorizontal: 32 },
+  statusBanner: { padding: 16, margin: 16, borderRadius: 8, backgroundColor: "#2a2a2a" },
+  statusRunning: { backgroundColor: "#2a2a2a", borderLeftWidth: 4, borderLeftColor: "#FFA500" },
+  statusSuccess: { backgroundColor: "#1a3a1a", borderLeftWidth: 4, borderLeftColor: "#4CAF50" },
+  statusFailed: { backgroundColor: "#3a1a1a", borderLeftWidth: 4, borderLeftColor: "#FF6B6B" },
+  statusBannerText: { color: "#FFFFFF", fontSize: 14 },
 })
 
 export default AdminStrandedPurchasesScreen
