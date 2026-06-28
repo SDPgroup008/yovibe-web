@@ -58,11 +58,17 @@ interface AuthProviderProps {
 }
 
 const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
-const AUTH_PROFILE_TIMEOUT_MS = 5000;
+const AUTH_PROFILE_TIMEOUT_MS = 8000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
+  const userRef = useRef<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Keep userRef in sync with state
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   // Track whether we've completed the initial auth resolution
   const initializedRef = useRef(false);
@@ -98,7 +104,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         try {
           if (session?.user) {
             // Skip re-fetching when the profile for this exact UID is already loaded
-            if (user && user.uid === session.user.id) {
+            if (userRef.current && userRef.current.uid === session.user.id) {
               console.log("AuthContext: Profile already loaded for this UID — skipping redundant fetch");
               if (!initializedRef.current) initializedRef.current = true;
               setIsLoading(false);
