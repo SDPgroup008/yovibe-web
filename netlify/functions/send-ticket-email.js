@@ -31,8 +31,6 @@ function buildTicketEmailHtml({
   venue,
   date,
   time,
-  quantity,
-  amountPaid,
   ticketRef,
   qrCodeDataUrl,
   buyerName,
@@ -76,8 +74,6 @@ function buildTicketEmailHtml({
           ${venue ? row("Venue", escapeHtml(venue)) : ""}
           ${row("Date", escapeHtml(date))}
           ${row("Time", escapeHtml(time))}
-          ${row("Quantity", escapeHtml(quantity))}
-          ${row("Amount Paid", escapeHtml(amountPaid), "#4ade80")}
           ${row("Ticket Ref", escapeHtml(ticketRef))}
         </div>
       </div>
@@ -143,8 +139,6 @@ async function buildTicketPdf({
   venue,
   date,
   time,
-  quantity,
-  amountPaid,
   ticketRef,
   qrCodeDataUrl,
   buyerName,
@@ -238,8 +232,6 @@ async function buildTicketPdf({
     ...(venue ? [["Venue", venue]] : []),
     ["Date", date],
     ["Time", time],
-    ["Quantity", String(quantity)],
-    ["Amount Paid", amountPaid, true],
     ["Ticket Ref", ticketRef],
   ];
 
@@ -300,8 +292,6 @@ exports.handler = async function (event) {
     venue,
     date,
     time,
-    quantity,
-    amountPaid,
     ticketRef,
     qrCodeDataUrl,
     photoUploadLink,
@@ -314,8 +304,6 @@ exports.handler = async function (event) {
   if (!ticketType) missing.push("ticketType");
   if (!date) missing.push("date");
   if (!time) missing.push("time");
-  if (!quantity) missing.push("quantity");
-  if (!amountPaid) missing.push("amountPaid");
   if (!ticketRef) missing.push("ticketRef");
   if (!qrCodeDataUrl) missing.push("qrCodeDataUrl");
 
@@ -332,8 +320,6 @@ exports.handler = async function (event) {
     venue,
     date,
     time,
-    quantity,
-    amountPaid,
     ticketRef,
     qrCodeDataUrl,
     buyerName,
@@ -348,8 +334,6 @@ exports.handler = async function (event) {
       venue,
       date,
       time,
-      quantity,
-      amountPaid,
       ticketRef,
       qrCodeDataUrl,
       buyerName,

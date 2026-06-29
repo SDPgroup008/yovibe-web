@@ -123,6 +123,7 @@ temp/
 *.njsproj
 *.sln
 *.sw?
+*.md
 
 # Firebase
 .firebase/
@@ -178,6 +179,9 @@ wallet-payout-fix-prompt.md
 fix-photo-link-bugs-prompt.md
 recovery.md
 auth-stale-closure-fix-prompt.md
+ticket-display-simplify-and-ref-fix-prompt.md
+google-signin-implementation-prompt.md
+
 
 
 # Temporary/development files

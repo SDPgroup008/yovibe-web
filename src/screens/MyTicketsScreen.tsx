@@ -408,14 +408,6 @@ const MyTicketsScreen: React.FC = () => {
                 <Text style={styles.infoValue}>{formatDate(selectedTicket.eventStartTime)} • {formatTime(selectedTicket.eventStartTime)}</Text>
               </View>
               <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Quantity</Text>
-                <Text style={styles.infoValue}>{selectedTicket.quantity}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Amount Paid</Text>
-                <Text style={styles.infoValueHighlight}>UGX {(selectedTicket.totalAmount || 0).toLocaleString()}</Text>
-              </View>
-              <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Ticket ID</Text>
                 <Text style={styles.infoValueMono}>{shortTicketRef(selectedTicket)}</Text>
               </View>

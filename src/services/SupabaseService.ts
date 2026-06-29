@@ -215,8 +215,10 @@ class SupabaseService {
     }
 
     // Get user_type from metadata (set during signup in SignUpScreen)
-    // If missing, log the user out and throw error - treat as unauthenticated
-    const userType = authUser.user_metadata?.user_type as UserType | undefined;
+    // If missing, default to 'regular_user' for Google OAuth sign-ins
+    const userType = (authUser.user_metadata?.user_type as UserType | undefined)
+      ?? (authUser.app_metadata?.provider === 'google' ? 'regular_user' : undefined);
+
     if (!userType) {
       console.warn("SupabaseService.ensureUserProfile: No user_type in metadata - signing out user");
       await supabase.auth.signOut();

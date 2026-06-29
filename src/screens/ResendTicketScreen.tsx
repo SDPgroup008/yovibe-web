@@ -60,9 +60,7 @@ const ResendTicketScreen: React.FC = () => {
               venue: ticket.venueName,
               date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
               time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              quantity: ticket.quantity,
-              amountPaid: `UGX ${ticket.totalAmount.toLocaleString()}`,
-              ticketRef: ticket.id,
+              ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
             }),
           })

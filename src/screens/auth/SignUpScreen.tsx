@@ -1,6 +1,5 @@
-"use client"
-
-import type React from "react"
+import "react-native-get-random-values"
+import React from "react"
 import { useState } from "react"
 import {
   View,
@@ -41,12 +40,13 @@ interface SignUpScreenProps {
 
 const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation }) => {
   const navigation = useCompatNavigation()
-  const { signUp, consumeRedirectIntent } = useAuth()
+  const { signUp, consumeRedirectIntent, signInWithGoogle } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [userType, setUserType] = useState<UserType>("regular_user")
   const [loading, setLoading] = useState(false)
+  const [googleLoading, setGoogleLoading] = useState(false)
   const [adminDotsPressed, setAdminDotsPressed] = useState(0)
 
   // visibility toggles for password fields
@@ -111,6 +111,17 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
     if (newCount === 5) {
       setUserType("admin")
       Alert.alert("Admin Mode", "Admin account type selected")
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true)
+    try {
+      await signInWithGoogle()
+    } catch (error) {
+      Alert.alert("Error", "Failed to sign in with Google. Please try again.")
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -216,6 +227,23 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
                 <>
                   <Text style={styles.buttonText}>Sign Up</Text>
                   <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.dividerContainer}>
+              <View style={styles.divider} />
+              <Text style={styles.dividerText}>or continue with</Text>
+              <View style={styles.divider} />
+            </View>
+
+            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={googleLoading}>
+              {googleLoading ? (
+                <ActivityIndicator color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="logo-google" size={20} color="#FFFFFF" />
+                  <Text style={styles.googleButtonText}>Continue with Google</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -385,6 +413,43 @@ const styles = StyleSheet.create({
   loginTextBold: {
     color: "#FFFFFF",
     fontWeight: "bold",
+  },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: responsiveSize(16, 20, 24),
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  dividerText: {
+    color: "#888888",
+    fontSize: responsiveSize(12, 13, 14),
+    marginHorizontal: responsiveSize(10, 12, 16),
+  },
+  googleButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#4285F4",
+    height: responsiveSize(48, 52, 56),
+    borderRadius: responsiveSize(8, 10, 12),
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: responsiveSize(8, 10, 14),
+    marginBottom: responsiveSize(16, 20, 24),
+    shadowColor: "#4285F4",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+  },
+  googleButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 17),
+    fontWeight: "bold",
+    marginLeft: responsiveSize(8, 10, 12),
   },
 })
 

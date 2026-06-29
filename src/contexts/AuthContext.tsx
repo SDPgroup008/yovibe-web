@@ -32,11 +32,12 @@ interface AuthContextType {
   /** new/alternate name some consumers expect */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-signUp: (
+  signUp: (
     email: string,
     password: string,
     userType: "regular_user" | "club_owner" | "admin"
   ) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
   updateProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
   setRedirectIntent: (intent: RedirectIntent) => void;
@@ -243,6 +244,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const signInWithGoogle = async () => {
+    setIsLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net',
+        },
+      });
+      if (error) throw error;
+    } catch (error) {
+      console.error("AuthContext: Google sign-in failed:", error);
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   /**
    * signOut
    *
@@ -305,6 +324,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading: isLoading,
     signIn,
     signUp,
+    signInWithGoogle,
     signOut,
     updateProfile,
     setRedirectIntent,
