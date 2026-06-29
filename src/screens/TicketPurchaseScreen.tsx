@@ -78,6 +78,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [visitorName, setVisitorName] = useState("")
   const [visitorEmail, setVisitorEmail] = useState("")
   const [visitorPhone, setVisitorPhone] = useState("")
+  const [buyerContactEmail, setBuyerContactEmail] = useState("")
   
   // Buyer names for each ticket (when quantity > 1)
   const [buyerNames, setBuyerNames] = useState<string[]>(() => {
@@ -140,7 +141,7 @@ const TicketPurchaseScreen: React.FC = () => {
   // Do not redeclare these inside handlePurchase or createTicketAndNavigate —
   // both functions now just reference these component-scope values directly.
   // ===========================================================================
-  const payerEmailForPhotoCheck = visitorEmail.trim() || buyerEmails[0]?.trim() || user?.email || ""
+  const payerEmailForPhotoCheck = buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || user?.email || ""
   const deliveryEmailsForPhotoCheck = emailDistribution === "single"
     ? Array(actualTicketCount).fill(payerEmailForPhotoCheck)
     : buyerEmails.slice(0, actualTicketCount).map(e => e.trim())
@@ -235,13 +236,13 @@ const TicketPurchaseScreen: React.FC = () => {
       setLoading(true)
       
       const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
-      const buyerEmailFinal = visitorEmail.trim() || buyerEmails[0]?.trim()
-      const buyerNameFinal = visitorName.trim()
+      const buyerEmailFinal = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim()
+      const buyerNameFinal = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
       
       fulfillmentId = await TicketService.createPendingFulfillment({
         paymentId,
         pawapayDepositId: isMobileMoney ? verificationResult.depositId : undefined,
-        buyerEmail: user?.email || visitorEmail.trim() || buyerEmails[0]?.trim(),
+        buyerEmail: user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim(),
         buyerName: buyerNameFinal,
         buyerId: user?.id,
         eventId: event!.id,
@@ -259,7 +260,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
 
-      const payerEmail = visitorEmail.trim() || buyerEmails[0]?.trim()
+      const payerEmail = buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim()
       const deliveryEmails = emailDistribution === "single" 
         ? Array(actualTicketCount).fill(payerEmail)
         : buyerEmailsList
@@ -453,6 +454,8 @@ const updateBuyerName = (index: number, name: string) => {
   }
 
 const handlePurchase = async () => {
+    console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod)
+    
     // Validate names for each ticket
     const buyerNamesList = getBuyerNames()
     const ticketCount = actualTicketCount
@@ -478,25 +481,18 @@ const handlePurchase = async () => {
       // Try to get phone from payment details or leave empty
       buyerPhone = user?.paymentDetails?.mobileMoney?.phoneNumber || ""
     } else {
-      // Unauthenticated user - require name, email, and phone
-      if (!visitorName.trim()) {
-        Alert.alert("Name Required", "Please enter your name")
-        return
-      }
-      if (!visitorEmail.trim()) {
+      // Unauthenticated user - require buyer contact email
+      console.log("[handlePurchase] Unauthenticated user - buyerContactEmail:", buyerContactEmail)
+      if (!buyerContactEmail.trim()) {
         Alert.alert("Email Required", "Please enter your email address")
-        return
-      }
-      if (!visitorPhone.trim()) {
-        Alert.alert("Phone Required", "Please enter your phone number for payment")
         return
       }
       
       // Generate unique visitor ID
       buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      buyerName = visitorName.trim()
-      buyerEmail = visitorEmail.trim()
-      buyerPhone = visitorPhone.trim()
+      buyerName = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
+      buyerEmail = buyerContactEmail.trim()
+      buyerPhone = visitorPhone.trim() || ""
     }
 
     // Validate ticket type selection
@@ -514,7 +510,9 @@ const handlePurchase = async () => {
     }
     
     try {
+      console.log("[handlePurchase] Payment method:", paymentMethod)
       if (paymentMethod === "mobile_money") {
+        console.log("[handlePurchase] Mobile Money flow - total:", total, "number:", mobileMoneyNumber)
         // Handle mobile money payment via PawaPay
         const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
         
@@ -581,6 +579,7 @@ const handlePurchase = async () => {
         }
         return
       } else {
+        console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail)
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
         const callbackUrl = typeof window !== "undefined" ? window.location.origin : ""
@@ -792,6 +791,21 @@ const handlePurchase = async () => {
           </View>
         </View>
       </View>
+
+      {!user && (
+        <View style={styles.visitorInfoSection}>
+          <Text style={styles.sectionTitle}>Buyer Contact Info</Text>
+          <TextInput
+            style={styles.input}
+            value={buyerContactEmail}
+            onChangeText={setBuyerContactEmail}
+            placeholder="Enter buyer's email address"
+            placeholderTextColor="#999"
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+        </View>
+      )}
 
       {/* Buyer Names Section - One input per ticket */}
       <View style={styles.buyerNamesSection}>
@@ -1350,6 +1364,13 @@ eventDate: {
     alignItems: "center",
   },
 buyerNamesSection: {
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    marginTop: 0,
+    borderRadius: 12,
+  },
+  visitorInfoSection: {
     padding: 16,
     backgroundColor: "#1E1E1E",
     margin: 16,
