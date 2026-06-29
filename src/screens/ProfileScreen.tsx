@@ -1,6 +1,4 @@
-"use client";
-
-
+import "react-native-get-random-values";
 import type React from "react";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -21,22 +19,24 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import SupabaseService from "../services/SupabaseService";
+import { supabase } from "../config/supabase";
+import ImagePickerService from "../services/ImagePickerService";
+import { useCompatNavigation } from "../utils/compatNavigation";
 
 const { width } = Dimensions.get('window');
 
-// Responsive helper function
 const responsiveSize = (small: number, medium: number, large: number) => {
   if (width >= 1024) return large;
   if (width >= 768) return medium;
   return small;
 };
-import ImagePickerService from "../services/ImagePickerService";
-import { useCompatNavigation } from "../utils/compatNavigation";
 
 const ProfileScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { user, signOut, updateProfile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
+  const [showUpgradeConfirm, setShowUpgradeConfirm] = useState(false);
 
   // Edit profile states
   const [showEditProfile, setShowEditProfile] = useState(false);
@@ -181,6 +181,42 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const handleUpgradeToClubOwner = async () => {
+    if (!user) return;
+    
+    setUpgradeLoading(true);
+    try {
+      const { error } = await supabase
+        .from("users")
+        .update({ user_type: "club_owner" })
+        .eq("id", user.id);
+      
+      if (error) throw error;
+      
+      const refreshedUser = await SupabaseService.getUserProfile(user.id);
+      if (refreshedUser) {
+        const { data: session } = await supabase.auth.getSession();
+        if (session.session?.user) {
+          const fullUser = await SupabaseService.ensureUserProfile(session.session.user);
+          updateProfile({ displayName: fullUser.displayName, photoURL: fullUser.photoURL });
+        }
+      }
+      
+      setBannerStatus("success");
+      setBannerMessage("Successfully upgraded to Club Owner!");
+      setShowUpgradeConfirm(false);
+    } catch (error) {
+      setBannerStatus("error");
+      setBannerMessage("Upgrade failed. Please try again.");
+    } finally {
+      setUpgradeLoading(false);
+    }
+  };
+
+  const handleToggleUpgradeConfirm = () => {
+    setShowUpgradeConfirm(!showUpgradeConfirm);
+  };
+
   const navigateToAdminDashboard = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminDashboard");
@@ -318,6 +354,14 @@ const ProfileScreen: React.FC = () => {
           </TouchableOpacity>
         )}
 
+        {user?.userType === "regular_user" && (
+          <TouchableOpacity style={styles.menuItem} onPress={handleToggleUpgradeConfirm}>
+            <Ionicons name="business-outline" size={24} color="#FFFFFF" />
+            <Text style={styles.menuText}>Become an Club Owner</Text>
+            <Ionicons name="chevron-forward" size={24} color="#666666" />
+          </TouchableOpacity>
+        )}
+
         <TouchableOpacity style={styles.menuItem} onPress={navigateToMyTickets}>
           <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
           <Text style={styles.menuText}>My Tickets</Text>
@@ -445,15 +489,54 @@ const ProfileScreen: React.FC = () => {
                 ) : (
                   <Text style={styles.saveButtonText}>Save</Text>
                 )}
-              </TouchableOpacity>
+</TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* Upgrade Confirmation Modal */}
+      {showUpgradeConfirm && (
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={showUpgradeConfirm}
+          onRequestClose={handleToggleUpgradeConfirm}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Become an Organizer</Text>
+              <Text style={styles.upgradeDescription}>
+                By upgrading to Club Owner, you'll be able to create and manage events, venues, and organize ticket sales. 
+                You'll be responsible for event coordination and guest management.
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={handleToggleUpgradeConfirm}
+                  disabled={upgradeLoading}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalButton, styles.saveButton, upgradeLoading && styles.disabledButton]}
+                  onPress={handleUpgradeToClubOwner}
+                  disabled={upgradeLoading}
+                >
+                  {upgradeLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.saveButtonText}>Confirm Upgrade</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </View>
   );
 };
-
 
 const styles = StyleSheet.create({
   container: {
@@ -668,6 +751,13 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontSize: 14,
     fontWeight: "bold",
+    textAlign: "center",
+  },
+  upgradeDescription: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 24,
     textAlign: "center",
   },
 })
