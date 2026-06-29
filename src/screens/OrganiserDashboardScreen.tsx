@@ -53,7 +53,8 @@ const PayoutSlider: React.FC<{
   price: number
   value: number
   onChange: (v: number) => void
-}> = ({ label, max, price, value, onChange }) => {
+  unitLabel?: string
+}> = ({ label, max, price, value, onChange, unitLabel = "ticket" }) => {
   const [trackWidth, setTrackWidth] = useState(SLIDER_WIDTH)
   const total = value * price
 
@@ -105,7 +106,7 @@ const PayoutSlider: React.FC<{
         </View>
       </View>
       <View style={payoutSliderStyles.footer}>
-        <Text style={payoutSliderStyles.countText}>{value} ticket{value !== 1 ? "s" : ""}</Text>
+        <Text style={payoutSliderStyles.countText}>{value} {unitLabel}{value !== 1 ? "s" : ""}</Text>
         <Text style={payoutSliderStyles.amountText}>UGX {total.toLocaleString()}</Text>
       </View>
     </View>
@@ -202,7 +203,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [withdrawLoading, setWithdrawLoading] = useState(false)
   
   // Payout slider state
-  const [payoutTicketTypes, setPayoutTicketTypes] = useState<Record<string, { total: number; price: number; scannedIds: string[] }>>({})
+  const [payoutTicketTypes, setPayoutTicketTypes] = useState<Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }>>({})
   const [payoutSelections, setPayoutSelections] = useState<Record<string, number>>({})
   const [payoutPhone, setPayoutPhone] = useState("")
   const [payoutProvider, setPayoutProvider] = useState<"MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA">("MTN_MOMO_UGA")
@@ -259,15 +260,20 @@ const OrganiserDashboardScreen: React.FC = () => {
     }
   }
 
+  // Build a lookup from entry fee name to fee details
+  const getEntryFeeInfo = useCallback((typeName: string): { isTable?: boolean; tableSize?: number } | undefined => {
+    return event?.entryFees?.find(fee => fee.name === typeName)
+  }, [event])
+
   const processTicketData = useCallback((tickets: any[]) => {
     let earlyCount = 0, lateCount = 0, totalRevenue = 0, eligibleTotal = 0
     const salesByType: TicketSalesByType = {}
-    const payoutTypes: Record<string, { total: number; price: number; scannedIds: string[] }> = {}
+    const payoutTypes: Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }> = {}
 
     if (event?.entryFees) {
-      event.entryFees.forEach((fee: { name: string; amount: string }) => {
+      event.entryFees.forEach((fee: { name: string; amount: string; isTable?: boolean; tableSize?: number }) => {
         salesByType[fee.name] = { early: { count: 0, revenue: 0 }, late: { count: 0, revenue: 0 }, scanned: { count: 0, revenue: 0 } }
-        payoutTypes[fee.name] = { total: 0, price: parseInt(fee.amount?.replace(/[^0-9]/g, "") || "0"), scannedIds: [] }
+        payoutTypes[fee.name] = { total: 0, price: parseInt(fee.amount?.replace(/[^0-9]/g, "") || "0"), scannedIds: [], isTable: fee.isTable || false, tableSize: fee.tableSize || 1 }
       })
     }
 
@@ -294,7 +300,11 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       // Track for payout (use scanned & payout-eligible tickets only)
       if (isScanned && isEligible) {
-        if (!payoutTypes[ticketType]) payoutTypes[ticketType] = { total: 0, price: t.venueRevenue || 0, scannedIds: [] }
+        if (!payoutTypes[ticketType]) {
+          payoutTypes[ticketType] = { total: 0, price: t.venueRevenue || 0, scannedIds: [], isTable: false, tableSize: 1 }
+        }
+        // Override the initial price from entryFees (full amount) with actual venueRevenue (price - app fees)
+        payoutTypes[ticketType].price = t.venueRevenue || 0
         payoutTypes[ticketType].total++
         payoutTypes[ticketType].scannedIds.push(t.id)
       }
@@ -454,12 +464,21 @@ const OrganiserDashboardScreen: React.FC = () => {
     let totalAmount = 0
     for (const [type, count] of Object.entries(payoutSelections)) {
       if (count > 0 && payoutTicketTypes[type]) {
-        const ticketIds = payoutTicketTypes[type].scannedIds.slice(0, count)
+        const data = payoutTicketTypes[type]
+        const isTableType = data.isTable || false
+        const tableSize = data.tableSize || 1
+        // For table types: slider counts in tables, need to multiply by tableSize for actual tickets
+        const actualTicketCount = isTableType ? count * tableSize : count
+        const ticketIds = data.scannedIds.slice(0, actualTicketCount)
         selectedTicketIds.push(...ticketIds)
-        totalAmount += count * (payoutTicketTypes[type].price || 0)
+        // Price already accounts for table: sliderPrice = price * tableSize for tables
+        totalAmount += count * (isTableType ? (data.price * tableSize) : (data.price || 0))
       }
     }
     if (selectedTicketIds.length === 0) { Alert.alert("Error", "Select at least one ticket"); return }
+    // Cap the amount to never exceed eligible payout total (safety net)
+    totalAmount = Math.min(totalAmount, eligiblePayoutTotal)
+    if (totalAmount <= 0) { Alert.alert("Error", "Payout amount cannot be zero after eligibility cap"); setWithdrawLoading(false); return }
 
     setWithdrawLoading(true)
     try {
@@ -535,11 +554,26 @@ const OrganiserDashboardScreen: React.FC = () => {
     } finally { setWithdrawLoading(false) }
   }
 
-  // Compute totals
-  const totalSelected = Object.values(payoutSelections).reduce((a, b) => a + b, 0)
-  const totalPayoutAmount = Object.entries(payoutSelections).reduce((sum, [type, count]) => {
-    return sum + (count * (payoutTicketTypes[type]?.price || 0))
+  // Compute totals (account for table types where count = tables, price = per-person)
+  const totalSelected = Object.entries(payoutSelections).reduce((sum, [type, count]) => {
+    if (count <= 0) return sum
+    const data = payoutTicketTypes[type]
+    if (!data) return sum
+    const isTableType = data.isTable || false
+    // For table types, selected count is in tables, so total units is the same (just tables)
+    return sum + count
   }, 0)
+  const totalPayoutAmount = Object.entries(payoutSelections).reduce((sum, [type, count]) => {
+    if (count <= 0 || !payoutTicketTypes[type]) return sum
+    const data = payoutTicketTypes[type]
+    const isTableType = data.isTable || false
+    const tableSize = data.tableSize || 1
+    // For table types: slider count is in tables, price per ticket * tableSize = price per table
+    const effectivePrice = isTableType ? (data.price * tableSize) : (data.price || 0)
+    return sum + (count * effectivePrice)
+  }, 0)
+  // Ensure payout amount never exceeds eligible total
+  const cappedPayoutAmount = Math.min(totalPayoutAmount, eligiblePayoutTotal)
 
   if (loading) return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading...</Text></View>
   if (!event) return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Event not found</Text></View>
@@ -564,17 +598,27 @@ const OrganiserDashboardScreen: React.FC = () => {
             {Object.entries(payoutTicketTypes).length === 0 ? (
               <Text style={{ color: "#888", textAlign: "center", padding: 30 }}>No scanned tickets eligible for payout</Text>
             ) : (
-              Object.entries(payoutTicketTypes).map(([typeName, data]) => (
+              Object.entries(payoutTicketTypes).map(([typeName, data]) => {
+                const isTableType = data.isTable || false
+                const tableSize = data.tableSize || 1
+                // For table types: slider counts in tables (1 = 1 full table)
+                const sliderMax = isTableType ? Math.floor(data.total / tableSize) : data.total
+                const sliderPrice = isTableType ? data.price * tableSize : data.price
+                const currentVal = payoutSelections[typeName] || 0
+                const unitLabel = isTableType ? "table" : "ticket"
+                return (
                 <View key={typeName} style={styles.sliderSection}>
                   <PayoutSlider
                     label={typeName}
-                    max={data.total}
-                    price={data.price}
-                    value={payoutSelections[typeName] || 0}
+                    max={sliderMax}
+                    price={sliderPrice}
+                    value={Math.min(currentVal, sliderMax)}
                     onChange={(v) => setPayoutSelections(prev => ({ ...prev, [typeName]: v }))}
+                    unitLabel={unitLabel}
                   />
                 </View>
-              ))
+                )
+              })
             )}
 
             {/* Mobile money number */}
@@ -611,16 +655,16 @@ const OrganiserDashboardScreen: React.FC = () => {
           <View style={styles.summaryBar}>
             <View style={styles.summaryLeft}>
               <Text style={styles.summaryLabel}>Selected</Text>
-              <Text style={styles.summaryCount}>{totalSelected} ticket{totalSelected !== 1 ? "s" : ""}</Text>
+              <Text style={styles.summaryCount}>{totalSelected} item{totalSelected !== 1 ? "s" : ""}</Text>
             </View>
             <View style={styles.summaryCenter}>
               <Text style={styles.summaryLabel}>Total</Text>
-              <Text style={styles.summaryAmount}>UGX {totalPayoutAmount.toLocaleString()}</Text>
+              <Text style={[styles.summaryAmount, totalPayoutAmount > eligiblePayoutTotal && { color: "#FF6B6B" }]}>UGX {cappedPayoutAmount.toLocaleString()}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading) && styles.payoutActionBtnDisabled]}
+              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal) && styles.payoutActionBtnDisabled]}
               onPress={handlePayoutSubmit}
-              disabled={totalSelected === 0 || withdrawLoading}
+              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal}
             >
               {withdrawLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -673,14 +717,31 @@ const OrganiserDashboardScreen: React.FC = () => {
                   <Text style={[styles.salesTableHeaderText, { flex: 1, textAlign: "center" }]}>Late</Text>
                   <Text style={[styles.salesTableHeaderText, { flex: 1, textAlign: "center" }]}>Scanned</Text>
                 </View>
-                {Object.keys(ticketSalesByType).length > 0 ? Object.entries(ticketSalesByType).map(([typeName, s]) => (
+                {Object.keys(ticketSalesByType).length > 0 ? Object.entries(ticketSalesByType).map(([typeName, s]) => {
+                  const feeInfo = getEntryFeeInfo(typeName)
+                  const isTableTicket = feeInfo?.isTable === true
+                  const tableSize = feeInfo?.tableSize || 1
+                  const formatCount = (count: number) => {
+                    if (isTableTicket && tableSize > 0) {
+                      const tables = Math.floor(count / tableSize)
+                      const remaining = count % tableSize
+                      let label = `${count}`
+                      if (tables > 0) label += ` (${tables} table${tables > 1 ? 's' : ''}`
+                      if (remaining > 0) label += ` +${remaining} pax`
+                      if (tables > 0) label += `)`
+                      return label
+                    }
+                    return `${count}`
+                  }
+                  return (
                   <View key={typeName} style={styles.salesTableRow}>
                     <Text style={[styles.salesTableCellText, { flex: 1.5 }]}>{typeName}</Text>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{s.early.count}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{s.late.count}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{s.scanned?.count || 0}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
+                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
+                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
+                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
                   </View>
-                )) : <Text style={styles.noDataText}>No sales yet</Text>}
+                  )
+                }) : <Text style={styles.noDataText}>No sales yet</Text>}
                 {Object.keys(ticketSalesByType).length > 0 && (
                   <View style={styles.salesTableSummary}>
                     <Text style={[styles.salesTableSummaryText, { flex: 1.5 }]}>TOTAL</Text>
