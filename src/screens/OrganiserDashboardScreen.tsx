@@ -44,6 +44,36 @@ const isTablet = screenWidth >= 768
 const isLargeScreen = screenWidth >= 1024
 const SLIDER_WIDTH = screenWidth - 96
 
+const toInternationalPhone = (localNumber: string): string => {
+  const cleaned = localNumber.replace(/\D/g, "")
+  if (cleaned.startsWith("+256")) return cleaned
+  if (cleaned.startsWith("256")) return "+256" + cleaned.slice(3)
+  if (cleaned.startsWith("0")) return "+256" + cleaned.slice(1)
+  return cleaned.length >= 9 ? "+256" + cleaned : cleaned
+}
+
+// =============================================================================
+// Payout Fee Calculator
+// =============================================================================
+// Test cases:
+// MTN_MOMO_UGA: 499->fee=5, 500->fee=305, 60000->fee=3300, 60001->fee=3600, 500000->fee=5600, 500001->fee=6000, 1000000->fee=11200
+// AIRTEL_OAPI_UGA: 499->fee=5, 500->fee=305, 60000->fee=3300, 500000->fee=5600, 500001->fee=6000
+const calculatePayoutFee = (amount: number, provider: "MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA"): number => {
+  const percentFee = Math.round(amount * 0.01)
+  
+  if (amount < 500) {
+    return percentFee
+  } else if (amount <= 60000) {
+    return 300 + percentFee
+  } else if (amount <= 500000) {
+    return 600 + percentFee
+  } else if (amount <= 1000000) {
+    return 1000 + percentFee
+  } else {
+    return 1200 + percentFee
+  }
+}
+
 // =============================================================================
 // Payout Slider Component – futuristic dot-on-line selector
 // =============================================================================
@@ -206,6 +236,12 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [payoutTicketTypes, setPayoutTicketTypes] = useState<Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }>>({})
   const [payoutSelections, setPayoutSelections] = useState<Record<string, number>>({})
   const [payoutPhone, setPayoutPhone] = useState("")
+  const [payoutPhoneConfirm, setPayoutPhoneConfirm] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpLoading, setOtpLoading] = useState(false)
+  const [otpError, setOtpError] = useState("")
+  const [resendCooldown, setResendCooldown] = useState(0)
   const [payoutProvider, setPayoutProvider] = useState<"MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA">("MTN_MOMO_UGA")
 
   const [ticketSalesByType, setTicketSalesByType] = useState<Record<string, { early: { count: number; revenue: number }; late: { count: number; revenue: number }; scanned: { count: number; revenue: number } }>>({})
@@ -383,7 +419,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     SupabaseService.getUserProfileOrNull(user.uid).then(ud => {
       if (ud?.paymentDetails?.mobileMoney?.phoneNumber) {
         setPayoutPhone(ud.paymentDetails.mobileMoney.phoneNumber)
-        setPayoutProvider(ud.paymentDetails.mobileMoney.provider === "AIRTEL_MOMO_UGA" ? "AIRTEL_OAPI_UGA" : "MTN_MOMO_UGA")
+        setPayoutProvider(ud.paymentDetails.mobileMoney.provider === "airtel" || ud.paymentDetails.mobileMoney.provider === "airtel_tigo" ? "AIRTEL_OAPI_UGA" : "MTN_MOMO_UGA")
       }
     }).catch(() => {})
   }, [user])
@@ -454,7 +490,85 @@ const OrganiserDashboardScreen: React.FC = () => {
   }
   useEffect(() => { loadPaymentDetails(); if (user?.userType === 'admin' && event?.createdBy) loadEventCreatorPaymentDetails(event.createdBy).then(setEventCreatorPaymentDetails) }, [user, event])
 
+  useEffect(() => {
+    if (resendCooldown > 0) {
+      const timer = setTimeout(() => setResendCooldown(resendCooldown - 1), 1000)
+      return () => clearTimeout(timer)
+    }
+  }, [resendCooldown])
+
+  // Reset state when modal closes or payout completes
+  const resetPayoutState = useCallback(() => {
+    setPayoutPhone("")
+    setPayoutPhoneConfirm("")
+    setOtpCode("")
+    setOtpSent(false)
+    setOtpError("")
+    setResendCooldown(0)
+  }, [])
+
   // --- Payout handler ---
+  const handlePayoutWithOtpCheck = async () => {
+    if (!otpSent || !otpCode) {
+      setOtpError("Enter the code sent to your email")
+      return
+    }
+    
+    setOtpError("")
+    try {
+      console.log("[PayoutOTP] Verifying OTP:", otpCode)
+      const { data, error } = await supabase.auth.verifyOtp({
+        email: user?.email || "",
+        token: otpCode,
+        type: 'email'
+      })
+      
+      if (error) {
+        console.log("[PayoutOTP] verification failed:", error)
+        const msg = error.message.toLowerCase()
+        if (msg.includes("expired") || msg.includes("invalid")) {
+          setOtpError("Code incorrect or expired. Please request a new one.")
+        } else {
+          setOtpError("Verification failed. Please try again.")
+        }
+        return
+      }
+      
+      console.log("[PayoutOTP] verified, proceeding to payout")
+      await handlePayoutSubmit()
+    } catch (err) {
+      console.error("[PayoutOTP] error:", err)
+      setOtpError("Verification error. Please try again.")
+    }
+  }
+
+  const handleSendOtp = async () => {
+    if (!user?.email) return
+    
+    const phone1 = toInternationalPhone(payoutPhone)
+    const phone2 = toInternationalPhone(payoutPhoneConfirm)
+    if (phone1 !== phone2) {
+      setOtpError("Numbers don't match")
+      return
+    }
+    
+    setOtpLoading(true)
+    setOtpError("")
+    try {
+      const { error } = await supabase.auth.reauthenticate()
+      if (error) throw error
+      console.log("[PayoutOTP] OTP sent to", user.email)
+      setOtpSent(true)
+      setOtpError("")
+      setResendCooldown(60)
+    } catch (err) {
+      console.error("[PayoutOTP] send failed:", err)
+      setOtpError("Failed to send code. Please try again.")
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
   const handlePayoutSubmit = async () => {
     if (!user) { Alert.alert("Error", "Sign in required"); return }
     if (!payoutPhone || payoutPhone.length < 10) { Alert.alert("Error", "Enter a valid mobile money number"); return }
@@ -482,13 +596,18 @@ const OrganiserDashboardScreen: React.FC = () => {
 
     setWithdrawLoading(true)
     try {
-      console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", payoutPhone)
+      const internationalPhone = toInternationalPhone(payoutPhone)
+      const payoutFee = calculatePayoutFee(totalAmount, payoutProvider)
+      const netPayoutAmount = totalAmount - payoutFee
+      console.log(`[PayoutFee] provider=${payoutProvider} gross=${totalAmount} fee=${payoutFee} net=${netPayoutAmount}`)
+
+      console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", internationalPhone)
 
       // Map provider string
       const provider = payoutProvider
 
-      // Initiate payout via PawaPay
-      const payoutResult = await PawaPayService.initiatePayout(totalAmount, "UGX", payoutPhone, provider)
+      // Initiate payout via PawaPay - use net amount
+      const payoutResult = await PawaPayService.initiatePayout(netPayoutAmount, "UGX", internationalPhone, provider)
 
       if (!payoutResult.success) {
         Alert.alert("Payout Failed", payoutResult.error || "Unknown error")
@@ -514,7 +633,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           transaction_reference: payoutResult.payoutId,
           payout_method: "mobile_money",
           recipient_name: user.displayName || user.email || "",
-          recipient_phone_number: payoutPhone,
+          recipient_phone_number: toInternationalPhone(payoutPhone),
         })
       } catch (err) { console.error("Failed to save payout record:", err) }
 
@@ -544,8 +663,9 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
       setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
-      Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${payoutPhone}\nPayout ID: ${payoutResult.payoutId}`)
+      Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${toInternationalPhone(payoutPhone)}\nPayout ID: ${payoutResult.payoutId}`)
       setShowWithdrawModal(false)
+      resetPayoutState()
       // Reset selections
       const reset: Record<string, number> = {}; Object.keys(payoutTicketTypes).forEach(k => { reset[k] = 0 }); setPayoutSelections(reset)
     } catch (error: any) {
@@ -588,7 +708,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>💰 Withdraw Earnings</Text>
-            <TouchableOpacity onPress={() => setShowWithdrawModal(false)}>
+            <TouchableOpacity onPress={() => { setShowWithdrawModal(false); resetPayoutState(); }}>
               <Ionicons name="close-circle" size={28} color="#888" />
             </TouchableOpacity>
           </View>
@@ -621,19 +741,9 @@ const OrganiserDashboardScreen: React.FC = () => {
               })
             )}
 
-            {/* Mobile money number */}
+            {/* Provider selection */}
             <View style={styles.phoneSection}>
-              <Text style={styles.phoneLabel}>📱 Mobile Money Number</Text>
-              <View style={styles.phoneRow}>
-                <TextInput
-                  style={styles.phoneInput}
-                  placeholder="+256700000000"
-                  placeholderTextColor="#555"
-                  value={payoutPhone}
-                  onChangeText={setPayoutPhone}
-                  keyboardType="phone-pad"
-                />
-              </View>
+              <Text style={styles.phoneLabel}>📱 Provider</Text>
               <View style={styles.providerRow}>
                 <TouchableOpacity
                   style={[styles.providerChip, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipActive]}
@@ -649,9 +759,66 @@ const OrganiserDashboardScreen: React.FC = () => {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Mobile money number */}
+            <View style={styles.phoneSection}>
+              <Text style={styles.phoneLabel}>📱 Mobile Money Number</Text>
+              <View style={styles.phoneRow}>
+                <TextInput
+                  style={styles.phoneInput}
+                  placeholder="07XXXXXXXX"
+                  placeholderTextColor="#555"
+                  value={payoutPhone}
+                  onChangeText={(t) => {
+                    setPayoutPhone(t)
+                    if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
+                  }}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <Text style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Confirm Number</Text>
+              <View style={styles.phoneRow}>
+                <TextInput
+                  style={styles.phoneInput}
+                  placeholder="07XXXXXXXX"
+                  placeholderTextColor="#555"
+                  value={payoutPhoneConfirm}
+                  onChangeText={(t) => {
+                    setPayoutPhoneConfirm(t)
+                    if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
+                  }}
+                  keyboardType="phone-pad"
+                />
+              </View>
+              <View style={{ height: 12 }} />
+              <TouchableOpacity
+                style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading) && styles.sendOtpBtnDisabled]}
+                onPress={handleSendOtp}
+                disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading}
+              >
+                {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
+              </TouchableOpacity>
+              {otpError ? <Text style={styles.otpErrorText}>{otpError}</Text> : null}
+              {otpSent && (
+                <>
+                  <Text style={styles.otpLabel}>Enter Code</Text>
+                  <TextInput
+                    style={styles.otpInput}
+                    placeholder="6-digit code"
+                    placeholderTextColor="#555"
+                    value={otpCode}
+                    onChangeText={setOtpCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                  />
+                </>
+              )}
+              {resendCooldown > 0 && <Text style={styles.resendText}>Resend available in {resendCooldown}s</Text>}
+              <View style={{ height: 20 }} />
+            </View>
           </ScrollView>
 
-          {/* Summary bar */}
+{/* Summary bar */}
           <View style={styles.summaryBar}>
             <View style={styles.summaryLeft}>
               <Text style={styles.summaryLabel}>Selected</Text>
@@ -661,10 +828,16 @@ const OrganiserDashboardScreen: React.FC = () => {
               <Text style={styles.summaryLabel}>Total</Text>
               <Text style={[styles.summaryAmount, totalPayoutAmount > eligiblePayoutTotal && { color: "#FF6B6B" }]}>UGX {cappedPayoutAmount.toLocaleString()}</Text>
             </View>
+            <View style={styles.feeRight}>
+              <Text style={styles.feeLabel}>Fee</Text>
+              <Text style={styles.feeAmount}>- UGX {calculatePayoutFee(totalPayoutAmount, payoutProvider).toLocaleString()}</Text>
+              <Text style={styles.netLabel}>You'll receive</Text>
+              <Text style={styles.netAmount}>UGX {Math.max(0, totalPayoutAmount - calculatePayoutFee(totalPayoutAmount, payoutProvider)).toLocaleString()}</Text>
+            </View>
             <TouchableOpacity
-              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal) && styles.payoutActionBtnDisabled]}
-              onPress={handlePayoutSubmit}
-              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal}
+              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent) && styles.payoutActionBtnDisabled]}
+              onPress={handlePayoutWithOtpCheck}
+              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent}
             >
               {withdrawLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -956,12 +1129,12 @@ const styles = StyleSheet.create({
 
   // -- Withdraw Modal --
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
-  modalContainer: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: "85%" },
+  modalContainer: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: 800 },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   modalTitle: { color: "#FFF", fontSize: 20, fontWeight: "bold" },
-  modalBody: { maxHeight: 400 },
+  modalBody: { maxHeight: 750 },
   sliderSection: { marginBottom: 0 },
-  phoneSection: { marginTop: 12, marginBottom: 80 },
+  phoneSection: { marginTop: 4, marginBottom: 80 },
   phoneLabel: { color: "#FFF", fontSize: 15, fontWeight: "600", marginBottom: 8 },
   phoneRow: { marginBottom: 8 },
   phoneInput: { backgroundColor: "#1a1a1a", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: "#333" },
@@ -976,9 +1149,21 @@ const styles = StyleSheet.create({
   summaryLabel: { color: "#666", fontSize: 11 },
   summaryCount: { color: "#FFF", fontSize: 16, fontWeight: "bold" },
   summaryAmount: { color: "#4CAF50", fontSize: 16, fontWeight: "bold" },
+  feeRight: { flex: 1, alignItems: "flex-end", marginRight: 12 },
+  feeLabel: { color: "#888", fontSize: 10 },
+  feeAmount: { color: "#FF6B6B", fontSize: 12, fontWeight: "bold" },
+  netLabel: { color: "#888", fontSize: 10, marginTop: 2 },
+  netAmount: { color: "#4CAF50", fontSize: 12, fontWeight: "bold" },
   payoutActionBtn: { backgroundColor: "#2196F3", flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, gap: 6 },
   payoutActionBtnDisabled: { backgroundColor: "#444" },
   payoutActionText: { color: "#FFF", fontWeight: "bold", fontSize: 14 },
+  sendOtpBtn: { backgroundColor: "#00D4FF", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, alignItems: "center", marginTop: 8 },
+  sendOtpBtnDisabled: { backgroundColor: "#666" },
+  sendOtpBtnText: { color: "#000", fontWeight: "bold", fontSize: 14 },
+  otpErrorText: { color: "#FF6B6B", fontSize: 12, marginTop: 8, textAlign: "center" },
+  otpLabel: { color: "#FFF", fontSize: 14, fontWeight: "600", marginTop: 16, marginBottom: 8 },
+  otpInput: { backgroundColor: "#1a1a1a", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 16, textAlign: "center", letterSpacing: 8, width: 200 },
+  resendText: { color: "#888", fontSize: 12, marginTop: 8, textAlign: "center" },
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center", padding: 20 },
   modalBox: { backgroundColor: "#1a1a1a", borderRadius: 16, padding: 24, width: "100%", maxWidth: 400, alignItems: "center" },
   modalSub: { color: "#888", fontSize: 14, textAlign: "center", marginBottom: 20 },
