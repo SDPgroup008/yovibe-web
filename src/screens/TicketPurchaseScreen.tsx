@@ -260,7 +260,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
 
-      const payerEmail = buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim()
+      const payerEmail = visitorEmail.trim() || buyerEmails[0]?.trim()
       const deliveryEmails = emailDistribution === "single" 
         ? Array(actualTicketCount).fill(payerEmail)
         : buyerEmailsList
