@@ -13,37 +13,25 @@ import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
-import { scrollPersistence, SCREEN_IDS } from "../utils/scrollPersistence";
+import { useMapScroll } from "../hooks/useScrollPersistence";
 
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // SEO Metadata for Map page
   const mapSeo = SCREEN_SEO.map;
   const isFocused = useIsFocused();
-  const scrollViewRef = useRef<ScrollView>(null);
+  
+  const { onScroll, restorePosition, scrollRef } = useMapScroll();
 
   // Detect desktop viewport (>=1024px)
   const screenWidth = Dimensions.get("window").width;
   const isDesktop = screenWidth >= 1024;
 
-  // Restore scroll position when screen is focused
+  // Restore scroll position when screen regains focus
   useEffect(() => {
-    if (isFocused && scrollViewRef.current) {
-      const savedPosition = scrollPersistence.getPosition(SCREEN_IDS.MAP);
-      if (savedPosition) {
-        setTimeout(() => {
-          if (scrollViewRef.current && typeof scrollViewRef.current.scrollToY === 'function') {
-            scrollViewRef.current.scrollToY({ y: savedPosition.y, animated: false });
-          }
-        }, 0);
-      }
+    if (isFocused) {
+      restorePosition();
     }
   }, [isFocused]);
-
-  // Save scroll position when scrolling
-  const handleScroll = (event: any) => {
-    const { y } = event.nativeEvent.contentOffset || { y: 0 };
-    scrollPersistence.savePosition(SCREEN_IDS.MAP, y, 0);
-  };
 
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
@@ -388,11 +376,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         </View>
       ) : (
 <ScrollView
-          ref={scrollViewRef}
+          ref={scrollRef}
           style={styles.venueList}
           contentContainerStyle={isDesktop ? styles.venueGrid : undefined}
-          onScroll={handleScroll}
-          scrollEventOptimizer={false}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

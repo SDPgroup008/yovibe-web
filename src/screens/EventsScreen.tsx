@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   View,
   Text,
@@ -14,19 +14,16 @@ import {
   TextInput,
   RefreshControl,
   Dimensions,
-  Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedEvents } from "../hooks/useDataCache";
-import { useEventsScroll } from "../hooks/useScrollPersistence";
-import SupabaseService from "../services/SupabaseService";
 import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
-import { scrollPersistence, SCREEN_IDS } from "../utils/scrollPersistence";
+import { useEventsScroll } from "../hooks/useScrollPersistence";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -45,8 +42,8 @@ type EventsScreenProps = {
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
-  const { data: cachedEvents, loading, error, refetch } = useCachedEvents()
-  const { onScroll } = useEventsScroll()
+  const { data: cachedEvents, loading, refetch } = useCachedEvents()
+  const { onScroll, restorePosition, scrollRef } = useEventsScroll()
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
   const seoUrl =
@@ -73,18 +70,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
-  const flatListRef = useRef<FlatList>(null);
 
+  // Restore scroll position when screen regains focus
   useEffect(() => {
-    if (isFocused && flatListRef.current) {
-      const savedPosition = scrollPersistence.getPosition(SCREEN_IDS.EVENTS);
-      if (savedPosition) {
-        setTimeout(() => {
-          if (flatListRef.current && typeof flatListRef.current.scrollToOffset === 'function') {
-            flatListRef.current.scrollToOffset({ offset: savedPosition.y, animated: false });
-          }
-        }, 0);
-      }
+    if (isFocused) {
+      restorePosition();
     }
   }, [isFocused]);
 
@@ -390,7 +380,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         </View>
       ) : (
         <FlatList
-          ref={flatListRef}
+          ref={scrollRef}
           data={displayedEvents || []}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}

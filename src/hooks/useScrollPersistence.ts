@@ -16,6 +16,7 @@ export function useScrollPersistence(options: UseScrollPersistenceOptions) {
   const { screenId, enabled = true, saveDelay = 100 } = options;
   const scrollRef = useRef<any>(null);
   const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const isRestoredRef = useRef(false);
 
   useEffect(() => {
     if (!enabled) return;
@@ -25,14 +26,20 @@ export function useScrollPersistence(options: UseScrollPersistenceOptions) {
     if (savedPosition && scrollRef.current) {
       // Use setTimeout to ensure DOM is ready
       setTimeout(() => {
-        if (scrollRef.current && typeof scrollRef.current.scrollTo === 'function') {
+        if (!scrollRef.current) return;
+        
+        // FlatList uses scrollTo, ScrollView uses scrollToY
+        if (typeof scrollRef.current.scrollTo === 'function') {
           scrollRef.current.scrollTo({
             x: savedPosition.x,
             y: savedPosition.y,
             animated: false
           });
+        } else if (typeof scrollRef.current.scrollToY === 'function') {
+          scrollRef.current.scrollToY({ y: savedPosition.y, animated: false });
         }
       }, 0);
+      isRestoredRef.current = true;
     }
 
     return () => {
@@ -58,10 +65,34 @@ export function useScrollPersistence(options: UseScrollPersistenceOptions) {
     }, saveDelay);
   };
 
+  const restorePosition = () => {
+    if (!enabled || isRestoredRef.current) return;
+    
+    const savedPosition = scrollPersistence.getPosition(screenId);
+    if (!savedPosition) return;
+    
+    setTimeout(() => {
+      if (!scrollRef.current) return;
+      
+      // FlatList uses scrollTo, ScrollView uses scrollToY
+      if (typeof scrollRef.current.scrollTo === 'function') {
+        scrollRef.current.scrollTo({
+          x: savedPosition.x,
+          y: savedPosition.y,
+          animated: false
+        });
+      } else if (typeof scrollRef.current.scrollToY === 'function') {
+        scrollRef.current.scrollToY({ y: savedPosition.y, animated: false });
+      }
+    }, 0);
+  };
+
   return {
     scrollRef,
     onScroll: handleScroll,
-    clearPosition: () => scrollPersistence.clearPosition(screenId)
+    clearPosition: () => scrollPersistence.clearPosition(screenId),
+    restorePosition,
+    markRestored: () => { isRestoredRef.current = true; }
   };
 }
 

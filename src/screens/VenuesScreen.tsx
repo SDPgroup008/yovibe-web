@@ -7,13 +7,11 @@ import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedVenues } from "../hooks/useDataCache";
 import { useVenuesScroll } from "../hooks/useScrollPersistence";
-import SupabaseService from "../services/SupabaseService";
 import type { Venue } from "../models/Venue";
 import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
-import { scrollPersistence, SCREEN_IDS } from "../utils/scrollPersistence";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -36,8 +34,8 @@ type VenuesScreenPropsInternal = {
 
 const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
-  const { data: venues = [], loading, error, refetch } = useCachedVenues()
-  const { onScroll } = useVenuesScroll()
+  const { data: venues = [], loading, refetch } = useCachedVenues()
+  const { onScroll, restorePosition, scrollRef } = useVenuesScroll()
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
   const seoUrl =
@@ -61,18 +59,11 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
-  const flatListRef = useRef<FlatList>(null);
 
+  // Restore scroll position when screen regains focus
   useEffect(() => {
-    if (isFocused && flatListRef.current) {
-      const savedPosition = scrollPersistence.getPosition(SCREEN_IDS.VENUES);
-      if (savedPosition) {
-        setTimeout(() => {
-          if (flatListRef.current && typeof flatListRef.current.scrollToOffset === 'function') {
-            flatListRef.current.scrollToOffset({ offset: savedPosition.y, animated: false });
-          }
-        }, 0);
-      }
+    if (isFocused) {
+      restorePosition();
     }
   }, [isFocused]);
 
@@ -404,7 +395,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         </View>
       ) : (
         <FlatList
-          ref={flatListRef}
+          ref={scrollRef}
           data={displayedVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}
