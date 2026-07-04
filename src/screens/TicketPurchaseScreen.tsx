@@ -175,7 +175,48 @@ const TicketPurchaseScreen: React.FC = () => {
     }
   }, [purchaseStatus])
 
-  const handlePaymentComplete = async () => {
+  const pollPaymentStatus = async (depositId: string, startAttempts: number = 0) => {
+    let attempts = startAttempts
+    const maxAttempts = 25
+    let status = "PENDING"
+    let verificationResult: any = null
+    let networkError = false
+    
+    while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        attempts++
+        verificationResult = await PawaPayService.checkDepositStatus(depositId)
+        status = (verificationResult.status || "").toUpperCase()
+        console.log(`   Attempt ${attempts}: Status = ${status}`)
+        networkError = false
+      } catch (err) {
+        console.log(`⚠️ Network error attempt ${attempts}:`, err)
+        networkError = true
+      }
+    }
+    
+    console.log("✅ Final status:", status)
+    const resultStatus = verificationResult ? (verificationResult.status || "").toUpperCase() : "PENDING"
+    
+    if (resultStatus === "COMPLETED") {
+      setCheckingPayment(false)
+      setPurchaseStatus("success")
+      setStatusMessage("Payment successful! Creating your ticket...")
+      await createTicketAndNavigate(true, verificationResult)
+    } else if (resultStatus === "FAILED") {
+      setCheckingPayment(false)
+      const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed."
+      setPurchaseStatus("error")
+      setStatusMessage(failMsg)
+    } else {
+      setStatusMessage(`Still pending. Check your mobile money PIN. Attempt ${attempts}/${maxAttempts}.`)
+    }
+    
+    return { status, verificationResult, attempts }
+  }
+
+const handlePaymentComplete = async () => {
     if (!paymentOrderId) return
 
     try {
@@ -187,21 +228,8 @@ const TicketPurchaseScreen: React.FC = () => {
       
       if (isMobileMoney) {
         console.log("🔍 Checking PawaPay deposit status (polling)...")
-        
-        // Poll for status up to 30 seconds
-        let attempts = 0
-        const maxAttempts = 15
-        let status = "PENDING"
-        
-        while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
-          await new Promise(resolve => setTimeout(resolve, 2000))
-          attempts++
-          verificationResult = await PawaPayService.checkDepositStatus(paymentOrderId)
-          status = (verificationResult.status || "").toUpperCase()
-          console.log(`   Attempt ${attempts}: Status = ${status}`)
-        }
-        
-        console.log("✅ Final status:", status)
+        await pollPaymentStatus(paymentOrderId!, 0)
+        return
       } else {
         console.log("🔍 Verifying payment with PesaPal...")
         verificationResult = await PesaPalService.verifyPayment(paymentOrderId)
@@ -536,47 +564,7 @@ const handlePurchase = async () => {
         setPaymentStatus("pending")
         setCheckingPayment(true)
 
-        // Now poll for payment status in foreground
-        let attempts = 0
-        const maxAttempts = 15
-        let status = "PENDING"
-        let verificationResult: any
-        let networkError = false
-        
-        while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
-          try {
-            await new Promise(resolve => setTimeout(resolve, 2000))
-            attempts++
-            verificationResult = await PawaPayService.checkDepositStatus(depositId)
-            status = (verificationResult.status || "").toUpperCase()
-            console.log(`   Attempt ${attempts}: Status = ${status}`)
-            networkError = false
-          } catch (err) {
-            console.log(`⚠️ Network error attempt ${attempts}:`, err)
-            networkError = true
-            // Continue retrying even on network errors
-          }
-        }
-        
-        console.log("✅ Final status:", status)
-        const resultStatus = verificationResult ? (verificationResult.status || "").toUpperCase() : "PENDING"
-        
-        if (resultStatus === "COMPLETED") {
-          setCheckingPayment(false)
-          setPurchaseStatus("success")
-          setStatusMessage("Payment successful! Creating your ticket...")
-          await createTicketAndNavigate(true, verificationResult)
-        } else if (resultStatus === "FAILED") {
-          setCheckingPayment(false)
-          const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed."
-          setPurchaseStatus("error")
-          setStatusMessage(failMsg)
-        } else {
-          // Still pending or network error – keep overlay visible with recheck button
-          // Do NOT set checkingPayment(false) – the overlay stays
-          setStatusMessage("Payment is taking longer. Check your mobile money PIN prompt or tap recheck.")
-          // Don't return – the overlay remains with the recheck button
-        }
+        await pollPaymentStatus(depositId, 0)
         return
       } else {
         console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail)
@@ -671,25 +659,9 @@ const handlePurchase = async () => {
               <TouchableOpacity
                 style={styles.recheckButton}
                 onPress={async () => {
+                  setCheckingPayment(true)
                   setStatusMessage("Rechecking payment status...")
-                  try {
-                    const result = await PawaPayService.checkDepositStatus(pawaPayDepositId)
-                    const status = (result.status || "").toUpperCase()
-                    if (status === "COMPLETED") {
-                      setCheckingPayment(false)
-                      setPurchaseStatus("success")
-                      setStatusMessage("Payment successful! Creating your ticket...")
-                      await createTicketAndNavigate(true, result)
-                    } else if (status === "FAILED") {
-                      setCheckingPayment(false)
-                      setPurchaseStatus("error")
-                      setStatusMessage(result.failureMessage || "Payment failed.")
-                    } else {
-                      setStatusMessage("Still pending. Make sure you entered your mobile money PIN. Tap recheck again.")
-                    }
-                  } catch (err) {
-                    setStatusMessage("Network error. Check your connection and tap recheck.")
-                  }
+                  await pollPaymentStatus(pawaPayDepositId, 0)
                 }}
               >
                 <Ionicons name="refresh" size={20} color="#FFF" />
@@ -1008,66 +980,6 @@ const handlePurchase = async () => {
               value={mobileMoneyName}
               onChangeText={setMobileMoneyName}
               placeholder="Account holder name"
-              placeholderTextColor="#999"
-            />
-          </View>
-        )}
-        
-        {paymentMethod === "credit_card" && (
-          <View style={styles.paymentForm}>
-            <Text style={styles.paymentFormTitle}>Card Details</Text>
-            <TextInput
-              style={styles.input}
-              value={cardNumber}
-              onChangeText={setCardNumber}
-              placeholder="Card number"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-            <View style={styles.cardRow}>
-              <TextInput
-                style={[styles.input, styles.cardHalfInput]}
-                value={cardExpiry}
-                onChangeText={setCardExpiry}
-                placeholder="MM/YY"
-                placeholderTextColor="#999"
-              />
-              <TextInput
-                style={[styles.input, styles.cardHalfInput]}
-                value={cardCvv}
-                onChangeText={setCardCvv}
-                placeholder="CVV"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-                secureTextEntry
-              />
-            </View>
-          </View>
-        )}
-        
-        {paymentMethod === "bank_transfer" && (
-          <View style={styles.paymentForm}>
-            <Text style={styles.paymentFormTitle}>Bank Transfer Details</Text>
-            <TextInput
-              style={styles.input}
-              value={bankName}
-              onChangeText={setBankName}
-              placeholder="Bank name"
-              placeholderTextColor="#999"
-            />
-            <TextInput
-              style={styles.input}
-              value={bankAccountNumber}
-              onChangeText={setBankAccountNumber}
-              placeholder="Account number"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-            <TextInput
-              style={styles.input}
-              value={bankAccountName}
-              onChangeText={setBankAccountName}
-              placeholder="Account name"
               placeholderTextColor="#999"
             />
           </View>
