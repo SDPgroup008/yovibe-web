@@ -66,7 +66,7 @@ export function useScrollPersistence(options: UseScrollPersistenceOptions) {
   };
 
   const restorePosition = () => {
-    if (!enabled || isRestoredRef.current) return;
+    if (!enabled) return;
     
     const savedPosition = scrollPersistence.getPosition(screenId);
     if (!savedPosition) return;

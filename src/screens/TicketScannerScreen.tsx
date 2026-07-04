@@ -49,6 +49,8 @@ const TicketScannerScreen: React.FC = () => {
   const stopCamera = () => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    videoRef.current = null
+    canvasRef.current = null
   }
 
   const jsqrRef = useRef<any>(null)
@@ -91,7 +93,7 @@ const TicketScannerScreen: React.FC = () => {
     
     canvas.width = scanW
     canvas.height = scanH
-    const ctx = canvas.getContext("2d")
+    const ctx = canvas.getContext("2d", { willReadFrequently: true })
     if (!ctx) return
     ctx.drawImage(video, offX, offY, scanW, scanH, 0, 0, scanW, scanH)
     
@@ -219,19 +221,20 @@ const TicketScannerScreen: React.FC = () => {
               <div
                 ref={(el) => {
                   if (el && !videoRef.current) {
-                    // Create video element directly via DOM (bypasses React Native Web issues)
                     const video = document.createElement("video")
                     video.setAttribute("playsinline", "")
                     video.setAttribute("muted", "")
                     video.style.cssText = "width:100%;height:260px;object-fit:cover;border-radius:8px;display:block;background:#000"
                     el.appendChild(video)
                     videoRef.current = video
-                    
-                    // Create hidden canvas
+
                     const canvas = document.createElement("canvas")
                     canvas.style.display = "none"
                     el.appendChild(canvas)
                     canvasRef.current = canvas
+                  } else if (!el) {
+                    videoRef.current = null
+                    canvasRef.current = null
                   }
                 }}
                 style={{ width: "100%" }}
