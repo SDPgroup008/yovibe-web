@@ -520,7 +520,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const { data, error } = await supabase.auth.verifyOtp({
         email: user?.email || "",
         token: otpCode,
-        type: 'email'
+        type: 'reauthentication'
       })
       
       if (error) {
