@@ -3,7 +3,8 @@
 import type React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions, TextInput } from "react-native";
-import { useIsFocused, useCompatNavigation } from "../utils/compatNavigation";
+import { useIsFocused } from "../utils/compatNavigation";
+import { useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedVenues } from "../hooks/useDataCache";
 import { useVenuesScroll } from "../hooks/useScrollPersistence";
 import SupabaseService from "../services/SupabaseService";
@@ -12,6 +13,7 @@ import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
+import { scrollPersistence, SCREEN_IDS } from "../utils/scrollPersistence";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -35,7 +37,7 @@ type VenuesScreenPropsInternal = {
 const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, error, refetch } = useCachedVenues()
-  const { scrollRef, onScroll } = useVenuesScroll()
+  const { onScroll } = useVenuesScroll()
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
   const seoUrl =
@@ -59,6 +61,20 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
+  const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (isFocused && flatListRef.current) {
+      const savedPosition = scrollPersistence.getPosition(SCREEN_IDS.VENUES);
+      if (savedPosition) {
+        setTimeout(() => {
+          if (flatListRef.current && typeof flatListRef.current.scrollToOffset === 'function') {
+            flatListRef.current.scrollToOffset({ offset: savedPosition.y, animated: false });
+          }
+        }, 0);
+      }
+    }
+  }, [isFocused]);
 
   const [refreshing, setRefreshing] = useState(false);
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
@@ -388,7 +404,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         </View>
       ) : (
         <FlatList
-          ref={scrollRef}
+          ref={flatListRef}
           data={displayedVenues}
           keyExtractor={(item) => item.id}
           renderItem={renderVenueCard}

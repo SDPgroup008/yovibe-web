@@ -26,6 +26,7 @@ import NotificationService from "../services/NotificationService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
+import { scrollPersistence, SCREEN_IDS } from "../utils/scrollPersistence";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -45,7 +46,7 @@ type EventsScreenProps = {
 const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: cachedEvents, loading, error, refetch } = useCachedEvents()
-  const { scrollRef, onScroll } = useEventsScroll()
+  const { onScroll } = useEventsScroll()
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
   const seoUrl =
@@ -72,6 +73,20 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
+  const flatListRef = useRef<FlatList>(null);
+
+  useEffect(() => {
+    if (isFocused && flatListRef.current) {
+      const savedPosition = scrollPersistence.getPosition(SCREEN_IDS.EVENTS);
+      if (savedPosition) {
+        setTimeout(() => {
+          if (flatListRef.current && typeof flatListRef.current.scrollToOffset === 'function') {
+            flatListRef.current.scrollToOffset({ offset: savedPosition.y, animated: false });
+          }
+        }, 0);
+      }
+    }
+  }, [isFocused]);
 
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
@@ -375,7 +390,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         </View>
       ) : (
         <FlatList
-          ref={scrollRef}
+          ref={flatListRef}
           data={displayedEvents || []}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
