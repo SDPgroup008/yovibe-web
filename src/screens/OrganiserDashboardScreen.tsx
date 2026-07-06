@@ -523,25 +523,25 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpError("");
 
     try {
-
       const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      console.log("session user id:", sessionUser?.id, "vs payload user_id:", user.id)
-      
+      if (!sessionUser) {
+        setOtpError("Session expired. Please sign in again.");
+        return;
+      }
+      const authUserId = sessionUser.id; // ← use THIS, not user.id
 
-      // Invalidate any previous unused OTPs for this user first
       await supabase
         .from('payout_otps')
         .update({ used: true })
-        .eq('user_id', user.id)
+        .eq('user_id', authUserId)
         .eq('used', false);
 
       const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      // Save the new OTP to the database
       const { error: dbError } = await supabase
         .from('payout_otps')
         .insert({
-          user_id: user.id,
+          user_id: authUserId,
           email: user.email,
           otp: otp,
           expires_at: new Date(Date.now() + 90 * 1000),
@@ -549,14 +549,13 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       if (dbError) throw dbError;
 
-      // Send email via the Edge Function
       const { error: emailError } = await supabase.functions.invoke('send-payout-otp', {
         body: { email: user.email, otp }
       });
 
       if (emailError) throw emailError;
 
-      console.log("[PayoutOTP] OTP sent:", otp); // remove this log in production
+      console.log("[PayoutOTP] OTP sent:", otp);
       setOtpSent(true);
       setResendCooldown(60);
     } catch (err) {
@@ -578,10 +577,16 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpLoading(true);
 
     try {
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      if (!sessionUser) {
+        setOtpError("Session expired. Please sign in again.");
+        return;
+      }
+
       const { data, error } = await supabase
         .from('payout_otps')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', sessionUser.id)  // ← fixed here too
         .eq('otp', otpCode.trim())
         .eq('used', false)
         .gt('expires_at', new Date().toISOString())
@@ -592,15 +597,12 @@ const OrganiserDashboardScreen: React.FC = () => {
         return;
       }
 
-      // Mark OTP as used
       await supabase
         .from('payout_otps')
         .update({ used: true })
         .eq('id', data.id);
 
       console.log("[PayoutOTP] OTP verified successfully!");
-
-      // Proceed with payout
       await handlePayoutSubmit();
 
     } catch (err) {
