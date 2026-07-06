@@ -508,74 +508,103 @@ const OrganiserDashboardScreen: React.FC = () => {
   }, [])
 
   // --- Payout handler ---
-  const handlePayoutWithOtpCheck = async () => {
-    if (!otpSent || !otpCode) {
-      setOtpError("Enter the code sent to your email")
-      return
+  // Send OTP
+  const handleSendOtp = async () => {
+    if (!user?.email) return;
+
+    const phone1 = toInternationalPhone(payoutPhone);
+    const phone2 = toInternationalPhone(payoutPhoneConfirm);
+    if (phone1 !== phone2) {
+      setOtpError("Numbers don't match");
+      return;
     }
 
-    setOtpError("")
+    setOtpLoading(true);
+    setOtpError("");
+
     try {
-      console.log("[PayoutOTP] Verifying OTP:", otpCode)
+      // Invalidate any previous unused OTPs for this user first
+      await supabase
+        .from('payout_otps')
+        .update({ used: true })
+        .eq('user_id', user.id)
+        .eq('used', false);
 
-      const { data, error } = await supabase.auth.verifyOtp({
-        email: user?.email || "",
-        token: otpCode,
-        type: 'email'           // ← Change this from 'reauthentication'
-      })
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      if (error) {
-        console.error("[PayoutOTP] verification failed:", error)
-        const msg = error.message.toLowerCase()
-        
-        if (msg.includes("expired") || msg.includes("invalid")) {
-          setOtpError("Code has expired or is invalid. Please request a new one.")
-        } else {
-          setOtpError(error.message || "Verification failed. Please try again.")
-        }
-        return
+      // Save the new OTP to the database
+      const { error: dbError } = await supabase
+        .from('payout_otps')
+        .insert({
+          user_id: user.id,
+          email: user.email,
+          otp: otp,
+          expires_at: new Date(Date.now() + 10 * 60 * 1000),
+        });
+
+      if (dbError) throw dbError;
+
+      // Send email via the Edge Function
+      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', {
+        body: { email: user.email, otp }
+      });
+
+      if (emailError) throw emailError;
+
+      console.log("[PayoutOTP] OTP sent:", otp); // remove this log in production
+      setOtpSent(true);
+      setResendCooldown(60);
+    } catch (err) {
+      console.error(err);
+      setOtpError("Failed to send code. Please try again.");
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  // Verify OTP
+  const handlePayoutWithOtpCheck = async () => {
+    if (!otpCode?.trim()) {
+      setOtpError("Please enter the code");
+      return;
+    }
+
+    setOtpError("");
+    setOtpLoading(true);
+
+    try {
+      const { data, error } = await supabase
+        .from('payout_otps')
+        .select('*')
+        .eq('user_id', user?.id)
+        .eq('otp', otpCode.trim())
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+      if (error || !data) {
+        setOtpError("Code is incorrect or has expired. Please request a new one.");
+        return;
       }
 
-      console.log("[PayoutOTP] OTP verified successfully!")
+      // Mark OTP as used
+      await supabase
+        .from('payout_otps')
+        .update({ used: true })
+        .eq('id', data.id);
 
-      // Important: Refresh session after reauth verification
-      await supabase.auth.refreshSession()
+      console.log("[PayoutOTP] OTP verified successfully!");
 
-      // Now proceed with the sensitive action
-      await handlePayoutSubmit()
+      // Proceed with payout
+      await handlePayoutSubmit();
 
     } catch (err) {
-      console.error("[PayoutOTP] error:", err)
-      setOtpError("Verification error. Please try again.")
-    }
-  }
-
-  const handleSendOtp = async () => {
-    if (!user?.email) return
-    
-    const phone1 = toInternationalPhone(payoutPhone)
-    const phone2 = toInternationalPhone(payoutPhoneConfirm)
-    if (phone1 !== phone2) {
-      setOtpError("Numbers don't match")
-      return
-    }
-    
-    setOtpLoading(true)
-    setOtpError("")
-    try {
-      const { error } = await supabase.auth.reauthenticate()
-      if (error) throw error
-      console.log("[PayoutOTP] OTP sent to", user.email)
-      setOtpSent(true)
-      setOtpError("")
-      setResendCooldown(60)
-    } catch (err) {
-      console.error("[PayoutOTP] send failed:", err)
-      setOtpError("Failed to send code. Please try again.")
+      console.error(err);
+      setOtpError("Verification failed. Please try again.");
     } finally {
-      setOtpLoading(false)
+      setOtpLoading(false);
     }
-  }
+  };
 
   const handlePayoutSubmit = async () => {
     if (!user) { Alert.alert("Error", "Sign in required"); return }
