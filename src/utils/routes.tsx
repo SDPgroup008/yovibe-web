@@ -3,6 +3,7 @@ import React from 'react';
 // Import all existing screens
 import LoginScreen from '../screens/auth/LoginScreen';
 import SignUpScreen from '../screens/auth/SignUpScreen';
+import TermsAndConditionsScreen from '../screens/auth/TermsAndConditionsScreen';
 import EventsScreen from '../screens/EventsScreen';
 import EventDetailScreen from '../screens/EventDetailScreen';
 import EventsRouteScreen from '../screens/EventsRouteScreen';
@@ -71,6 +72,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/signup',
     component: SignUpScreen,
+    exact: true
+  },
+  {
+    path: '/terms',
+    component: TermsAndConditionsScreen,
     exact: true
   },
 

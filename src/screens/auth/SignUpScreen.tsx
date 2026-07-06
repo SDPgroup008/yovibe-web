@@ -1,6 +1,5 @@
 import "react-native-get-random-values"
-import React from "react"
-import { useState } from "react"
+import React, { useState } from "react"
 import {
   View,
   Text,
@@ -48,6 +47,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
   const [loading, setLoading] = useState(false)
   const [googleLoading, setGoogleLoading] = useState(false)
   const [adminDotsPressed, setAdminDotsPressed] = useState(0)
+  const [termsAgreed, setTermsAgreed] = useState(false)
 
   // visibility toggles for password fields
   const [showPassword, setShowPassword] = useState(false)
@@ -220,7 +220,27 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading}>
+            <TouchableOpacity
+              style={[styles.termsContainer, !termsAgreed && styles.termsContainerInactive]}
+              onPress={() => setTermsAgreed(!termsAgreed)}
+            >
+              <View style={[styles.checkbox, termsAgreed && styles.checkboxActive]}>
+                {termsAgreed && (
+                  <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                )}
+              </View>
+              <Text style={[styles.termsText, !termsAgreed && styles.termsTextInactive]}>
+                I agree to the{" "}
+                <Text
+                  style={styles.termsLink}
+                  onPress={() => navigation.navigate("TermsAndConditions")}
+                >
+                  Terms and Conditions
+                </Text>
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading || !termsAgreed}>
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
@@ -237,7 +257,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
               <View style={styles.divider} />
             </View>
 
-            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={googleLoading}>
+            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={googleLoading || !termsAgreed}>
               {googleLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
@@ -450,6 +470,43 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(15, 16, 17),
     fontWeight: "bold",
     marginLeft: responsiveSize(8, 10, 12),
+  },
+  termsContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: responsiveSize(12, 14, 16),
+    paddingVertical: responsiveSize(8, 10, 12),
+  },
+  termsContainerInactive: {
+    opacity: 0.7,
+  },
+  checkbox: {
+    width: responsiveSize(24, 28, 32),
+    height: responsiveSize(24, 28, 32),
+    borderRadius: responsiveSize(4, 6, 8),
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: responsiveSize(12, 14, 16),
+  },
+  checkboxActive: {
+    borderColor: "#FF3B30",
+    backgroundColor: "#FF3B30",
+  },
+  termsText: {
+    color: "#CCCCCC",
+    fontSize: responsiveSize(13, 14, 15),
+    flex: 1,
+  },
+  termsTextInactive: {
+    color: "#888888",
+  },
+  termsLink: {
+    color: "#00D4FF",
+    textDecorationLine: "underline",
+    fontWeight: "500",
   },
 })
 

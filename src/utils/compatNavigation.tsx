@@ -3,9 +3,6 @@ import { useRouter, useNavigation } from '../utils/URLRouter';
 
 export { useRouter };
 
-// Compatibility layer for existing screens
-// This provides the same interface as React Navigation
-
 export interface CompatRoute {
   params: Record<string, any>;
   name?: string;
@@ -19,21 +16,15 @@ export interface CompatNavigation {
   addListener: (event: string, callback: () => void) => () => void;
 }
 
-// Compatibility hook for useIsFocused
 export const useIsFocused = (): boolean => {
-  // For URL routing, a screen is "focused" when it matches the current path
-  // Since we don't have a concept of focus in URL routing like React Navigation,
-  // we'll return true for now (screens are always "focused" in single-page apps)
   return true;
 };
 
-// Hook that provides React Navigation compatible interface
 export const useCompatNavigation = (): CompatNavigation => {
   const { navigate, goBack } = useNavigation();
 
   return {
     navigate: (screen: string, params?: Record<string, any>) => {
-      // Convert screen names to routes
       const routeMap: Record<string, (params?: Record<string, any>) => void> = {
         'Events': () => navigate('/events'),
         'EventDetail': (params) => navigate(`/events/${params?.eventId}`),
@@ -64,6 +55,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'Auth': () => navigate('/login'),
         'Login': () => navigate('/login'),
         'SignUp': () => navigate('/signup'),
+        'TermsAndConditions': () => navigate('/terms'),
       };
 
       const navigateFn = routeMap[screen];
@@ -75,33 +67,28 @@ export const useCompatNavigation = (): CompatNavigation => {
     },
     goBack,
     reset: (state) => {
-      // Simplified reset - just navigate to the first route
       if (state.routes && state.routes.length > 0) {
         const firstRoute = state.routes[0];
         navigate(`/${firstRoute.name?.toLowerCase() || 'events'}`);
       }
     },
     setParams: (params) => {
-      // This would be complex to implement - skip for compatibility
       console.warn('setParams not fully implemented in URL router');
     },
     addListener: (event, callback) => {
-      // Return unsubscribe function
       if (event === 'focus') {
-        callback(); // Call immediately for compatibility
+        callback();
       }
-      return () => {}; // No-op unsubscribe
+      return () => {};
     }
   };
 };
 
-// Hook that provides route params
 export const useCompatRoute = (): CompatRoute => {
   const { params, currentPath } = useRouter();
 
-  // Extract route name from path
   const pathSegments = currentPath.split('/').filter(Boolean);
-  let routeName = 'EventsList'; // default
+  let routeName = 'EventsList';
 
   if (pathSegments[0] === 'events') {
     routeName = pathSegments[1] ? 'EventDetail' : 'EventsList';
@@ -113,6 +100,8 @@ export const useCompatRoute = (): CompatRoute => {
     routeName = 'CalendarView';
   } else if (pathSegments[0] === 'profile') {
     routeName = 'ProfileMain';
+  } else if (pathSegments[0] === 'terms') {
+    routeName = 'TermsAndConditions';
   }
 
   return {
@@ -121,7 +110,6 @@ export const useCompatRoute = (): CompatRoute => {
   };
 };
 
-// HOC to make screens compatible with URL router
 export const withCompatNavigation = <P extends object>(
   Component: React.ComponentType<P>
 ) => {
@@ -133,5 +121,4 @@ export const withCompatNavigation = <P extends object>(
   };
 };
 
-// Export compatibility types
 export type { CompatNavigation as NavigationProp, CompatRoute as RouteProp };

@@ -15,6 +15,7 @@ export type AuthStackParamList = {
   // Login and SignUp accept an optional redirect intent so the auth flow can restore navigation
   Login: { redirect?: RedirectIntent } | undefined
   SignUp: { redirect?: RedirectIntent } | undefined
+  TermsAndConditions: undefined
 }
 
 // Venues Stack
