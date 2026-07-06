@@ -513,29 +513,37 @@ const OrganiserDashboardScreen: React.FC = () => {
       setOtpError("Enter the code sent to your email")
       return
     }
-    
+
     setOtpError("")
     try {
       console.log("[PayoutOTP] Verifying OTP:", otpCode)
+
       const { data, error } = await supabase.auth.verifyOtp({
         email: user?.email || "",
         token: otpCode,
-        type: 'reauthentication'
+        type: 'email'           // ← Change this from 'reauthentication'
       })
-      
+
       if (error) {
-        console.log("[PayoutOTP] verification failed:", error)
+        console.error("[PayoutOTP] verification failed:", error)
         const msg = error.message.toLowerCase()
+        
         if (msg.includes("expired") || msg.includes("invalid")) {
-          setOtpError("Code incorrect or expired. Please request a new one.")
+          setOtpError("Code has expired or is invalid. Please request a new one.")
         } else {
-          setOtpError("Verification failed. Please try again.")
+          setOtpError(error.message || "Verification failed. Please try again.")
         }
         return
       }
-      
-      console.log("[PayoutOTP] verified, proceeding to payout")
+
+      console.log("[PayoutOTP] OTP verified successfully!")
+
+      // Important: Refresh session after reauth verification
+      await supabase.auth.refreshSession()
+
+      // Now proceed with the sensitive action
       await handlePayoutSubmit()
+
     } catch (err) {
       console.error("[PayoutOTP] error:", err)
       setOtpError("Verification error. Please try again.")
