@@ -240,13 +240,17 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.button} onPress={handleSignUp} disabled={loading || !termsAgreed}>
+            <TouchableOpacity 
+              style={[styles.button, !termsAgreed && styles.buttonDisabled]} 
+              onPress={handleSignUp} 
+              disabled={loading || !termsAgreed}
+            >
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Text style={styles.buttonText}>Sign Up</Text>
-                  <Ionicons name="arrow-forward" size={20} color="#FFFFFF" style={styles.buttonIcon} />
+                  <Text style={[styles.buttonText, !termsAgreed && styles.buttonTextDisabled]}>Sign Up</Text>
+                  <Ionicons name="arrow-forward" size={20} color={!termsAgreed ? "#666666" : "#FFFFFF"} style={styles.buttonIcon} />
                 </>
               )}
             </TouchableOpacity>
@@ -257,13 +261,17 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
               <View style={styles.divider} />
             </View>
 
-            <TouchableOpacity style={styles.googleButton} onPress={handleGoogleSignIn} disabled={googleLoading || !termsAgreed}>
+            <TouchableOpacity 
+              style={[styles.googleButton, !termsAgreed && styles.googleButtonDisabled]} 
+              onPress={handleGoogleSignIn} 
+              disabled={googleLoading || !termsAgreed}
+            >
               {googleLoading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
                 <>
-                  <Ionicons name="logo-google" size={20} color="#FFFFFF" />
-                  <Text style={styles.googleButtonText}>Continue with Google</Text>
+                  <Ionicons name="logo-google" size={20} color={!termsAgreed ? "#666666" : "#FFFFFF"} />
+                  <Text style={[styles.googleButtonText, !termsAgreed && styles.googleButtonTextDisabled]}>Continue with Google</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -414,6 +422,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  buttonDisabled: {
+    backgroundColor: "rgba(255, 59, 48, 0.3)",
+    shadowOpacity: 0,
+  },
+  buttonTextDisabled: {
+    color: "#666666",
+  },
   buttonText: {
     color: "white",
     fontSize: responsiveSize(15, 16, 17),
@@ -465,11 +480,18 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  googleButtonDisabled: {
+    backgroundColor: "rgba(66, 133, 244, 0.3)",
+    shadowOpacity: 0,
+  },
   googleButtonText: {
     color: "#FFFFFF",
     fontSize: responsiveSize(15, 16, 17),
     fontWeight: "bold",
     marginLeft: responsiveSize(8, 10, 12),
+  },
+  googleButtonTextDisabled: {
+    color: "#666666",
   },
   termsContainer: {
     flexDirection: "row",
