@@ -539,7 +539,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           user_id: user.id,
           email: user.email,
           otp: otp,
-          expires_at: new Date(Date.now() + 10 * 60 * 1000),
+          expires_at: new Date(Date.now() + 90 * 1000),
         });
 
       if (dbError) throw dbError;
