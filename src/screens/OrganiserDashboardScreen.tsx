@@ -523,6 +523,11 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpError("");
 
     try {
+
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      console.log("session user id:", sessionUser?.id, "vs payload user_id:", user.id)
+      
+
       // Invalidate any previous unused OTPs for this user first
       await supabase
         .from('payout_otps')
