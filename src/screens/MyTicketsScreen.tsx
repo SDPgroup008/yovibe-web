@@ -9,8 +9,7 @@ import { useCachedUserTickets } from "../hooks/useDataCache"
 import { useMyTicketsScroll } from "../hooks/useScrollPersistence"
 import { useAuth } from "../contexts/AuthContext"
 import SupabaseService from "../services/SupabaseService"
-import * as Printing from "expo-print"
-import * as Sharing from "expo-sharing"
+import TicketPDFService from "../services/TicketPDFService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 
@@ -156,57 +155,10 @@ const MyTicketsScreen: React.FC = () => {
 
   const handleDownloadTicket = async (ticket: Ticket) => {
     try {
-      const htmlContent = `
-        <html>
-          <head>
-            <meta charset="UTF-8" />
-            <style>
-              body { font-family: system-ui; padding: 20px; background: #121212; color: #fff; }
-              h1 { color: #00D4FF; }
-              h2 { color: #fff; }
-              p { color: #CCCCCC; margin: 8px 0; }
-              .highlight { color: #4CAF50; font-weight: bold; }
-              .mono { font-family: monospace; color: #00D4FF; }
-              hr { border: 1px solid #333; margin: 20px 0; }
-            </style>
-          </head>
-          <body>
-            <h1>🎫 Your Ticket</h1>
-            <h2>${ticket.eventName}</h2>
-            <p>Ticket Reference: <b class="mono">${shortTicketRef(ticket)}</b></p>
-            <hr />
-            <p><b>Buyer:</b> ${ticket.buyerName}</p>
-            <p><b>Venue:</b> ${ticket.venueName || "Venue TBA"}</p>
-            <p><b>Date:</b> ${formatDate(ticket.eventStartTime)}</p>
-            <p><b>Time:</b> ${formatTime(ticket.eventStartTime)}</p>
-            <p><b>Ticket Type:</b> ${ticket.entryFeeType || "Standard"}</p>
-            ${ticket.tableTotalAmount ? `<p class="highlight">UGX ${ticket.tableTotalAmount.toLocaleString()} (Table Total)</p>` : `<p class="highlight">UGX ${(ticket.totalAmount || 0).toLocaleString()}</p>`}
-            <hr />
-            <p class="mono">Ticket ID: ${ticket.id}</p>
-            <p class="mono">Purchase Date: ${formatDate(ticket.purchaseDate)}</p>
-            <hr />
-            <p style="color: #00D4FF; font-style: italic;">This ticket is verified and secured by YoVibe.</p>
-          </body>
-        </html>
-      `
-
-      const result = await Printing.printToFileAsync({
-        html: htmlContent,
-      }) as any
-
-      const pdfUrl: string = result.uri || result.url
-
-      if (Platform.OS === "web") {
-        const link = document.createElement("a")
-        link.href = pdfUrl
-        link.download = `ticket-${shortTicketRef(ticket)}.pdf`
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        Alert.alert("Downloaded", "Ticket PDF saved to your downloads")
-      } else {
-        await Sharing.shareAsync(pdfUrl as any)
-        Alert.alert("Downloaded", "Ticket PDF saved to your files")
+      const event = await SupabaseService.getEventById(ticket.eventId)
+      const result = await TicketPDFService.downloadTicketPDF(ticket, event ?? undefined)
+      if (!result.success) {
+        Alert.alert("Error", result.error || "Failed to generate ticket PDF. Please try again.")
       }
     } catch (error: any) {
       console.error("Error generating PDF:", error)

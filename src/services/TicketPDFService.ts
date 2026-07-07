@@ -1,7 +1,9 @@
 import * as Print from "expo-print"
 import * as Sharing from "expo-sharing"
+import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { Event } from "../models/Event"
+import { TICKET_TEMPLATE_BACKGROUNDS } from "../constants/ticketTemplates"
 
 export class TicketPDFService {
   /**
@@ -87,6 +89,18 @@ export class TicketPDFService {
 
     const secureQR = this.generateSecureQRData(ticket)
 
+    const ticketDesign = event?.ticket_design
+    const isCustomDesign = ticketDesign?.enabled
+    let backgroundUrl = "#f5f5f5"
+    
+    if (isCustomDesign && ticketDesign?.source === "upload" && ticketDesign?.background_url) {
+      backgroundUrl = ticketDesign.background_url
+    } else if (isCustomDesign && ticketDesign?.source === "template" && ticketDesign?.template_id) {
+      backgroundUrl = TICKET_TEMPLATE_BACKGROUNDS[ticketDesign.template_id] || "#f5f5f5"
+    }
+    
+    const isLandscape = isCustomDesign && ticketDesign?.orientation === "landscape"
+
     return `
 <!DOCTYPE html>
 <html>
@@ -98,17 +112,29 @@ export class TicketPDFService {
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { 
       font-family: 'Helvetica Neue', Arial, sans-serif; 
-      background: #f5f5f5;
+      background: url('${backgroundUrl}') center/cover no-repeat;
       color: #333;
-      padding: 20px;
+      padding: 40px 20px;
+      min-height: 100vh;
     }
     .ticket-container {
-      max-width: 600px;
+      max-width: ${isLandscape ? '900px' : '600px'};
       margin: 0 auto;
       background: white;
       border-radius: 16px;
       overflow: hidden;
       box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    .landscape {
+      display: flex;
+      flex-direction: row;
+    }
+    .landscape .event-info {
+      flex: 1;
+    }
+    .landscape .qr-container {
+      flex: 0 0 auto;
+      margin: 24px;
     }
     .header {
       background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -343,6 +369,22 @@ export class TicketPDFService {
       
       const html = this.generateTicketHTML(ticket, event)
       
+      // Web-specific handling - download as HTML
+      if (Platform.OS === "web") {
+        const blob = new Blob([html], { type: "text/html" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `ticket-${ticket.id}.html`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        
+        console.log("📄 TicketPDFService: HTML download initiated on web")
+        return { success: true }
+      }
+      
       const { uri } = await Print.printToFileAsync({
         html,
         base64: false,
@@ -355,7 +397,6 @@ export class TicketPDFService {
         await Sharing.shareAsync(uri, {
           mimeType: "application/pdf",
           dialogTitle: `YoVibe Ticket - ${ticket.eventName}`,
-          uri,
         })
         console.log("📄 TicketPDFService: PDF shared successfully")
         return { success: true }
@@ -363,9 +404,9 @@ export class TicketPDFService {
         console.log("📄 TicketPDFService: Sharing not available")
         return { success: false, error: "Sharing not available on this device" }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("📄 TicketPDFService: Error generating PDF:", error)
-      return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+      return { success: false, error: error.message || "Unknown error" }
     }
   }
 

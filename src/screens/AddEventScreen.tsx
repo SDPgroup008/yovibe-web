@@ -20,6 +20,7 @@ import ImagePickerService from "../services/ImagePickerService"
 import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
+import { TICKET_TEMPLATES } from "../constants/ticketTemplates"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -62,7 +63,12 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [location, setLocation] = useState("")
   const [isFreeEntry, setIsFreeEntry] = useState(false)
   const [showFeeForm, setShowFeeForm] = useState(false)
-  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>)
+  const [newFeeCustomDesign, setNewFeeCustomDesign] = useState(false)
+  const [newFeeDesignOrientation, setNewFeeDesignOrientation] = useState<"portrait" | "landscape">("portrait")
+  const [newFeeSelectedTemplate, setNewFeeSelectedTemplate] = useState<string | null>(null)
+  const [newFeeDesignSource, setNewFeeDesignSource] = useState<"template" | "upload">("template")
+  const [newFeeUploadedBackgroundUrl, setNewFeeUploadedBackgroundUrl] = useState<string | null>(null)
+  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
   const [newFeeIsTable, setNewFeeIsTable] = useState(false)
@@ -99,6 +105,15 @@ const AddEventScreen: React.FC<any> = (props) => {
     ticketContacts?: string
     entryFees?: string
   }>({})
+  const [newFeeBackgroundFile, setNewFeeBackgroundFile] = useState<any>(null)
+  
+  // Global event-level ticket design
+  const [customTicketDesign, setCustomTicketDesign] = useState(false)
+  const [ticketOrientation, setTicketOrientation] = useState<"portrait" | "landscape">("portrait")
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null)
+  const [uploadedBackgroundUrl, setUploadedBackgroundUrl] = useState<string | null>(null)
+  const [designSource, setDesignSource] = useState<"template" | "upload">("template")
+  const [eventBackgroundFile, setEventBackgroundFile] = useState<any>(null)
 
   // Load venues and auto-select for club owners
   useEffect(() => {
@@ -227,7 +242,15 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Error", "Please enter both a fee name and amount")
       return
     }
-    const fee: { name: string; amount: string; isTable?: boolean; tableSize?: number } = {
+    if (newFeeCustomDesign && newFeeDesignSource === "template" && !newFeeSelectedTemplate) {
+      Alert.alert("Error", "Please select a ticket design template")
+      return
+    }
+    if (newFeeCustomDesign && newFeeDesignSource === "upload" && !newFeeUploadedBackgroundUrl) {
+      Alert.alert("Error", "Please upload a background image for the ticket design")
+      return
+    }
+    const fee: { name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } } = {
       name: newFeeName,
       amount: newFeeAmount,
     }
@@ -240,11 +263,28 @@ const AddEventScreen: React.FC<any> = (props) => {
       fee.isTable = true
       fee.tableSize = size
     }
+    if (newFeeCustomDesign) {
+      fee.ticketDesign = {
+        enabled: true,
+        orientation: newFeeDesignOrientation,
+        source: newFeeDesignSource,
+        template_id: newFeeDesignSource === "template" ? newFeeSelectedTemplate : null,
+        background_url: newFeeDesignSource === "upload" ? newFeeUploadedBackgroundUrl : null,
+        dimensions: newFeeDesignOrientation === "portrait"
+          ? { width: 1080, height: 1920 }
+          : { width: 1920, height: 1080 },
+      }
+    }
     setEntryFees([...entryFees, fee])
     setNewFeeName("")
     setNewFeeAmount("")
     setNewFeeIsTable(false)
     setNewTableSize("")
+    setNewFeeCustomDesign(false)
+    setNewFeeDesignSource("template")
+    setNewFeeDesignOrientation("portrait")
+    setNewFeeSelectedTemplate(null)
+    setNewFeeUploadedBackgroundUrl(null)
     setShowFeeForm(false)
   }
 
@@ -378,6 +418,48 @@ const AddEventScreen: React.FC<any> = (props) => {
     )
   }
 
+  const pickFeeBackgroundImage = async () => {
+    try {
+      const result = await ImagePickerService.launchImageLibraryAsync({
+        mediaTypes: "Images",
+        allowsEditing: true,
+        aspect: [9, 16],
+        quality: 0.8,
+      })
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0]
+        console.log("Fee background image selected:", selectedImage.uri.substring(0, 50) + "...")
+        setNewFeeBackgroundFile(selectedImage)
+        setNewFeeUploadedBackgroundUrl(selectedImage.uri)
+      }
+    } catch (error) {
+      console.error("Error picking fee background image:", error)
+      Alert.alert("Error", "Failed to pick image")
+    }
+  }
+
+  const pickEventBackgroundImage = async () => {
+    try {
+      const result = await ImagePickerService.launchImageLibraryAsync({
+        mediaTypes: "Images",
+        allowsEditing: true,
+        aspect: [9, 16],
+        quality: 0.8,
+      })
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const selectedImage = result.assets[0]
+        console.log("Event background image selected:", selectedImage.uri.substring(0, 50) + "...")
+        setEventBackgroundFile(selectedImage)
+        setUploadedBackgroundUrl(selectedImage.uri)
+      }
+    } catch (error) {
+      console.error("Error picking event background image:", error)
+      Alert.alert("Error", "Failed to pick image")
+    }
+  }
+
   const handleSubmit = async () => {
     // Reset errors
     const newErrors: {
@@ -427,6 +509,19 @@ const AddEventScreen: React.FC<any> = (props) => {
     }
     if (!isFreeEntry && entryFees.length === 0) {
       newErrors.entryFees = "At least one entry fee is required or select Free Entry"
+    }
+    entryFees.forEach((fee, idx) => {
+      if (fee.ticketDesign?.enabled) {
+        if (fee.ticketDesign.source === "template" && !fee.ticketDesign.template_id) {
+          newErrors.entryFees = `Please select a ticket design template for "${fee.name}"`
+        }
+      }
+    })
+    if (customTicketDesign && designSource === "template" && !selectedTemplateId) {
+      newErrors.entryFees = "Please select a ticket design template for the event"
+    }
+    if (customTicketDesign && designSource === "upload" && !uploadedBackgroundUrl) {
+      newErrors.entryFees = "Please upload a background image for the event ticket design"
     }
 
     // If there are errors, display them and highlight fields
@@ -505,6 +600,16 @@ const AddEventScreen: React.FC<any> = (props) => {
         createdByType: user.userType,
         priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
+        ticket_design: customTicketDesign ? {
+          enabled: true,
+          orientation: ticketOrientation,
+          source: designSource,
+          template_id: designSource === "template" ? selectedTemplateId : null,
+          background_url: designSource === "upload" ? uploadedBackgroundUrl : null,
+          dimensions: ticketOrientation === "portrait"
+            ? { width: 1080, height: 1920 }
+            : { width: 1920, height: 1080 },
+        } : null,
         createdAt: new Date(),
       }
 
@@ -820,6 +925,7 @@ const AddEventScreen: React.FC<any> = (props) => {
           </TouchableOpacity>
           <Text style={styles.checkboxLabel}>Free Entry</Text>
         </View>
+        
         {!isFreeEntry && (
           <>
             <TouchableOpacity
@@ -858,6 +964,107 @@ const AddEventScreen: React.FC<any> = (props) => {
                   </TouchableOpacity>
                   <Text style={styles.checkboxLabel}>This is a Table Entry</Text>
                 </View>
+                <View style={styles.checkboxContainer}>
+                  <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeCustomDesign(!newFeeCustomDesign)}>
+                    {newFeeCustomDesign ? (
+                      <Ionicons name="checkbox" size={24} color="#2196F3" />
+                    ) : (
+                      <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.checkboxLabel}>Custom Ticket Design</Text>
+                </View>
+                {newFeeCustomDesign && (
+                  <View style={styles.customDesignContainer}>
+                    <Text style={styles.designLabel}>Ticket Orientation</Text>
+                    <View style={styles.orientationToggle}>
+                      <TouchableOpacity
+                        style={[styles.orientationButton, newFeeDesignOrientation === "portrait" && styles.orientationButtonActive]}
+                        onPress={() => setNewFeeDesignOrientation("portrait")}
+                      >
+                        <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.orientationButton, newFeeDesignOrientation === "landscape" && styles.orientationButtonActive]}
+                        onPress={() => setNewFeeDesignOrientation("landscape")}
+                      >
+                        <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.designLabel}>Design Source</Text>
+                    <View style={styles.orientationToggle}>
+                      <TouchableOpacity
+                        style={[styles.orientationButton, newFeeDesignSource === "template" && styles.orientationButtonActive]}
+                        onPress={() => {
+                          setNewFeeDesignSource("template")
+                          setNewFeeUploadedBackgroundUrl(null)
+                          setNewFeeBackgroundFile(null)
+                        }}
+                      >
+                        <Text style={[styles.orientationButtonText, newFeeDesignSource === "template" && styles.orientationButtonTextActive]}>Template</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.orientationButton, newFeeDesignSource === "upload" && styles.orientationButtonActive]}
+                        onPress={() => {
+                          setNewFeeDesignSource("upload")
+                          setNewFeeSelectedTemplate(null)
+                        }}
+                      >
+                        <Text style={[styles.orientationButtonText, newFeeDesignSource === "upload" && styles.orientationButtonTextActive]}>Upload Custom</Text>
+                      </TouchableOpacity>
+                    </View>
+                    {newFeeDesignSource === "template" ? (
+                      <>
+                        <Text style={styles.designLabel}>Select Template</Text>
+                        <ScrollView horizontal style={styles.templateGallery} showsHorizontalScrollIndicator={false}>
+                          {TICKET_TEMPLATES.filter(t => t.orientation === newFeeDesignOrientation).map((template) => (
+                            <TouchableOpacity
+                              key={template.id}
+                              style={[styles.templateCard, newFeeSelectedTemplate === template.id && styles.templateCardSelected]}
+                              onPress={() => setNewFeeSelectedTemplate(template.id)}
+                            >
+                              <Image source={{ uri: template.thumbnailUrl }} style={styles.templateThumbnail} />
+                              <Text style={styles.templateLabel}>{template.label}</Text>
+                              {newFeeSelectedTemplate === template.id && (
+                                <View style={styles.selectedOverlay}>
+                                  <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
+                                </View>
+                              )}
+                            </TouchableOpacity>
+                          ))}
+                        </ScrollView>
+                        {!newFeeSelectedTemplate && (
+                          <Text style={styles.designError}>Please select a ticket design template.</Text>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.designLabel}>Upload Background Image</Text>
+                        <TouchableOpacity
+                          style={styles.uploadButton}
+                          onPress={() => pickFeeBackgroundImage()}
+                        >
+                          <Ionicons name="image-outline" size={20} color="#FFFFFF" />
+                          <Text style={styles.uploadButtonText}>Choose Image</Text>
+                        </TouchableOpacity>
+                        {newFeeUploadedBackgroundUrl && (
+                          <View style={styles.uploadedImagePreview}>
+                            <Image source={{ uri: newFeeUploadedBackgroundUrl }} style={styles.uploadedImageThumb} />
+                            <TouchableOpacity
+                              style={styles.removeUploadButton}
+                              onPress={() => {
+                                setNewFeeUploadedBackgroundUrl(null)
+                                setNewFeeBackgroundFile(null)
+                              }}
+                            >
+                              <Ionicons name="close-circle" size={20} color="#FF3B30" />
+                            </TouchableOpacity>
+                          </View>
+                        )}
+                      </>
+                    )}
+                  </View>
+                )}
                 {newFeeIsTable && (
                   <TextInput
                     style={styles.input}
@@ -1478,6 +1685,111 @@ const styles = StyleSheet.create({
     color: "#00D4FF",
     fontSize: 14,
     fontWeight: "600",
+  },
+  customDesignContainer: {
+    backgroundColor: "#1E1E1E",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  designLabel: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  orientationToggle: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  orientationButton: {
+    flex: 1,
+    padding: 8,
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  orientationButtonActive: {
+    backgroundColor: "#2196F3",
+    borderColor: "#2196F3",
+  },
+  orientationButtonText: {
+    color: "#888888",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  orientationButtonTextActive: {
+    color: "#FFFFFF",
+  },
+  templateGallery: {
+    marginBottom: 8,
+  },
+  templateCard: {
+    alignItems: "center",
+    marginRight: 12,
+  },
+  templateCardSelected: {
+    borderWidth: 2,
+    borderColor: "#2196F3",
+    borderRadius: 6,
+  },
+  templateThumbnail: {
+    width: 120,
+    height: 200,
+    borderRadius: 6,
+    marginBottom: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  templateLabel: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    textAlign: "center",
+  },
+  selectedOverlay: {
+    position: "absolute",
+    top: -8,
+    right: -8,
+  },
+  designError: {
+    color: "#FF3B30",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  uploadButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#2196F3",
+    padding: 10,
+    borderRadius: 6,
+    marginBottom: 12,
+  },
+  uploadButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 6,
+  },
+  uploadedImagePreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+  },
+  uploadedImageThumb: {
+    width: 60,
+    height: 100,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  removeUploadButton: {
+    marginLeft: 8,
   },
 })
 

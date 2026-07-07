@@ -15,17 +15,48 @@ export interface Event {
   isFeatured: boolean
   createdAt: Date
   createdBy?: string
+  createdByAuth?: string
   createdByType?: UserType
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
-  entryFees: Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>
+  entryFees: Array<{
+    name: string
+    amount: string
+    isTable?: boolean
+    tableSize?: number
+    ticketDesign?: {
+      enabled: boolean
+      orientation: "portrait" | "landscape"
+      source: "template" | "upload"
+      template_id: string | null
+      background_url: string | null
+      dimensions: { width: number; height: number }
+    }
+  }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
   attendees?: string[]
   paymentMethods?: {
     mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
     bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
   }
+  ticket_design?: {
+    enabled: boolean
+    orientation: "portrait" | "landscape"
+    source: "template" | "upload"
+    template_id: string | null
+    background_url: string | null
+    dimensions: { width: number; height: number }
+  } | null
+}
+
+export interface TicketDesign {
+  enabled: boolean
+  orientation: "portrait" | "landscape"
+  source: "template" | "upload"
+  template_id: string | null
+  background_url: string | null
+  dimensions: { width: number; height: number }
 }
 
 // Add a new interface for Firestore storage
@@ -45,7 +76,14 @@ export interface FirestoreEvent {
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
-  entryFees: Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number }>
+  entryFees: Array<{
+    name: string
+    amount: string
+    isTable?: boolean
+    tableSize?: number
+    ticketDesign?: TicketDesign
+  }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
   attendees?: string[]
+  ticket_design?: TicketDesign | null
 }

@@ -775,7 +775,7 @@ class SupabaseService {
       // Fetch event by slug (events table uses slug as primary identifier)
       const { data, error } = await supabase
         .from("events")
-        .select("*, created_by_auth")
+        .select("*, created_by_auth, ticket_design")
         .eq("slug", eventSlug)
         .eq("is_deleted", false)
         .single();
@@ -805,6 +805,7 @@ class SupabaseService {
         createdByAuth: data.created_by_auth,
         createdByType: data.created_by_type,
         createdAt: new Date(data.created_at),
+        ticket_design: data.ticket_design,
       };
     } catch (error) {
       console.error("SupabaseService: Error getting event by slug:", error);
@@ -819,7 +820,7 @@ class SupabaseService {
 
       const { data, error } = await supabase
         .from("events")
-        .select("*, created_by_auth")
+        .select("*, created_by_auth, ticket_design")
         .eq("venue_slug", venueSlug)
         .eq("is_deleted", false)
         .gte("date", today.toISOString())
@@ -852,6 +853,7 @@ class SupabaseService {
             createdByAuth: doc.created_by_auth,
             createdByType: doc.created_by_type,
             createdAt: new Date(doc.created_at),
+            ticket_design: doc.ticket_design,
           });
         });
       }
@@ -911,6 +913,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
             payment_methods: eventData.paymentMethods || { mobileMoney: [], bankAccounts: [] },
             created_at: new Date().toISOString(),
             is_deleted: false,
+            ticket_design: eventData.ticket_design,
           })
           .select("slug")
           .single()
