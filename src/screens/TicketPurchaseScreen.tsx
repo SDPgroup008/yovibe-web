@@ -818,9 +818,19 @@ const handleInstallmentPurchase = async () => {
         </View>
 
       <View style={styles.eventInfo}>
-        <Text style={styles.eventName}>{event.name}</Text>
-        <Text style={styles.eventVenue}>{event.venueName}</Text>
-        <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
+        {event.posterImageUrl ? (
+          <Image
+            source={{ uri: event.posterImageUrl }}
+            style={styles.eventPosterBg}
+            resizeMode="cover"
+          />
+        ) : null}
+        <View style={styles.eventInfoGradient} />
+        <View style={styles.eventInfoContent}>
+          <Text style={styles.eventName}>{event.name}</Text>
+          <Text style={styles.eventVenue}>{event.venueName}</Text>
+          <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
+        </View>
       </View>
 
       {/* Purchase Status Banner */}
@@ -1221,7 +1231,7 @@ const handleInstallmentPurchase = async () => {
         </View>
       </View>
 
-      {!user && (
+      {!user && useInstallments && (
         <TouchableOpacity
           onPress={() => navigation.navigate("Login")}
           style={styles.loginToContinueLink}
@@ -1231,9 +1241,9 @@ const handleInstallmentPurchase = async () => {
       )}
 
       <TouchableOpacity
-        style={[styles.purchaseButton, (!paymentMethod || loading || !user) && styles.purchaseButtonDisabled]}
+        style={[styles.purchaseButton, (!paymentMethod || loading || (!user && useInstallments)) && styles.purchaseButtonDisabled]}
         onPress={useInstallments ? handleInstallmentPurchase : handlePurchase}
-        disabled={!paymentMethod || loading || !user}
+        disabled={!paymentMethod || loading || (!user && useInstallments)}
       >
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
@@ -1366,24 +1376,52 @@ const styles = StyleSheet.create({
     marginLeft: 16,
   },
   eventInfo: {
-    padding: 16,
-    backgroundColor: "#1E1E1E",
     margin: 16,
     borderRadius: 12,
+    overflow: "hidden",
+    backgroundColor: "#1E1E1E",
+    height: 110,
+  },
+  eventPosterBg: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    width: "55%",
+  },
+  eventInfoGradient: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // left side fully opaque dark, fades to transparent on the right
+    // React Native Web supports backgroundImage for gradients
+    ...(Platform.OS === "web" ? {
+      backgroundImage: "linear-gradient(to right, #1E1E1E 38%, rgba(30,30,30,0.85) 55%, transparent 100%)",
+    } : {
+      backgroundColor: "rgba(30,30,30,0.5)",
+    }),
+  },
+  eventInfoContent: {
+    padding: 16,
+    justifyContent: "center",
+    width: "65%",
+    height: "100%",
   },
   eventName: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginBottom: 8,
+    marginBottom: 6,
   },
   eventVenue: {
-    fontSize: 16,
-    color: "#2196F3",
-    marginBottom: 4,
-  },
-eventDate: {
     fontSize: 14,
+    color: "#2196F3",
+    marginBottom: 3,
+  },
+  eventDate: {
+    fontSize: 12,
     color: "#DDDDDD",
   },
   ticketSection: {
