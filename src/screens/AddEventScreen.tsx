@@ -13,6 +13,7 @@ import {
   Alert,
   ActivityIndicator,
   Dimensions,
+  Platform,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
@@ -20,7 +21,8 @@ import ImagePickerService from "../services/ImagePickerService"
 import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
-import { TICKET_TEMPLATES } from "../constants/ticketTemplates"
+import { getTemplatesByOrientation, type TicketTemplateConfig } from "../constants/ticketTemplates"
+import { generatePreviewHTML } from "../services/TicketPDFService"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -36,6 +38,58 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   if (isTablet) return medium;
   return small;
 };
+
+// ─── Live ticket preview (web only — renders actual HTML in an iframe) ────────
+const TicketPreview: React.FC<{
+  templateId: string | null
+  orientation: "portrait" | "landscape"
+  uploadedBgUrl?: string | null
+  widthCm?: number
+  heightCm?: number
+  eventName?: string
+  venueName?: string
+}> = ({ templateId, orientation, uploadedBgUrl, widthCm, heightCm, eventName, venueName }) => {
+  if (Platform.OS !== "web") return null
+  const html = generatePreviewHTML(templateId, orientation, uploadedBgUrl, { eventName, venueName })
+
+  // If custom cm dimensions provided, use them; otherwise fall back to template defaults
+  const CM_TO_PX = 96 / 2.54
+  const srcW = widthCm ? Math.round(widthCm * CM_TO_PX) : (orientation === "landscape" ? 900 : 600)
+  const srcH = heightCm ? Math.round(heightCm * CM_TO_PX) : (orientation === "landscape" ? 500 : 900)
+
+  // Scale to max 420px wide in the form
+  const maxW = 420
+  const scale = Math.min(maxW / srcW, 1)
+  const previewW = Math.round(srcW * scale)
+  const previewH = Math.round(srcH * scale)
+  return (
+    <View style={{ marginTop: 12, marginBottom: 8, alignItems: "center" }}>
+      <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Live Preview</Text>
+      <View style={{
+        width: previewW,
+        height: previewH,
+        borderRadius: 8,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: "rgba(255,255,255,0.15)",
+      }}>
+        {/* @ts-ignore — iframe is valid on web */}
+        <iframe
+          srcDoc={html}
+          style={{
+            width: srcW,
+            height: srcH,
+            border: "none",
+            transform: `scale(${scale})`,
+            transformOrigin: "top left",
+            pointerEvents: "none",
+          }}
+          sandbox="allow-same-origin"
+        />
+      </View>
+    </View>
+  )
+}
 
 const AddEventScreen: React.FC<any> = (props) => {
   const navigation = useCompatNavigation()
@@ -68,6 +122,8 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeSelectedTemplate, setNewFeeSelectedTemplate] = useState<string | null>(null)
   const [newFeeDesignSource, setNewFeeDesignSource] = useState<"template" | "upload">("template")
   const [newFeeUploadedBackgroundUrl, setNewFeeUploadedBackgroundUrl] = useState<string | null>(null)
+  const [newFeeWidthCm, setNewFeeWidthCm] = useState("21")
+  const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -264,15 +320,20 @@ const AddEventScreen: React.FC<any> = (props) => {
       fee.tableSize = size
     }
     if (newFeeCustomDesign) {
+      const CM_TO_PX = 96 / 2.54
+      const uploadW = Math.round((parseFloat(newFeeWidthCm) || 21) * CM_TO_PX)
+      const uploadH = Math.round((parseFloat(newFeeHeightCm) || 29.7) * CM_TO_PX)
       fee.ticketDesign = {
         enabled: true,
         orientation: newFeeDesignOrientation,
         source: newFeeDesignSource,
         template_id: newFeeDesignSource === "template" ? newFeeSelectedTemplate : null,
         background_url: newFeeDesignSource === "upload" ? newFeeUploadedBackgroundUrl : null,
-        dimensions: newFeeDesignOrientation === "portrait"
-          ? { width: 1080, height: 1920 }
-          : { width: 1920, height: 1080 },
+        dimensions: newFeeDesignSource === "upload"
+          ? { width: uploadW, height: uploadH }
+          : newFeeDesignOrientation === "portrait"
+            ? { width: 600, height: 900 }
+            : { width: 900, height: 500 },
       }
     }
     setEntryFees([...entryFees, fee])
@@ -285,6 +346,8 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeDesignOrientation("portrait")
     setNewFeeSelectedTemplate(null)
     setNewFeeUploadedBackgroundUrl(null)
+    setNewFeeWidthCm("21")
+    setNewFeeHeightCm("29.7")
     setShowFeeForm(false)
   }
 
@@ -1017,13 +1080,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                       <>
                         <Text style={styles.designLabel}>Select Template</Text>
                         <ScrollView horizontal style={styles.templateGallery} showsHorizontalScrollIndicator={false}>
-                          {TICKET_TEMPLATES.filter(t => t.orientation === newFeeDesignOrientation).map((template) => (
+                          {getTemplatesByOrientation(newFeeDesignOrientation).map((template) => (
                             <TouchableOpacity
                               key={template.id}
                               style={[styles.templateCard, newFeeSelectedTemplate === template.id && styles.templateCardSelected]}
                               onPress={() => setNewFeeSelectedTemplate(template.id)}
                             >
-                              <Image source={{ uri: template.thumbnailUrl }} style={styles.templateThumbnail} />
+                              <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
                               <Text style={styles.templateLabel}>{template.label}</Text>
                               {newFeeSelectedTemplate === template.id && (
                                 <View style={styles.selectedOverlay}>
@@ -1033,6 +1096,14 @@ const AddEventScreen: React.FC<any> = (props) => {
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
+                        {newFeeSelectedTemplate && (
+                          <TicketPreview
+                            templateId={newFeeSelectedTemplate}
+                            orientation={newFeeDesignOrientation}
+                            eventName={name || undefined}
+                            venueName={selectedVenueName || undefined}
+                          />
+                        )}
                         {!newFeeSelectedTemplate && (
                           <Text style={styles.designError}>Please select a ticket design template.</Text>
                         )}
@@ -1060,6 +1131,46 @@ const AddEventScreen: React.FC<any> = (props) => {
                               <Ionicons name="close-circle" size={20} color="#FF3B30" />
                             </TouchableOpacity>
                           </View>
+                        )}
+                        <View style={styles.dimensionRow}>
+                          <View style={styles.dimensionField}>
+                            <Text style={styles.dimensionLabel}>Width (cm)</Text>
+                            <TextInput
+                              style={styles.dimensionInput}
+                              value={newFeeWidthCm}
+                              onChangeText={setNewFeeWidthCm}
+                              placeholder="21"
+                              placeholderTextColor="#666"
+                              keyboardType="decimal-pad"
+                            />
+                          </View>
+                          <View style={styles.dimensionField}>
+                            <Text style={styles.dimensionLabel}>Height (cm)</Text>
+                            <TextInput
+                              style={styles.dimensionInput}
+                              value={newFeeHeightCm}
+                              onChangeText={setNewFeeHeightCm}
+                              placeholder="29.7"
+                              placeholderTextColor="#666"
+                              keyboardType="decimal-pad"
+                            />
+                          </View>
+                        </View>
+                        <Text style={styles.dimensionHint}>
+                          {newFeeWidthCm && newFeeHeightCm
+                            ? `${newFeeWidthCm} × ${newFeeHeightCm} cm → ${Math.round((parseFloat(newFeeWidthCm)||21)*(96/2.54))} × ${Math.round((parseFloat(newFeeHeightCm)||29.7)*(96/2.54))} px`
+                            : "Enter dimensions in centimetres"}
+                        </Text>
+                        {newFeeUploadedBackgroundUrl && (
+                          <TicketPreview
+                            templateId={null}
+                            orientation={newFeeDesignOrientation}
+                            uploadedBgUrl={newFeeUploadedBackgroundUrl}
+                            widthCm={parseFloat(newFeeWidthCm) || 21}
+                            heightCm={parseFloat(newFeeHeightCm) || 29.7}
+                            eventName={name || undefined}
+                            venueName={selectedVenueName || undefined}
+                          />
                         )}
                       </>
                     )}
@@ -1787,6 +1898,35 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  dimensionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 4,
+  },
+  dimensionField: {
+    flex: 1,
+  },
+  dimensionLabel: {
+    color: "#888",
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  dimensionInput: {
+    backgroundColor: "#2A2A2A",
+    color: "#FFFFFF",
+    padding: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+    fontSize: 14,
+    marginBottom: 0,
+  },
+  dimensionHint: {
+    color: "#555",
+    fontSize: 10,
+    marginBottom: 10,
+    fontFamily: "monospace",
   },
   removeUploadButton: {
     marginLeft: 8,
