@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image } from "react-native"
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Image, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useCachedUserTickets } from "../hooks/useDataCache"
@@ -10,8 +10,12 @@ import { useMyTicketsScroll } from "../hooks/useScrollPersistence"
 import { useAuth } from "../contexts/AuthContext"
 import SupabaseService from "../services/SupabaseService"
 import TicketPDFService from "../services/TicketPDFService"
+import InstallmentService from "../services/InstallmentService"
+import PawaPayService from "../services/PawaPayService"
+import PesaPalService from "../services/PesaPalService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
+import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
 const shortTicketRef = (ticket: Ticket): string => {
@@ -41,6 +45,14 @@ const MyTicketsScreen: React.FC = () => {
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
+  const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([])
+  const [payingPlanId, setPayingPlanId] = useState<string | null>(null)
+  const [payInstallmentMethod, setPayInstallmentMethod] = useState<"mobile_money" | "credit_card">("mobile_money")
+  const [payInstallmentProvider, setPayInstallmentProvider] = useState<"mtn" | "airtel">("mtn")
+  const [payInstallmentNumber, setPayInstallmentNumber] = useState("")
+  const [payInstallmentLoading, setPayInstallmentLoading] = useState(false)
+  const [payInstallmentStatus, setPayInstallmentStatus] = useState<"idle" | "polling" | "success" | "error">("idle")
+  const [payInstallmentMessage, setPayInstallmentMessage] = useState("")
 
   // Load tickets on mount and when user changes
   useEffect(() => {
@@ -59,31 +71,19 @@ const MyTicketsScreen: React.FC = () => {
     }
 
     try {
-      console.log("📋 MyTicketsScreen: Loading tickets for user:", user.id)
-      const userTickets = await SupabaseService.getTicketsByUser(user.id)
-      
-      console.log("📋 MyTicketsScreen: Raw response length:", userTickets?.length)
-      if (userTickets && userTickets.length > 0) {
-        const t = userTickets[0]
-        console.log("📋 MyTicketsScreen: First ticket keys:", Object.keys(t))
-        console.log("📋 MyTicketsScreen: First ticket totalAmount:", t.totalAmount, "type:", typeof t.totalAmount)
-        console.log("📋 MyTicketsScreen: First ticket eventName:", t.eventName)
-        console.log("📋 MyTicketsScreen: First ticket status:", t.status)
-        console.log("📋 MyTicketsScreen: First ticket purchaseDate:", t.purchaseDate)
-        console.log("📋 MyTicketsScreen: First ticket eventStartTime:", t.eventStartTime)
-      } else {
-        console.log("📋 MyTicketsScreen: No tickets returned from SupabaseService.getTicketsByUser")
-      }
-      
-      // Sort by purchase date (newest first)
+      const [userTickets, plans] = await Promise.all([
+        SupabaseService.getTicketsByUser(user.id),
+        InstallmentService.getPlansByBuyerId(user.id),
+      ])
+
       const sorted = (userTickets || []).sort((a, b) => {
         const dateA = a.purchaseDate instanceof Date ? a.purchaseDate.getTime() : new Date(a.purchaseDate || 0).getTime()
         const dateB = b.purchaseDate instanceof Date ? b.purchaseDate.getTime() : new Date(b.purchaseDate || 0).getTime()
         return dateB - dateA
       })
-      
+
       setLocalTickets(sorted)
-      console.log("📋 MyTicketsScreen: Set", sorted.length, "tickets in state")
+      setInstallmentPlans(plans.filter((p) => p.status === "active"))
     } catch (error) {
       console.error("📋 MyTicketsScreen: Error loading tickets:", error)
       Alert.alert("Error", "Failed to load tickets")
@@ -168,8 +168,74 @@ const MyTicketsScreen: React.FC = () => {
 
   const handleRefresh = () => {
     setLoading(true)
-    refetch() // clear cache
+    refetch()
     loadUserTickets()
+  }
+
+  const getNextPendingInstallment = (plan: InstallmentPlan) =>
+    plan.installments.find((i) => i.status === "pending")
+
+  const handlePayInstallment = async (plan: InstallmentPlan) => {
+    const next = getNextPendingInstallment(plan)
+    if (!next) return
+
+    if (!payInstallmentNumber.trim() && payInstallmentMethod === "mobile_money") {
+      Alert.alert("Number Required", "Please enter your mobile money number")
+      return
+    }
+
+    try {
+      setPayInstallmentLoading(true)
+      setPayInstallmentStatus("idle")
+
+      const result = await InstallmentService.payInstallment(plan.id, next.index, {
+        method: payInstallmentMethod,
+        provider: payInstallmentMethod === "mobile_money" ? payInstallmentProvider : undefined,
+        number: payInstallmentMethod === "mobile_money" ? payInstallmentNumber : undefined,
+      })
+
+      if (payInstallmentMethod === "mobile_money" && result.depositId) {
+        setPayInstallmentStatus("polling")
+        setPayInstallmentMessage("Check your phone and enter your PIN...")
+
+        let attempts = 0
+        let status = "PENDING"
+        while (attempts < 25 && (status === "PENDING" || status === "PROCESSING")) {
+          await new Promise((r) => setTimeout(r, 2000))
+          attempts++
+          try {
+            const check = await PawaPayService.checkDepositStatus(result.depositId)
+            status = (check.status || "").toUpperCase()
+          } catch { /* keep polling */ }
+        }
+
+        if (status === "COMPLETED") {
+          const { planComplete } = await InstallmentService.onInstallmentPaid(
+            plan.id, next.index, result.depositId, "mobile_money"
+          )
+          setPayInstallmentStatus("success")
+          setPayInstallmentMessage(
+            planComplete
+              ? "All installments paid! Your ticket is being emailed to you."
+              : "Installment paid! Check back here for remaining installments."
+          )
+          setPayingPlanId(null)
+          loadUserTickets()
+        } else {
+          setPayInstallmentStatus("error")
+          setPayInstallmentMessage("Payment not confirmed. Try again.")
+        }
+      } else if (result.paymentUrl) {
+        if (typeof window !== "undefined") window.open(result.paymentUrl, "_blank")
+        setPayInstallmentStatus("success")
+        setPayInstallmentMessage("Complete payment in the opened tab, then refresh.")
+      }
+    } catch (error: any) {
+      setPayInstallmentStatus("error")
+      setPayInstallmentMessage(error.message || "Payment failed")
+    } finally {
+      setPayInstallmentLoading(false)
+    }
   }
 
   if (loading || cacheLoading) {
@@ -209,6 +275,147 @@ const MyTicketsScreen: React.FC = () => {
           </TouchableOpacity>
         ))}
       </View>
+
+      {/* Installment Plans */}
+      {installmentPlans.length > 0 && (
+        <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
+          <Text style={{ color: "#F59E0B", fontWeight: "700", fontSize: 13, marginBottom: 8, letterSpacing: 0.5 }}>
+            RESERVED TICKETS — INSTALLMENTS
+          </Text>
+          {installmentPlans.map((plan) => {
+            const next = getNextPendingInstallment(plan)
+            const paidCount = plan.installments.filter((i) => i.status === "paid").length
+            const total = plan.installments.length
+            const progress = paidCount / total
+            const isOverdue = next && new Date() > next.dueDate
+            const eventPassed = plan.eventDate && new Date() > plan.eventDate
+
+            return (
+              <View key={plan.id} style={styles.installmentCard}>
+                <View style={styles.installmentCardHeader}>
+                  <Text style={styles.installmentCardEvent} numberOfLines={1}>{plan.eventName}</Text>
+                  <View style={[styles.installmentBadge, eventPassed && styles.installmentBadgeExpired]}>
+                    <Text style={styles.installmentBadgeText}>
+                      {eventPassed ? "EXPIRED" : `${paidCount}/${total} PAID`}
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={styles.installmentCardType}>{plan.ticketType} · {plan.quantity} ticket{plan.quantity > 1 ? "s" : ""}</Text>
+
+                {/* Progress bar */}
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: `${progress * 100}%` as any }]} />
+                </View>
+                <Text style={styles.progressText}>
+                  UGX {plan.amountPaid.toLocaleString()} of UGX {plan.totalAmount.toLocaleString()} paid
+                </Text>
+
+                {next && !eventPassed && (
+                  <>
+                    <View style={styles.nextInstallmentRow}>
+                      <Text style={[styles.nextInstallmentLabel, isOverdue && styles.overdueText]}>
+                        {isOverdue ? "⚠ Overdue — " : "Next: "}
+                        UGX {next.totalDue.toLocaleString()}
+                        <Text style={{ color: "#666", fontSize: 11 }}> (incl. UGX {next.serviceFee.toLocaleString()} fee)</Text>
+                      </Text>
+                    </View>
+
+                    {payingPlanId === plan.id ? (
+                      <View style={styles.payInstallmentForm}>
+                        {/* Method toggle */}
+                        <View style={styles.methodRow}>
+                          {(["mobile_money", "credit_card"] as const).map((m) => (
+                            <TouchableOpacity
+                              key={m}
+                              style={[styles.methodBtn, payInstallmentMethod === m && styles.methodBtnActive]}
+                              onPress={() => setPayInstallmentMethod(m)}
+                            >
+                              <Text style={[styles.methodBtnText, payInstallmentMethod === m && styles.methodBtnTextActive]}>
+                                {m === "mobile_money" ? "Mobile Money" : "Card"}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+
+                        {payInstallmentMethod === "mobile_money" && (
+                          <>
+                            <View style={styles.methodRow}>
+                              {(["mtn", "airtel"] as const).map((p) => (
+                                <TouchableOpacity
+                                  key={p}
+                                  style={[styles.methodBtn, payInstallmentProvider === p && styles.methodBtnActive]}
+                                  onPress={() => setPayInstallmentProvider(p)}
+                                >
+                                  <Text style={[styles.methodBtnText, payInstallmentProvider === p && styles.methodBtnTextActive]}>
+                                    {p.toUpperCase()}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                            <TextInput
+                              style={styles.payInput}
+                              value={payInstallmentNumber}
+                              onChangeText={setPayInstallmentNumber}
+                              placeholder="Mobile money number"
+                              placeholderTextColor="#666"
+                              keyboardType="phone-pad"
+                            />
+                          </>
+                        )}
+
+                        {payInstallmentStatus === "polling" && (
+                          <View style={styles.pollingRow}>
+                            <ActivityIndicator size="small" color="#F59E0B" />
+                            <Text style={styles.pollingText}>{payInstallmentMessage}</Text>
+                          </View>
+                        )}
+                        {payInstallmentStatus === "success" && (
+                          <Text style={styles.successMsg}>{payInstallmentMessage}</Text>
+                        )}
+                        {payInstallmentStatus === "error" && (
+                          <Text style={styles.errorMsg}>{payInstallmentMessage}</Text>
+                        )}
+
+                        <View style={styles.methodRow}>
+                          <TouchableOpacity
+                            style={[styles.payNowBtn, payInstallmentLoading && { opacity: 0.6 }]}
+                            onPress={() => handlePayInstallment(plan)}
+                            disabled={payInstallmentLoading}
+                          >
+                            {payInstallmentLoading
+                              ? <ActivityIndicator size="small" color="#FFF" />
+                              : <Text style={styles.payNowBtnText}>Pay UGX {next.totalDue.toLocaleString()}</Text>
+                            }
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={styles.cancelBtn}
+                            onPress={() => { setPayingPlanId(null); setPayInstallmentStatus("idle") }}
+                          >
+                            <Text style={styles.cancelBtnText}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.payInstallmentBtn}
+                        onPress={() => {
+                          setPayingPlanId(plan.id)
+                          setPayInstallmentStatus("idle")
+                          setPayInstallmentNumber(plan.paymentNumber || "")
+                        }}
+                      >
+                        <Ionicons name="card-outline" size={16} color="#F59E0B" />
+                        <Text style={styles.payInstallmentBtnText}>Pay Next Installment</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
+                )}
+              </View>
+            )
+          })}
+        </View>
+      )}
 
       {/* Ticket Summary */}
       <View style={styles.summaryContainer}>
@@ -744,6 +951,176 @@ downloadButton: {
     color: "#00D4FF",
     fontSize: 14,
     fontWeight: "500",
+  },
+  // Installment plan card styles
+  installmentCard: {
+    backgroundColor: "#1a1a1a",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.25)",
+  },
+  installmentCardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  installmentCardEvent: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "700",
+    flex: 1,
+    marginRight: 8,
+  },
+  installmentBadge: {
+    backgroundColor: "rgba(245,158,11,0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  installmentBadgeExpired: {
+    backgroundColor: "rgba(239,68,68,0.15)",
+  },
+  installmentBadgeText: {
+    color: "#F59E0B",
+    fontSize: 10,
+    fontWeight: "700",
+  },
+  installmentCardType: {
+    color: "#888",
+    fontSize: 12,
+    marginBottom: 10,
+  },
+  progressBarBg: {
+    height: 6,
+    backgroundColor: "#2a2a2a",
+    borderRadius: 3,
+    marginBottom: 4,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: 6,
+    backgroundColor: "#F59E0B",
+    borderRadius: 3,
+  },
+  progressText: {
+    color: "#666",
+    fontSize: 11,
+    marginBottom: 10,
+  },
+  nextInstallmentRow: {
+    marginBottom: 10,
+  },
+  nextInstallmentLabel: {
+    color: "#CCCCCC",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  overdueText: {
+    color: "#EF4444",
+  },
+  payInstallmentBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderWidth: 1,
+    borderColor: "#F59E0B",
+    borderRadius: 8,
+    paddingVertical: 10,
+  },
+  payInstallmentBtnText: {
+    color: "#F59E0B",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  payInstallmentForm: {
+    marginTop: 8,
+    gap: 8,
+  },
+  methodRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  methodBtn: {
+    flex: 1,
+    padding: 10,
+    alignItems: "center",
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  methodBtnActive: {
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderColor: "#F59E0B",
+  },
+  methodBtnText: {
+    color: "#888",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  methodBtnTextActive: {
+    color: "#F59E0B",
+  },
+  payInput: {
+    backgroundColor: "#2a2a2a",
+    color: "#FFF",
+    padding: 10,
+    borderRadius: 8,
+    fontSize: 14,
+  },
+  payNowBtn: {
+    flex: 1,
+    backgroundColor: "#F59E0B",
+    padding: 12,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+  payNowBtnText: {
+    color: "#000",
+    fontWeight: "700",
+    fontSize: 14,
+  },
+  cancelBtn: {
+    paddingHorizontal: 16,
+    padding: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cancelBtnText: {
+    color: "#666",
+    fontSize: 13,
+  },
+  pollingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    padding: 8,
+    backgroundColor: "rgba(245,158,11,0.08)",
+    borderRadius: 8,
+  },
+  pollingText: {
+    color: "#D97706",
+    fontSize: 12,
+    flex: 1,
+  },
+  successMsg: {
+    color: "#4CAF50",
+    fontSize: 13,
+    padding: 8,
+    backgroundColor: "rgba(76,175,80,0.08)",
+    borderRadius: 8,
+  },
+  errorMsg: {
+    color: "#EF4444",
+    fontSize: 13,
+    padding: 8,
+    backgroundColor: "rgba(239,68,68,0.08)",
+    borderRadius: 8,
   },
 })
 

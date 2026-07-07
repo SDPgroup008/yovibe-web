@@ -13,6 +13,9 @@ import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
 import PawaPayService from "../services/PawaPayService"
 import SupabaseService from "../services/SupabaseService"
+import InstallmentService from "../services/InstallmentService"
+import type { InstallmentPlanType } from "../models/InstallmentPlan"
+import { INSTALLMENT_SERVICE_FEE_RATE } from "../models/InstallmentPlan"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
 import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
@@ -129,6 +132,11 @@ const TicketPurchaseScreen: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState("")
   const [checkingPayment, setCheckingPayment] = useState(false)
   const bannerOpacity = useRef(new Animated.Value(0)).current
+
+  // Installment state
+  const [useInstallments, setUseInstallments] = useState(false)
+  const [installmentPlanType, setInstallmentPlanType] = useState<InstallmentPlanType>("2")
+  const [installmentPlanId, setInstallmentPlanId] = useState<string | null>(null)
 
   // ===========================================================================
   // FIX: Security-photo branch logic, computed ONCE at component scope so it's
@@ -419,6 +427,12 @@ const handlePaymentComplete = async () => {
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
+
+  // Installment preview — recalculated whenever plan type or total changes
+  const installmentPreview = useMemo(() => {
+    if (!useInstallments || !event?.date) return []
+    return InstallmentService.previewPlan(total, installmentPlanType, event.date)
+  }, [useInstallments, installmentPlanType, total, event?.date])
   
 const updateBuyerName = (index: number, name: string) => {
     setBuyerNames(prev => {
@@ -481,7 +495,124 @@ const updateBuyerName = (index: number, name: string) => {
     }
   }
 
-const handlePurchase = async () => {
+const handleInstallmentPurchase = async () => {
+    const buyerNamesList = getBuyerNames()
+    for (let i = 0; i < actualTicketCount; i++) {
+      if (!buyerNamesList[i]?.trim()) {
+        Alert.alert("Name Required", `Please enter name for person ${i + 1}`)
+        return
+      }
+    }
+
+    if (!paymentMethod) {
+      Alert.alert("Payment Required", "Please select a payment method")
+      return
+    }
+
+    if (paymentMethod === "mobile_money" && !mobileMoneyNumber.trim()) {
+      Alert.alert("Number Required", "Please enter your mobile money number")
+      return
+    }
+
+    const buyerEmailFinal = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
+    const buyerNameFinal = visitorName.trim() || buyerEmailFinal.split("@")[0] || "Guest"
+    const buyerEmailsList = getBuyerEmails()
+    const deliveryEmails = emailDistribution === "single"
+      ? Array(actualTicketCount).fill(buyerEmailFinal)
+      : buyerEmailsList
+
+    try {
+      setLoading(true)
+      const result = await InstallmentService.createPlanAndPayFirst(
+        event!,
+        installmentPlanType,
+        total,
+        lateFee,
+        {
+          buyerId: user?.id,
+          buyerEmail: buyerEmailFinal,
+          buyerName: buyerNameFinal,
+          buyerNames: buyerNamesList,
+          buyerEmails: buyerEmailsList,
+          deliveryEmails,
+          payerEmail: buyerEmailFinal,
+          isTableEntry,
+          tableSize,
+          buyerPhotoUrl: photoCaptured ? buyerPhotoUrl : undefined,
+        },
+        {
+          method: paymentMethod,
+          provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
+          number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
+          name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
+        }
+      )
+
+      setInstallmentPlanId(result.planId)
+
+      if (paymentMethod === "mobile_money" && result.depositId) {
+        setPaymentOrderId(result.depositId)
+        setPawaPayDepositId(result.depositId)
+        setCheckingPayment(true)
+        // Poll and on completion mark installment 0 paid
+        const pollResult = await pollInstallmentPayment(result.planId, 0, result.depositId)
+        if (!pollResult) {
+          setPurchaseStatus("error")
+          setStatusMessage("Payment not completed. You can pay the first installment from My Tickets.")
+        }
+      } else if (result.paymentUrl) {
+        if (typeof window !== "undefined") {
+          window.open(result.paymentUrl, "_blank")
+        }
+        setPaymentOrderId(result.orderId || null)
+        setShowPaymentModal(true)
+      }
+    } catch (error: any) {
+      setPurchaseStatus("error")
+      setStatusMessage(error.message || "Failed to create installment plan")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const pollInstallmentPayment = async (
+    planId: string,
+    installmentIndex: number,
+    depositId: string
+  ): Promise<boolean> => {
+    let attempts = 0
+    const maxAttempts = 25
+    let status = "PENDING"
+
+    while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
+      await new Promise((r) => setTimeout(r, 2000))
+      attempts++
+      try {
+        const result = await PawaPayService.checkDepositStatus(depositId)
+        status = (result.status || "").toUpperCase()
+      } catch {
+        // network hiccup — keep polling
+      }
+    }
+
+    setCheckingPayment(false)
+
+    if (status === "COMPLETED") {
+      await InstallmentService.onInstallmentPaid(planId, installmentIndex, depositId, "mobile_money")
+      setPurchaseStatus("success")
+      const remaining = parseInt(installmentPlanType) - 1
+      setStatusMessage(
+        remaining > 0
+          ? `First installment paid! ${remaining} installment${remaining > 1 ? "s" : ""} remaining. Find them in My Tickets.`
+          : "All installments paid! Your ticket is being sent to your email."
+      )
+      setTimeout(() => navigation.navigate("MyTickets"), 1500)
+      return true
+    }
+    return false
+  }
+
+  const handlePurchase = async () => {
     console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod)
     
     // Validate names for each ticket
@@ -986,6 +1117,65 @@ const handlePurchase = async () => {
         )}
       </View>
 
+      {/* Installment Plan Toggle */}
+      <View style={styles.installmentSection}>
+        <Text style={styles.sectionTitle}>Payment Plan</Text>
+        <View style={styles.planToggleRow}>
+          <TouchableOpacity
+            style={[styles.planToggleBtn, !useInstallments && styles.planToggleBtnActive]}
+            onPress={() => setUseInstallments(false)}
+          >
+            <Text style={[styles.planToggleText, !useInstallments && styles.planToggleTextActive]}>Pay in Full</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.planToggleBtn, useInstallments && styles.planToggleBtnActive]}
+            onPress={() => setUseInstallments(true)}
+          >
+            <Text style={[styles.planToggleText, useInstallments && styles.planToggleTextActive]}>Pay in Parts</Text>
+          </TouchableOpacity>
+        </View>
+
+        {useInstallments && (
+          <>
+            <View style={styles.planTypeRow}>
+              {(["2", "3", "4", "5"] as InstallmentPlanType[]).map((pt) => (
+                <TouchableOpacity
+                  key={pt}
+                  style={[styles.planTypeBtn, installmentPlanType === pt && styles.planTypeBtnActive]}
+                  onPress={() => setInstallmentPlanType(pt)}
+                >
+                  <Text style={[styles.planTypeText, installmentPlanType === pt && styles.planTypeTextActive]}>
+                    {pt}x
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {installmentPreview.map((inst, i) => {
+              const label = i === 0 ? "Pay now" : `Installment ${i + 1} — due ${inst.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+              return (
+                <View key={i} style={styles.installmentRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.installmentLabel}>{label}</Text>
+                    <Text style={styles.installmentFeeNote}>Includes 8% service fee (UGX {inst.serviceFee.toLocaleString()})</Text>
+                  </View>
+                  <Text style={[styles.installmentAmount, i === 0 && styles.installmentAmountFirst]}>
+                    UGX {inst.totalDue.toLocaleString()}
+                  </Text>
+                </View>
+              )
+            })}
+
+            <View style={styles.installmentNotice}>
+              <Ionicons name="information-circle-outline" size={16} color="#F59E0B" />
+              <Text style={styles.installmentNoticeText}>
+                QR code is sent after the final installment. Missed installments can be paid any time before the event date.
+              </Text>
+            </View>
+          </>
+        )}
+      </View>
+
       <View style={styles.summarySection}>
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
@@ -1003,25 +1193,37 @@ const handlePurchase = async () => {
           </View>
         )}
 
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>YoVibe Fee (15%):</Text>
-          <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
-        </View>
+        {!useInstallments && (
+          <>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>YoVibe Fee (15%):</Text>
+              <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
+            </View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Event Revenue:</Text>
+              <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
+            </View>
+          </>
+        )}
 
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryLabel}>Event Revenue:</Text>
-          <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
-        </View>
+        {useInstallments && installmentPreview.length > 0 && (
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Due today (incl. 8% fee):</Text>
+            <Text style={[styles.summaryValue, { color: "#F59E0B" }]}>
+              UGX {installmentPreview[0].totalDue.toLocaleString()}
+            </Text>
+          </View>
+        )}
 
         <View style={[styles.summaryRow, styles.totalRow]}>
-          <Text style={styles.totalLabel}>Total:</Text>
+          <Text style={styles.totalLabel}>{useInstallments ? "Ticket Total:" : "Total:"}</Text>
           <Text style={styles.totalValue}>UGX {total.toLocaleString()}</Text>
         </View>
       </View>
 
       <TouchableOpacity
         style={[styles.purchaseButton, (!paymentMethod || loading) && styles.purchaseButtonDisabled]}
-        onPress={handlePurchase}
+        onPress={useInstallments ? handleInstallmentPurchase : handlePurchase}
         disabled={!paymentMethod || loading}
       >
         {loading ? (
@@ -1029,7 +1231,9 @@ const handlePurchase = async () => {
         ) : (
           <>
             <Ionicons name="card" size={24} color="#FFFFFF" />
-            <Text style={styles.purchaseButtonText}>Purchase Tickets</Text>
+            <Text style={styles.purchaseButtonText}>
+              {useInstallments ? `Reserve & Pay First Installment` : "Purchase Tickets"}
+            </Text>
           </>
         )}
       </TouchableOpacity>
@@ -1717,6 +1921,107 @@ buyerNamesSection: {
   cancelPaymentText: {
     color: "#888888",
     fontSize: 14,
+  },
+  // Installment styles
+  installmentSection: {
+    padding: 16,
+    backgroundColor: "#1E1E1E",
+    margin: 16,
+    borderRadius: 12,
+  },
+  planToggleRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  planToggleBtn: {
+    flex: 1,
+    padding: 12,
+    alignItems: "center",
+    backgroundColor: "#333333",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  planToggleBtnActive: {
+    backgroundColor: "rgba(0,212,255,0.12)",
+    borderColor: "#00D4FF",
+  },
+  planToggleText: {
+    color: "#888888",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  planToggleTextActive: {
+    color: "#00D4FF",
+  },
+  planTypeRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  planTypeBtn: {
+    flex: 1,
+    padding: 10,
+    alignItems: "center",
+    backgroundColor: "#2a2a2a",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  planTypeBtnActive: {
+    backgroundColor: "rgba(245,158,11,0.12)",
+    borderColor: "#F59E0B",
+  },
+  planTypeText: {
+    color: "#888888",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  planTypeTextActive: {
+    color: "#F59E0B",
+  },
+  installmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.06)",
+  },
+  installmentLabel: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  installmentFeeNote: {
+    color: "#666",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  installmentAmount: {
+    color: "#CCCCCC",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  installmentAmountFirst: {
+    color: "#F59E0B",
+  },
+  installmentNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginTop: 14,
+    padding: 12,
+    backgroundColor: "rgba(245,158,11,0.08)",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(245,158,11,0.25)",
+  },
+  installmentNoticeText: {
+    flex: 1,
+    color: "#D97706",
+    fontSize: 12,
+    lineHeight: 18,
   },
   loaderFooter: {
     color: "#888888",
