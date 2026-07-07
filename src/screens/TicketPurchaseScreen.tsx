@@ -154,7 +154,7 @@ const TicketPurchaseScreen: React.FC = () => {
     ? Array(actualTicketCount).fill(payerEmailForPhotoCheck)
     : buyerEmails.slice(0, actualTicketCount).map(e => e.trim())
 
-  const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && deliveryEmailsForPhotoCheck[0] === payerEmailForPhotoCheck
+  const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse && deliveryEmailsForPhotoCheck[0] === payerEmailForPhotoCheck
   const showManualPhotoCapture = isBuyingForSelf
   const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
 
@@ -1221,10 +1221,19 @@ const handleInstallmentPurchase = async () => {
         </View>
       </View>
 
+      {!user && (
+        <TouchableOpacity
+          onPress={() => navigation.navigate("Login")}
+          style={styles.loginToContinueLink}
+        >
+          <Text style={styles.loginToContinueText}>Login to continue</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
-        style={[styles.purchaseButton, (!paymentMethod || loading) && styles.purchaseButtonDisabled]}
+        style={[styles.purchaseButton, (!paymentMethod || loading || !user) && styles.purchaseButtonDisabled]}
         onPress={useInstallments ? handleInstallmentPurchase : handlePurchase}
-        disabled={!paymentMethod || loading}
+        disabled={!paymentMethod || loading || !user}
       >
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
@@ -2022,6 +2031,17 @@ buyerNamesSection: {
     color: "#D97706",
     fontSize: 12,
     lineHeight: 18,
+  },
+  loginToContinueLink: {
+    alignItems: "center",
+    marginHorizontal: 16,
+    marginBottom: 8,
+    paddingVertical: 8,
+  },
+  loginToContinueText: {
+    color: "#00D4FF",
+    fontSize: 14,
+    textDecorationLine: "underline",
   },
   loaderFooter: {
     color: "#888888",
