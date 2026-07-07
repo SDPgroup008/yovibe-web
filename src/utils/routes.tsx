@@ -36,6 +36,7 @@ import AdminEventsScreen from '../screens/admin/AdminEventsScreen';
 import AdminOwnershipRequestsScreen from '../screens/admin/AdminOwnershipRequestsScreen';
 import AdminStrandedPurchasesScreen from '../screens/admin/AdminStrandedPurchasesScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
+import TokenScannerScreen from '../screens/auth/TokenScannerScreen';
 
 // Import compatibility wrapper
 import { withCompatNavigation } from './compatNavigation';
@@ -78,6 +79,10 @@ export const routes: RouteDefinition[] = [
     path: '/terms',
     component: TermsAndConditionsScreen,
     exact: true
+  },
+  {
+    path: '/scan/:token',
+    component: TokenScannerScreen
   },
 
   // Main navigation routes

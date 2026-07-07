@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Image, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
@@ -10,14 +10,25 @@ import { useRouter } from "../utils/URLRouter"
 import { useAuth } from "../contexts/AuthContext"
 import TicketService from "../services/TicketService"
 
-const TicketScannerScreen: React.FC = () => {
+type TicketScannerScreenProps = {
+  eventId?: string
+  eventName?: string
+  isTokenAuth?: boolean
+}
+
+const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
+  eventId: propEventId,
+  eventName: propEventName,
+  isTokenAuth = false
+}) => {
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
   const { user } = useAuth()
 
   const pathParts = currentPath.split('/').filter(Boolean)
-  const eventId = pathParts[2]
-  const eventName = "Event"
+  const eventId = propEventId || pathParts[2] || ""
+  const eventName = propEventName || "Event"
+
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
@@ -26,6 +37,7 @@ const TicketScannerScreen: React.FC = () => {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const rafRef = useRef<number | null>(null)
+  const hasCheckedAuth = useRef(false)
   
   // Photo verification state
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
@@ -33,12 +45,16 @@ const TicketScannerScreen: React.FC = () => {
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
 
+  // Auth check - only for non-token auth
   useEffect(() => {
-    if (!user) {
-      Alert.alert("Access Denied", "Please sign in to access this page")
-      navigation.goBack()
+    if (!isTokenAuth && !hasCheckedAuth.current) {
+      hasCheckedAuth.current = true
+      if (!user) {
+        Alert.alert("Access Denied", "Please sign in to access this page")
+        navigation.goBack()
+      }
     }
-  }, [user, navigation])
+  }, [user, navigation, isTokenAuth])
 
   useEffect(() => {
     return () => {
@@ -46,14 +62,13 @@ const TicketScannerScreen: React.FC = () => {
     }
   }, [])
 
-  const stopCamera = () => {
+  const stopCamera = useCallback(() => {
     if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
     videoRef.current = null
     canvasRef.current = null
-  }
+  }, [])
 
-  const jsqrRef = useRef<any>(null)
   const [libLoaded, setLibLoaded] = useState(false)
 
   useEffect(() => {
@@ -69,7 +84,7 @@ const TicketScannerScreen: React.FC = () => {
     }
   }, [])
 
-  const scanLoop = () => {
+  const scanLoop = useCallback(() => {
     if (!videoRef.current || !canvasRef.current) return
     const video = videoRef.current
     const canvas = canvasRef.current
@@ -106,17 +121,17 @@ const TicketScannerScreen: React.FC = () => {
     }
     
     rafRef.current = requestAnimationFrame(scanLoop)
-  }
+  }, [])
 
-  const onQrDetected = (decodedText: string) => {
+  const onQrDetected = useCallback((decodedText: string) => {
     stopCamera()
     setScanning(false)
     let ticketId = decodedText
     try { const p = JSON.parse(decodedText); ticketId = p.id || decodedText } catch {}
     handleValidateTicket(ticketId)
-  }
+  }, [stopCamera])
 
-  const startScanner = async () => {
+  const startScanner = useCallback(async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }
@@ -143,20 +158,20 @@ const TicketScannerScreen: React.FC = () => {
       setScanning(false)
       Alert.alert("Camera Error", error?.message?.includes("permission") ? "Permission denied." : "Could not start camera.")
     }
-  }
+  }, [scanLoop])
 
-  const handleScanTicket = () => {
+  const handleScanTicket = useCallback(() => {
     if (scanning) { stopCamera(); setScanning(false) }
     else { startScanner() }
-  }
+  }, [scanning, stopCamera, startScanner])
 
-  const handleValidateTicket = async (qrCodeData: string) => {
+  const handleValidateTicket = useCallback(async (qrCodeData: string) => {
     stopCamera()
-    if (!user) return
+    if (!user && !isTokenAuth) return
 
     try {
       setValidating(true)
-      const result = await TicketService.validateTicket(qrCodeData, user.id, eventName || "Event Entrance")
+      const result = await TicketService.validateTicket(qrCodeData, user?.id || "", eventName || "Event Entrance")
       
       setScanHistory((prev) => [{
         ticketId: qrCodeData.substring(0, 12) + "...",
@@ -184,15 +199,15 @@ const TicketScannerScreen: React.FC = () => {
     } finally {
       setValidating(false)
     }
-  }
+  }, [user, isTokenAuth, eventName, stopCamera])
 
-  const handlePhotoConfirm = async (confirmed: boolean) => {
-    if (!user || !pendingTicketDocId) { setShowPhotoVerification(false); return }
+  const handlePhotoConfirm = useCallback(async (confirmed: boolean) => {
+    if ((!user && !isTokenAuth) || !pendingTicketDocId) { setShowPhotoVerification(false); return }
     setShowPhotoVerification(false)
     setValidating(true)
     try {
       if (confirmed) {
-        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user.id, eventName || "Event Entrance", eventId)
+        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user?.id || "", eventName || "Event Entrance", eventId)
         if (r.success) Alert.alert("✅ Entry Granted", `Photo verified for ${buyerName}.`, [{ text: "OK" }])
         else Alert.alert("❌ Entry Denied", r.reason || "Failed to confirm", [{ text: "OK" }])
       } else {
@@ -203,7 +218,7 @@ const TicketScannerScreen: React.FC = () => {
     } finally {
       setPendingTicketDocId(null); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false)
     }
-  }
+  }, [user, isTokenAuth, eventName, eventId, buyerName])
 
   return (
     <View style={styles.container}>

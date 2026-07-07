@@ -28,6 +28,7 @@ import SupabaseService from "../services/SupabaseService"
 import TicketService from "../services/TicketService"
 import PesaPalService from "../services/PesaPalService"
 import PawaPayService from "../services/PawaPayService"
+import StaffTokenService from "../services/StaffTokenService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type {
@@ -267,6 +268,70 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
   const [eventCreatorPaymentDetails, setEventCreatorPaymentDetails] = useState<any>(null)
+
+  type StaffToken = { id: string; token: string; label?: string; expires_at: string; created_at: string }
+  const [activeTokens, setActiveTokens] = useState<StaffToken[]>([])
+  const [newTokenLabel, setNewTokenLabel] = useState("")
+  const [showTokenModal, setShowTokenModal] = useState(false)
+  const [tokenLoading, setTokenLoading] = useState(false)
+
+  const formatTimeRemaining = (expiresAt: string) => {
+    const diff = new Date(expiresAt).getTime() - Date.now()
+    if (diff <= 0) return "Expired"
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+    return `${hours}h ${minutes}m`
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      Alert.alert("Copied", "Link copied to clipboard")
+    } catch {
+      Alert.alert("Error", "Failed to copy")
+    }
+  }
+
+  const handleGenerateToken = async () => {
+    if (!event?.slug) return
+    const activeCount = activeTokens.filter(t => new Date(t.expires_at) > new Date()).length
+    if (activeCount >= 15) {
+      Alert.alert("Limit Reached", "Maximum of 15 active staff links per event")
+      return
+    }
+    setTokenLoading(true)
+    try {
+      const result = await StaffTokenService.generateToken(event.slug, newTokenLabel || undefined)
+      if (result) {
+        const tokens = await StaffTokenService.getActiveTokensForEvent(event.slug)
+        const newToken = tokens.find(t => t.id === result.tokenId)
+        if (newToken) {
+          const link = `https://yovibe.net/scan/${newToken.token}`
+          await copyToClipboard(link)
+          setActiveTokens([newToken, ...activeTokens])
+        }
+        setShowTokenModal(false)
+        setNewTokenLabel("")
+      }
+    } catch {
+      Alert.alert("Error", "Failed to generate token")
+    } finally {
+      setTokenLoading(false)
+    }
+  }
+
+  const handleRevokeToken = async (tokenId: string) => {
+    await StaffTokenService.revokeToken(tokenId)
+    setActiveTokens(activeTokens.filter(t => t.id !== tokenId))
+  }
+
+  const handleFetchTokens = async () => {
+    if (!event?.slug) return
+    const tokens = await StaffTokenService.getActiveTokensForEvent(event.slug)
+    setActiveTokens(tokens)
+  }
+
+  useEffect(() => { handleFetchTokens() }, [event?.slug])
 
   type TicketSalesByType = {
     [entryFeeName: string]: {
@@ -983,6 +1048,35 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
 
             <View style={styles.dashboardSection}>
+              <View style={styles.dashboardRow}>
+                <Text style={styles.dashboardSectionTitle}>🔐 Staff Scanner Links</Text>
+                <TouchableOpacity onPress={() => setShowTokenModal(true)}>
+                  <Ionicons name="add-circle-outline" size={28} color="#00D4FF" />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.dashboardCard}>
+                {activeTokens.length > 0 ? (
+                  activeTokens.map((token) => (
+                    <View key={token.id} style={styles.tokenItem}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.tokenLabel}>{token.label || "Staff"}</Text>
+                        <Text style={styles.tokenExpiry}>Expires: {formatTimeRemaining(token.expires_at)}</Text>
+                      </View>
+                      <TouchableOpacity onPress={() => copyToClipboard(`https://yovibe.net/scan/${token.token}`)}>
+                        <Ionicons name="link-outline" size={20} color="#00D4FF" />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => handleRevokeToken(token.id)}>
+                        <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+                      </TouchableOpacity>
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.noDataText}>No staff links generated yet</Text>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.dashboardSection}>
               <Text style={styles.dashboardSectionTitle}>🔍 Scan Logs</Text>
               <View style={styles.dashboardCard}>
                 {scanLogs.length > 0 ? scanLogs.map((log, i) => (
@@ -1100,6 +1194,42 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       {/* Withdraw Modal */}
       {renderWithdrawModal()}
+
+      {/* Staff Token Modal */}
+      <Modal visible={showTokenModal} transparent animationType="slide" onRequestClose={() => setShowTokenModal(false)}>
+        <View style={styles.tokenModalOverlay}>
+          <View style={styles.tokenModalContainer}>
+            <View style={styles.tokenModalHeader}>
+              <Text style={styles.tokenModalTitle}>🔐 Generate Staff Link</Text>
+              <TouchableOpacity onPress={() => setShowTokenModal(false)}>
+                <Ionicons name="close-circle" size={28} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.tokenModalBody}>
+              <Text style={styles.staffInputLabel}>Label (optional)</Text>
+              <TextInput
+                style={styles.staffInput}
+                placeholder="e.g. Main Entrance Scanner"
+                placeholderTextColor="#888"
+                value={newTokenLabel}
+                onChangeText={setNewTokenLabel}
+              />
+              <Text style={styles.staffHelperText}>Maximum 15 active links per event. Links expire in 24 hours.</Text>
+              <TouchableOpacity
+                style={[styles.staffGenerateBtn, tokenLoading && styles.staffGenerateBtnDisabled]}
+                onPress={handleGenerateToken}
+                disabled={tokenLoading}
+              >
+                {tokenLoading ? (
+                  <ActivityIndicator color="#000" />
+                ) : (
+                  <Text style={styles.staffGenerateBtnText}>Generate Link</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -1219,6 +1349,22 @@ const styles = StyleSheet.create({
   denyBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#FF4444", paddingVertical: 14, borderRadius: 8 },
   confirmBtn: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#4CAF50", paddingVertical: 14, borderRadius: 8 },
   btnText: { color: "#FFF", fontSize: 16, fontWeight: "bold", marginLeft: 8 },
+
+  // -- Staff Token --
+  tokenItem: { flexDirection: "row", alignItems: "center", paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: "#2a2a2a" },
+  tokenLabel: { color: "#FFF", fontSize: 15, fontWeight: "500" },
+  tokenExpiry: { color: "#888", fontSize: 12, marginTop: 2 },
+  tokenModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
+  tokenModalContainer: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: 800 },
+  tokenModalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
+  tokenModalTitle: { color: "#FFF", fontSize: 20, fontWeight: "bold" },
+  tokenModalBody: { maxHeight: 750, paddingHorizontal: 0 },
+  staffInputLabel: { color: "#FFF", fontSize: 14, fontWeight: "600", marginBottom: 8 },
+  staffInput: { backgroundColor: "#1a1a1a", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: "#333", marginBottom: 16 },
+  staffHelperText: { color: "#666", fontSize: 12, textAlign: "center", marginBottom: 16 },
+  staffGenerateBtn: { backgroundColor: "#00D4FF", paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  staffGenerateBtnDisabled: { backgroundColor: "#666" },
+  staffGenerateBtnText: { color: "#000", fontWeight: "bold", fontSize: 16 },
 })
 
 export default OrganiserDashboardScreen
