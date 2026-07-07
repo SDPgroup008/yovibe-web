@@ -98,7 +98,7 @@ const StaffTokenService = {
   }> {
     const { data, error } = await supabase
       .from("event_staff_tokens")
-      .select("event_id, events(name, id, slug)")
+      .select("event_id, events(name, slug)")
       .eq("token", token)
       .gt("expires_at", new Date().toISOString())
       .single()
