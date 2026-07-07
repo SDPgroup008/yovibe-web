@@ -25,7 +25,7 @@ export interface StaffTokenRow {
 const StaffTokenService = {
   async getActiveTokensForEvent(eventSlug: string): Promise<StaffToken[]> {
     const { data, error } = await supabase
-      .from<StaffTokenRow[]>("event_staff_tokens")
+      .from("event_staff_tokens")
       .select("*")
       .eq("event_id", eventSlug)
       .gt("expires_at", new Date().toISOString())
@@ -36,15 +36,20 @@ const StaffTokenService = {
       return []
     }
 
-    return data || []
+    return (data as StaffTokenRow[]) || []
   },
 
   async generateToken(
     eventSlug: string,
     label?: string
   ): Promise<{ token: string; tokenId: string } | null> {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return null
+    const { data: { user }, error: sessionError } = await supabase.auth.getUser()
+    if (sessionError || !user) {
+      console.error("StaffTokenService.generateToken: no valid session", sessionError)
+      return null
+    }
+
+    console.log("[StaffTokenService] generating token as auth uid:", user.id, "for event:", eventSlug)
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 
@@ -105,11 +110,13 @@ const StaffTokenService = {
       }
     }
 
+    const eventInfo = Array.isArray(data.events) ? data.events[0] : data.events
+
     return {
       valid: true,
       eventId: data.event_id,
-      eventName: data.events?.name,
-      eventSlug: data.events?.slug,
+      eventName: eventInfo?.name,
+      eventSlug: eventInfo?.slug,
     }
   },
 

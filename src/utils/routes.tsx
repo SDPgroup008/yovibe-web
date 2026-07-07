@@ -82,7 +82,8 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/scan/:token',
-    component: TokenScannerScreen
+    component: withCompatNavigation(TokenScannerScreen),
+    exact: true
   },
 
   // Main navigation routes

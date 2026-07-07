@@ -16,7 +16,7 @@ import { useCompatNavigation, useCompatRoute } from "../../utils/compatNavigatio
 import { useRouter } from "../../utils/URLRouter"
 import { Ionicons } from "@expo/vector-icons"
 import StaffTokenService from "../../services/StaffTokenService"
-import TicketScannerScreen from "./TicketScannerScreen"
+import TicketScannerScreen from "../TicketScannerScreen"
 
 const { width: screenWidth } = Dimensions.get('window')
 

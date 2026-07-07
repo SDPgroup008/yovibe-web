@@ -775,7 +775,7 @@ class SupabaseService {
       // Fetch event by slug (events table uses slug as primary identifier)
       const { data, error } = await supabase
         .from("events")
-        .select("*")
+        .select("*, created_by_auth")
         .eq("slug", eventSlug)
         .eq("is_deleted", false)
         .single();
@@ -802,6 +802,7 @@ class SupabaseService {
         paymentMethods: data.payment_methods || { mobileMoney: [], bankAccounts: [] },
         attendees: data.attendees || [],
         createdBy: data.created_by,
+        createdByAuth: data.created_by_auth,
         createdByType: data.created_by_type,
         createdAt: new Date(data.created_at),
       };
@@ -818,7 +819,7 @@ class SupabaseService {
 
       const { data, error } = await supabase
         .from("events")
-        .select("*")
+        .select("*, created_by_auth")
         .eq("venue_slug", venueSlug)
         .eq("is_deleted", false)
         .gte("date", today.toISOString())
@@ -848,6 +849,7 @@ class SupabaseService {
             paymentMethods: doc.payment_methods || { mobileMoney: [], bankAccounts: [] },
             attendees: doc.attendees || [],
             createdBy: doc.created_by,
+            createdByAuth: doc.created_by_auth,
             createdByType: doc.created_by_type,
             createdAt: new Date(doc.created_at),
           });
@@ -861,7 +863,7 @@ class SupabaseService {
     }
   }
 
-  async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
+async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     try {
       if (!(eventData.date instanceof Date) || isNaN(eventData.date.getTime())) {
         throw new Error("Invalid event date provided")
@@ -870,11 +872,19 @@ class SupabaseService {
       const baseSlug = generateSlug(eventData.name)
       const MAX_SLUG_ATTEMPTS = 6
 
+      const { data: { user: sessionUser }, error: sessionError } = await supabase.auth.getUser()
+      if (sessionError || !sessionUser) {
+        console.error("SupabaseService.addEvent: no valid session", sessionError)
+        throw new Error("Session expired. Please sign in again.")
+      }
+
       for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
         const slug =
           attempt === 0
-            ? baseSlug
-            : `${baseSlug}-${Date.now().toString(36)}-${attempt}`
+          ? baseSlug
+          : `${baseSlug}-${Date.now().toString(36)}-${attempt}`
+
+        console.log("[SupabaseService.addEvent] generating event as auth uid:", sessionUser.id)
 
         const { data, error } = await supabase
           .from("events")
@@ -896,6 +906,7 @@ class SupabaseService {
             ticket_contacts: eventData.ticketContacts || [],
             attendees: eventData.attendees || [],
             created_by: eventData.createdBy,
+            created_by_auth: sessionUser.id,
             created_by_type: eventData.createdByType,
             payment_methods: eventData.paymentMethods || { mobileMoney: [], bankAccounts: [] },
             created_at: new Date().toISOString(),
