@@ -20,18 +20,23 @@ import TicketScannerScreen from "../TicketScannerScreen"
 
 const { width: screenWidth } = Dimensions.get('window')
 
-const TokenScannerScreen: React.FC = () => {
+interface TokenScannerScreenProps {
+  token?: string
+}
+
+const TokenScannerScreen: React.FC<TokenScannerScreenProps> = (props) => {
   const navigation = useCompatNavigation()
   const route = useCompatRoute()
-  const { currentPath } = useRouter()
+  const { params } = useRouter()
+
+  const token = props.token || (route.params?.token as string) || (params?.token as string)
+  console.log("[TokenScannerScreen] resolved token:", token)
 
   const [loading, setLoading] = useState(true)
   const [tokenValid, setTokenValid] = useState(false)
   const [eventId, setEventId] = useState<string | undefined>(undefined)
   const [eventName, setEventName] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
-
-  const token = route.params?.token as string
 
   const validateToken = useCallback(async () => {
     if (!token) {
@@ -74,7 +79,7 @@ const TokenScannerScreen: React.FC = () => {
     return (
       <View style={styles.container}>
         <View style={styles.centerContent}>
-          <Ionicons name="link-off" size={64} color="#FF6B6B" />
+          <Ionicons name="close-circle-outline" size={64} color="#FF6B6B" />
           <Text style={styles.errorTitle}>Link Invalid or Expired</Text>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
