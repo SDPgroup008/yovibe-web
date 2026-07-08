@@ -193,6 +193,9 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
   const [newFeeQrPosition, setNewFeeQrPosition] = useState<"top" | "bottom" | "center" | "left" | "right">("center")
   const [newFeeLayout, setNewFeeLayout] = useState<TicketLayout>(() => defaultLayout("portrait", false))
+  const [newFeeEditingTemplate, setNewFeeEditingTemplate] = useState(false)
+  const [newFeeTemplateWidthCm, setNewFeeTemplateWidthCm] = useState("21")
+  const [newFeeTemplateHeightCm, setNewFeeTemplateHeightCm] = useState("29.7")
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -419,6 +422,9 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeHeightCm("29.7")
     setNewFeeQrPosition("center")
     setNewFeeLayout(defaultLayout("portrait", false))
+    setNewFeeEditingTemplate(false)
+    setNewFeeTemplateWidthCm("21")
+    setNewFeeTemplateHeightCm("29.7")
     setShowFeeForm(false)
   }
 
@@ -1116,13 +1122,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                     <View style={styles.orientationToggle}>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "portrait" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center"); setNewFeeLayout(defaultLayout("portrait", !!newFeeUploadedBackgroundUrl)) }}
+                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center"); setNewFeeLayout(defaultLayout("portrait", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false) }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "landscape" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right"); setNewFeeLayout(defaultLayout("landscape", !!newFeeUploadedBackgroundUrl)) }}
+                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right"); setNewFeeLayout(defaultLayout("landscape", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false) }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
                       </TouchableOpacity>
@@ -1157,7 +1163,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                             <TouchableOpacity
                               key={template.id}
                               style={[styles.templateCard, newFeeSelectedTemplate === template.id && styles.templateCardSelected]}
-                              onPress={() => setNewFeeSelectedTemplate(template.id)}
+                              onPress={() => { setNewFeeSelectedTemplate(template.id); setNewFeeEditingTemplate(false); setNewFeeLayout(defaultLayout(newFeeDesignOrientation, !!image)) }}
                             >
                               <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
                               <Text style={styles.templateLabel}>{template.label}</Text>
@@ -1169,8 +1175,57 @@ const AddEventScreen: React.FC<any> = (props) => {
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
-                        {newFeeSelectedTemplate && (
+
+                        {newFeeSelectedTemplate && !newFeeEditingTemplate && (
                           <>
+                            {/* Static preview */}
+                            {Platform.OS === "web" && (() => {
+                              const srcW = newFeeDesignOrientation === "landscape" ? 900 : 600
+                              const srcH = newFeeDesignOrientation === "landscape" ? 500 : 900
+                              const zoom = 360 / srcW
+                              const html = generatePreviewHTML(newFeeSelectedTemplate, newFeeDesignOrientation, null, { eventName: name || undefined, venueName: selectedVenueName || undefined })
+                              return (
+                                <View style={{ marginTop: 10, alignItems: "center" }}>
+                                  <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Preview</Text>
+                                  <View style={{ width: 360, height: Math.round(srcH * zoom), borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }}>
+                                    {/* @ts-ignore */}
+                                    <iframe srcDoc={html} style={{ width: srcW, height: srcH, border: "none", zoom, display: "block", pointerEvents: "none" }} sandbox="allow-same-origin" />
+                                  </View>
+                                </View>
+                              )
+                            })()}
+                            {/* Action buttons */}
+                            <View style={{ flexDirection: "row", gap: 8, marginTop: 10 }}>
+                              <TouchableOpacity
+                                style={[styles.orientationButton, styles.orientationButtonActive, { flex: 1 }]}
+                                onPress={() => { setNewFeeEditingTemplate(true); setNewFeeLayout(defaultLayout(newFeeDesignOrientation, !!image)) }}
+                              >
+                                <Text style={[styles.orientationButtonText, styles.orientationButtonTextActive]}>✏️ Edit Layout</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </>
+                        )}
+
+                        {newFeeSelectedTemplate && newFeeEditingTemplate && (
+                          <>
+                            {/* Dimension inputs for template */}
+                            <Text style={[styles.designLabel, { marginTop: 10 }]}>Ticket Dimensions</Text>
+                            <View style={styles.dimensionRow}>
+                              <View style={styles.dimensionField}>
+                                <Text style={styles.dimensionLabel}>Width (cm)</Text>
+                                <TextInput style={styles.dimensionInput} value={newFeeTemplateWidthCm} onChangeText={setNewFeeTemplateWidthCm} placeholder={newFeeDesignOrientation === "landscape" ? "29.7" : "21"} placeholderTextColor="#666" keyboardType="decimal-pad" />
+                              </View>
+                              <View style={styles.dimensionField}>
+                                <Text style={styles.dimensionLabel}>Height (cm)</Text>
+                                <TextInput style={styles.dimensionInput} value={newFeeTemplateHeightCm} onChangeText={setNewFeeTemplateHeightCm} placeholder={newFeeDesignOrientation === "landscape" ? "21" : "29.7"} placeholderTextColor="#666" keyboardType="decimal-pad" />
+                              </View>
+                            </View>
+                            <Text style={styles.dimensionHint}>
+                              {newFeeTemplateWidthCm && newFeeTemplateHeightCm
+                                ? `${newFeeTemplateWidthCm} × ${newFeeTemplateHeightCm} cm → ${Math.round((parseFloat(newFeeTemplateWidthCm)||21)*(96/2.54))} × ${Math.round((parseFloat(newFeeTemplateHeightCm)||29.7)*(96/2.54))} px`
+                                : "Default: 600 × 900 px (portrait) / 900 × 500 px (landscape)"}
+                            </Text>
+                            {/* Editor */}
                             <TicketEditor
                               templateId={newFeeSelectedTemplate}
                               orientation={newFeeDesignOrientation}
@@ -1180,8 +1235,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                               layout={newFeeLayout}
                               onLayoutChange={setNewFeeLayout}
                             />
+                            <TouchableOpacity style={styles.resetLayoutBtn} onPress={() => setNewFeeEditingTemplate(false)}>
+                              <Ionicons name="eye" size={14} color="#888" />
+                              <Text style={{ color: "#888", fontSize: 11, marginLeft: 4 }}>Back to preview</Text>
+                            </TouchableOpacity>
                           </>
                         )}
+
                         {!newFeeSelectedTemplate && (
                           <Text style={styles.designError}>Please select a ticket design template.</Text>
                         )}
