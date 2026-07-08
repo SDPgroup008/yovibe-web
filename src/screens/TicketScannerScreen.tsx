@@ -341,6 +341,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
       </Modal>
 
       {/* Photo Verification Modal */}
+      <Modal visible={showPhotoVerification} transparent animationType="fade" onRequestClose={() => setShowPhotoVerification(false)}>
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Photo Verification Required</Text>
