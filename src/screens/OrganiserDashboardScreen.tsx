@@ -1103,7 +1103,6 @@ const OrganiserDashboardScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
 
-            </View>
 
             <View style={styles.dashboardSection}>
               <Text style={styles.dashboardSectionTitle}>🔄 Grant Re-entry</Text>
