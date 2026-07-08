@@ -103,6 +103,8 @@ export function generateTicketHTML(
       : null
 
   const t = tpl || fallback
+  // Allow preview to override qrPosition without changing the template
+  const qrPos = (design as any)?.qrPositionOverride || t.qrPosition
   const isLandscape = t.orientation === "landscape"
   const W = isLandscape ? LANDSCAPE_W : PORTRAIT_W
   const H = isLandscape ? LANDSCAPE_H : PORTRAIT_H
@@ -120,14 +122,14 @@ export function generateTicketHTML(
   let bodyContent: string
 
   if (!isLandscape) {
-    if (t.qrPosition === "top") {
+    if (qrPos === "top") {
       bodyContent = `
         <div class="header">${qr}</div>
         <div class="divider"></div>
         <div class="event-name">${eventName}</div>
         <div class="badge">${ticketType}</div>
         <div class="info-block">${info}</div>`
-    } else if (t.qrPosition === "bottom") {
+    } else if (qrPos === "bottom") {
       bodyContent = `
         <div class="header">
           <div class="event-name">${eventName}</div>
@@ -158,7 +160,7 @@ export function generateTicketHTML(
       </div>`
     const qrPanel = `<div class="ls-qr">${qr}</div>`
 
-    if (t.qrPosition === "left") {
+    if (qrPos === "left") {
       bodyContent = `${qrPanel}${infoPanel}`
     } else {
       bodyContent = `${infoPanel}${qrPanel}`
@@ -177,9 +179,10 @@ export function generateTicketHTML(
     background: ${bg};
     color: ${t.textPrimary};
     width: ${W}px;
-    min-height: ${H}px;
+    height: ${H}px;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   /* ── Shared ── */
@@ -315,6 +318,7 @@ export function generatePreviewHTML(
     venueName?: string
     ticketType?: string
     buyerName?: string
+    qrPosition?: "top" | "bottom" | "center" | "left" | "right"
   }
 ): string {
   const fakeTicket: Ticket = {
@@ -405,6 +409,7 @@ export function generatePreviewHTML(
         orientation === "portrait"
           ? { width: PORTRAIT_W, height: PORTRAIT_H }
           : { width: LANDSCAPE_W, height: LANDSCAPE_H },
+      qrPositionOverride: sampleData?.qrPosition,
     },
   }
 

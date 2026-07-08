@@ -48,20 +48,21 @@ const TicketPreview: React.FC<{
   heightCm?: number
   eventName?: string
   venueName?: string
-}> = ({ templateId, orientation, uploadedBgUrl, widthCm, heightCm, eventName, venueName }) => {
+  qrPosition?: "top" | "bottom" | "center" | "left" | "right"
+}> = ({ templateId, orientation, uploadedBgUrl, widthCm, heightCm, eventName, venueName, qrPosition }) => {
   if (Platform.OS !== "web") return null
-  const html = generatePreviewHTML(templateId, orientation, uploadedBgUrl, { eventName, venueName })
+  const html = generatePreviewHTML(templateId, orientation, uploadedBgUrl, { eventName, venueName, qrPosition })
 
-  // If custom cm dimensions provided, use them; otherwise fall back to template defaults
   const CM_TO_PX = 96 / 2.54
   const srcW = widthCm ? Math.round(widthCm * CM_TO_PX) : (orientation === "landscape" ? 900 : 600)
   const srcH = heightCm ? Math.round(heightCm * CM_TO_PX) : (orientation === "landscape" ? 500 : 900)
 
-  // Scale to max 420px wide in the form
-  const maxW = 420
-  const scale = Math.min(maxW / srcW, 1)
-  const previewW = Math.round(srcW * scale)
+  // Scale to fit within 360px wide, preserving aspect ratio
+  const maxW = 360
+  const scale = maxW / srcW
+  const previewW = maxW
   const previewH = Math.round(srcH * scale)
+
   return (
     <View style={{ marginTop: 12, marginBottom: 8, alignItems: "center" }}>
       <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Live Preview</Text>
@@ -83,6 +84,7 @@ const TicketPreview: React.FC<{
             transform: `scale(${scale})`,
             transformOrigin: "top left",
             pointerEvents: "none",
+            display: "block",
           }}
           sandbox="allow-same-origin"
         />
@@ -124,6 +126,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeUploadedBackgroundUrl, setNewFeeUploadedBackgroundUrl] = useState<string | null>(null)
   const [newFeeWidthCm, setNewFeeWidthCm] = useState("21")
   const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
+  const [newFeeQrPosition, setNewFeeQrPosition] = useState<"top" | "bottom" | "center" | "left" | "right">("center")
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -348,6 +351,7 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeUploadedBackgroundUrl(null)
     setNewFeeWidthCm("21")
     setNewFeeHeightCm("29.7")
+    setNewFeeQrPosition("center")
     setShowFeeForm(false)
   }
 
@@ -1017,25 +1021,27 @@ const AddEventScreen: React.FC<any> = (props) => {
                   placeholder="Amount (e.g. 20,000 UGX)"
                   placeholderTextColor="#999"
                 />
-                <View style={styles.checkboxContainer}>
-                  <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeIsTable(!newFeeIsTable)}>
-                    {newFeeIsTable ? (
-                      <Ionicons name="checkbox" size={24} color="#2196F3" />
-                    ) : (
-                      <Ionicons name="square-outline" size={24} color="#FFFFFF" />
-                    )}
-                  </TouchableOpacity>
-                  <Text style={styles.checkboxLabel}>This is a Table Entry</Text>
-                </View>
-                <View style={styles.checkboxContainer}>
-                  <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeCustomDesign(!newFeeCustomDesign)}>
-                    {newFeeCustomDesign ? (
-                      <Ionicons name="checkbox" size={24} color="#2196F3" />
-                    ) : (
-                      <Ionicons name="square-outline" size={24} color="#FFFFFF" />
-                    )}
-                  </TouchableOpacity>
-                  <Text style={styles.checkboxLabel}>Custom Ticket Design</Text>
+                <View style={styles.checkboxRow}>
+                  <View style={styles.checkboxContainer}>
+                    <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeIsTable(!newFeeIsTable)}>
+                      {newFeeIsTable ? (
+                        <Ionicons name="checkbox" size={24} color="#2196F3" />
+                      ) : (
+                        <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                    <Text style={styles.checkboxLabel}>Table Entry</Text>
+                  </View>
+                  <View style={styles.checkboxContainer}>
+                    <TouchableOpacity style={styles.checkbox} onPress={() => setNewFeeCustomDesign(!newFeeCustomDesign)}>
+                      {newFeeCustomDesign ? (
+                        <Ionicons name="checkbox" size={24} color="#2196F3" />
+                      ) : (
+                        <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+                      )}
+                    </TouchableOpacity>
+                    <Text style={styles.checkboxLabel}>Custom Design</Text>
+                  </View>
                 </View>
                 {newFeeCustomDesign && (
                   <View style={styles.customDesignContainer}>
@@ -1043,13 +1049,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                     <View style={styles.orientationToggle}>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "portrait" && styles.orientationButtonActive]}
-                        onPress={() => setNewFeeDesignOrientation("portrait")}
+                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center") }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "landscape" && styles.orientationButtonActive]}
-                        onPress={() => setNewFeeDesignOrientation("landscape")}
+                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right") }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
                       </TouchableOpacity>
@@ -1097,12 +1103,32 @@ const AddEventScreen: React.FC<any> = (props) => {
                           ))}
                         </ScrollView>
                         {newFeeSelectedTemplate && (
-                          <TicketPreview
-                            templateId={newFeeSelectedTemplate}
-                            orientation={newFeeDesignOrientation}
-                            eventName={name || undefined}
-                            venueName={selectedVenueName || undefined}
-                          />
+                          <>
+                            <Text style={styles.designLabel}>QR Position</Text>
+                            <View style={styles.orientationToggle}>
+                              {(newFeeDesignOrientation === "portrait"
+                                ? (["top", "center", "bottom"] as const)
+                                : (["left", "right"] as const)
+                              ).map((pos) => (
+                                <TouchableOpacity
+                                  key={pos}
+                                  style={[styles.orientationButton, newFeeQrPosition === pos && styles.orientationButtonActive]}
+                                  onPress={() => setNewFeeQrPosition(pos)}
+                                >
+                                  <Text style={[styles.orientationButtonText, newFeeQrPosition === pos && styles.orientationButtonTextActive]}>
+                                    {pos.charAt(0).toUpperCase() + pos.slice(1)}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                            <TicketPreview
+                              templateId={newFeeSelectedTemplate}
+                              orientation={newFeeDesignOrientation}
+                              qrPosition={newFeeQrPosition}
+                              eventName={name || undefined}
+                              venueName={selectedVenueName || undefined}
+                            />
+                          </>
                         )}
                         {!newFeeSelectedTemplate && (
                           <Text style={styles.designError}>Please select a ticket design template.</Text>
@@ -1162,15 +1188,35 @@ const AddEventScreen: React.FC<any> = (props) => {
                             : "Enter dimensions in centimetres"}
                         </Text>
                         {newFeeUploadedBackgroundUrl && (
-                          <TicketPreview
-                            templateId={null}
-                            orientation={newFeeDesignOrientation}
-                            uploadedBgUrl={newFeeUploadedBackgroundUrl}
-                            widthCm={parseFloat(newFeeWidthCm) || 21}
-                            heightCm={parseFloat(newFeeHeightCm) || 29.7}
-                            eventName={name || undefined}
-                            venueName={selectedVenueName || undefined}
-                          />
+                          <>
+                            <Text style={styles.designLabel}>QR Position</Text>
+                            <View style={styles.orientationToggle}>
+                              {(newFeeDesignOrientation === "portrait"
+                                ? (["top", "center", "bottom"] as const)
+                                : (["left", "right"] as const)
+                              ).map((pos) => (
+                                <TouchableOpacity
+                                  key={pos}
+                                  style={[styles.orientationButton, newFeeQrPosition === pos && styles.orientationButtonActive]}
+                                  onPress={() => setNewFeeQrPosition(pos)}
+                                >
+                                  <Text style={[styles.orientationButtonText, newFeeQrPosition === pos && styles.orientationButtonTextActive]}>
+                                    {pos.charAt(0).toUpperCase() + pos.slice(1)}
+                                  </Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                            <TicketPreview
+                              templateId={null}
+                              orientation={newFeeDesignOrientation}
+                              uploadedBgUrl={newFeeUploadedBackgroundUrl}
+                              widthCm={parseFloat(newFeeWidthCm) || 21}
+                              heightCm={parseFloat(newFeeHeightCm) || 29.7}
+                              qrPosition={newFeeQrPosition}
+                              eventName={name || undefined}
+                              venueName={selectedVenueName || undefined}
+                            />
+                          </>
                         )}
                       </>
                     )}
@@ -1557,6 +1603,11 @@ const styles = StyleSheet.create({
   venueText: {
     color: "#FFFFFF",
     fontSize: responsiveSize(13, 14, 15),
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    gap: 16,
+    marginBottom: responsiveSize(14, 16, 18),
   },
   checkboxContainer: {
     flexDirection: "row",
