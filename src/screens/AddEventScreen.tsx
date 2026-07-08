@@ -57,11 +57,11 @@ const TicketPreview: React.FC<{
   const srcW = widthCm ? Math.round(widthCm * CM_TO_PX) : (orientation === "landscape" ? 900 : 600)
   const srcH = heightCm ? Math.round(heightCm * CM_TO_PX) : (orientation === "landscape" ? 500 : 900)
 
-  // Scale to fit within 360px wide, preserving aspect ratio
+  // zoom shrinks both visual AND layout box — no clipping, no empty space
   const maxW = 360
-  const scale = maxW / srcW
+  const zoom = maxW / srcW
   const previewW = maxW
-  const previewH = Math.round(srcH * scale)
+  const previewH = Math.round(srcH * zoom)
 
   return (
     <View style={{ marginTop: 12, marginBottom: 8, alignItems: "center" }}>
@@ -81,10 +81,9 @@ const TicketPreview: React.FC<{
             width: srcW,
             height: srcH,
             border: "none",
-            transform: `scale(${scale})`,
-            transformOrigin: "top left",
-            pointerEvents: "none",
+            zoom,
             display: "block",
+            pointerEvents: "none",
           }}
           sandbox="allow-same-origin"
         />
