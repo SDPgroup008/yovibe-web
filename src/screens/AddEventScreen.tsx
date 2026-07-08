@@ -1,7 +1,6 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import {
   View,
   Text,
@@ -22,7 +21,7 @@ import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
 import { getTemplatesByOrientation, type TicketTemplateConfig } from "../constants/ticketTemplates"
-import { generatePreviewHTML } from "../services/TicketPDFService"
+import { generateEditorHTML, generatePreviewHTML, defaultLayout, type TicketLayout } from "../services/TicketPDFService"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -39,8 +38,8 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-// ─── Live ticket preview (web only — renders actual HTML in an iframe) ────────
-const TicketPreview: React.FC<{
+// ─── Interactive ticket editor (web only) ────────────────────────────────────
+const TicketEditor: React.FC<{
   templateId: string | null
   orientation: "portrait" | "landscape"
   uploadedBgUrl?: string | null
@@ -48,46 +47,113 @@ const TicketPreview: React.FC<{
   heightCm?: number
   eventName?: string
   venueName?: string
-  qrPosition?: "top" | "bottom" | "center" | "left" | "right"
-}> = ({ templateId, orientation, uploadedBgUrl, widthCm, heightCm, eventName, venueName, qrPosition }) => {
+  posterUrl?: string | null
+  layout: TicketLayout
+  onLayoutChange: (l: TicketLayout) => void
+}> = ({ templateId, orientation, uploadedBgUrl, widthCm, heightCm, eventName, venueName, posterUrl, layout, onLayoutChange }) => {
   if (Platform.OS !== "web") return null
-  const html = generatePreviewHTML(templateId, orientation, uploadedBgUrl, { eventName, venueName, qrPosition })
+
+  const ref = React.useRef<any>(null)
 
   const CM_TO_PX = 96 / 2.54
   const srcW = widthCm ? Math.round(widthCm * CM_TO_PX) : (orientation === "landscape" ? 900 : 600)
   const srcH = heightCm ? Math.round(heightCm * CM_TO_PX) : (orientation === "landscape" ? 500 : 900)
-
-  // zoom shrinks both visual AND layout box — no clipping, no empty space
   const maxW = 360
   const zoom = maxW / srcW
   const previewW = maxW
   const previewH = Math.round(srcH * zoom)
 
+  const html = generateEditorHTML(templateId, orientation, uploadedBgUrl, posterUrl, { eventName, venueName }, layout)
+
+  // Listen for layout updates from iframe
+  React.useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === "LAYOUT_UPDATE") onLayoutChange(e.data.layout)
+    }
+    window.addEventListener("message", handler)
+    return () => window.removeEventListener("message", handler)
+  }, [onLayoutChange])
+
+  // When layout changes externally (e.g. reset), push it into iframe
+  const prevLayout = React.useRef(layout)
+  React.useEffect(() => {
+    if (ref.current?.contentWindow && prevLayout.current !== layout) {
+      ref.current.contentWindow.postMessage({ type: "SET_LAYOUT", layout }, "*")
+      prevLayout.current = layout
+    }
+  }, [layout])
+
+  const sendBg = (type: string, extra: object) =>
+    ref.current?.contentWindow?.postMessage({ type, ...extra }, "*")
+
+  const isUpload = !!uploadedBgUrl
+
   return (
-    <View style={{ marginTop: 12, marginBottom: 8, alignItems: "center" }}>
-      <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Live Preview</Text>
-      <View style={{
-        width: previewW,
-        height: previewH,
-        borderRadius: 8,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: "rgba(255,255,255,0.15)",
-      }}>
-        {/* @ts-ignore — iframe is valid on web */}
-        <iframe
-          srcDoc={html}
-          style={{
-            width: srcW,
-            height: srcH,
-            border: "none",
-            zoom,
-            display: "block",
-            pointerEvents: "none",
-          }}
-          sandbox="allow-same-origin"
-        />
+    <View style={{ marginTop: 12, marginBottom: 8 }}>
+      <Text style={{ color: "#888", fontSize: 11, marginBottom: 6, textAlign: "center" }}>Live Editor — drag blocks to reposition</Text>
+
+      {/* Ticket iframe */}
+      <View style={{ alignItems: "center" }}>
+        <View style={{
+          width: previewW, height: previewH,
+          borderRadius: 8, overflow: "hidden",
+          borderWidth: 1, borderColor: "rgba(255,255,255,0.15)",
+        }}>
+          {/* @ts-ignore */}
+          <iframe
+            ref={ref}
+            srcDoc={html}
+            style={{ width: srcW, height: srcH, border: "none", zoom, display: "block" }}
+            sandbox="allow-scripts allow-same-origin"
+          />
+        </View>
       </View>
+
+      {/* Background pan/zoom controls — only for upload mode */}
+      {isUpload && (
+        <View style={styles.bgControls}>
+          <Text style={styles.bgControlsLabel}>Background</Text>
+          <View style={styles.bgControlsRow}>
+            {/* Pan arrows */}
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_PAN", { dx: 0, dy: -20 })}>
+              <Ionicons name="arrow-up" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_PAN", { dx: 0, dy: 20 })}>
+              <Ionicons name="arrow-down" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_PAN", { dx: -20, dy: 0 })}>
+              <Ionicons name="arrow-back" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_PAN", { dx: 20, dy: 0 })}>
+              <Ionicons name="arrow-forward" size={16} color="#fff" />
+            </TouchableOpacity>
+            {/* Zoom */}
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_ZOOM", { delta: 0.1 })}>
+              <Ionicons name="add" size={16} color="#fff" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.bgBtn} onPress={() => sendBg("BG_ZOOM", { delta: -0.1 })}>
+              <Ionicons name="remove" size={16} color="#fff" />
+            </TouchableOpacity>
+            {/* Reset */}
+            <TouchableOpacity style={[styles.bgBtn, { paddingHorizontal: 10 }]} onPress={() => sendBg("BG_RESET", {})}>
+              <Text style={{ color: "#fff", fontSize: 11 }}>Reset</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Reset layout button */}
+      <TouchableOpacity
+        style={styles.resetLayoutBtn}
+        onPress={() => {
+          const fresh = defaultLayout(orientation, !!posterUrl)
+          onLayoutChange(fresh)
+          ref.current?.contentWindow?.postMessage({ type: "SET_LAYOUT", layout: fresh }, "*")
+        }}
+      >
+        <Ionicons name="refresh" size={14} color="#888" />
+        <Text style={{ color: "#888", fontSize: 11, marginLeft: 4 }}>Reset layout</Text>
+      </TouchableOpacity>
     </View>
   )
 }
@@ -126,6 +192,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeWidthCm, setNewFeeWidthCm] = useState("21")
   const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
   const [newFeeQrPosition, setNewFeeQrPosition] = useState<"top" | "bottom" | "center" | "left" | "right">("center")
+  const [newFeeLayout, setNewFeeLayout] = useState<TicketLayout>(() => defaultLayout("portrait", false))
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -351,6 +418,7 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeWidthCm("21")
     setNewFeeHeightCm("29.7")
     setNewFeeQrPosition("center")
+    setNewFeeLayout(defaultLayout("portrait", false))
     setShowFeeForm(false)
   }
 
@@ -1048,13 +1116,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                     <View style={styles.orientationToggle}>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "portrait" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center") }}
+                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center"); setNewFeeLayout(defaultLayout("portrait", !!newFeeUploadedBackgroundUrl)) }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "landscape" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right") }}
+                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right"); setNewFeeLayout(defaultLayout("landscape", !!newFeeUploadedBackgroundUrl)) }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
                       </TouchableOpacity>
@@ -1103,29 +1171,14 @@ const AddEventScreen: React.FC<any> = (props) => {
                         </ScrollView>
                         {newFeeSelectedTemplate && (
                           <>
-                            <Text style={styles.designLabel}>QR Position</Text>
-                            <View style={styles.orientationToggle}>
-                              {(newFeeDesignOrientation === "portrait"
-                                ? (["top", "center", "bottom"] as const)
-                                : (["left", "right"] as const)
-                              ).map((pos) => (
-                                <TouchableOpacity
-                                  key={pos}
-                                  style={[styles.orientationButton, newFeeQrPosition === pos && styles.orientationButtonActive]}
-                                  onPress={() => setNewFeeQrPosition(pos)}
-                                >
-                                  <Text style={[styles.orientationButtonText, newFeeQrPosition === pos && styles.orientationButtonTextActive]}>
-                                    {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                            <TicketPreview
+                            <TicketEditor
                               templateId={newFeeSelectedTemplate}
                               orientation={newFeeDesignOrientation}
-                              qrPosition={newFeeQrPosition}
+                              posterUrl={image || null}
                               eventName={name || undefined}
                               venueName={selectedVenueName || undefined}
+                              layout={newFeeLayout}
+                              onLayoutChange={setNewFeeLayout}
                             />
                           </>
                         )}
@@ -1187,35 +1240,18 @@ const AddEventScreen: React.FC<any> = (props) => {
                             : "Enter dimensions in centimetres"}
                         </Text>
                         {newFeeUploadedBackgroundUrl && (
-                          <>
-                            <Text style={styles.designLabel}>QR Position</Text>
-                            <View style={styles.orientationToggle}>
-                              {(newFeeDesignOrientation === "portrait"
-                                ? (["top", "center", "bottom"] as const)
-                                : (["left", "right"] as const)
-                              ).map((pos) => (
-                                <TouchableOpacity
-                                  key={pos}
-                                  style={[styles.orientationButton, newFeeQrPosition === pos && styles.orientationButtonActive]}
-                                  onPress={() => setNewFeeQrPosition(pos)}
-                                >
-                                  <Text style={[styles.orientationButtonText, newFeeQrPosition === pos && styles.orientationButtonTextActive]}>
-                                    {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                            <TicketPreview
-                              templateId={null}
-                              orientation={newFeeDesignOrientation}
-                              uploadedBgUrl={newFeeUploadedBackgroundUrl}
-                              widthCm={parseFloat(newFeeWidthCm) || 21}
-                              heightCm={parseFloat(newFeeHeightCm) || 29.7}
-                              qrPosition={newFeeQrPosition}
-                              eventName={name || undefined}
-                              venueName={selectedVenueName || undefined}
-                            />
-                          </>
+                          <TicketEditor
+                            templateId={null}
+                            orientation={newFeeDesignOrientation}
+                            uploadedBgUrl={newFeeUploadedBackgroundUrl}
+                            widthCm={parseFloat(newFeeWidthCm) || 21}
+                            heightCm={parseFloat(newFeeHeightCm) || 29.7}
+                            posterUrl={image || null}
+                            eventName={name || undefined}
+                            venueName={selectedVenueName || undefined}
+                            layout={newFeeLayout}
+                            onLayoutChange={setNewFeeLayout}
+                          />
                         )}
                       </>
                     )}
@@ -1980,6 +2016,41 @@ const styles = StyleSheet.create({
   },
   removeUploadButton: {
     marginLeft: 8,
+  },
+  bgControls: {
+    marginTop: 10,
+    backgroundColor: "#1a1a1a",
+    borderRadius: 8,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  bgControlsLabel: {
+    color: "#888",
+    fontSize: 11,
+    marginBottom: 6,
+  },
+  bgControlsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  bgBtn: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 6,
+    padding: 8,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 36,
+  },
+  resetLayoutBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    padding: 6,
   },
 })
 
