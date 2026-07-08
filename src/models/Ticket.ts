@@ -12,6 +12,7 @@ export interface Ticket {
   quantity: number
   totalAmount: number
   tableTotalAmount?: number
+  seatNumber?: number
   tableGroupId?: string
   basePrice: number
   lateFee: number

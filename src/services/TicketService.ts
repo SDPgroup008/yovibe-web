@@ -92,6 +92,7 @@ export class TicketService {
     buyerId?: string | null,
     payerEmail?: string,
     deliveryEmails?: string[],
+    seatNumber?: number,
   ): Promise<Ticket[]> {
     try {
       console.log("========================================")
@@ -129,6 +130,7 @@ export class TicketService {
           tableGroupId,
           buyerId ?? null,
           deliveryEmail,
+          seatNumber,
         )
         createdTickets.push(ticket)
       }
@@ -225,6 +227,7 @@ private static async createSingleTicket(
     tableGroupId?: string,
     buyerId?: string | null,
     deliveryEmail?: string,
+    seatNumber?: number,
   ): Promise<Ticket> {
     console.log("--- Step 1: Calculating ticket price ---")
     const basePrice = event.entryFees && event.entryFees.length > 0
@@ -323,6 +326,7 @@ private static async createSingleTicket(
       totalAmount: total,
       tableTotalAmount: tableTotalAmount,
       tableGroupId: tableGroupId,
+      seatNumber: seatNumber,
       basePrice: subtotal,
       lateFee: lateFee,
       venueRevenue,
@@ -383,7 +387,11 @@ private static async createSingleTicket(
     console.log("--- Step 8: Saving ticket to Supabase ---")
     const savedTicket = await withRetry(
       async () => {
-        const result = await supabase.from("tickets_api").insert({ ...ticket, event_slug: event.slug || event.id }).select("id").single()
+        const result = await supabase.from("tickets_api").insert({ 
+          ...ticket, 
+          event_slug: event.slug || event.id,
+          seat_number: seatNumber ?? null,
+        }).select("id").single()
         if (result.error) throw result.error
         return result.data
       },
@@ -786,6 +794,7 @@ private static async createSingleTicket(
       pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
       tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
       tableGroupId: row.table_group_id || row.tableGroupId,
+      seatNumber: row.seat_number ?? row.seatNumber,
       photoUploadToken: row.photo_upload_token || row.photoUploadToken,
       photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,
     }

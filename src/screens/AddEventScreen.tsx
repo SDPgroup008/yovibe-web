@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import React, { useState, useEffect } from "react"
 import {
@@ -211,6 +211,11 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
   const [newFeeQrPosition, setNewFeeQrPosition] = useState<"top" | "bottom" | "center" | "left" | "right">("center")
   const [newFeeLayout, setNewFeeLayout] = useState<TicketLayout>(() => defaultLayout("portrait", false))
+  // Capacity & seat map
+  const [newFeeMaxTickets, setNewFeeMaxTickets] = useState("")
+  const [newFeeSeatMapType, setNewFeeSeatMapType] = useState<"none" | "numbered" | "cinema">("none")
+  const [newFeeSeatRows, setNewFeeSeatRows] = useState("")
+  const [newFeeSeatCols, setNewFeeSeatCols] = useState("")
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -406,6 +411,20 @@ const AddEventScreen: React.FC<any> = (props) => {
       fee.isTable = true
       fee.tableSize = size
     }
+    // Capacity
+    const maxT = parseInt(newFeeMaxTickets)
+    if (!isNaN(maxT) && maxT > 0) {
+      fee.maxTickets = maxT
+      if (newFeeSeatMapType !== "none") {
+        const rows = parseInt(newFeeSeatRows)
+        const cols = parseInt(newFeeSeatCols)
+        fee.seatMap = {
+          type: newFeeSeatMapType,
+          rows: newFeeSeatMapType === "cinema" && !isNaN(rows) && rows > 0 ? rows : undefined,
+          cols: newFeeSeatMapType === "cinema" && !isNaN(cols) && cols > 0 ? cols : undefined,
+        }
+      }
+    }
     if (newFeeCustomDesign) {
       const CM_TO_PX = 96 / 2.54
       const uploadW = Math.round((parseFloat(newFeeWidthCm) || 21) * CM_TO_PX)
@@ -438,6 +457,10 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeHeightCm("29.7")
     setNewFeeQrPosition("center")
     setNewFeeLayout(defaultLayout("portrait", false))
+    setNewFeeMaxTickets("")
+    setNewFeeSeatMapType("none")
+    setNewFeeSeatRows("")
+    setNewFeeSeatCols("")
     setShowFeeForm(false)
   }
 
@@ -1313,6 +1336,61 @@ const AddEventScreen: React.FC<any> = (props) => {
                     keyboardType="numeric"
                   />
                 )}
+
+                {/* ── Capacity & Seat Map ── */}
+                <View style={styles.customDesignContainer}>
+                  <Text style={styles.designLabel}>Capacity (optional)</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={newFeeMaxTickets}
+                    onChangeText={setNewFeeMaxTickets}
+                    placeholder="Max tickets available (blank = unlimited)"
+                    placeholderTextColor="#666"
+                    keyboardType="numeric"
+                  />
+                  {newFeeMaxTickets !== "" && parseInt(newFeeMaxTickets) > 0 && (
+                    <>
+                      <Text style={styles.designLabel}>Seat Map Type</Text>
+                      <View style={styles.orientationToggle}>
+                        {(["none", "numbered", "cinema"] as const).map(t => (
+                          <TouchableOpacity
+                            key={t}
+                            style={[styles.orientationButton, newFeeSeatMapType === t && styles.orientationButtonActive]}
+                            onPress={() => setNewFeeSeatMapType(t)}
+                          >
+                            <Text style={[styles.orientationButtonText, newFeeSeatMapType === t && styles.orientationButtonTextActive]}>
+                              {t === "none" ? "None" : t === "numbered" ? "Numbered" : "Cinema"}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {newFeeSeatMapType === "none" && (
+                        <Text style={{ color: "#666", fontSize: 11, marginBottom: 4 }}>No seat selection -- tickets sold on first-come basis up to the max</Text>
+                      )}
+                      {newFeeSeatMapType === "numbered" && (
+                        <Text style={{ color: "#666", fontSize: 11, marginBottom: 4 }}>Buyers pick a number 1 to {newFeeMaxTickets} from a grid</Text>
+                      )}
+                      {newFeeSeatMapType === "cinema" && (
+                        <>
+                          <Text style={{ color: "#666", fontSize: 11, marginBottom: 8 }}>Buyers pick a seat from a rows x columns grid (e.g. A1, B3)</Text>
+                          <View style={styles.dimensionRow}>
+                            <View style={styles.dimensionField}>
+                              <Text style={styles.dimensionLabel}>Rows</Text>
+                              <TextInput style={styles.dimensionInput} value={newFeeSeatRows} onChangeText={setNewFeeSeatRows} placeholder="e.g. 5" placeholderTextColor="#666" keyboardType="numeric" />
+                            </View>
+                            <View style={styles.dimensionField}>
+                              <Text style={styles.dimensionLabel}>Cols per row</Text>
+                              <TextInput style={styles.dimensionInput} value={newFeeSeatCols} onChangeText={setNewFeeSeatCols} placeholder="e.g. 10" placeholderTextColor="#666" keyboardType="numeric" />
+                            </View>
+                          </View>
+                          {newFeeSeatRows && newFeeSeatCols && (
+                            <Text style={styles.dimensionHint}>{parseInt(newFeeSeatRows) * parseInt(newFeeSeatCols)} total seats (rows A-{String.fromCharCode(64 + parseInt(newFeeSeatRows))}, cols 1-{newFeeSeatCols})</Text>
+                          )}
+                        </>
+                      )}
+                    </>
+                  )}
+                </View>
                 <TouchableOpacity style={styles.addButton} onPress={addFee}>
                   <Ionicons name="add" size={20} color="#FFFFFF" />
                   <Text style={styles.addButtonText}>Submit</Text>

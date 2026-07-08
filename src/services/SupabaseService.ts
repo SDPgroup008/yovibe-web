@@ -1845,6 +1845,39 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     }
   }
 
+  async getOccupiedSeats(eventSlug: string, feeTypeName: string): Promise<number[]> {
+    try {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("seat_number")
+        .eq("event_slug", eventSlug)
+        .eq("entry_fee_type", feeTypeName)
+        .not("seat_number", "is", null)
+        .in("status", ["active", "used", "pending"])
+      if (error) throw error
+      return (data || []).map((r: any) => r.seat_number).filter(Boolean)
+    } catch (error) {
+      console.error("SupabaseService: Error getting occupied seats:", error)
+      return []
+    }
+  }
+
+  async getSoldTicketCount(eventSlug: string, feeTypeName: string): Promise<number> {
+    try {
+      const { count, error } = await supabase
+        .from("tickets")
+        .select("id", { count: "exact", head: true })
+        .eq("event_slug", eventSlug)
+        .eq("entry_fee_type", feeTypeName)
+        .in("status", ["active", "used", "pending"])
+      if (error) throw error
+      return count || 0
+    } catch (error) {
+      console.error("SupabaseService: Error getting sold ticket count:", error)
+      return 0
+    }
+  }
+
   async getEligibleTicketsForPayout(organizerId: string): Promise<any[]> {
     try {
       const { data, error } = await supabase

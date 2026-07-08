@@ -992,24 +992,32 @@ const OrganiserDashboardScreen: React.FC = () => {
 
             <View style={styles.dashboardSection}>
               <Text style={styles.dashboardSectionTitle}>📊 Sales by Type</Text>
-              <View style={styles.salesTable}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={[styles.salesTable, { minWidth: 520 }]}>
                 <View style={styles.salesTableHeader}>
-                  <Text style={[styles.salesTableHeaderText, { flex: 1.5 }]}>Type</Text>
-                  <Text style={[styles.salesTableHeaderText, { flex: 1, textAlign: "center" }]}>Early</Text>
-                  <Text style={[styles.salesTableHeaderText, { flex: 1, textAlign: "center" }]}>Late</Text>
-                  <Text style={[styles.salesTableHeaderText, { flex: 1, textAlign: "center" }]}>Scanned</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 90 }]}>Type</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Early</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Late</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Scanned</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Cap</Text>
+                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Left</Text>
                 </View>
                 {Object.keys(ticketSalesByType).length > 0 ? Object.entries(ticketSalesByType).map(([typeName, s]) => {
-                  const feeInfo = getEntryFeeInfo(typeName)
+                  const feeInfo = getEntryFeeInfo(typeName) as any
                   const isTableTicket = feeInfo?.isTable === true
                   const tableSize = feeInfo?.tableSize || 1
+                  const maxTickets: number | undefined = feeInfo?.maxTickets
+                  const totalSold = s.early.count + s.late.count
+                  const remaining = maxTickets ? Math.max(0, maxTickets - totalSold) : null
+                  const pct = maxTickets && maxTickets > 0 ? totalSold / maxTickets : null
+                  const remainColor = pct === null ? "#FFF" : pct >= 1 ? "#FF4444" : pct >= 0.5 ? "#F59E0B" : "#4CAF50"
                   const formatCount = (count: number) => {
                     if (isTableTicket && tableSize > 0) {
                       const tables = Math.floor(count / tableSize)
-                      const remaining = count % tableSize
+                      const rem = count % tableSize
                       let label = `${count}`
-                      if (tables > 0) label += ` (${tables} table${tables > 1 ? 's' : ''}`
-                      if (remaining > 0) label += ` +${remaining} pax`
+                      if (tables > 0) label += ` (${tables}t`
+                      if (rem > 0) label += `+${rem}`
                       if (tables > 0) label += `)`
                       return label
                     }
@@ -1017,22 +1025,31 @@ const OrganiserDashboardScreen: React.FC = () => {
                   }
                   return (
                   <View key={typeName} style={styles.salesTableRow}>
-                    <Text style={[styles.salesTableCellText, { flex: 1.5 }]}>{typeName}</Text>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
+                    <Text style={[styles.salesTableCellText, { width: 90 }]} numberOfLines={1}>{typeName}</Text>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{maxTickets ?? '--'}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}>
+                      <Text style={[styles.salesTableCountText, { color: remainColor }]}>
+                        {remaining !== null ? (remaining === 0 ? 'SOLD OUT' : remaining) : '--'}
+                      </Text>
+                    </View>
                   </View>
                   )
                 }) : <Text style={styles.noDataText}>No sales yet</Text>}
                 {Object.keys(ticketSalesByType).length > 0 && (
                   <View style={styles.salesTableSummary}>
-                    <Text style={[styles.salesTableSummaryText, { flex: 1.5 }]}>TOTAL</Text>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.early.count, 0)}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.late.count, 0)}</Text></View>
-                    <View style={{ flex: 1, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + (t.scanned?.count || 0), 0)}</Text></View>
+                    <Text style={[styles.salesTableSummaryText, { width: 90 }]}>TOTAL</Text>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.early.count, 0)}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.late.count, 0)}</Text></View>
+                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + (t.scanned?.count || 0), 0)}</Text></View>
+                    <View style={{ width: 70 }} />
+                    <View style={{ width: 70 }} />
                   </View>
                 )}
               </View>
+              </ScrollView>
             </View>
 
             <View style={styles.dashboardSection}>

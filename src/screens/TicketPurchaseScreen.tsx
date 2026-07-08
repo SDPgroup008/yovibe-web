@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
@@ -40,7 +40,13 @@ const TicketPurchaseScreen: React.FC = () => {
   
   // Ticket type selection state
   const [selectedTicketType, setSelectedTicketType] = useState<{ name: string; amount: string } | null>(null)
+
   const [showTicketTypeModal, setShowTicketTypeModal] = useState(false)
+
+  const [soldCounts, setSoldCounts] = useState<Record<string, number>>({})
+  const [showSeatMapModal, setShowSeatMapModal] = useState(false)
+  const [occupiedSeats, setOccupiedSeats] = useState<number[]>([])
+  const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
   
   // Load event data
   useEffect(() => {
@@ -54,6 +60,15 @@ const TicketPurchaseScreen: React.FC = () => {
         const eventData = await SupabaseService.getEventById(eventId)
         if (eventData) {
           setEvent(eventData)
+          const counts: Record<string, number> = {}
+          await Promise.all(
+            (eventData.entryFees || []).map(async (fee: any) => {
+              if (fee.maxTickets && fee.maxTickets > 0) {
+                counts[fee.name] = await SupabaseService.getSoldTicketCount(eventId, fee.name)
+              }
+            })
+          )
+          setSoldCounts(counts)
         }
       } catch (error) {
         console.error("Error loading event for ticket purchase:", error)
@@ -66,13 +81,26 @@ const TicketPurchaseScreen: React.FC = () => {
   }, [eventId])
 
   // Get ticket types from event entry fees
-  const ticketTypes = event?.entryFees && event.entryFees.length > 0 ? event.entryFees : []
+  const ticketTypes: any[] = event?.entryFees && event.entryFees.length > 0 ? event.entryFees : []
+
+  const isSoldOut = (fee: any): boolean => {
+    if (!fee.maxTickets || fee.maxTickets <= 0) return false
+    return (soldCounts[fee.name] ?? 0) >= fee.maxTickets
+  }
+
+  const openSeatMap = async (fee: any) => {
+    if (!fee.seatMap || fee.seatMap.type === "none") return
+    setSelectedSeat(null)
+    const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
+    setOccupiedSeats(occupied)
+    setShowSeatMapModal(true)
+  }
   
   // Get the selected ticket type name
   const selectedTicketTypeName = selectedTicketType?.name || (ticketTypes.length > 0 ? ticketTypes[0].name : "Standard")
 
   // Calculate table entry details
-  const selectedEntryFee = ticketTypes.length > 0 ? ticketTypes.find(t => t.name === selectedTicketTypeName) : null
+  const selectedEntryFee = ticketTypes.length > 0 ? ticketTypes.find((t: any) => t.name === selectedTicketTypeName) : null
   const isTableEntry = selectedEntryFee?.isTable ?? false
   const tableSize = selectedEntryFee?.tableSize ?? 1
   const actualTicketCount = isTableEntry ? quantity * tableSize : quantity
@@ -332,6 +360,7 @@ const handlePaymentComplete = async () => {
         user?.id ?? null,
         payerEmail,
         deliveryEmails,
+        selectedSeat ?? undefined,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
@@ -1312,6 +1341,76 @@ const handleInstallmentPurchase = async () => {
         </View>
       </Modal>
 
+      {/* Seat Map Modal */}
+      <Modal visible={showSeatMapModal} transparent animationType="slide" onRequestClose={() => setShowSeatMapModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "85%", width: "92%" }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Your Seat</Text>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowSeatMapModal(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {selectedEntryFee && (selectedEntryFee as any).seatMap?.type === "cinema" ? (
+                Array.from({ length: (selectedEntryFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
+                  const rowLabel = String.fromCharCode(65 + rowIdx)
+                  const cols = (selectedEntryFee as any).seatMap.cols || 10
+                  return (
+                    <View key={rowLabel} style={seatMapStyles.cinemaRow}>
+                      <Text style={seatMapStyles.rowLabel}>{rowLabel}</Text>
+                      <View style={seatMapStyles.seatsRow}>
+                        {Array.from({ length: cols }).map((_, colIdx) => {
+                          const seatNum = rowIdx * cols + colIdx + 1
+                          const taken = occupiedSeats.includes(seatNum)
+                          const picked = selectedSeat === seatNum
+                          return (
+                            <TouchableOpacity key={seatNum}
+                              style={[seatMapStyles.seat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
+                              onPress={() => !taken && setSelectedSeat(seatNum)} disabled={taken}>
+                              <Text style={[seatMapStyles.seatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>{colIdx + 1}</Text>
+                            </TouchableOpacity>
+                          )
+                        })}
+                      </View>
+                    </View>
+                  )
+                })
+              ) : (
+                <View style={seatMapStyles.numberedGrid}>
+                  {Array.from({ length: (selectedEntryFee as any)?.maxTickets || 0 }).map((_, idx) => {
+                    const seatNum = idx + 1
+                    const taken = occupiedSeats.includes(seatNum)
+                    const picked = selectedSeat === seatNum
+                    return (
+                      <TouchableOpacity key={seatNum}
+                        style={[seatMapStyles.numberedSeat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
+                        onPress={() => !taken && setSelectedSeat(seatNum)} disabled={taken}>
+                        <Text style={[seatMapStyles.numberedSeatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>{seatNum}</Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              )}
+              <View style={seatMapStyles.legend}>
+                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#2a2a2a" }]} /><Text style={seatMapStyles.legendText}>Available</Text></View>
+                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#FF4444" }]} /><Text style={seatMapStyles.legendText}>Taken</Text></View>
+                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#00D4FF" }]} /><Text style={seatMapStyles.legendText}>Selected</Text></View>
+              </View>
+            </ScrollView>
+            <TouchableOpacity
+              style={[styles.purchaseButton, { margin: 0, marginTop: 12 }, !selectedSeat && styles.purchaseButtonDisabled]}
+              onPress={() => setShowSeatMapModal(false)}
+              disabled={!selectedSeat}
+            >
+              <Text style={styles.purchaseButtonText}>
+                {selectedSeat ? `Confirm Seat ${selectedSeat}` : "Pick a seat to continue"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Payment Modal (for card/bank transfer) */}
       <Modal
         visible={showPaymentModal}
@@ -2128,6 +2227,23 @@ buyerNamesSection: {
     fontSize: 16,
     fontWeight: "bold",
   },
+})
+
+const seatMapStyles = StyleSheet.create({
+  cinemaRow: { flexDirection: "row", alignItems: "center", marginBottom: 6 },
+  rowLabel: { color: "#888", fontSize: 12, width: 18, fontWeight: "bold" },
+  seatsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4 },
+  seat: { width: 28, height: 28, borderRadius: 4, backgroundColor: "#2a2a2a", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#444" },
+  seatTaken: { backgroundColor: "#3a1a1a", borderColor: "#FF4444" },
+  seatPicked: { backgroundColor: "#00D4FF", borderColor: "#00D4FF" },
+  seatLabel: { color: "#CCC", fontSize: 10, fontWeight: "600" },
+  numberedGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 8 },
+  numberedSeat: { width: 44, height: 44, borderRadius: 8, backgroundColor: "#2a2a2a", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#444" },
+  numberedSeatLabel: { color: "#CCC", fontSize: 13, fontWeight: "700" },
+  legend: { flexDirection: "row", gap: 16, justifyContent: "center", paddingVertical: 12 },
+  legendItem: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendDot: { width: 12, height: 12, borderRadius: 3 },
+  legendText: { color: "#888", fontSize: 11 },
 })
 
 export default TicketPurchaseScreen

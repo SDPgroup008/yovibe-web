@@ -25,6 +25,12 @@ export interface Event {
     amount: string
     isTable?: boolean
     tableSize?: number
+    maxTickets?: number
+    seatMap?: {
+      type: "none" | "numbered" | "cinema"
+      rows?: number
+      cols?: number
+    }
     ticketDesign?: {
       enabled: boolean
       orientation: "portrait" | "landscape"
