@@ -63,7 +63,7 @@ const TicketEditor: React.FC<{
   const previewW = maxW
   const previewH = Math.round(srcH * zoom)
 
-  const html = generateEditorHTML(templateId, orientation, uploadedBgUrl, posterUrl, { eventName, venueName }, layout)
+  const html = generateEditorHTML(templateId, orientation, uploadedBgUrl, posterUrl, { eventName, venueName }, layout, widthCm, heightCm)
 
   // Listen for layout updates from iframe
   React.useEffect(() => {
@@ -106,6 +106,24 @@ const TicketEditor: React.FC<{
             style={{ width: srcW, height: srcH, border: "none", zoom, display: "block" }}
             sandbox="allow-scripts allow-same-origin"
           />
+        </View>
+      </View>
+
+      {/* Block resize controls */}
+      <View style={styles.bgControls}>
+        <Text style={styles.bgControlsLabel}>Resize Blocks</Text>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          {(["poster", "title", "info", "qr"] as const).map(id => (
+            <View key={id} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <Text style={{ color: "#aaa", fontSize: 10, width: 32 }}>{id}</Text>
+              <TouchableOpacity style={styles.bgBtn} onPress={() => ref.current?.contentWindow?.postMessage({ type: "BLOCK_RESIZE", id, delta: -0.1 }, "*")}>
+                <Ionicons name="remove" size={14} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.bgBtn} onPress={() => ref.current?.contentWindow?.postMessage({ type: "BLOCK_RESIZE", id, delta: 0.1 }, "*")}>
+                <Ionicons name="add" size={14} color="#fff" />
+              </TouchableOpacity>
+            </View>
+          ))}
         </View>
       </View>
 
@@ -194,8 +212,8 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeQrPosition, setNewFeeQrPosition] = useState<"top" | "bottom" | "center" | "left" | "right">("center")
   const [newFeeLayout, setNewFeeLayout] = useState<TicketLayout>(() => defaultLayout("portrait", false))
   const [newFeeEditingTemplate, setNewFeeEditingTemplate] = useState(false)
-  const [newFeeTemplateWidthCm, setNewFeeTemplateWidthCm] = useState("21")
-  const [newFeeTemplateHeightCm, setNewFeeTemplateHeightCm] = useState("29.7")
+  const [newFeeTemplateWidthCm, setNewFeeTemplateWidthCm] = useState("")
+  const [newFeeTemplateHeightCm, setNewFeeTemplateHeightCm] = useState("")
   const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
@@ -395,6 +413,8 @@ const AddEventScreen: React.FC<any> = (props) => {
       const CM_TO_PX = 96 / 2.54
       const uploadW = Math.round((parseFloat(newFeeWidthCm) || 21) * CM_TO_PX)
       const uploadH = Math.round((parseFloat(newFeeHeightCm) || 29.7) * CM_TO_PX)
+      const tplW = Math.round((parseFloat(newFeeTemplateWidthCm) || (newFeeDesignOrientation === "landscape" ? 29.7 : 21)) * CM_TO_PX)
+      const tplH = Math.round((parseFloat(newFeeTemplateHeightCm) || (newFeeDesignOrientation === "landscape" ? 21 : 29.7)) * CM_TO_PX)
       fee.ticketDesign = {
         enabled: true,
         orientation: newFeeDesignOrientation,
@@ -403,9 +423,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         background_url: newFeeDesignSource === "upload" ? newFeeUploadedBackgroundUrl : null,
         dimensions: newFeeDesignSource === "upload"
           ? { width: uploadW, height: uploadH }
-          : newFeeDesignOrientation === "portrait"
-            ? { width: 600, height: 900 }
-            : { width: 900, height: 500 },
+          : { width: tplW, height: tplH },
       }
     }
     setEntryFees([...entryFees, fee])
@@ -423,8 +441,8 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeQrPosition("center")
     setNewFeeLayout(defaultLayout("portrait", false))
     setNewFeeEditingTemplate(false)
-    setNewFeeTemplateWidthCm("21")
-    setNewFeeTemplateHeightCm("29.7")
+    setNewFeeTemplateWidthCm("")
+    setNewFeeTemplateHeightCm("")
     setShowFeeForm(false)
   }
 
@@ -1122,13 +1140,13 @@ const AddEventScreen: React.FC<any> = (props) => {
                     <View style={styles.orientationToggle}>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "portrait" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center"); setNewFeeLayout(defaultLayout("portrait", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false) }}
+                        onPress={() => { setNewFeeDesignOrientation("portrait"); setNewFeeQrPosition("center"); setNewFeeLayout(defaultLayout("portrait", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false); setNewFeeTemplateWidthCm(""); setNewFeeTemplateHeightCm("") }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.orientationButton, newFeeDesignOrientation === "landscape" && styles.orientationButtonActive]}
-                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right"); setNewFeeLayout(defaultLayout("landscape", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false) }}
+                        onPress={() => { setNewFeeDesignOrientation("landscape"); setNewFeeQrPosition("right"); setNewFeeLayout(defaultLayout("landscape", !!newFeeUploadedBackgroundUrl)); setNewFeeEditingTemplate(false); setNewFeeTemplateWidthCm(""); setNewFeeTemplateHeightCm("") }}
                       >
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
                       </TouchableOpacity>
@@ -1209,26 +1227,28 @@ const AddEventScreen: React.FC<any> = (props) => {
                         {newFeeSelectedTemplate && newFeeEditingTemplate && (
                           <>
                             {/* Dimension inputs for template */}
-                            <Text style={[styles.designLabel, { marginTop: 10 }]}>Ticket Dimensions</Text>
+                            <Text style={[styles.designLabel, { marginTop: 10 }]}>Ticket Dimensions (optional)</Text>
                             <View style={styles.dimensionRow}>
                               <View style={styles.dimensionField}>
                                 <Text style={styles.dimensionLabel}>Width (cm)</Text>
-                                <TextInput style={styles.dimensionInput} value={newFeeTemplateWidthCm} onChangeText={setNewFeeTemplateWidthCm} placeholder={newFeeDesignOrientation === "landscape" ? "29.7" : "21"} placeholderTextColor="#666" keyboardType="decimal-pad" />
+                                <TextInput style={styles.dimensionInput} value={newFeeTemplateWidthCm} onChangeText={setNewFeeTemplateWidthCm} placeholder={newFeeDesignOrientation === "landscape" ? "default 29.7" : "default 21"} placeholderTextColor="#666" keyboardType="decimal-pad" />
                               </View>
                               <View style={styles.dimensionField}>
                                 <Text style={styles.dimensionLabel}>Height (cm)</Text>
-                                <TextInput style={styles.dimensionInput} value={newFeeTemplateHeightCm} onChangeText={setNewFeeTemplateHeightCm} placeholder={newFeeDesignOrientation === "landscape" ? "21" : "29.7"} placeholderTextColor="#666" keyboardType="decimal-pad" />
+                                <TextInput style={styles.dimensionInput} value={newFeeTemplateHeightCm} onChangeText={setNewFeeTemplateHeightCm} placeholder={newFeeDesignOrientation === "landscape" ? "default 21" : "default 29.7"} placeholderTextColor="#666" keyboardType="decimal-pad" />
                               </View>
                             </View>
                             <Text style={styles.dimensionHint}>
                               {newFeeTemplateWidthCm && newFeeTemplateHeightCm
                                 ? `${newFeeTemplateWidthCm} × ${newFeeTemplateHeightCm} cm → ${Math.round((parseFloat(newFeeTemplateWidthCm)||21)*(96/2.54))} × ${Math.round((parseFloat(newFeeTemplateHeightCm)||29.7)*(96/2.54))} px`
-                                : "Default: 600 × 900 px (portrait) / 900 × 500 px (landscape)"}
+                                : newFeeDesignOrientation === "landscape" ? "Default: 900 × 500 px" : "Default: 600 × 900 px"}
                             </Text>
                             {/* Editor */}
                             <TicketEditor
                               templateId={newFeeSelectedTemplate}
                               orientation={newFeeDesignOrientation}
+                              widthCm={parseFloat(newFeeTemplateWidthCm) || undefined}
+                              heightCm={parseFloat(newFeeTemplateHeightCm) || undefined}
                               posterUrl={image || null}
                               eventName={name || undefined}
                               venueName={selectedVenueName || undefined}
