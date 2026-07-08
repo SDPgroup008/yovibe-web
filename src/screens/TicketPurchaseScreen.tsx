@@ -47,6 +47,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [showSeatMapModal, setShowSeatMapModal] = useState(false)
   const [occupiedSeats, setOccupiedSeats] = useState<number[]>([])
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
+  const [seatMapFee, setSeatMapFee] = useState<any>(null)
   
   // Load event data
   useEffect(() => {
@@ -93,6 +94,7 @@ const TicketPurchaseScreen: React.FC = () => {
     setSelectedSeat(null)
     const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
     setOccupiedSeats(occupied)
+    setSeatMapFee(fee)
     setShowSeatMapModal(true)
   }
   
@@ -1307,29 +1309,47 @@ const handleInstallmentPurchase = async () => {
             
             <FlatList
               data={ticketTypes}
-              keyExtractor={(item, index) => `${item.name}_${index}`}
-              renderItem={({ item }) => {
+              keyExtractor={(item: any, index: number) => `${item.name}_${index}`}
+              renderItem={({ item }: { item: any }) => {
                 const isSelected = selectedTicketType?.name === item.name
-                const itemPrice = Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0")
-                
+                const soldOut = isSoldOut(item)
+                const remaining = item.maxTickets && item.maxTickets > 0
+                  ? Math.max(0, item.maxTickets - (soldCounts[item.name] ?? 0))
+                  : null
+                const hasSeatMap = item.seatMap && item.seatMap.type !== "none"
                 return (
                   <TouchableOpacity
-                    style={[
-                      styles.ticketTypeItem,
-                      isSelected && styles.ticketTypeItemSelected
-                    ]}
+                    style={[styles.ticketTypeItem, isSelected && styles.ticketTypeItemSelected, soldOut && styles.ticketTypeItemSoldOut]}
                     onPress={() => {
+                      if (soldOut) return
                       setSelectedTicketType(item)
                       setShowTicketTypeModal(false)
+                      if (hasSeatMap) openSeatMap(item)
                     }}
+                    disabled={soldOut}
                   >
                     <View style={styles.ticketTypeItemContent}>
-                      <Text style={styles.ticketTypeItemName}>{item.name}</Text>
-                      <Text style={styles.ticketTypeItemPrice}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.ticketTypeItemName, soldOut && { color: "#666" }]}>{item.name}</Text>
+                        {soldOut && (
+                          <View style={styles.soldOutBadge}>
+                            <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
+                          </View>
+                        )}
+                        {hasSeatMap && !soldOut && (
+                          <View style={styles.seatMapBadge}>
+                            <Text style={styles.seatMapBadgeText}>PICK SEAT</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.ticketTypeItemPrice, soldOut && { color: "#555" }]}>
                         UGX {Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0").toLocaleString()}
                       </Text>
+                      {remaining !== null && !soldOut && (
+                        <Text style={styles.remainingText}>{remaining} left</Text>
+                      )}
                     </View>
-                    {isSelected && (
+                    {isSelected && !soldOut && (
                       <Ionicons name="checkmark-circle" size={24} style={styles.ticketTypeItemCheck} />
                     )}
                   </TouchableOpacity>
@@ -1352,10 +1372,10 @@ const handleInstallmentPurchase = async () => {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {selectedEntryFee && (selectedEntryFee as any).seatMap?.type === "cinema" ? (
-                Array.from({ length: (selectedEntryFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
+              {seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
+                Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
                   const rowLabel = String.fromCharCode(65 + rowIdx)
-                  const cols = (selectedEntryFee as any).seatMap.cols || 10
+                  const cols = (seatMapFee as any).seatMap.cols || 10
                   return (
                     <View key={rowLabel} style={seatMapStyles.cinemaRow}>
                       <Text style={seatMapStyles.rowLabel}>{rowLabel}</Text>
@@ -1378,7 +1398,7 @@ const handleInstallmentPurchase = async () => {
                 })
               ) : (
                 <View style={seatMapStyles.numberedGrid}>
-                  {Array.from({ length: (selectedEntryFee as any)?.maxTickets || 0 }).map((_, idx) => {
+                  {Array.from({ length: (seatMapFee as any)?.maxTickets || 0 }).map((_, idx) => {
                     const seatNum = idx + 1
                     const taken = occupiedSeats.includes(seatNum)
                     const picked = selectedSeat === seatNum
@@ -1978,6 +1998,12 @@ buyerNamesSection: {
   ticketTypeItemCheck: {
     color: "#00FF9F",
   },
+  ticketTypeItemSoldOut: { opacity: 0.5 },
+  soldOutBadge: { backgroundColor: "#FF4444", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  soldOutBadgeText: { color: "#FFFFFF", fontSize: 10, fontWeight: "bold" },
+  seatMapBadge: { backgroundColor: "rgba(0,212,255,0.2)", borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, borderWidth: 1, borderColor: "#00D4FF" },
+  seatMapBadgeText: { color: "#00D4FF", fontSize: 10, fontWeight: "bold" },
+  remainingText: { color: "#F59E0B", fontSize: 11, marginTop: 2 },
   banner: {
     padding: 16,
     marginHorizontal: 16,
