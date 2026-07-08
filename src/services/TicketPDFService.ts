@@ -318,69 +318,124 @@ function buildHTML(
 </body></html>`
 }
 
-// ─── Original styled template preview (no draggable blocks) ─────────────────
-function buildOriginalPreviewHTML(t: TicketTemplateConfig, W: number, H: number, eventName: string, venueName: string): string {
-  const css = sharedCSS(t, W, H)
-  const fmtDate = new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric" })
+// ─── Modern futuristic template HTML (static, no drag) ───────────────────────
+function buildOriginalPreviewHTML(
+  t: TicketTemplateConfig, W: number, H: number,
+  eventName: string, venueName: string,
+  qrPosition?: "top" | "bottom" | "center" | "left" | "right",
+  fmtDate?: string, fmtTime?: string, buyerName?: string, ticketType?: string, ticketRef?: string, qrSrc?: string
+): string {
   const isLandscape = W > H
+  const qrPos = qrPosition || t.qrPosition
+  const date = fmtDate || new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric", year:"numeric" })
+  const time = fmtTime || "09:00 PM"
+  const name = buyerName || "John Doe"
+  const ttype = ticketType || "VIP"
+  const ref = ticketRef || "YV-PREVIEW"
+  const qr = qrSrc || FAKE_QR
+
+  const base = `* { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: ${FONT_STACKS[t.fontStyle]}; width:${W}px; height:${H}px; overflow:hidden; position:relative; color:${t.textPrimary}; }
+  .bg { position:absolute; inset:0; background:${t.background}; }
+  .noise { position:absolute; inset:0; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); opacity:0.5; }
+  .glow { position:absolute; border-radius:50%; filter:blur(60px); pointer-events:none; }
+  .accent-bar { position:absolute; top:0; left:0; bottom:0; width:5px; background:${t.accentColor}; }
+  .content { position:absolute; inset:0; }`
 
   if (isLandscape) {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}
-    .header-strip { position:absolute; top:0; left:0; right:0; height:44px; background:${t.headerBg}; display:flex; align-items:center; padding:0 20px; gap:12px; z-index:2; }
-    .brand { font-size:16px; font-weight:800; color:${t.badgeText}; letter-spacing:1px; }
-    .badge2 { background:${t.badgeBg}; color:${t.badgeText}; font-size:10px; font-weight:700; padding:3px 10px; border-radius:20px; text-transform:uppercase; }
-    .left-panel { position:absolute; left:0; top:44px; bottom:32px; width:60%; padding:18px 20px; display:flex; flex-direction:column; justify-content:space-between; }
-    .right-panel { position:absolute; right:0; top:44px; bottom:32px; width:38%; display:flex; align-items:center; justify-content:center; }
-    .event-title { font-size:22px; font-weight:800; color:${t.textPrimary}; line-height:1.2; text-shadow:0 2px 8px rgba(0,0,0,0.5); }
-    .info-grid { display:flex; flex-direction:column; gap:8px; background:rgba(0,0,0,0.35); backdrop-filter:blur(6px); border-radius:8px; padding:10px 14px; border:1px solid ${t.dividerColor}; }
-    .info-row2 { display:flex; align-items:center; gap:8px; }
-    .info-label2 { font-size:9px; color:${t.textSecondary}; text-transform:uppercase; letter-spacing:0.5px; width:36px; }
-    .info-val2 { font-size:12px; font-weight:600; color:${t.textPrimary}; }
-    .qr-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; background:${t.qrBg}; border:2px solid ${t.accentColor}; border-radius:10px; padding:10px; }
-    .footer2 { position:absolute; bottom:0; left:0; right:0; height:32px; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:space-between; padding:0 16px; font-size:10px; color:${t.textSecondary}; z-index:2; }
+    // Landscape: left 58% = info panel, right 42% = QR panel with vertical accent strip
+    const qrOnLeft = qrPos === "left"
+    const infoLeft = qrOnLeft ? "42%" : "0"
+    const qrLeft = qrOnLeft ? "0" : "58%"
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    ${base}
+    .glow1 { width:300px; height:300px; top:-80px; ${qrOnLeft ? "right" : "left"}:-60px; background:${t.accentColor}; opacity:0.18; }
+    .glow2 { width:200px; height:200px; bottom:-60px; ${qrOnLeft ? "left" : "right"}:20px; background:${t.accentColor}; opacity:0.10; }
+    .info-panel { position:absolute; top:0; left:${infoLeft}; width:58%; height:100%; display:flex; flex-direction:column; justify-content:space-between; padding:22px 24px 16px; }
+    .top-row { display:flex; align-items:flex-start; justify-content:space-between; }
+    .brand-pill { background:${t.accentColor}; color:${t.badgeText}; font-size:9px; font-weight:800; padding:3px 10px; border-radius:20px; letter-spacing:1.5px; text-transform:uppercase; }
+    .ticket-type { font-size:9px; color:${t.textSecondary}; letter-spacing:1px; text-transform:uppercase; border:1px solid ${t.dividerColor}; padding:3px 8px; border-radius:20px; }
+    .event-name { font-size:${eventName.length > 20 ? "18px" : "22px"}; font-weight:900; color:${t.textPrimary}; line-height:1.15; letter-spacing:-0.3px; text-shadow:0 2px 12px rgba(0,0,0,0.5); margin:10px 0 14px; }
+    .divider { height:1px; background:${t.dividerColor}; margin-bottom:12px; }
+    .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+    .info-cell { display:flex; flex-direction:column; gap:2px; }
+    .info-lbl { font-size:8px; color:${t.textSecondary}; text-transform:uppercase; letter-spacing:0.8px; }
+    .info-val { font-size:12px; font-weight:700; color:${t.textPrimary}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .bottom-row { display:flex; align-items:center; justify-content:space-between; }
+    .ref { font-size:9px; font-family:monospace; color:${t.accentColor}; letter-spacing:1.5px; }
+    .qr-panel { position:absolute; top:0; left:${qrLeft}; width:42%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; border-${qrOnLeft ? "right" : "left"}:1px solid ${t.dividerColor}; background:rgba(0,0,0,0.2); backdrop-filter:blur(4px); }
+    .qr-card { background:${t.qrBg}; border:2px solid ${t.accentColor}; border-radius:12px; padding:10px; display:flex; flex-direction:column; align-items:center; gap:5px; box-shadow:0 0 24px ${t.accentColor}33; }
+    .scan-hint { font-size:8px; color:${t.textSecondary}; letter-spacing:0.5px; text-transform:uppercase; }
     </style></head><body>
-    <div class="bg-layer" style="background:${t.background};"></div>
-    <div class="header-strip"><span class="brand">YoVibe</span><span class="badge2">VIP</span></div>
-    <div class="left-panel">
-      <div class="event-title">${eventName}</div>
-      <div class="info-grid">
-        <div class="info-row2"><span class="info-label2">📅 Date</span><span class="info-val2">${fmtDate}</span></div>
-        <div class="info-row2"><span class="info-label2">🕐 Time</span><span class="info-val2">09:00 PM</span></div>
-        <div class="info-row2"><span class="info-label2">📍 Venue</span><span class="info-val2">${venueName}</span></div>
-        <div class="info-row2"><span class="info-label2">👤 Name</span><span class="info-val2">John Doe</span></div>
+    <div class="bg"></div><div class="noise"></div>
+    <div class="glow glow1"></div><div class="glow glow2"></div>
+    <div class="accent-bar" style="left:${qrOnLeft ? "42%" : "0"}"></div>
+    <div class="content">
+      <div class="info-panel">
+        <div class="top-row"><span class="brand-pill">YoVibe</span><span class="ticket-type">${ttype}</span></div>
+        <div class="event-name">${eventName}</div>
+        <div class="divider"></div>
+        <div class="info-grid">
+          <div class="info-cell"><span class="info-lbl">Date</span><span class="info-val">${date}</span></div>
+          <div class="info-cell"><span class="info-lbl">Time</span><span class="info-val">${time}</span></div>
+          <div class="info-cell"><span class="info-lbl">Venue</span><span class="info-val">${venueName}</span></div>
+          <div class="info-cell"><span class="info-lbl">Attendee</span><span class="info-val">${name}</span></div>
+        </div>
+        <div class="bottom-row"><span class="ref">${ref}</span><span style="font-size:8px;color:${t.textSecondary};">✓ Verified</span></div>
+      </div>
+      <div class="qr-panel">
+        <div class="qr-card"><img src="${qr}" style="width:100px;height:100px;display:block;"/><span class="scan-hint">Scan at entrance</span></div>
       </div>
     </div>
-    <div class="right-panel">
-      <div class="qr-wrap"><img src="${FAKE_QR}" style="width:110px;height:110px;display:block;"/><span style="font-size:9px;color:${t.textSecondary};">Scan at entrance</span><span style="font-size:9px;font-family:monospace;color:${t.accentColor};">YV-PREVIEW</span></div>
-    </div>
-    <div class="footer2"><span style="font-weight:700;color:${t.accentColor};">YoVibe</span><span>Verified &amp; Secured Ticket</span><span>YV-PREVIEW</span></div>
     </body></html>`
   }
 
-  // Portrait
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${css}
-  .header-strip { position:absolute; top:0; left:0; right:0; height:52px; background:${t.headerBg}; display:flex; align-items:center; padding:0 20px; gap:12px; z-index:2; }
-  .brand { font-size:18px; font-weight:800; color:${t.badgeText}; letter-spacing:1px; }
-  .badge2 { background:${t.badgeBg}; color:${t.badgeText}; font-size:10px; font-weight:700; padding:3px 12px; border-radius:20px; text-transform:uppercase; }
-  .event-title { position:absolute; top:68px; left:20px; right:20px; font-size:28px; font-weight:800; color:${t.textPrimary}; line-height:1.2; text-shadow:0 2px 8px rgba(0,0,0,0.6); }
-  .qr-section { position:absolute; top:${t.qrPosition === "top" ? "140px" : t.qrPosition === "center" ? "280px" : "520px"}; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; background:${t.qrBg}; border:2px solid ${t.accentColor}; border-radius:12px; padding:14px; }
-  .info-section { position:absolute; bottom:48px; left:20px; right:20px; display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.45); backdrop-filter:blur(6px); border-radius:10px; padding:14px 16px; border:1px solid ${t.dividerColor}; }
-  .info-row2 { display:flex; align-items:center; gap:10px; }
-  .info-label2 { font-size:9px; color:${t.textSecondary}; text-transform:uppercase; letter-spacing:0.5px; width:40px; }
-  .info-val2 { font-size:13px; font-weight:600; color:${t.textPrimary}; }
-  .footer2 { position:absolute; bottom:0; left:0; right:0; height:40px; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:space-between; padding:0 20px; font-size:10px; color:${t.textSecondary}; z-index:2; }
+  // Portrait: full-width modern layout
+  // QR position: top (below header), center (middle), bottom (above footer)
+  const qrTopPx = qrPos === "top" ? 110 : qrPos === "center" ? 340 : 620
+  const qrSize = 130
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  ${base}
+  .glow1 { width:400px; height:400px; top:-100px; left:-100px; background:${t.accentColor}; opacity:0.15; }
+  .glow2 { width:300px; height:300px; bottom:-80px; right:-60px; background:${t.accentColor}; opacity:0.10; }
+  .header { position:absolute; top:0; left:0; right:0; height:64px; background:${t.headerBg}; display:flex; align-items:center; justify-content:space-between; padding:0 20px; z-index:2; }
+  .brand { font-size:20px; font-weight:900; color:${t.badgeText}; letter-spacing:2px; text-transform:uppercase; }
+  .ticket-badge { background:rgba(255,255,255,0.15); color:${t.badgeText}; font-size:9px; font-weight:700; padding:4px 12px; border-radius:20px; letter-spacing:1px; text-transform:uppercase; border:1px solid rgba(255,255,255,0.25); }
+  .hero { position:absolute; top:64px; left:0; right:0; padding:20px 22px 0; }
+  .event-name { font-size:${eventName.length > 22 ? "22px" : "28px"}; font-weight:900; color:${t.textPrimary}; line-height:1.15; letter-spacing:-0.5px; text-shadow:0 3px 16px rgba(0,0,0,0.6); }
+  .type-pill { display:inline-block; margin-top:8px; background:${t.badgeBg}; color:${t.badgeText}; font-size:10px; font-weight:800; padding:4px 14px; border-radius:20px; letter-spacing:0.8px; text-transform:uppercase; }
+  .qr-section { position:absolute; top:${qrTopPx}px; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; }
+  .qr-card { background:${t.qrBg}; border:2px solid ${t.accentColor}; border-radius:14px; padding:12px; box-shadow:0 0 30px ${t.accentColor}44; display:flex; flex-direction:column; align-items:center; gap:5px; }
+  .scan-hint { font-size:9px; color:${t.textSecondary}; letter-spacing:0.5px; text-transform:uppercase; }
+  .ref-code { font-size:9px; font-family:monospace; color:${t.accentColor}; letter-spacing:2px; }
+  .info-panel { position:absolute; bottom:44px; left:16px; right:16px; background:rgba(0,0,0,0.5); backdrop-filter:blur(10px); border-radius:12px; padding:14px 16px; border:1px solid ${t.dividerColor}; }
+  .info-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .info-cell { display:flex; flex-direction:column; gap:2px; }
+  .info-lbl { font-size:8px; color:${t.textSecondary}; text-transform:uppercase; letter-spacing:0.8px; }
+  .info-val { font-size:12px; font-weight:700; color:${t.textPrimary}; }
+  .footer { position:absolute; bottom:0; left:0; right:0; height:36px; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:space-between; padding:0 18px; z-index:2; }
+  .footer-brand { font-size:10px; font-weight:800; color:${t.accentColor}; letter-spacing:1px; }
+  .footer-ref { font-size:9px; font-family:monospace; color:${t.textSecondary}; }
   </style></head><body>
-  <div class="bg-layer" style="background:${t.background};"></div>
-  <div class="header-strip"><span class="brand">YoVibe</span><span class="badge2">VIP</span></div>
-  <div class="event-title">${eventName}</div>
-  <div class="qr-section"><img src="${FAKE_QR}" style="width:140px;height:140px;display:block;"/><span style="font-size:10px;color:${t.textSecondary};">Scan at entrance</span><span style="font-size:10px;font-family:monospace;color:${t.accentColor};">YV-PREVIEW</span></div>
-  <div class="info-section">
-    <div class="info-row2"><span class="info-label2">📅 Date</span><span class="info-val2">${fmtDate}</span></div>
-    <div class="info-row2"><span class="info-label2">🕐 Time</span><span class="info-val2">09:00 PM</span></div>
-    <div class="info-row2"><span class="info-label2">📍 Venue</span><span class="info-val2">${venueName}</span></div>
-    <div class="info-row2"><span class="info-label2">👤 Name</span><span class="info-val2">John Doe</span></div>
+  <div class="bg"></div><div class="noise"></div>
+  <div class="glow glow1"></div><div class="glow glow2"></div>
+  <div class="accent-bar"></div>
+  <div class="content">
+    <div class="header"><span class="brand">YoVibe</span><span class="ticket-badge">${ttype}</span></div>
+    <div class="hero"><div class="event-name">${eventName}</div><span class="type-pill">${ttype}</span></div>
+    <div class="qr-section">
+      <div class="qr-card"><img src="${qr}" style="width:${qrSize}px;height:${qrSize}px;display:block;"/><span class="scan-hint">Scan at entrance</span><span class="ref-code">${ref}</span></div>
+    </div>
+    <div class="info-panel">
+      <div class="info-grid">
+        <div class="info-cell"><span class="info-lbl">Date</span><span class="info-val">${date}</span></div>
+        <div class="info-cell"><span class="info-lbl">Time</span><span class="info-val">${time}</span></div>
+        <div class="info-cell"><span class="info-lbl">Venue</span><span class="info-val">${venueName}</span></div>
+        <div class="info-cell"><span class="info-lbl">Attendee</span><span class="info-val">${name}</span></div>
+      </div>
+    </div>
+    <div class="footer"><span class="footer-brand">YoVibe</span><span class="footer-ref">${ref}</span></div>
   </div>
-  <div class="footer2"><span style="font-weight:700;color:${t.accentColor};">YoVibe</span><span>Verified &amp; Secured Ticket</span><span>YV-PREVIEW</span></div>
   </body></html>`
 }
 
@@ -389,7 +444,7 @@ export function generatePreviewHTML(
   templateId: string | null,
   orientation: "portrait" | "landscape",
   uploadedBgUrl?: string | null,
-  sampleData?: { eventName?: string; venueName?: string; posterUrl?: string; layout?: TicketLayout }
+  sampleData?: { eventName?: string; venueName?: string; posterUrl?: string; layout?: TicketLayout; qrPosition?: "top" | "bottom" | "center" | "left" | "right" }
 ): string {
   const isLandscape = orientation === "landscape"
   const W = isLandscape ? LANDSCAPE_W : PORTRAIT_W
@@ -405,9 +460,9 @@ export function generatePreviewHTML(
   }
   const { t, isUploadBg, bgImage, bgGradient } = resolveTemplate(fakeEvent)
 
-  // For template mode: render the original styled layout (not draggable blocks)
+  // For template mode: render the modern futuristic layout
   if (!isUploadBg && templateId) {
-    return buildOriginalPreviewHTML(t, W, H, sampleData?.eventName || "Sample Event Night", sampleData?.venueName || "The Grand Venue")
+    return buildOriginalPreviewHTML(t, W, H, sampleData?.eventName || "Sample Event Night", sampleData?.venueName || "The Grand Venue", sampleData?.qrPosition)
   }
 
   // For upload mode: render with actual bg image
@@ -475,6 +530,13 @@ export function generateTicketHTML(ticket: Ticket, event?: Event, overrideQrData
 
   const { t, isUploadBg, bgImage, bgGradient, isLandscape, W, H } = resolveTemplate(event)
   const lyt = layout || defaultLayout(isLandscape ? "landscape" : "portrait", !!posterUrl)
+  // qr_position can come from per-fee ticketDesign or event-level ticket_design
+  const qrPos = (ticket as any).ticketDesign?.qr_position || event?.ticket_design?.qr_position as any
+
+  // For template mode use the modern static layout
+  if (!isUploadBg) {
+    return buildOriginalPreviewHTML(t, W, H, eventName, venueName, qrPos, fmtDate, fmtTime, buyerName, ticketType, ticketRef, qrSrc)
+  }
 
   return buildHTML(
     t, W, H, isUploadBg, bgImage, bgGradient, lyt.bg,
