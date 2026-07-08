@@ -275,6 +275,13 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [showTokenModal, setShowTokenModal] = useState(false)
   const [tokenLoading, setTokenLoading] = useState(false)
 
+  // Re-entry state
+  const [reentryQuery, setReentryQuery] = useState("")
+  const [reentrySearching, setReentrySearching] = useState(false)
+  const [reentryTicket, setReentryTicket] = useState<{ id: string; buyerName: string; entryFeeType: string; status: string; reentryPass: any } | null>(null)
+  const [reentryGranting, setReentryGranting] = useState(false)
+  const [reentryMessage, setReentryMessage] = useState<{ text: string; ok: boolean } | null>(null)
+
   const formatTimeRemaining = (expiresAt: string) => {
     const diff = new Date(expiresAt).getTime() - Date.now()
     if (diff <= 0) return "Expired"
@@ -491,6 +498,38 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const handleScanTicket = () => {
     navigation.navigate("TicketScanner", { eventId, eventName: event?.name || "Event" })
+  }
+
+  const handleReentrySearch = async () => {
+    if (!reentryQuery.trim() || !event?.slug) return
+    setReentrySearching(true)
+    setReentryTicket(null)
+    setReentryMessage(null)
+    const result = await TicketService.findTicketByRef(event.slug, reentryQuery.trim())
+    setReentrySearching(false)
+    if (!result) {
+      setReentryMessage({ text: "No ticket found. Check the ref or name.", ok: false })
+    } else {
+      setReentryTicket(result)
+    }
+  }
+
+  const handleGrantReentry = async () => {
+    if (!reentryTicket || !user) return
+    setReentryGranting(true)
+    setReentryMessage(null)
+    const result = await TicketService.grantReentryPass(
+      reentryTicket.id,
+      user.id,
+      user.displayName || user.email || "Organiser"
+    )
+    setReentryGranting(false)
+    if (result.success) {
+      setReentryMessage({ text: `Re-entry pass granted for ${reentryTicket.buyerName}. They can now scan back in.`, ok: true })
+      setReentryTicket({ ...reentryTicket, reentryPass: { used: false }, status: "used" })
+    } else {
+      setReentryMessage({ text: result.error || "Failed to grant re-entry.", ok: false })
+    }
   }
 
   const handleValidateTicket = async (ticketId: string) => {
@@ -1062,6 +1101,90 @@ const OrganiserDashboardScreen: React.FC = () => {
                   <Ionicons name="chevron-forward" size={24} color="#00D4FF" />
                 </View>
               </TouchableOpacity>
+            </View>
+
+            </View>
+
+            <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>🔄 Grant Re-entry</Text>
+              <View style={styles.dashboardCard}>
+                <Text style={styles.dashboardLabel}>Search by ticket ref or attendee name</Text>
+                <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    placeholder="e.g. YV-ABC123 or John"
+                    placeholderTextColor="#555"
+                    value={reentryQuery}
+                    onChangeText={setReentryQuery}
+                    onSubmitEditing={handleReentrySearch}
+                    returnKeyType="search"
+                  />
+                  <TouchableOpacity
+                    style={{ backgroundColor: "#00D4FF", paddingHorizontal: 16, borderRadius: 8, justifyContent: "center" }}
+                    onPress={handleReentrySearch}
+                    disabled={reentrySearching}
+                  >
+                    {reentrySearching
+                      ? <ActivityIndicator color="#000" size="small" />
+                      : <Ionicons name="search" size={20} color="#000" />}
+                  </TouchableOpacity>
+                </View>
+
+                {reentryTicket && (
+                  <View style={{ backgroundColor: "#111", borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? "#F59E0B" : "#333" }}>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+                      <Text style={{ color: "#888", fontSize: 13 }}>Attendee</Text>
+                      <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>{reentryTicket.buyerName}</Text>
+                    </View>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+                      <Text style={{ color: "#888", fontSize: 13 }}>Ticket type</Text>
+                      <Text style={{ color: "#FFF", fontSize: 13 }}>{reentryTicket.entryFeeType}</Text>
+                    </View>
+                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+                      <Text style={{ color: "#888", fontSize: 13 }}>Status</Text>
+                      <Text style={{
+                        fontSize: 13, fontWeight: "700",
+                        color: reentryTicket.status === "used" ? "#F59E0B" : reentryTicket.status === "active" ? "#4CAF50" : "#FF6B6B"
+                      }}>
+                        {reentryTicket.status.toUpperCase()}
+                      </Text>
+                    </View>
+
+                    {reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? (
+                      <View style={{ backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 8, padding: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" }}>
+                        <Text style={{ color: "#F59E0B", fontSize: 13, textAlign: "center" }}>
+                          ✓ Re-entry pass active — attendee can scan back in
+                        </Text>
+                      </View>
+                    ) : reentryTicket.status !== "used" ? (
+                      <View style={{ backgroundColor: "rgba(255,107,107,0.1)", borderRadius: 8, padding: 10 }}>
+                        <Text style={{ color: "#FF6B6B", fontSize: 13, textAlign: "center" }}>
+                          Ticket must be scanned (used) before granting re-entry
+                        </Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={{ backgroundColor: "#F59E0B", paddingVertical: 12, borderRadius: 8, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
+                        onPress={handleGrantReentry}
+                        disabled={reentryGranting}
+                      >
+                        {reentryGranting
+                          ? <ActivityIndicator color="#000" size="small" />
+                          : <Ionicons name="refresh-circle" size={20} color="#000" />}
+                        <Text style={{ color: "#000", fontWeight: "bold", fontSize: 15 }}>Grant Re-entry Pass</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {reentryMessage && (
+                  <View style={{ backgroundColor: reentryMessage.ok ? "rgba(76,175,80,0.1)" : "rgba(255,107,107,0.1)", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: reentryMessage.ok ? "rgba(76,175,80,0.3)" : "rgba(255,107,107,0.3)" }}>
+                    <Text style={{ color: reentryMessage.ok ? "#4CAF50" : "#FF6B6B", fontSize: 13, textAlign: "center" }}>
+                      {reentryMessage.text}
+                    </Text>
+                  </View>
+                )}
+              </View>
             </View>
 
             <View style={styles.dashboardSection}>

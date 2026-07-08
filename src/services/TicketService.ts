@@ -431,6 +431,9 @@ private static async createSingleTicket(
     buyerPhotoUrl?: string;
     buyerName?: string;
     ticketDocId?: string;
+    isReentry?: boolean;
+    reentryGrantedByName?: string;
+    reentryGrantedAt?: string;
   }> {
     try {
       console.log("========================================")
@@ -485,6 +488,31 @@ private static async createSingleTicket(
 
       // Step 3: Check status
       if (t.status !== "active" && t.status !== "pending") {
+        // Check for active re-entry pass before denying
+        if (t.status === "used" && t.reentryPass && !t.reentryPass.used) {
+          // Mark the pass as consumed
+          await supabase
+            .from("tickets")
+            .update({ reentry_pass: { ...t.reentryPass, used: true } })
+            .eq("id", t.id)
+          await this.logValidation({
+            id: `val_${Date.now()}`,
+            ticketId: t.id,
+            eventId: t.eventId,
+            validatedAt: now,
+            validatedBy: validatorId,
+            location,
+            status: "granted",
+            reason: `Re-entry authorised by ${t.reentryPass.grantedByName}`,
+          })
+          return {
+            success: true,
+            isReentry: true,
+            buyerName: t.buyerName,
+            reentryGrantedByName: t.reentryPass.grantedByName,
+            reentryGrantedAt: t.reentryPass.grantedAt,
+          }
+        }
         const reason = t.status === "used" ? "Ticket already used" : t.status === "cancelled" ? "Ticket was cancelled" : "Invalid ticket status"
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason })
         return { success: false, reason }
@@ -566,6 +594,59 @@ private static async createSingleTicket(
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error?.message || error)
       return { success: false, reason: error?.message || "Validation failed" }
+    }
+  }
+
+  static async grantReentryPass(
+    ticketId: string,
+    grantedById: string,
+    grantedByName: string,
+  ): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data: ticket, error: fetchErr } = await supabase
+        .from("tickets")
+        .select("id, status, buyer_name")
+        .eq("id", ticketId)
+        .single()
+      if (fetchErr || !ticket) return { success: false, error: "Ticket not found" }
+      if (ticket.status !== "used") return { success: false, error: "Ticket has not been scanned yet" }
+      const { error } = await supabase
+        .from("tickets")
+        .update({
+          reentry_pass: {
+            grantedAt: new Date().toISOString(),
+            grantedBy: grantedById,
+            grantedByName,
+            used: false,
+          },
+        })
+        .eq("id", ticketId)
+      if (error) throw error
+      return { success: true }
+    } catch (e: any) {
+      return { success: false, error: e.message || "Failed to grant re-entry" }
+    }
+  }
+
+  static async findTicketByRef(
+    eventSlug: string,
+    query: string,
+  ): Promise<{ id: string; buyerName: string; entryFeeType: string; status: string; reentryPass: any } | null> {
+    const q = query.trim().toLowerCase()
+    const { data, error } = await supabase
+      .from("tickets")
+      .select("id, buyer_name, entry_fee_type, status, reentry_pass, ticket_ref")
+      .eq("event_slug", eventSlug)
+      .or(`ticket_ref.ilike.%${q}%,buyer_name.ilike.%${q}%`)
+      .limit(1)
+      .single()
+    if (error || !data) return null
+    return {
+      id: data.id,
+      buyerName: data.buyer_name,
+      entryFeeType: data.entry_fee_type,
+      status: data.status,
+      reentryPass: data.reentry_pass ?? null,
     }
   }
 
@@ -795,6 +876,7 @@ private static async createSingleTicket(
       tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
       tableGroupId: row.table_group_id || row.tableGroupId,
       seatNumber: row.seat_number ?? row.seatNumber,
+      reentryPass: row.reentry_pass ?? row.reentryPass ?? undefined,
       photoUploadToken: row.photo_upload_token || row.photoUploadToken,
       photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,
     }

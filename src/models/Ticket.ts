@@ -28,6 +28,7 @@ export interface Ticket {
   status: "active" | "used" | "cancelled" | "refunded" | "expired" | "pending"
   validationHistory: TicketValidation[]
   entryFeeType?: string
+  reentryPass?: { grantedAt: string; grantedBy: string; grantedByName: string; used: boolean }
   paymentId?: string
   paymentStatus?: "pending" | "completed" | "failed"
   paymentReference?: string

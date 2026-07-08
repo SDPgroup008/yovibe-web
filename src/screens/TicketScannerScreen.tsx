@@ -45,6 +45,10 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
 
+  // Re-entry state
+  const [showReentryModal, setShowReentryModal] = useState(false)
+  const [reentryInfo, setReentryInfo] = useState<{ buyerName: string; grantedByName: string; grantedAt: string } | null>(null)
+
   // Auth check - only for non-token auth
   useEffect(() => {
     if (!isTokenAuth && !hasCheckedAuth.current) {
@@ -181,6 +185,16 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
       }, ...prev].slice(0, 10))
 
       if (result.success) {
+        if (result.isReentry) {
+          setReentryInfo({
+            buyerName: result.buyerName || "Attendee",
+            grantedByName: result.reentryGrantedByName || "Organiser",
+            grantedAt: result.reentryGrantedAt || new Date().toISOString(),
+          })
+          setShowReentryModal(true)
+          setValidating(false)
+          return
+        }
         if (result.needsPhotoVerification && result.buyerPhotoUrl && result.ticketDocId) {
           setPendingTicketDocId(result.ticketDocId)
           setBuyerPhotoUrl(result.buyerPhotoUrl)
@@ -291,7 +305,42 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
         )}
       </ScrollView>
 
-      <Modal visible={showPhotoVerification} transparent animationType="fade" onRequestClose={() => setShowPhotoVerification(false)}>
+      {/* Re-entry Modal */}
+      <Modal visible={showReentryModal} transparent animationType="fade" onRequestClose={() => setShowReentryModal(false)}>
+        <View style={styles.overlay}>
+          <View style={[styles.modalBox, { borderWidth: 2, borderColor: "#F59E0B" }]}>
+            <View style={{ backgroundColor: "rgba(245,158,11,0.15)", borderRadius: 50, padding: 16, marginBottom: 16 }}>
+              <Ionicons name="refresh-circle" size={48} color="#F59E0B" />
+            </View>
+            <Text style={[styles.modalTitle, { color: "#F59E0B" }]}>Re-entry Authorised</Text>
+            <Text style={[styles.modalSub, { marginBottom: 8 }]}>This attendee was granted permission to leave and return.</Text>
+            <View style={{ backgroundColor: "#1a1a1a", borderRadius: 10, padding: 14, width: "100%", marginBottom: 20, gap: 8 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Attendee</Text>
+                <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>{reentryInfo?.buyerName}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Authorised by</Text>
+                <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>{reentryInfo?.grantedByName}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Left at</Text>
+                <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>
+                  {reentryInfo?.grantedAt ? new Date(reentryInfo.grantedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "--"}
+                </Text>
+              </View>
+            </View>
+            <TouchableOpacity
+              style={{ backgroundColor: "#F59E0B", paddingVertical: 14, paddingHorizontal: 32, borderRadius: 8, width: "100%", alignItems: "center" }}
+              onPress={() => { setShowReentryModal(false); setReentryInfo(null) }}
+            >
+              <Text style={{ color: "#000", fontWeight: "bold", fontSize: 16 }}>Confirm Re-entry</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Photo Verification Modal */}
         <View style={styles.overlay}>
           <View style={styles.modalBox}>
             <Text style={styles.modalTitle}>Photo Verification Required</Text>
