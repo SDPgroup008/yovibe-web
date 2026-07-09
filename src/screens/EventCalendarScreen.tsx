@@ -101,6 +101,44 @@ const normalizeEvent = (raw: any): Event => {
   return e as Event
 }
 
+// ─── Cache: survives component remounts ──────────────────────────
+const CALENDAR_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
+const CALENDAR_CACHE_KEY = 'yovibe_calendar_cache';
+
+interface CalendarCacheEntry {
+  events: Event[];
+  timestamp: number;
+}
+
+/** Read cache from sessionStorage (survives HMR, tab switches, etc.) */
+const readCalendarCache = (): CalendarCacheEntry | null => {
+  try {
+    const raw = typeof window !== 'undefined' ? sessionStorage.getItem(CALENDAR_CACHE_KEY) : null;
+    if (!raw) return null;
+    return JSON.parse(raw) as CalendarCacheEntry;
+  } catch {
+    return null;
+  }
+};
+
+/** Write events to sessionStorage cache */
+const writeCalendarCache = (events: Event[]) => {
+  try {
+    const entry: CalendarCacheEntry = { events, timestamp: Date.now() };
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(CALENDAR_CACHE_KEY, JSON.stringify(entry));
+    }
+  } catch {
+    // sessionStorage full or unavailable — ignore
+  }
+};
+
+const isCalendarCacheValid = () => {
+  const cache = readCalendarCache();
+  if (!cache) return false;
+  return Date.now() - cache.timestamp < CALENDAR_CACHE_DURATION;
+};
+// ─────────────────────────────────────────────────────────────────
 const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   // SEO Metadata for Calendar page
   const calendarSeo = SCREEN_SEO.calendar;
@@ -113,14 +151,45 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   const calendarWidth = useResponsiveSize(width - 32, width * 0.6, width * 0.4);
 
   const isFocused = useIsFocused()
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<Event[]>(() => {
+    const cache = readCalendarCache();
+    return isCalendarCacheValid() && cache ? cache.events : [];
+  })
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => !isCalendarCacheValid())
   const [refreshing, setRefreshing] = useState(false)
+
+  // ─── Generate markedDates whenever events or selectedDate changes ─────
+  useEffect(() => {
+    if (events.length === 0) return;
+
+    const marked: Record<string, any> = {}
+    events.forEach((event) => {
+      const dateStr = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
+      marked[dateStr] = {
+        marked: true,
+        dotColor: "#2196F3",
+        selectedColor: dateStr === selectedDate ? "#2196F3" : undefined,
+        selected: dateStr === selectedDate,
+      }
+    })
+
+    if (!marked[selectedDate]) {
+      marked[selectedDate] = { selected: true, selectedColor: "#2196F3" }
+    }
+
+    setMarkedDates(marked)
+  }, [events, selectedDate])
 
   // Initial data load only
   useEffect(() => {
+    const cache = readCalendarCache();
+    if (cache && isCalendarCacheValid()) {
+      console.log('[EventCalendar] 💾 Hydrated from sessionStorage cache, events:', cache.events.length);
+      setLoading(false);
+      return;
+    }
     if (events.length === 0) {
       loadEvents()
     }
@@ -134,23 +203,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
       const rawEvents = await SupabaseService.getEvents()
       const normalized: Event[] = (rawEvents || []).map((ev: any) => normalizeEvent(ev))
       setEvents(normalized)
-
-      const marked: Record<string, any> = {}
-      normalized.forEach((event) => {
-        const dateStr = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
-        marked[dateStr] = {
-          marked: true,
-          dotColor: "#2196F3",
-          selectedColor: dateStr === selectedDate ? "#2196F3" : undefined,
-          selected: dateStr === selectedDate,
-        }
-      })
-
-      if (!marked[selectedDate]) {
-        marked[selectedDate] = { selected: true, selectedColor: "#2196F3" }
-      }
-
-      setMarkedDates(marked)
+      writeCalendarCache(normalized)
     } catch (error) {
       console.error("Error loading events for calendar:", error)
     } finally {

@@ -7,9 +7,15 @@ import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
 import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
+import { useMapScroll } from "../hooks/useScrollPersistence"
+import { useIsFocused } from "../utils/compatNavigation"
 
 // This is a web-only implementation of the MapScreen
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
+  console.log('[MapScreen] 🏗️ RENDER/MOUNT');
+  const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useMapScroll()
+  const isFocused = useIsFocused()
+
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -24,6 +30,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
+
+  // Restore scroll position when screen regains focus
+  useEffect(() => {
+    console.log('[MapScreen] 👁️ focus effect - isFocused=', isFocused);
+    if (isFocused) restorePosition()
+  }, [isFocused])
 
   // Initial load only
   useEffect(() => {
@@ -204,15 +216,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         </View>
       ) : (
         <ScrollView
+          ref={scrollRef}
           style={styles.venueList}
-          onScroll={({ nativeEvent }) => {
-            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent;
-            const paddingToBottom = 20;
+          onContentSizeChange={onContentSizeChange}
+          onScroll={(event) => {
+            // Forward to scroll persistence
+            onScroll(event)
+            // Also handle infinite scroll
+            const { nativeEvent } = event
+            const { layoutMeasurement, contentOffset, contentSize } = nativeEvent
+            const paddingToBottom = 20
             if (layoutMeasurement.height + contentOffset.y >= contentSize.height - paddingToBottom) {
-              loadMoreVenues();
+              loadMoreVenues()
             }
           }}
-          scrollEventThrottle={400}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

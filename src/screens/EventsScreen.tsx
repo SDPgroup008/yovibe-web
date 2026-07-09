@@ -43,7 +43,8 @@ type EventsScreenProps = {
 const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: cachedEvents, loading, refetch } = useCachedEvents()
-  const { onScroll, restorePosition, scrollRef } = useEventsScroll()
+  const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useEventsScroll()
+  console.log('[EventsScreen] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
   const seoUrl =
@@ -71,11 +72,17 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
 
-  // Restore scroll position when screen regains focus
+
+  const events = useMemo<Event[]>(() => {
+    return Array.isArray(cachedEvents) ? cachedEvents : [];
+  }, [cachedEvents]);
+
+  // The useScrollPersistence hook automatically restores on mount.
+  // We keep this effect for potential future use when useIsFocused
+  // properly tracks focus state.
   useEffect(() => {
-    if (isFocused) {
-      restorePosition();
-    }
+    console.log('[EventsScreen] 👁️ focus effect - isFocused=', isFocused);
+    if (isFocused) restorePosition();
   }, [isFocused]);
 
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
@@ -86,13 +93,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const events = useMemo<Event[]>(() => {
-    return Array.isArray(cachedEvents) ? cachedEvents : [];
-  }, [cachedEvents]);
   useEffect(() => {
     const normalized = initialSearchQuery.trim();
     if (!normalized) return;
-
     setSearchQuery(normalized);
     setShowSearch(true);
   }, [initialSearchQuery]);
@@ -414,6 +417,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           windowSize={5}
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
+          onContentSizeChange={onContentSizeChange}
           onScroll={onScroll}
         />
       )}

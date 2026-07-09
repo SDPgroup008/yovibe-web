@@ -15,38 +15,77 @@ import type { MapScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { useMapScroll } from "../hooks/useScrollPersistence";
 
+// ─── Module-level cache: survives component remounts ─────────────
+const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
+
+interface CacheEntry {
+  venues: Venue[];
+  vibeRatings: Record<string, number>;
+  timestamp: number;
+}
+
+let mapCache: CacheEntry | null = null;
+
+function isCacheValid(): boolean {
+  if (!mapCache) return false;
+  return Date.now() - mapCache.timestamp < CACHE_DURATION_MS;
+}
+
+function updateCache(venues: Venue[], vibeRatings: Record<string, number>) {
+  mapCache = { venues, vibeRatings, timestamp: Date.now() };
+}
+
+// ─── Module-level ref to track if we already set up listeners ────
+let listenersSetup = false;
+let vibeUnsubscribers: (() => void)[] = [];
+
+// ─────────────────────────────────────────────────────────────────
+
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
+  console.log('[MapScreen.web] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Map page
   const mapSeo = SCREEN_SEO.map;
   const isFocused = useIsFocused();
   
-  const { onScroll, restorePosition, scrollRef } = useMapScroll();
+  const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useMapScroll();
 
   // Detect desktop viewport (>=1024px)
   const screenWidth = Dimensions.get("window").width;
   const isDesktop = screenWidth >= 1024;
 
-  // Restore scroll position when screen regains focus
-  useEffect(() => {
-    if (isFocused) {
-      restorePosition();
-    }
-  }, [isFocused]);
-
-  const [venues, setVenues] = useState<Venue[]>([])
-  const [loading, setLoading] = useState(true)
+  // ─── Initialise state from cache if available ─────────────────
+  const [venues, setVenues] = useState<Venue[]>(() => isCacheValid() ? mapCache!.venues : []);
+  const [loading, setLoading] = useState(() => !isCacheValid());
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
-  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>(() => isCacheValid() ? mapCache!.vibeRatings : {})
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // ─── Hydrate once from cache on first mount (if cached) ────────
+  const initialisedRef = useRef(false);
+  useEffect(() => {
+    if (!initialisedRef.current && isCacheValid() && mapCache) {
+      console.log('[MapScreen.web] 💾 Hydrating from module-level cache, venue count:', mapCache.venues.length);
+      setVenues(mapCache.venues);
+      setVenueVibeRatings(mapCache.vibeRatings);
+      setLoading(false);
+      initialisedRef.current = true;
+    }
+    initialisedRef.current = true;
+  }, []);
+
+  // Restore scroll position when screen regains focus
+  useEffect(() => {
+    console.log('[MapScreen.web] 👁️ focus effect - isFocused=', isFocused);
+    if (isFocused) restorePosition();
+  }, [isFocused]);
 
   // Debounced search handler for performance
   const handleSearchChange = useCallback((text: string) => {
     setSearchQuery(text)
     
-    // Debounce: clear previous timeout and set new one
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current)
     }
@@ -67,75 +106,104 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // Check if we need to show directions to a specific venue
   const destinationVenueId = route.params?.destinationVenueId
 
+  // ─── Load data only once (module-level guard) ──────────────────
   useEffect(() => {
-    // Load venues and initial vibe ratings
-    loadVenues()
-
-    // Set up real-time listeners for vibe ratings
-    const unsubscribeVibeListeners: (() => void)[] = []
-
-    const setupVibeListeners = async () => {
-      try {
-        const venuesList = await SupabaseService.getVenues()
-        for (const venue of venuesList) {
-          const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          const tomorrow = new Date(today)
-          tomorrow.setDate(tomorrow.getDate() + 1)
-
-          const q = query(
-            vibeRatingsRef,
-            where("venueId", "==", venue.id),
-            where("createdAt", ">=", today),
-            where("createdAt", "<", tomorrow),
-            orderBy("createdAt", "desc"),
-            limit(1)
-          )
-
-          const unsubscribe = onSnapshot(
-            q,
-            (snapshot) => {
-              snapshot.docChanges().forEach((change) => {
-                if (change.type === "added" || change.type === "modified") {
-                  const data = change.doc.data()
-                  const rating = data.rating || 0.0
-                  setVenueVibeRatings((prev) => ({
-                    ...prev,
-                    [venue.id]: rating,
-                  }))
-                } else if (change.type === "removed") {
-                  // If the latest vibe rating is removed, default to 0.0
-                  setVenueVibeRatings((prev) => ({
-                    ...prev,
-                    [venue.id]: 0.0,
-                  }))
-                }
-              })
-            },
-            (error) => {
-              console.error(`FirebaseService: Error listening to vibe ratings for venue ${venue.id}:`, error)
-              // Default to 0.0 on error
-              setVenueVibeRatings((prev) => ({
-                ...prev,
-                [venue.id]: 0.0,
-              }))
-            }
-          )
-          unsubscribeVibeListeners.push(unsubscribe)
-        }
-      } catch (error) {
-        console.error("Error setting up vibe listeners:", error)
+    if (isCacheValid()) {
+      console.log('[MapScreen.web] ⏭️ Skipping initial load — cache is valid');
+      if (!listenersSetup) {
+        listenersSetup = true;
+        setupVibeListeners();
       }
+      return;
     }
 
-    setupVibeListeners()
+    // Cache invalid or empty — load fresh
+    loadVenues();
 
-    // Cleanup listeners on unmount
+    if (!listenersSetup) {
+      listenersSetup = true;
+      setupVibeListeners();
+    }
+
     return () => {
-      unsubscribeVibeListeners.forEach((unsubscribe) => unsubscribe())
+      // NOTE: We do NOT tear down vibe listeners on unmount anymore —
+      // they stay alive & update the cache. The module-level
+      // `vibeUnsubscribers` array lets us clean up only on full page
+      // unload (handled below).
+    };
+  }, []);
+
+  // ─── Full-cleanup on page unload (not component unmount) ──────
+  useEffect(() => {
+    return () => {
+      // On component unmount update the cache so next mount has data
+      if (venues.length > 0) {
+        updateCache(venues, venueVibeRatings);
+      }
+    };
+  }, [venues, venueVibeRatings]);
+
+  // Set up real-time vibe listeners (called once)
+  const setupVibeListeners = async () => {
+    try {
+      const venuesList = await SupabaseService.getVenues()
+      for (const venue of venuesList) {
+        // CRITICAL: skip venues without a valid id — Firebase will crash
+        // with "Unsupported field value: undefined" on where("==", undefined)
+        if (!venue?.id) {
+          console.warn(`[MapScreen.web] ⚠️ Skipping vibe listener setup for venue without id:`, venue?.name || 'unknown');
+          continue;
+        }
+
+        const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
+        const today = new Date()
+        today.setHours(0, 0, 0, 0)
+        const tomorrow = new Date(today)
+        tomorrow.setDate(tomorrow.getDate() + 1)
+
+        const q = query(
+          vibeRatingsRef,
+          where("venueId", "==", venue.id),
+          where("createdAt", ">=", today),
+          where("createdAt", "<", tomorrow),
+          orderBy("createdAt", "desc"),
+          limit(1)
+        )
+
+        const venueId = venue.id; // capture in closure
+        const unsubscribe = onSnapshot(
+          q,
+          (snapshot) => {
+            snapshot.docChanges().forEach((change) => {
+              if (change.type === "added" || change.type === "modified") {
+                const data = change.doc.data()
+                const rating = data.rating || 0.0
+                setVenueVibeRatings((prev) => ({
+                  ...prev,
+                  [venueId]: rating,
+                }))
+              } else if (change.type === "removed") {
+                setVenueVibeRatings((prev) => ({
+                  ...prev,
+                  [venueId]: 0.0,
+                }))
+              }
+            })
+          },
+          (error) => {
+            console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
+            setVenueVibeRatings((prev) => ({
+              ...prev,
+              [venueId]: 0.0,
+            }))
+          }
+        )
+        vibeUnsubscribers.push(unsubscribe)
+      }
+    } catch (error) {
+      console.error("Error setting up vibe listeners:", error)
     }
-  }, [])
+  }
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
@@ -158,9 +226,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     try {
       setLoading(true);
       
-      // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
-      // console.log("\n🚀 MAP WEB AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
-      
       let allVenues: any[] = [];
       let currentLastCreatedAt: string | undefined = undefined;
       let fetchCount = 0;
@@ -169,30 +234,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       
       while (true) {
         fetchCount++;
-        // console.log(`\n${'='.repeat(60)}`);
-        // console.log(`🗺️ MAP WEB BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
-        // console.log(`${'='.repeat(60)}`);
-        
         const { venues: paginatedVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, currentLastCreatedAt);
         
-        // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-        // console.log(`   • Received: ${paginatedVenues.length} venues`);
-        // console.log(`   • Has more data: ${newLastCreatedAt ? 'YES' : 'NO'}`);
-        
         if (paginatedVenues.length === 0) {
-          // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
           break;
         }
         
         allVenues = [...allVenues, ...paginatedVenues];
         currentLastCreatedAt = newLastCreatedAt ?? undefined;
         
-        // 🚀 IMMEDIATELY DISPLAY the batch to users
         setVenues(allVenues);
-        // console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
         
-        // 🎵 Load vibe ratings for this batch BEFORE moving to next batch
-        // console.log(`🎵 Loading vibe ratings for batch #${fetchCount} (${paginatedVenues.length} venues)...`);
         const today = new Date();
         for (const venue of paginatedVenues) {
           const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venue.id, today);
@@ -205,37 +257,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
           }
         }
-        // console.log(`✅ Vibe ratings loaded for batch #${fetchCount}`);
         
-        // Hide loading spinner after first batch is displayed
         if (fetchCount === 1) {
-          // console.log("🎬 First batch complete - hiding loading spinner");
           setLoading(false);
         }
         
-        // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-        // console.log(`   • Total venues loaded: ${allVenues.length}`);
-        
         if (!newLastCreatedAt) {
-          // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
           break;
         }
         
-        // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
         await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
       
-      // console.log(`\n${'='.repeat(60)}`);
-      // console.log(`🎉 MAP WEB AUTO-LOAD COMPLETE!`);
-      // console.log(`${'='.repeat(60)}`);
-      // console.log(`   • Total batches: ${fetchCount}`);
-      // console.log(`   • Total venues: ${allVenues.length}`);
-      // console.log(`${'='.repeat(60)}\n`);
-      
       setVenues(allVenues);
-      // console.log("✅ All vibe ratings already loaded per batch");
+      updateCache(allVenues, venueVibeRatings);
     } catch (error) {
-      // console.error("Error loading venues for map:", error);
       const errorRatings: Record<string, number> = {};
       venues.forEach((venue) => {
         errorRatings[venue.id] = 0.0;
@@ -379,6 +415,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           ref={scrollRef}
           style={styles.venueList}
           contentContainerStyle={isDesktop ? styles.venueGrid : undefined}
+          onContentSizeChange={onContentSizeChange}
           onScroll={onScroll}
           scrollEventThrottle={16}
           refreshControl={
@@ -391,7 +428,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           }
         >
           {filteredAndSortedVenues.map((venue) => (
-            <View key={venue.id} style={[styles.venueCard, isDesktop && styles.venueCardDesktop, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
+            <View key={venue?.id || venue?.slug || `map-venue-${Math.random()}`} style={[styles.venueCard, isDesktop && styles.venueCardDesktop, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
               <View style={styles.venueCardRow}>
                 <View style={styles.venueInfo}>
                   <Text style={styles.venueName}>{venue.name}</Text>

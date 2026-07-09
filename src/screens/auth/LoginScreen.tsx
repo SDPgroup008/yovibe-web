@@ -88,6 +88,12 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
       await signIn(email, password)
       console.log("Login successful")
 
+      // Handle returnTo param (e.g. from ticket purchase screen login link)
+      const returnTo = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') : null
+      if (returnTo) {
+        window.location.href = decodeURIComponent(returnTo)
+        return
+      }
       // Handle redirect intent (e.g. came from AddEvent or AddVenue buttons via soft-auth)
       const redirectIntent = consumeRedirectIntent()
       if (redirectIntent?.routeName) {

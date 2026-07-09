@@ -35,7 +35,8 @@ type VenuesScreenPropsInternal = {
 const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, refetch } = useCachedVenues()
-  const { onScroll, restorePosition, scrollRef } = useVenuesScroll()
+  const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useVenuesScroll()
+  console.log('[VenuesScreen] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
   const seoUrl =
@@ -62,9 +63,8 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   // Restore scroll position when screen regains focus
   useEffect(() => {
-    if (isFocused) {
-      restorePosition();
-    }
+    console.log('[VenuesScreen] 👁️ focus effect - isFocused=', isFocused);
+    if (isFocused) restorePosition();
   }, [isFocused]);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -395,9 +395,10 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         </View>
       ) : (
         <FlatList
+          key={gridColumns}
           ref={scrollRef}
           data={displayedVenues}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item?.id || item?.slug || `venue-${Math.random()}`}
           renderItem={renderVenueCard}
           numColumns={gridColumns}
           getItemLayout={(_: any, index: number) => ({
@@ -423,6 +424,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
           windowSize={5}
           removeClippedSubviews={true}
           updateCellsBatchingPeriod={50}
+          onContentSizeChange={onContentSizeChange}
           onScroll={onScroll}
         />
       )}

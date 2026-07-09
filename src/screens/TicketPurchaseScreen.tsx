@@ -142,6 +142,31 @@ const TicketPurchaseScreen: React.FC = () => {
     })
   }, [actualTicketCount])
   
+  // Save form draft to sessionStorage on field change (for login redirect restore)
+  useEffect(() => {
+    if (typeof sessionStorage === "undefined") return
+    try {
+      sessionStorage.setItem("yovibe_ticket_draft_" + eventId, JSON.stringify({
+        visitorName, visitorEmail, visitorPhone, buyerContactEmail, buyerNames, buyerEmails
+      }))
+    } catch {}
+  }, [visitorName, visitorEmail, visitorPhone, buyerContactEmail, buyerNames, buyerEmails, eventId])
+
+  // Restore form draft from sessionStorage on mount (after login redirect)
+  useEffect(() => {
+    if (typeof sessionStorage === "undefined" || !eventId) return
+    try {
+      const raw = sessionStorage.getItem("yovibe_ticket_draft_" + eventId)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft.visitorName) setVisitorName(draft.visitorName)
+      if (draft.visitorEmail) setVisitorEmail(draft.visitorEmail)
+      if (draft.visitorPhone) setVisitorPhone(draft.visitorPhone)
+      if (draft.buyerContactEmail) setBuyerContactEmail(draft.buyerContactEmail)
+      if (draft.buyerNames?.length) setBuyerNames(draft.buyerNames)
+      if (draft.buyerEmails?.length) setBuyerEmails(draft.buyerEmails)
+    } catch {}
+  }, [eventId])
   // Payment method state
   const [paymentMethod, setPaymentMethod] = useState<"mobile_money" | "credit_card" | "bank_transfer" | null>(null)
   const [mobileMoneyProvider, setMobileMoneyProvider] = useState<"mtn" | "airtel">("mtn")
@@ -239,6 +264,7 @@ const TicketPurchaseScreen: React.FC = () => {
     
     if (resultStatus === "COMPLETED") {
       setCheckingPayment(false)
+      try { sessionStorage.removeItem("yovibe_ticket_draft_" + (event ? event.id : "")) } catch {}
       setPurchaseStatus("success")
       setStatusMessage("Payment successful! Creating your ticket...")
       await createTicketAndNavigate(true, verificationResult)
@@ -1264,7 +1290,7 @@ const handleInstallmentPurchase = async () => {
 
       {!user && useInstallments && (
         <TouchableOpacity
-          onPress={() => navigation.navigate("Login")}
+          onPress={() => { if (typeof window !== "undefined") window.location.href = "/login?returnTo=" + encodeURIComponent(window.location.pathname) }}
           style={styles.loginToContinueLink}
         >
           <Text style={styles.loginToContinueText}>Login to continue</Text>

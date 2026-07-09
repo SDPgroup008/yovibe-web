@@ -460,14 +460,17 @@ const OrganiserDashboardScreen: React.FC = () => {
     return () => { supabase.removeChannel(tc); supabase.removeChannel(vc) }
   }, [eventId, fetchTicketData, fetchScanLogs])
 
-  // Load payout history from Supabase on mount
+  // Load payout history from Supabase - scoped to current event
   useEffect(() => {
-    if (!user) return
+    if (!user || !eventId) return
     const loadPayouts = async () => {
       try {
+        const { data: evTickets } = await supabase.from('tickets').select('id').eq('event_slug', eventId)
+        const eventTicketIds = new Set((evTickets || []).map((t: any) => t.id))
         const payouts = await SupabaseService.getPayoutsByOrganizer(user.id)
         if (payouts && payouts.length > 0) {
-          setPayoutHistory(payouts.map((p: any) => ({
+          const filtered = payouts.filter((p: any) => (p.ticket_ids || []).some((id: string) => eventTicketIds.has(id)))
+          setPayoutHistory(filtered.map((p: any) => ({
             date: new Date(p.request_date || p.processed_date).toLocaleDateString(),
             amount: `UGX ${(p.amount || 0).toLocaleString()}`,
             status: p.status === "Completed" ? "Completed" : "Pending",
