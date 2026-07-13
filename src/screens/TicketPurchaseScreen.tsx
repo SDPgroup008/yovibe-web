@@ -327,6 +327,8 @@ const handlePaymentComplete = async () => {
     try {
       setLoading(true)
       
+      const buyerNamesList = getBuyerNames()
+      const buyerEmailsList = getBuyerEmails()
       const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
       const buyerEmailFinal = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim()
       const buyerNameFinal = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
@@ -341,6 +343,7 @@ const handlePaymentComplete = async () => {
         eventName: event!.name,
         quantity: actualTicketCount,
         amount: total,
+        attendeeNames: buyerNamesList,
       })
       console.log("✅ Created pending fulfillment:", fulfillmentId)
       
@@ -348,8 +351,6 @@ const handlePaymentComplete = async () => {
 
       const includePhoto = securityPhotoEnabled && photoCaptured
       
-      const buyerNamesList = getBuyerNames()
-      const buyerEmailsList = getBuyerEmails()
       const ticketCount = actualTicketCount
 
       const payerEmail = visitorEmail.trim() || buyerEmails[0]?.trim()

@@ -390,7 +390,6 @@ private static async createSingleTicket(
         const result = await supabase.from("tickets_api").insert({ 
           ...ticket, 
           event_slug: event.slug || event.id,
-          seat_number: seatNumber ?? null,
         }).select("id").single()
         if (result.error) throw result.error
         return result.data
@@ -1137,26 +1136,34 @@ private static async createSingleTicket(
     }
   }
 
-  static async recoverTicket(
+  // ============ Automatic Retry Mechanism ============
+
+  /**
+   * Retry a single fulfillment with exponential backoff
+   * Returns true if successfully retried, false if should be marked as failed
+   */
+  static async retryFulfillment(
     fulfillment: PendingFulfillment,
-    adminEmail: string,
-    attendeeNames?: string[]
-  ): Promise<{ success: boolean; ticketIds: string[]; error?: string }> {
-    const fulfillmentId = fulfillment.id
-    console.log(`[ManualRecovery:${fulfillmentId}] Stage: starting — manual recovery initiated`)
+    maxRetries: number = 3
+  ): Promise<{ success: boolean; error?: string; ticketsCreated?: string[] }> {
+    const { id: fulfillmentId, attemptCount, lastError } = fulfillment
+    
+    if (attemptCount >= maxRetries) {
+      return { 
+        success: false, 
+        error: `Max retries (${maxRetries}) exceeded. Previous error: ${lastError || "Unknown"}` 
+      }
+    }
 
     try {
       const event = await SupabaseService.getEventById(fulfillment.eventId)
       if (!event) {
-        throw new Error(`Event not found: ${fulfillment.eventId}`)
+        return { success: false, error: `Event not found: ${fulfillment.eventId}` }
       }
 
-      const namesToUse = attendeeNames ?? fulfillment.attendeeNames ?? [fulfillment.buyerName || "Attendee"]
+      const namesToUse = fulfillment.attendeeNames ?? [fulfillment.buyerName || "Attendee"]
       const ticketsToCreate = fulfillment.quantity
-      const createdTickets: Ticket[] = []
       const createdTicketIds: string[] = []
-
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — starting (${ticketsToCreate} tickets)`)
 
       for (let i = 0; i < ticketsToCreate; i++) {
         const ticket = await this.createSingleTicket(
@@ -1173,34 +1180,222 @@ private static async createSingleTicket(
           fulfillment.buyerId ?? undefined,
           fulfillment.buyerEmail
         )
-        createdTickets.push(ticket)
         createdTicketIds.push(ticket.id)
-        console.log(`[ManualRecovery:${fulfillmentId}] Ticket created: ${ticket.id}`)
       }
 
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: qr-upload — starting (${createdTickets.length} QR codes)`)
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      for (const ticketId of createdTicketIds) {
+        await fetch(`${baseUrl}/.netlify/functions/send-ticket-email`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            buyerEmail: fulfillment.buyerEmail,
+            buyerName: namesToUse[0] || "Attendee",
+            eventName: event.name,
+            ticketType: "Standard",
+            venue: event.venueName,
+            date: event.date.toISOString().split("T")[0],
+            time: event.time,
+            quantity: 1,
+            amountPaid: (fulfillment.amount / ticketsToCreate).toLocaleString(),
+            ticketRef: ticketId,
+            qrCodeDataUrl: "",
+          }),
+        })
+      }
 
-      for (let i = 0; i < createdTickets.length; i++) {
-        const ticket = createdTickets[i]
-        try {
-          if (ticket.qrCodeDataUrl) {
-            await uploadQRCode(ticket.qrCodeDataUrl, ticket.id)
-            console.log(`[ManualRecovery:${fulfillmentId}] QR code uploaded for ticket ${ticket.id}`)
+      await this.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
+        ticketIds: createdTicketIds,
+        attemptCount: attemptCount + 1,
+      })
+
+      return { success: true, ticketsCreated: createdTicketIds }
+    } catch (error: any) {
+      const errorMsg = error instanceof Error ? error.message : String(error)
+      await this.updateFulfillmentStatus(fulfillmentId, "failed", {
+        attemptCount: attemptCount + 1,
+      }, errorMsg)
+      return { success: false, error: errorMsg }
+    }
+  }
+
+  /**
+   * Get all fulfillments that need retry (older than 5 minutes, not yet failed)
+   */
+  static async getStuckFulfillments(
+    maxAgeMinutes: number = 5,
+    excludeFailed: boolean = true
+  ): Promise<PendingFulfillment[]> {
+    const cutoffTime = new Date(Date.now() - maxAgeMinutes * 60 * 1000)
+    
+    const { data, error } = await supabase
+      .from("pending_ticket_fulfillments")
+      .select("*")
+      .gt("created_at", cutoffTime.toISOString())
+      .neq("status", "fulfilled")
+      .order("created_at", { ascending: true })
+
+    if (error) throw error
+    
+    let fulfillments = (data || []).map(this.rowToFulfillment)
+    
+    if (excludeFailed) {
+      fulfillments = fulfillments.filter(f => f.status !== "failed")
+    }
+    
+    return fulfillments
+  }
+
+  /**
+   * Process stuck fulfillments automatically
+   * Call this from a cron job or background task
+   */
+  static async processStuckFulfillments(
+    batchSize: number = 10,
+    maxRetries: number = 3
+  ): Promise<{ processed: number; succeeded: number; failed: number }> {
+    const fulfillments = await this.getStuckFulfillments(5)
+    
+    const batch = fulfillments.slice(0, batchSize)
+    let succeeded = 0
+    let failed = 0
+
+    for (const fulfillment of batch) {
+      const result = await this.retryFulfillment(fulfillment, maxRetries)
+      if (result.success) {
+        succeeded++
+      } else {
+        failed++
+      }
+    }
+
+    return { processed: batch.length, succeeded, failed }
+  }
+
+  // ============ Manual Recovery ============
+
+  static async recoverTicket(
+    fulfillment: PendingFulfillment,
+    adminEmail: string,
+    attendeeNames?: string[]
+  ): Promise<{ success: boolean; ticketIds: string[]; error?: string }> {
+    const fulfillmentId = fulfillment.id
+    const existingTicketIds = fulfillment.ticketIds || []
+
+    console.log(`[ManualRecovery:${fulfillmentId}] Stage: starting — manual recovery initiated${existingTicketIds.length > 0 ? ` (resuming from previous attempt, ${existingTicketIds.length} tickets exist)` : ''}`)
+
+    try {
+      const event = await SupabaseService.getEventById(fulfillment.eventId)
+      if (!event) {
+        throw new Error(`Event not found: ${fulfillment.eventId}`)
+      }
+
+      const namesToUse = attendeeNames ?? fulfillment.attendeeNames ?? [fulfillment.buyerName || "Attendee"]
+      const ticketsToCreate = fulfillment.quantity
+
+      let createdTickets: Ticket[] = []
+      let createdTicketIds: string[] = []
+      let needsTicketCreation = true
+
+      // Phase 1: Try to find existing tickets from:
+      //   a) ticketIds stored in the fulfillment record, OR
+      //   b) fallback lookup by buyerEmail + eventId (for stranded records where ticketIds weren't saved)
+      if (existingTicketIds.length > 0) {
+        // Case a: Resume from stored ticket IDs
+        console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — ${existingTicketIds.length} tickets already exist, fetching from DB`)
+        await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
+          attemptCount: fulfillment.attemptCount,
+        }, `Resuming recovery — ${existingTicketIds.length} tickets already created...`)
+
+        for (const ticketId of existingTicketIds) {
+          const { data, error } = await supabase
+            .from("tickets")
+            .select("*")
+            .eq("id", ticketId)
+            .single()
+
+          if (error || !data) {
+            console.warn(`[ManualRecovery:${fulfillmentId}] Could not fetch existing ticket ${ticketId}: ${error?.message || 'not found'}`)
+            continue
           }
-        } catch (err) {
-          const errorMsg = `QR upload failed for ticket ${ticket.id}: ${err}`
-          console.error(`[ManualRecovery:${fulfillmentId}] Stage: qr-upload — FAILED`, err)
-          await this.updateFulfillmentStatus(fulfillmentId, "failed", {
-            attemptCount: fulfillment.attemptCount + 1,
-          }, errorMsg)
-          return { success: false, ticketIds: createdTicketIds, error: errorMsg }
+          createdTickets.push(this.rowToTicket(data))
+        }
+        createdTicketIds = existingTicketIds.slice()
+
+        if (createdTickets.length === 0) {
+          console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — no valid existing tickets found, will try fallback lookup`)
+        } else {
+          needsTicketCreation = false
+          console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — loaded ${createdTickets.length} existing tickets from DB`)
         }
       }
 
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails)`)
+      // Case b: No stored ticket IDs, attempt fallback lookup by buyer email + event
+      if (needsTicketCreation && fulfillment.buyerEmail && fulfillment.eventId) {
+        console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no stored ticket IDs, searching by buyer email + event`)
+        const { data: foundTickets, error: findError } = await supabase
+          .from("tickets")
+          .select("*")
+          .eq("buyer_email", fulfillment.buyerEmail)
+          .or(`event_id.eq.${fulfillment.eventId},event_slug.eq.${fulfillment.eventId}`)
+          .limit(fulfillment.quantity)
 
-      for (const ticket of createdTickets) {
-        try {
+        if (!findError && foundTickets && foundTickets.length > 0) {
+          const mapped = foundTickets.map(t => this.rowToTicket(t))
+          createdTickets.push(...mapped)
+          createdTicketIds.push(...mapped.map(t => t.id))
+          needsTicketCreation = false
+          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — found ${mapped.length} existing tickets via email+event lookup`)
+
+          // Save these IDs to the fulfillment so next retry uses the stored IDs
+          await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
+            attemptCount: fulfillment.attemptCount,
+            ticketIds: createdTicketIds,
+          }, `Found ${createdTicketIds.length} existing tickets, proceeding to email send...`)
+        } else {
+          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no existing tickets found by email+event, will create new ones`)
+        }
+      }
+
+      if (needsTicketCreation) {
+        console.log(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — starting (${ticketsToCreate} tickets)`)
+        await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
+          attemptCount: fulfillment.attemptCount,
+        }, "Creating tickets...")
+
+        for (let i = 0; i < ticketsToCreate; i++) {
+          const ticket = await this.createSingleTicket(
+            event,
+            namesToUse[i] || namesToUse[0] || "Attendee",
+            fulfillment.buyerEmail,
+            1,
+            "",
+            fulfillment.amount / ticketsToCreate,
+            undefined,
+            false,
+            undefined,
+            undefined,
+            fulfillment.buyerId ?? undefined,
+            fulfillment.buyerEmail
+          )
+          createdTickets.push(ticket)
+          createdTicketIds.push(ticket.id)
+          console.log(`[ManualRecovery:${fulfillmentId}] Ticket created: ${ticket.id}`)
+        }
+
+        // QR code was already uploaded within createSingleTicket (Step 7).
+        // The qrCodeDataUrl is now the hosted R2 URL for use in the email, no re-upload needed.
+        console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-preparation — QR codes already uploaded during ticket creation`)
+        await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
+          attemptCount: fulfillment.attemptCount + 1,
+          ticketIds: createdTicketIds,
+        }, `Created ${createdTicketIds.length} tickets, proceeding to email send...`)
+      }
+
+      console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails, sending in parallel with 120s timeout)`)
+
+      const emailResults = await Promise.allSettled(
+        createdTickets.map(async (ticket) => {
           const emailPayload = {
             buyerEmail: fulfillment.buyerEmail,
             buyerName: ticket.buyerName,
@@ -1216,24 +1411,53 @@ private static async createSingleTicket(
             photoUploadLink: ticket.photoUploadToken ? `${FUNCTIONS_BASE_URL}/.netlify/functions/upload-buyer-photo?ticketId=${ticket.id}&token=${ticket.photoUploadToken}` : undefined,
           }
 
-          const response = await fetch(`${FUNCTIONS_BASE_URL}/.netlify/functions/send-ticket-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(emailPayload),
-          })
+          // Use AbortController with 120s timeout (accounts for Netlify cold starts + PDF generation + Resend)
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 120000)
 
-          if (!response.ok) {
-            throw new Error(`Email send failed: ${response.status}`)
+          const functionUrl = FUNCTIONS_BASE_URL
+            ? `${FUNCTIONS_BASE_URL}/.netlify/functions/send-ticket-email`
+            : `/.netlify/functions/send-ticket-email`
+
+          try {
+            const response = await fetch(functionUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(emailPayload),
+              signal: controller.signal,
+            })
+
+            clearTimeout(timeoutId)
+
+            if (!response.ok) {
+              throw new Error(`${response.status} ${response.statusText}`)
+            }
+            return { ticketId: ticket.id, success: true }
+          } catch (err) {
+            clearTimeout(timeoutId)
+            throw err
           }
-          console.log(`[ManualRecovery:${fulfillmentId}] Email sent for ticket ${ticket.id}`)
-        } catch (err) {
-          const errorMsg = `Email send failed for ticket ${ticket.id}: ${err}`
-          console.error(`[ManualRecovery:${fulfillmentId}] Stage: email-send — FAILED`, err)
-          await this.updateFulfillmentStatus(fulfillmentId, "failed", {
-            attemptCount: fulfillment.attemptCount + 1,
-          }, errorMsg)
-          return { success: false, ticketIds: createdTicketIds, error: errorMsg }
+        })
+      )
+
+      const emailErrors: string[] = []
+      for (const result of emailResults) {
+        if (result.status === "fulfilled") {
+          console.log(`[ManualRecovery:${fulfillmentId}] Email sent for ticket ${result.value.ticketId}`)
+        } else {
+          const msg = result.reason instanceof Error ? result.reason.message : String(result.reason)
+          emailErrors.push(msg)
+          console.error(`[ManualRecovery:${fulfillmentId}] Email send failed:`, msg)
         }
+      }
+
+      if (emailErrors.length > 0) {
+        const errorMsg = `Email send failed for ${emailErrors.length}/${createdTickets.length} tickets: ${emailErrors.join("; ")}`
+        console.error(`[ManualRecovery:${fulfillmentId}] Stage: email-send — FAILED`, errorMsg)
+        await this.updateFulfillmentStatus(fulfillmentId, "failed", {
+          attemptCount: fulfillment.attemptCount + 1,
+        }, errorMsg)
+        return { success: false, ticketIds: createdTicketIds, error: errorMsg }
       }
 
       console.log(`[ManualRecovery:${fulfillmentId}] Stage: fulfillment — completing (${createdTicketIds.length} tickets)`)
@@ -1255,6 +1479,107 @@ private static async createSingleTicket(
         attemptCount: fulfillment.attemptCount + 1,
       }, errorMsg)
       return { success: false, ticketIds: [], error: errorMsg }
+    }
+  }
+
+  // ============ Cleanup Old Records ============
+
+  /**
+   * Clean up old fulfilled/cancelled pending fulfillments
+   * Call this from a cron job or nightly cleanup task
+   */
+  static async cleanupOldFulfillments(
+    olderThanDays: number = 30,
+    statusesToClean: ("fulfilled" | "failed" | "cancelled")[] = ["fulfilled", "failed"]
+  ): Promise<{ deleted: number; error?: string }> {
+    const cutoffDate = new Date()
+    cutoffDate.setDate(cutoffDate.getDate() - olderThanDays)
+
+    try {
+      let totalDeleted = 0
+
+      for (const status of statusesToClean) {
+        const { data: beforeDelete, error: countError } = await supabase
+          .from("pending_ticket_fulfillments")
+          .select("*", { count: "exact", head: true })
+          .eq("status", status)
+          .lt("updated_at", cutoffDate.toISOString())
+
+        if (countError) {
+          console.error(`[Cleanup] Error counting ${status} records:`, countError)
+          continue
+        }
+
+        const count = beforeDelete?.length || 0
+
+        const { error: deleteError } = await supabase
+          .from("pending_ticket_fulfillments")
+          .delete()
+          .eq("status", status)
+          .lt("updated_at", cutoffDate.toISOString())
+
+        if (deleteError) {
+          console.error(`[Cleanup] Error deleting ${status} records:`, deleteError)
+          continue
+        }
+
+        totalDeleted += count
+      }
+
+      console.log(`[Cleanup] Deleted ${totalDeleted} old fulfillment records`)
+      return { deleted: totalDeleted }
+    } catch (error: any) {
+      console.error("[Cleanup] Error cleaning up fulfillments:", error)
+      return { deleted: 0, error: error.message || "Unknown error" }
+    }
+  }
+
+  /**
+   * Get summary of pending fulfillments by status
+   */
+  static async getFulfillmentSummary(): Promise<{
+    total: number
+    paymentConfirmed: number
+    fulfilling: number
+    fulfilled: number
+    failed: number
+    oldestFailed: Date | null
+  }> {
+    const statuses = ["payment_confirmed", "fulfilling", "fulfilled", "failed"] as const
+    const counts: Record<string, number> = {}
+    let total = 0
+
+    for (const status of statuses) {
+      const { data, error } = await supabase
+        .from("pending_ticket_fulfillments")
+        .select("*", { count: "exact", head: true })
+        .eq("status", status)
+
+      if (!error && data) {
+        const count = data.length
+        counts[status] = count
+        total += count
+      } else {
+        counts[status] = 0
+      }
+    }
+
+    const { data: failedData } = await supabase
+      .from("pending_ticket_fulfillments")
+      .select("created_at")
+      .eq("status", "failed")
+      .order("created_at", { ascending: true })
+      .limit(1)
+
+    const oldestFailed = failedData?.[0]?.created_at ? new Date(failedData[0].created_at) : null
+
+    return {
+      total,
+      paymentConfirmed: counts["payment_confirmed"] || 0,
+      fulfilling: counts["fulfilling"] || 0,
+      fulfilled: counts["fulfilled"] || 0,
+      failed: counts["failed"] || 0,
+      oldestFailed,
     }
   }
 }
