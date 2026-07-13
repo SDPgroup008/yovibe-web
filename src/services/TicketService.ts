@@ -1331,21 +1331,26 @@ private static async createSingleTicket(
       }
 
       // Case b: No stored ticket IDs, attempt fallback lookup by buyer email + event
+      // Query tickets_api view because it has camelCase columns that match the Ticket model
       if (needsTicketCreation && fulfillment.buyerEmail && fulfillment.eventId) {
-        console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no stored ticket IDs, searching by buyer email + event`)
+        console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no stored ticket IDs, searching tickets_api by buyer email + event`)
         const { data: foundTickets, error: findError } = await supabase
-          .from("tickets")
+          .from("tickets_api")
           .select("*")
-          .eq("buyer_email", fulfillment.buyerEmail)
-          .or(`event_id.eq.${fulfillment.eventId},event_slug.eq.${fulfillment.eventId}`)
+          .eq("buyerEmail", fulfillment.buyerEmail)
+          .eq("eventId", fulfillment.eventId)
           .limit(fulfillment.quantity)
 
         if (!findError && foundTickets && foundTickets.length > 0) {
           const mapped = foundTickets.map(t => this.rowToTicket(t))
+          // Log QR data URL availability for debugging
+          for (const t of mapped) {
+            console.log(`[ManualRecovery:${fulfillmentId}] Ticket ${t.id}: qrCodeDataUrl=${t.qrCodeDataUrl ? t.qrCodeDataUrl.substring(0, 80) + '...' : 'MISSING'}, ticketRef=${t.ticketRef || 'MISSING'}`)
+          }
           createdTickets.push(...mapped)
           createdTicketIds.push(...mapped.map(t => t.id))
           needsTicketCreation = false
-          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — found ${mapped.length} existing tickets via email+event lookup`)
+          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — found ${mapped.length} existing tickets via tickets_api email+event lookup`)
 
           // Save these IDs to the fulfillment so next retry uses the stored IDs
           await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
@@ -1394,20 +1399,47 @@ private static async createSingleTicket(
 
       console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails, sending in parallel with 120s timeout)`)
 
+      // Pre-generate QR codes for any tickets that don't have one
+      // (old recovery tickets may have null qrCodeDataUrl in the tickets_api table)
+      for (let i = 0; i < createdTickets.length; i++) {
+        const ticket = createdTickets[i]
+        if (!ticket.qrCodeDataUrl) {
+          try {
+            const qrResult = await this.generateSecureQRCode(event.id, event.date || new Date())
+            ticket.qrCodeDataUrl = qrResult.qrCodeDataUrl
+            ticket.qrCode = qrResult.qrCode
+            console.log(`[ManualRecovery:${fulfillmentId}] Generated fresh QR for ticket ${ticket.id}: ${qrResult.qrCode}`)
+          } catch (err) {
+            console.warn(`[ManualRecovery:${fulfillmentId}] Could not generate QR for ticket ${ticket.id}:`, err)
+          }
+        }
+      }
+
       const emailResults = await Promise.allSettled(
         createdTickets.map(async (ticket) => {
+          // Format date safely — event.date may be a Date object or ISO string
+          const eventDate = event.date instanceof Date ? event.date : new Date(event.date || Date.now())
+          const formattedDate = !isNaN(eventDate.getTime()) ? eventDate.toISOString().split("T")[0] : "TBD"
+          const formattedTime = event.time || "TBD"
+
+          // Fallback for ticketRef — old tickets may not have it stored in the tickets table
+          const ticketRef = ticket.ticketRef || ticket.id
+
+          // Must have a qrCodeDataUrl — generate one now if still missing
+          const qrCodeDataUrl = ticket.qrCodeDataUrl || ""
+
           const emailPayload = {
             buyerEmail: fulfillment.buyerEmail,
-            buyerName: ticket.buyerName,
-            eventName: event.name,
+            buyerName: ticket.buyerName || "Attendee",
+            eventName: event.name || "Event",
             ticketType: ticket.entryFeeType || "Standard",
-            venue: event.venueName,
-            date: event.date.toISOString().split("T")[0],
-            time: event.time,
+            venue: event.venueName || "",
+            date: formattedDate,
+            time: formattedTime,
             quantity: 1,
-            amountPaid: ticket.totalAmount.toLocaleString(),
-            ticketRef: ticket.ticketRef,
-            qrCodeDataUrl: ticket.qrCodeDataUrl,
+            amountPaid: (ticket.totalAmount || 0).toLocaleString(),
+            ticketRef,
+            qrCodeDataUrl,
             photoUploadLink: ticket.photoUploadToken ? `${FUNCTIONS_BASE_URL}/.netlify/functions/upload-buyer-photo?ticketId=${ticket.id}&token=${ticket.photoUploadToken}` : undefined,
           }
 
@@ -1430,7 +1462,10 @@ private static async createSingleTicket(
             clearTimeout(timeoutId)
 
             if (!response.ok) {
-              throw new Error(`${response.status} ${response.statusText}`)
+              // Read the 400 response body to see which fields are missing
+              let bodyText = ""
+              try { bodyText = await response.text() } catch {}
+              throw new Error(`${response.status} ${bodyText || response.statusText}`)
             }
             return { ticketId: ticket.id, success: true }
           } catch (err) {
