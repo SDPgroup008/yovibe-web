@@ -19,6 +19,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import ImagePickerService from "../services/ImagePickerService"
 import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
+import { uploadToR2 } from "../services/R2Service"
 import { useAuth } from "../contexts/AuthContext"
 import { getTemplatesByOrientation, type TicketTemplateConfig } from "../constants/ticketTemplates"
 import { generateEditorHTML, generatePreviewHTML, defaultLayout, type TicketLayout } from "../services/TicketPDFService"
@@ -37,6 +38,8 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   if (isTablet) return medium;
   return small;
 };
+
+type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; qr_position?: "top" | "bottom" | "center" | "left" | "right"; dimensions: { width: number; height: number } } }
 
 // ─── Interactive ticket editor (web only) ────────────────────────────────────
 const TicketEditor: React.FC<{
@@ -216,7 +219,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeSeatMapType, setNewFeeSeatMapType] = useState<"none" | "numbered" | "cinema">("none")
   const [newFeeSeatRows, setNewFeeSeatRows] = useState("")
   const [newFeeSeatCols, setNewFeeSeatCols] = useState("")
-  const [entryFees, setEntryFees] = useState<Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>>([] as Array<{ name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } }>)
+  const [entryFees, setEntryFees] = useState<EntryFee[]>([])
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
   const [newFeeIsTable, setNewFeeIsTable] = useState(false)
@@ -344,6 +347,87 @@ const AddEventScreen: React.FC<any> = (props) => {
     }
   }
 
+  const uploadFeeBackgroundsToR2 = async (fees: EntryFee[], eventId: string): Promise<EntryFee[]> => {
+    const updatedFees = await Promise.all(fees.map(async (fee) => {
+      if (fee.ticketDesign?.enabled && fee.ticketDesign.source === "upload" && fee.ticketDesign.background_url) {
+        const bgUrl = fee.ticketDesign.background_url
+        
+        if (!bgUrl) return fee
+        
+        const isR2Url = bgUrl.includes('.r2.') || bgUrl.includes('/ticket-designs/')
+        if (isR2Url) {
+          console.log(`Fee background for ${fee.name} already has R2 URL`)
+          return fee
+        }
+        
+        try {
+          console.log(`Uploading fee background for ${fee.name} to R2...`)
+          const contentTypeMatch = bgUrl.match(/^data:(image\/[a-z]+)/i)
+          const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png'
+          
+          const ext = contentType.split('/')[1] || 'png'
+          const filename = `${eventId}_${fee.name.replace(/[^a-z0-9]/gi, '_')}_bg.${ext}`
+          
+          const result = await uploadToR2({
+            path: 'ticket-designs',
+            filename,
+            contentType,
+            body: bgUrl,
+          })
+          
+          console.log(`Fee background uploaded: ${result.url}`)
+          return {
+            ...fee,
+            ticketDesign: {
+              ...fee.ticketDesign,
+              background_url: result.url,
+            }
+          }
+        } catch (error) {
+          console.error(`Error uploading fee background for ${fee.name}:`, error)
+          return fee
+        }
+      }
+      return fee
+    }))
+    return updatedFees
+  }
+
+  const uploadEventDesignBackgroundToR2 = async (eventId: string): Promise<string | null> => {
+    if (!customTicketDesign || designSource !== "upload" || !uploadedBackgroundUrl) {
+      return null
+    }
+    
+    const bgUrl = uploadedBackgroundUrl
+    const isR2Url = bgUrl.includes('.r2.') || bgUrl.includes('/ticket-designs/')
+    if (isR2Url) {
+      console.log("Event design background already has R2 URL")
+      return bgUrl
+    }
+    
+    try {
+      console.log("Uploading event ticket design background to R2...")
+      const contentTypeMatch = bgUrl.match(/^data:(image\/[a-z]+)/i)
+      const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png'
+      
+      const ext = contentType.split('/')[1] || 'png'
+      const filename = `${eventId}_event_bg.${ext}`
+      
+      const result = await uploadToR2({
+        path: 'ticket-designs',
+        filename,
+        contentType,
+        body: bgUrl,
+      })
+      
+      console.log("Event design background uploaded:", result.url)
+      return result.url
+    } catch (error) {
+      console.error("Error uploading event design background:", error)
+      return null
+    }
+  }
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value)
     setDate(newDate)
@@ -398,7 +482,7 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Error", "Please upload a background image for the ticket design")
       return
     }
-    const fee: { name: string; amount: string; isTable?: boolean; tableSize?: number; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number } } } = {
+    const fee: EntryFee = {
       name: newFeeName,
       amount: newFeeAmount,
     }
@@ -607,7 +691,45 @@ const AddEventScreen: React.FC<any> = (props) => {
         const selectedImage = result.assets[0]
         console.log("Fee background image selected:", selectedImage.uri.substring(0, 50) + "...")
         setNewFeeBackgroundFile(selectedImage)
-        setNewFeeUploadedBackgroundUrl(selectedImage.uri)
+        
+        if (selectedImage.uri.startsWith('data:')) {
+          setNewFeeUploadedBackgroundUrl(selectedImage.uri)
+        } else {
+          try {
+            console.log("Uploading fee background to R2...")
+            const response = await fetch(selectedImage.uri)
+            const blob = await response.blob()
+            const reader = new FileReader()
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string)
+              reader.onerror = () => reject(new Error('Failed to read image'))
+              reader.readAsDataURL(blob)
+            })
+            
+            const uploaded = await uploadToR2({
+              path: 'ticket-designs',
+              filename: `fee-bg-${Date.now()}.png`,
+              contentType: 'image/png',
+              body: dataUrl,
+            })
+            console.log("Fee background uploaded to R2:", uploaded.url)
+            setNewFeeUploadedBackgroundUrl(uploaded.url)
+          } catch (uploadError) {
+            console.warn("Failed to upload fee background to R2, storing data URL:", uploadError)
+            try {
+              const response = await fetch(selectedImage.uri)
+              const blob = await response.blob()
+              const reader = new FileReader()
+              reader.onload = () => {
+                setNewFeeUploadedBackgroundUrl(reader.result as string)
+              }
+              reader.readAsDataURL(blob)
+            } catch (e) {
+              console.error("Failed to convert image to data URL:", e)
+              Alert.alert("Error", "Failed to process image. Please try again.")
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Error picking fee background image:", error)
@@ -628,7 +750,45 @@ const AddEventScreen: React.FC<any> = (props) => {
         const selectedImage = result.assets[0]
         console.log("Event background image selected:", selectedImage.uri.substring(0, 50) + "...")
         setEventBackgroundFile(selectedImage)
-        setUploadedBackgroundUrl(selectedImage.uri)
+        
+        if (selectedImage.uri.startsWith('data:')) {
+          setUploadedBackgroundUrl(selectedImage.uri)
+        } else {
+          try {
+            console.log("Uploading event background to R2...")
+            const response = await fetch(selectedImage.uri)
+            const blob = await response.blob()
+            const reader = new FileReader()
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              reader.onload = () => resolve(reader.result as string)
+              reader.onerror = () => reject(new Error('Failed to read image'))
+              reader.readAsDataURL(blob)
+            })
+            
+            const uploaded = await uploadToR2({
+              path: 'ticket-designs',
+              filename: `event-bg-${Date.now()}.png`,
+              contentType: 'image/png',
+              body: dataUrl,
+            })
+            console.log("Event background uploaded to R2:", uploaded.url)
+            setUploadedBackgroundUrl(uploaded.url)
+          } catch (uploadError) {
+            console.warn("Failed to upload event background to R2, storing data URL:", uploadError)
+            try {
+              const response = await fetch(selectedImage.uri)
+              const blob = await response.blob()
+              const reader = new FileReader()
+              reader.onload = () => {
+                setUploadedBackgroundUrl(reader.result as string)
+              }
+              reader.readAsDataURL(blob)
+            } catch (e) {
+              console.error("Failed to convert image to data URL:", e)
+              Alert.alert("Error", "Failed to process image. Please try again.")
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Error picking event background image:", error)
@@ -757,6 +917,28 @@ const AddEventScreen: React.FC<any> = (props) => {
         }
       }
 
+      let processedEntryFees = entryFees
+      let processedEventDesignBg: string | null = null
+
+      if (entryFees.length > 0) {
+        console.log("Processing entry fees and uploading backgrounds...")
+        try {
+          processedEntryFees = await uploadFeeBackgroundsToR2(entryFees, `event-${Date.now()}`)
+        } catch (error) {
+          console.error("Error processing fee backgrounds:", error)
+          Alert.alert("Warning", "Some ticket design backgrounds could not be uploaded")
+        }
+      }
+
+      if (customTicketDesign && designSource === "upload" && uploadedBackgroundUrl) {
+        console.log("Processing event ticket design background...")
+        try {
+          processedEventDesignBg = await uploadEventDesignBackgroundToR2(`event-${Date.now()}`)
+        } catch (error) {
+          console.error("Error processing event design background:", error)
+        }
+      }
+
       const eventData = {
         name,
         description,
@@ -770,18 +952,18 @@ const AddEventScreen: React.FC<any> = (props) => {
         location: location.toUpperCase(),
         ticketContacts,
         paymentMethods,
-        entryFees: isFreeEntry ? [] : entryFees,
+        entryFees: isFreeEntry ? [] : processedEntryFees,
         attendees: [],
         createdBy: user.id,
         createdByType: user.userType,
-        priceIndicator: entryFees.length > 0 ? Math.min(...entryFees.map((fee) => parseFloat(fee.amount))) : 0,
+        priceIndicator: processedEntryFees.length > 0 ? Math.min(...processedEntryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
         ticket_design: customTicketDesign ? {
           enabled: true,
           orientation: ticketOrientation,
           source: designSource,
           template_id: designSource === "template" ? selectedTemplateId : null,
-          background_url: designSource === "upload" ? uploadedBackgroundUrl : null,
+          background_url: processedEventDesignBg || (designSource === "upload" ? uploadedBackgroundUrl : null),
           dimensions: ticketOrientation === "portrait"
             ? { width: 1080, height: 1920 }
             : { width: 1920, height: 1080 },

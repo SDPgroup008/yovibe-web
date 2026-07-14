@@ -138,8 +138,10 @@ function buildTicketEmailHtml({
   };
   
   // Use uploaded background if available
+  // Note: data URLs contain ' characters in the base64, so we need to use double quotes
+  // and ensure the URL doesn't break the CSS
   const bgStyle = ticketDesign?.source === "upload" && ticketDesign.background_url
-    ? `background-image:url('${ticketDesign.background_url}');background-size:cover;background-position:center;`
+    ? `background-image:url("${ticketDesign.background_url}");background-size:cover;background-position:center;`
     : `background:${colors.bg};`;
 
   const photoLinkSection = photoUploadLink

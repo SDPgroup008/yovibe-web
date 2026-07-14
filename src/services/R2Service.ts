@@ -274,6 +274,35 @@ export async function uploadBuyerPhoto(
 }
 
 /**
+ * Upload ticket design background to R2
+ */
+export async function uploadTicketDesignBackground(
+  backgroundDataUrl: string,
+  eventId: string,
+  feeName: string
+): Promise<{ url: string; key: string }> {
+  try {
+    // Extract content type from data URL
+    const contentTypeMatch = backgroundDataUrl.match(/^data:(image\/[a-z]+)/i);
+    const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png';
+    
+    // Extract extension from content type
+    const extension = contentType.split('/')[1] || 'png';
+    const filename = `${eventId}_${feeName}_background.${extension}`;
+    
+    return await uploadToR2({
+      path: 'ticket-designs',
+      filename,
+      contentType,
+      body: backgroundDataUrl,
+    });
+  } catch (error) {
+    console.error('[R2Service] Ticket design background upload error:', error);
+    throw error;
+  }
+}
+
+/**
  * Batch upload multiple files to R2
  */
 export async function uploadBatch(
