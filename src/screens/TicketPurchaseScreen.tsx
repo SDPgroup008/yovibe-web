@@ -409,6 +409,9 @@ const handlePaymentComplete = async () => {
             ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
             : undefined
           
+          // Find the ticket design from the entry fee
+          const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
+          
           await fetch(`/.netlify/functions/send-ticket-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -423,6 +426,7 @@ const handlePaymentComplete = async () => {
               ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
               photoUploadLink,
+              ticketDesign,
             }),
           })
           console.log(`Email sent for ticket ${ticket.id}`)

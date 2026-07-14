@@ -1184,6 +1184,8 @@ console.error("❌ Error details:", updateError.details)
       }
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      // Get ticket design from first entry fee as fallback for bulk fulfillment
+      const bulkTicketDesign = event.entryFees?.[0]?.ticketDesign
       for (const ticketId of createdTicketIds) {
         await fetch(`${baseUrl}/.netlify/functions/send-ticket-email`, {
           method: "POST",
@@ -1200,6 +1202,7 @@ console.error("❌ Error details:", updateError.details)
             amountPaid: (fulfillment.amount / ticketsToCreate).toLocaleString(),
             ticketRef: ticketId,
             qrCodeDataUrl: "",
+            ticketDesign: bulkTicketDesign,
           }),
         })
       }
@@ -1441,6 +1444,8 @@ console.error("❌ Error details:", updateError.details)
             ticketRef,
             qrCodeDataUrl,
             photoUploadLink: ticket.photoUploadToken ? `${FUNCTIONS_BASE_URL}/.netlify/functions/upload-buyer-photo?ticketId=${ticket.id}&token=${ticket.photoUploadToken}` : undefined,
+            // Include ticket design from entry fee
+            ticketDesign: event.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,
           }
 
           // Use AbortController with 120s timeout (accounts for Netlify cold starts + PDF generation + Resend)

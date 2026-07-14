@@ -867,6 +867,9 @@ class SupabaseService {
 
 async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     try {
+      console.log(`[addEvent] 📝 Creating event: ${eventData.name}`);
+      console.log(`[addEvent] ticket_design value:`, JSON.stringify(eventData.ticket_design));
+      console.log(`[addEvent] customTicketDesign would be:`, eventData.ticket_design?.enabled);
       if (!(eventData.date instanceof Date) || isNaN(eventData.date.getTime())) {
         throw new Error("Invalid event date provided")
       }
@@ -919,6 +922,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           .single()
 
         if (!error) {
+          console.log(`[addEvent] ✅ Event created successfully with slug: ${data.slug}`);
           return data.slug
         }
 

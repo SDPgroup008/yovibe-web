@@ -234,14 +234,17 @@ export class InstallmentService {
       .update({ ticket_ids: ticketIds, updated_at: new Date().toISOString() })
       .eq("id", plan.id)
 
-    // Send ticket emails
+// Send ticket emails
     const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
     for (const ticket of tickets) {
       try {
         const photoUploadLink =
           ticket.photoUploadToken && !ticket.buyerPhotoUrl
-            ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
-            : undefined
+          ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
+          : undefined
+
+        // Find the ticket design from the entry fee
+        const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
 
         await fetch(`/.netlify/functions/send-ticket-email`, {
           method: "POST",
@@ -261,6 +264,7 @@ export class InstallmentService {
             ticketRef: ticket.ticketRef,
             qrCodeDataUrl: ticket.qrCodeDataUrl,
             photoUploadLink,
+            ticketDesign,
           }),
         })
       } catch (err) {

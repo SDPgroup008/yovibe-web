@@ -1074,6 +1074,91 @@ const AddEventScreen: React.FC<any> = (props) => {
           </View>
         )}
 
+        {/* Event-level custom ticket design */}
+        <View style={styles.checkboxContainer}>
+          <TouchableOpacity style={styles.checkbox} onPress={() => setCustomTicketDesign(!customTicketDesign)}>
+            {customTicketDesign ? (
+              <Ionicons name="checkbox" size={24} color="#2196F3" />
+            ) : (
+              <Ionicons name="square-outline" size={24} color="#FFFFFF" />
+            )}
+          </TouchableOpacity>
+          <Text style={styles.checkboxLabel}>Custom Ticket Design</Text>
+        </View>
+
+        {customTicketDesign && (
+          <View style={styles.customDesignContainer}>
+            <Text style={styles.designLabel}>Ticket Orientation</Text>
+            <View style={styles.orientationToggle}>
+              <TouchableOpacity
+                style={[styles.orientationButton, ticketOrientation === "portrait" && styles.orientationButtonActive]}
+                onPress={() => setTicketOrientation("portrait")}
+              >
+                <Text style={[styles.orientationButtonText, ticketOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.orientationButton, ticketOrientation === "landscape" && styles.orientationButtonActive]}
+                onPress={() => setTicketOrientation("landscape")}
+              >
+                <Text style={[styles.orientationButtonText, ticketOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.designLabel}>Design Source</Text>
+            <View style={styles.orientationToggle}>
+              <TouchableOpacity
+                style={[styles.orientationButton, designSource === "template" && styles.orientationButtonActive]}
+                onPress={() => setDesignSource("template")}
+              >
+                <Text style={[styles.orientationButtonText, designSource === "template" && styles.orientationButtonTextActive]}>Template</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.orientationButton, designSource === "upload" && styles.orientationButtonActive]}
+                onPress={() => setDesignSource("upload")}
+              >
+                <Text style={[styles.orientationButtonText, designSource === "upload" && styles.orientationButtonTextActive]}>Upload Custom</Text>
+              </TouchableOpacity>
+            </View>
+            {designSource === "template" ? (
+              <>
+                <Text style={styles.designLabel}>Select Template</Text>
+                <ScrollView horizontal style={styles.templateGallery} showsHorizontalScrollIndicator={false}>
+                  {getTemplatesByOrientation(ticketOrientation).map((template) => (
+                    <TouchableOpacity
+                      key={template.id}
+                      style={[styles.templateCard, selectedTemplateId === template.id && styles.templateCardSelected]}
+                      onPress={() => setSelectedTemplateId(template.id)}
+                    >
+                      <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
+                      <Text style={styles.templateLabel}>{template.label}</Text>
+                      {selectedTemplateId === template.id && (
+                        <View style={styles.selectedOverlay}>
+                          <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            ) : (
+              <>
+                <Text style={styles.designLabel}>Upload Background Image</Text>
+                <TouchableOpacity
+                  style={styles.uploadButton}
+                  onPress={pickEventBackgroundImage}
+                >
+                  <Ionicons name="image-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.uploadButtonText}>Choose Image</Text>
+                </TouchableOpacity>
+                {uploadedBackgroundUrl && (
+                  <View style={{ marginTop: 8 }}>
+                    <Text style={{ color: "#888", fontSize: 12 }}>Image selected: {uploadedBackgroundUrl.substring(0, 50)}...</Text>
+                  </View>
+                )}
+              </>
+            )}
+          </View>
+        )}
+
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Location (City) *</Text>
           {errors.location && <Text style={styles.errorStar}>*</Text>}

@@ -36,8 +36,111 @@ function buildTicketEmailHtml({
   qrCodeDataUrl,
   buyerName,
   photoUploadLink,
+  ticketDesign,
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
+  
+  // Extract colors from ticket design or use defaults
+  const isEnabled = ticketDesign?.enabled !== false;
+  const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
+  
+  // Define color schemes for different templates
+  const templateColors = {
+    "midnight-portrait": {
+      bg: "linear-gradient(160deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      header: "linear-gradient(90deg,#302b63,#24243e)",
+      accent: "#7c3aed",
+      text: "#ffffff",
+      qr: "#1e1b4b",
+      footer: "#101010",
+    },
+    "neon-night-portrait": {
+      bg: "linear-gradient(160deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
+      header: "linear-gradient(90deg,#ff0080,#7928ca)",
+      accent: "#ff0080",
+      text: "#ffffff",
+      qr: "#1a0533",
+      footer: "#101010",
+    },
+    "golden-vip-portrait": {
+      bg: "linear-gradient(160deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
+      header: "linear-gradient(90deg,#b8860b,#ffd700)",
+      accent: "#ffd700",
+      text: "#fff8dc",
+      qr: "#2d1f00",
+      footer: "#101010",
+    },
+    "ocean-portrait": {
+      bg: "linear-gradient(160deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
+      header: "linear-gradient(90deg,#0074d9,#00b4d8)",
+      accent: "#00b4d9",
+      text: "#ffffff",
+      qr: "#003366",
+      footer: "#101010",
+    },
+    "ember-portrait": {
+      bg: "linear-gradient(160deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
+      header: "linear-gradient(90deg,#ff4500,#ff8c00)",
+      accent: "#ff4500",
+      text: "#fff5f0",
+      qr: "#3d0c00",
+      footer: "#101010",
+    },
+    "midnight-landscape": {
+      bg: "linear-gradient(120deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      header: "linear-gradient(180deg,#302b63,#24243e)",
+      accent: "#7c3aed",
+      text: "#ffffff",
+      qr: "#1e1b4b",
+      footer: "#101010",
+    },
+    "neon-night-landscape": {
+      bg: "linear-gradient(120deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
+      header: "linear-gradient(180deg,#ff0080,#7928ca)",
+      accent: "#ff0080",
+      text: "#ffffff",
+      qr: "#1a0533",
+      footer: "#101010",
+    },
+    "golden-vip-landscape": {
+      bg: "linear-gradient(120deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
+      header: "linear-gradient(180deg,#b8860b,#ffd700)",
+      accent: "#ffd700",
+      text: "#fff8dc",
+      qr: "#2d1f00",
+      footer: "#101010",
+    },
+    "ocean-landscape": {
+      bg: "linear-gradient(120deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
+      header: "linear-gradient(180deg,#0074d9,#00b4d8)",
+      accent: "#00b4d9",
+      text: "#ffffff",
+      qr: "#003366",
+      footer: "#101010",
+    },
+    "ember-landscape": {
+      bg: "linear-gradient(120deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
+      header: "linear-gradient(180deg,#ff4500,#ff8c00)",
+      accent: "#ff4500",
+      text: "#fff5f0",
+      qr: "#3d0c00",
+      footer: "#101010",
+    },
+  };
+  
+  const colors = templateColors[templateId || ""] || templateColors["midnight-portrait"] || {
+    bg: "#0b0b0b",
+    header: "#ff3b3b",
+    accent: "#ff3b3b",
+    text: "#f5f5f5",
+    qr: "#ffffff",
+    footer: "#101010",
+  };
+  
+  // Use uploaded background if available
+  const bgStyle = ticketDesign?.source === "upload" && ticketDesign.background_url
+    ? `background-image:url('${ticketDesign.background_url}');background-size:cover;background-position:center;`
+    : `background:${colors.bg};`;
 
   const photoLinkSection = photoUploadLink
     ? `
@@ -53,16 +156,16 @@ function buildTicketEmailHtml({
     : "";
 
   return `
-  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:#0b0b0b; padding:24px; color:#f5f5f5;">
+  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${bgStyle}; padding:24px; color:${colors.text};">
     <div style="max-width:480px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
       <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
-        <span style="color:#ff3b3b; font-weight:700; font-size:18px;">YoVibe</span>
+        <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
       </div>
 
       <div style="padding:24px;">
         <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
 
-        <div style="background:#ffffff; border-radius:10px; padding:16px; text-align:center; margin-bottom:20px;">
+        <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:center; margin-bottom:20px; border:1px solid #2a2a2a;">
           <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
         </div>
         <p style="text-align:center; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
@@ -79,7 +182,7 @@ function buildTicketEmailHtml({
         </div>
       </div>
 
-      <div style="padding:16px 24px; background:#101010; text-align:center;">
+      <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
         <p style="margin:0; font-size:11px; color:#6b6b6b;">
           This ticket is verified and secured by YoVibe
         </p>
@@ -143,6 +246,7 @@ async function buildTicketPdf({
   ticketRef,
   qrCodeDataUrl,
   buyerName,
+  ticketDesign,
 }) {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([320, 560]); // narrow, receipt-like ticket shape
@@ -151,14 +255,35 @@ async function buildTicketPdf({
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const dark = rgb(0.07, 0.07, 0.07);
   const textGrey = rgb(0.6, 0.6, 0.6);
   const textWhite = rgb(0.96, 0.96, 0.96);
   const green = rgb(0.29, 0.87, 0.5);
   const brandRed = rgb(1, 0.23, 0.23);
-
-  // Full-page dark background
-  page.drawRectangle({ x: 0, y: 0, width, height, color: dark });
+  
+  // Extract colors from ticket design or use defaults
+  const isEnabled = ticketDesign?.enabled !== false;
+  const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
+  
+  // Define color schemes for different templates
+  const templateColors = {
+    "midnight-portrait": { bg: rgb(0.07, 0.07, 0.07), accent: rgb(0.49, 0.51, 0.73), text: textWhite, qr: rgb(0.12, 0.18, 0.31) },
+    "neon-night-portrait": { bg: rgb(0.04, 0.04, 0.04), accent: rgb(1, 0, 0.5), text: textWhite, qr: rgb(0.10, 0.02, 0.20) },
+    "golden-vip-portrait": { bg: rgb(0.10, 0.12, 0.00), accent: rgb(0.85, 0.53, 0.00), text: textWhite, qr: rgb(0.18, 0.12, 0.00) },
+    "ocean-portrait": { bg: rgb(0.00, 0.12, 0.24), accent: rgb(0.00, 0.72, 0.85), text: textWhite, qr: rgb(0.00, 0.20, 0.40) },
+    "ember-portrait": { bg: rgb(0.10, 0.02, 0.00), accent: rgb(1, 0.27, 0.14), text: textWhite, qr: rgb(0.24, 0.05, 0.00) },
+    "midnight-landscape": { bg: rgb(0.07, 0.07, 0.07), accent: rgb(0.49, 0.51, 0.73), text: textWhite, qr: rgb(0.12, 0.18, 0.31) },
+    "neon-night-landscape": { bg: rgb(0.04, 0.04, 0.04), accent: rgb(1, 0, 0.5), text: textWhite, qr: rgb(0.10, 0.02, 0.20) },
+    "golden-vip-landscape": { bg: rgb(0.10, 0.12, 0.00), accent: rgb(0.85, 0.53, 0.00), text: textWhite, qr: rgb(0.18, 0.12, 0.00) },
+    "ocean-landscape": { bg: rgb(0.00, 0.12, 0.24), accent: rgb(0.00, 0.72, 0.85), text: textWhite, qr: rgb(0.00, 0.20, 0.40) },
+    "ember-landscape": { bg: rgb(0.10, 0.02, 0.00), accent: rgb(1, 0.27, 0.14), text: textWhite, qr: rgb(0.24, 0.05, 0.00) },
+  };
+  
+  const colors = templateColors[templateId || ""] || templateColors["midnight-portrait"] || {
+    bg: rgb(0.07, 0.07, 0.07),
+    accent: brandRed,
+    text: textWhite,
+    qr: rgb(1, 1, 1),
+  };
 
   let cursorY = height - 36;
 
@@ -168,7 +293,7 @@ async function buildTicketPdf({
     y: cursorY,
     size: 16,
     font: fontBold,
-    color: brandRed,
+    color: colors.accent,
   });
   cursorY -= 28;
 
@@ -177,7 +302,7 @@ async function buildTicketPdf({
     y: cursorY,
     size: 11,
     font: fontRegular,
-    color: textGrey,
+    color: colors.text,
   });
   cursorY -= 24;
 
@@ -213,7 +338,7 @@ async function buildTicketPdf({
     y: cursorY,
     size: 9,
     font: fontRegular,
-    color: textGrey,
+    color: colors.text,
   });
   cursorY -= 26;
 
@@ -242,7 +367,7 @@ async function buildTicketPdf({
       y: cursorY,
       size: 10,
       font: fontRegular,
-      color: textGrey,
+      color: colors.qr,
     });
     const valueText = String(value);
     const valueWidth = fontBold.widthOfTextAtSize(valueText, 10);
@@ -251,7 +376,7 @@ async function buildTicketPdf({
       y: cursorY,
       size: 10,
       font: fontBold,
-      color: isAmount ? green : textWhite,
+      color: isAmount ? green : colors.text,
     });
     cursorY -= 20;
   }
@@ -262,7 +387,7 @@ async function buildTicketPdf({
     y: 20,
     size: 8,
     font: fontRegular,
-    color: textGrey,
+    color: colors.qr,
   });
 
   return pdfDoc.save(); // returns Uint8Array
@@ -356,6 +481,7 @@ exports.handler = async function (event) {
     ticketRef,
     qrCodeDataUrl,
     photoUploadLink,
+    ticketDesign,
   } = payload;
 
   // Required fields — fail fast with a clear message rather than a vague 500 later
@@ -385,6 +511,7 @@ exports.handler = async function (event) {
     qrCodeDataUrl,
     buyerName,
     photoUploadLink,
+    ticketDesign,
   });
 
   let pdfBytes;
@@ -398,6 +525,7 @@ exports.handler = async function (event) {
       ticketRef,
       qrCodeDataUrl,
       buyerName,
+      ticketDesign,
     });
   } catch (err) {
     // PDF generation failing shouldn't block the email entirely — log it

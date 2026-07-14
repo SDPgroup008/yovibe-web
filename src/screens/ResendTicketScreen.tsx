@@ -15,6 +15,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import TicketService from "../services/TicketService"
+import SupabaseService from "../services/SupabaseService"
 
 const ResendTicketScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -44,6 +45,10 @@ const ResendTicketScreen: React.FC = () => {
         return
       }
 
+      // Get event to find ticket designs for each ticket type
+      const eventId = tickets[0]?.eventId
+      const event = eventId ? await SupabaseService.getEventById(eventId) : null
+
       let successCount = 0
       let failCount = 0
 
@@ -62,6 +67,8 @@ const ResendTicketScreen: React.FC = () => {
               time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
+              // Find the ticket design from the entry fee
+              ticketDesign: event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,
             }),
           })
 
