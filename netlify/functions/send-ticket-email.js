@@ -11,6 +11,7 @@ const { Resend } = require("resend");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
 
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
@@ -48,7 +49,7 @@ function buildTicketEmailHtml({
           Add Security Photo
         </a>
       </div>
-    `
+      `
     : "";
 
   return `
@@ -267,6 +268,66 @@ async function buildTicketPdf({
   return pdfDoc.save(); // returns Uint8Array
 }
 
+async function sendViaZeptoMail({ to, subject, html, pdfBytes, ticketRef }) {
+  if (!ZEPTOMAIL_TOKEN) {
+    return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
+  }
+
+  const body = {
+    from: { address: "tickets@yovibe.net", name: "YoVibe Tickets" },
+    to: [{ email_address: { address: to } }],
+    subject,
+    htmlbody: html,
+  };
+
+  if (pdfBytes) {
+    body.attachments = [
+      {
+        content: Buffer.from(pdfBytes).toString("base64"),
+        mime_type: "application/pdf",
+        name: `${ticketRef}.pdf`,
+      },
+    ];
+  }
+
+  try {
+    const res = await fetch("https://api.zeptomail.com/v1.1/email", {
+      method: "POST",
+      headers: {
+        "Authorization": ZEPTOMAIL_TOKEN,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      return { ok: false, error: `ZeptoMail API error: ${errText}` };
+    }
+
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: `ZeptoMail request failed: ${err.message}` };
+  }
+}
+
+async function sendViaResendFallback({ to, subject, html, pdfBytes, ticketRef }) {
+  const { data, error } = await resend.emails.send({
+    from: "YoVibe Tickets <tickets@yovibe.net>",
+    to: [to],
+    subject,
+    html,
+    attachments: pdfBytes
+      ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }]
+      : undefined,
+  });
+
+  if (error) {
+    return { ok: false, error };
+  }
+  return { ok: true, id: data?.id };
+}
+
 exports.handler = async function (event) {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
@@ -344,33 +405,47 @@ exports.handler = async function (event) {
     console.error("send-ticket-email: PDF generation failed", err);
   }
 
-  try {
-    const { data, error } = await resend.emails.send({
-      from: "YoVibe Tickets <tickets@yovibe.net>",
-      to: [buyerEmail],
-      subject: `Your ticket for ${eventName}`,
-      html,
-      attachments: pdfBytes
-        ? [
-            {
-              filename: `${ticketRef}.pdf`,
-              content: Buffer.from(pdfBytes).toString("base64"),
-            },
-          ]
-        : undefined,
-    });
+  const emailSubject = `Your ticket for ${eventName}`;
 
-    if (error) {
-      console.error("send-ticket-email: Resend error", error);
-      return { statusCode: 502, body: JSON.stringify({ error: "Failed to send email", details: error }) };
-    }
+  const zeptoResult = await sendViaZeptoMail({
+    to: buyerEmail,
+    subject: emailSubject,
+    html,
+    pdfBytes,
+    ticketRef,
+  });
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify({ success: true, id: data?.id }),
-    };
-  } catch (err) {
-    console.error("send-ticket-email: Unexpected error", err);
-    return { statusCode: 500, body: JSON.stringify({ error: "Unexpected server error" }) };
+  if (zeptoResult.ok) {
+    console.log("send-ticket-email: sent successfully via ZeptoMail");
+    return { statusCode: 200, body: JSON.stringify({ success: true, provider: "zeptomail" }) };
   }
+
+  console.warn("send-ticket-email: ZeptoMail failed, falling back to Resend:", zeptoResult.error);
+
+  const resendResult = await sendViaResendFallback({
+    to: buyerEmail,
+    subject: emailSubject,
+    html,
+    pdfBytes,
+    ticketRef,
+    eventName,
+  });
+
+  if (!resendResult.ok) {
+    console.error("send-ticket-email: Resend fallback also failed", resendResult.error);
+    return {
+      statusCode: 502,
+      body: JSON.stringify({
+        error: "Failed to send email via both providers",
+        zeptoError: zeptoResult.error,
+        resendError: resendResult.error,
+      }),
+    };
+  }
+
+  console.log("send-ticket-email: sent successfully via Resend (fallback)");
+  return {
+    statusCode: 200,
+    body: JSON.stringify({ success: true, provider: "resend-fallback", id: resendResult.id }),
+  };
 };
