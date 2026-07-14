@@ -229,64 +229,7 @@ function buildTicketEmailHtml({
       ${ticketContent}
     </div>
   </div>
-  `;
-  
-  // Build the inner ticket content
-  const ticketContent = `
-    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
-      <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
-    </div>
-
-    <div style="padding:24px;">
-      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
-
-      ${qrSection}
-
-      <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
-        ${row("Event", escapeHtml(eventName))}
-        ${row("Ticket Type", escapeHtml(ticketType))}
-        ${venue ? row("Venue", escapeHtml(venue)) : ""}
-        ${row("Date", escapeHtml(date))}
-        ${row("Time", escapeHtml(time))}
-        ${row("Ticket Ref", escapeHtml(ticketRef))}
-      </div>
-    </div>
-
-    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
-      <p style="margin:0; font-size:11px; color:#6b6b6b;">
-        This ticket is verified and secured by YoVibe
-      </p>
-    </div>
-    ${photoLinkSection}
-  `
-  
-  // For uploaded backgrounds, apply background-image to the ticket card itself
-  if (hasUploadBg) {
-    return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
-            <tr>
-              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
-                ${ticketContent}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-    `
-  }
-  
-  // Default gradient background
-  return `
-  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${colors.bg}; padding:24px; color:${colors.text};">
-    <div style="max-width:480px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
-      ${ticketContent}
-    </div>
-  </div>
-  `;
+`;
 }
 
 function row(label, value, valueColor) {
