@@ -39,6 +39,10 @@ export interface Event {
       background_url: string | null
       qr_position?: "top" | "bottom" | "center" | "left" | "right"
       dimensions: { width: number; height: number }
+      layout?: {
+        blocks: Array<{ id: string; x: number; y: number; scale?: number }>
+        bg: { x: number; y: number; scale: number }
+      }
     }
   }>
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
@@ -55,6 +59,10 @@ export interface Event {
     background_url: string | null
     qr_position?: "top" | "bottom" | "center" | "left" | "right"
     dimensions: { width: number; height: number }
+    layout?: {
+      blocks: Array<{ id: string; x: number; y: number; scale?: number }>
+      bg: { x: number; y: number; scale: number }
+    }
   } | null
 }
 
@@ -66,6 +74,10 @@ export interface TicketDesign {
   background_url: string | null
   qr_position?: "top" | "bottom" | "center" | "left" | "right"
   dimensions: { width: number; height: number }
+  layout?: {
+    blocks: Array<{ id: string; x: number; y: number; scale?: number }>
+    bg: { x: number; y: number; scale: number }
+  }
 }
 
 // Add a new interface for Firestore storage

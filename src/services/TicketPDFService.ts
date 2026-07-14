@@ -4,16 +4,18 @@ import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { Event } from "../models/Event"
 import { getTemplateById, type TicketTemplateConfig } from "../constants/ticketTemplates"
+import {
+  type BlockLayout,
+  type BgTransform,
+  type TicketLayout,
+  getDefaultLayout,
+} from "./TicketLayoutEngine"
 
 const PORTRAIT_W = 600
 const PORTRAIT_H = 900
 const LANDSCAPE_W = 900
 const LANDSCAPE_H = 500
 const CM_TO_PX = 96 / 2.54
-
-export interface BlockLayout { id: string; x: number; y: number; scale?: number }
-export interface BgTransform { x: number; y: number; scale: number }
-export interface TicketLayout { blocks: BlockLayout[]; bg: BgTransform }
 
 const FONT_STACKS = {
   sans: "'Helvetica Neue', Arial, sans-serif",
@@ -75,8 +77,9 @@ export function defaultLayout(orientation: "portrait" | "landscape", hasPoster: 
   }
 }
 
-function resolveTemplate(event?: Event): { t: TicketTemplateConfig; isUploadBg: boolean; bgImage: string; bgGradient: string; isLandscape: boolean; W: number; H: number } {
-  const design = event?.ticket_design
+function resolveTemplate(event?: Event, feeDesign?: any): { t: TicketTemplateConfig; isUploadBg: boolean; bgImage: string; bgGradient: string; isLandscape: boolean; W: number; H: number } {
+  // Prefer fee-level design over event-level design
+  const design = feeDesign || event?.ticket_design
   let tpl: TicketTemplateConfig | undefined
   if (design?.enabled && design.source === "template" && design.template_id) {
     tpl = getTemplateById(design.template_id)
@@ -96,8 +99,10 @@ function resolveTemplate(event?: Event): { t: TicketTemplateConfig; isUploadBg: 
   const bgImage = isUploadBg ? (design!.background_url as string) : ""
   const bgGradient = t.background
   const isLandscape = (design?.orientation || t.orientation) === "landscape"
-  const W = isLandscape ? LANDSCAPE_W : PORTRAIT_W
-  const H = isLandscape ? LANDSCAPE_H : PORTRAIT_H
+  // Use fee-level dimensions if available
+  const dims = design?.dimensions
+  const W = dims?.width || (isLandscape ? LANDSCAPE_W : PORTRAIT_W)
+  const H = dims?.height || (isLandscape ? LANDSCAPE_H : PORTRAIT_H)
   return { t, isUploadBg, bgImage, bgGradient, isLandscape, W, H }
 }
 
@@ -528,10 +533,18 @@ export function generateTicketHTML(ticket: Ticket, event?: Event, overrideQrData
   const buyerName  = ticket.buyerName || "Guest"
   const posterUrl  = event?.posterImageUrl || null
 
-  const { t, isUploadBg, bgImage, bgGradient, isLandscape, W, H } = resolveTemplate(event)
-  const lyt = layout || defaultLayout(isLandscape ? "landscape" : "portrait", !!posterUrl)
-  // qr_position can come from per-fee ticketDesign or event-level ticket_design
-  const qrPos = (ticket as any).ticketDesign?.qr_position || event?.ticket_design?.qr_position as any
+  // Find fee-level ticket design based on ticket's entryFeeType
+  const feeDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
+
+  // Use fee-level design if available, otherwise fall back to event-level
+  const { t, isUploadBg, bgImage, bgGradient, isLandscape, W, H } = resolveTemplate(event, feeDesign)
+
+  // Use stored layout from fee design, or passed layout, or default
+  const storedLayout = feeDesign?.layout as TicketLayout | undefined
+  const lyt = layout || storedLayout || defaultLayout(isLandscape ? "landscape" : "portrait", !!posterUrl)
+
+  // qr_position can come from fee-level ticketDesign or event-level ticket_design
+  const qrPos = feeDesign?.qr_position || (ticket as any).ticketDesign?.qr_position || event?.ticket_design?.qr_position as any
 
   // For template mode use the modern static layout
   if (!isUploadBg) {

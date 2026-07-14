@@ -13,6 +13,12 @@ const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 const resend = new Resend(process.env.RESEND_API_KEY);
 const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
 
+const {
+  computeTicketLayout,
+  computeEmailSections,
+  computePdfPositions,
+} = require("./ticketLayoutEngine");
+
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
   return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -40,111 +46,15 @@ function buildTicketEmailHtml({
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
   
-  // Extract colors and layout from ticket design or use defaults
-  const isEnabled = ticketDesign?.enabled !== false;
+  // Extract template id for color scheme
   const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
-  const isLandscape = ticketDesign?.orientation === "landscape";
-  const qrPosition = ticketDesign?.qr_position || "center";
-  const isUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url;
-  const customDims = ticketDesign?.dimensions || null;
   
-  // Define color schemes for different templates
-  const templateColors = {
-    "midnight-portrait": {
-      bg: "linear-gradient(160deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
-      header: "linear-gradient(90deg,#302b63,#24243e)",
-      accent: "#7c3aed",
-      text: "#ffffff",
-      qr: "#1e1b4b",
-      footer: "#101010",
-    },
-    "neon-night-portrait": {
-      bg: "linear-gradient(160deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
-      header: "linear-gradient(90deg,#ff0080,#7928ca)",
-      accent: "#ff0080",
-      text: "#ffffff",
-      qr: "#1a0533",
-      footer: "#101010",
-    },
-    "golden-vip-portrait": {
-      bg: "linear-gradient(160deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
-      header: "linear-gradient(90deg,#b8860b,#ffd700)",
-      accent: "#ffd700",
-      text: "#fff8dc",
-      qr: "#2d1f00",
-      footer: "#101010",
-    },
-    "ocean-portrait": {
-      bg: "linear-gradient(160deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
-      header: "linear-gradient(90deg,#0074d9,#00b4d8)",
-      accent: "#00b4d9",
-      text: "#ffffff",
-      qr: "#003366",
-      footer: "#101010",
-    },
-    "ember-portrait": {
-      bg: "linear-gradient(160deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
-      header: "linear-gradient(90deg,#ff4500,#ff8c00)",
-      accent: "#ff4500",
-      text: "#fff5f0",
-      qr: "#3d0c00",
-      footer: "#101010",
-    },
-    "midnight-landscape": {
-      bg: "linear-gradient(120deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
-      header: "linear-gradient(180deg,#302b63,#24243e)",
-      accent: "#7c3aed",
-      text: "#ffffff",
-      qr: "#1e1b4b",
-      footer: "#101010",
-    },
-    "neon-night-landscape": {
-      bg: "linear-gradient(120deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
-      header: "linear-gradient(180deg,#ff0080,#7928ca)",
-      accent: "#ff0080",
-      text: "#ffffff",
-      qr: "#1a0533",
-      footer: "#101010",
-    },
-    "golden-vip-landscape": {
-      bg: "linear-gradient(120deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
-      header: "linear-gradient(180deg,#b8860b,#ffd700)",
-      accent: "#ffd700",
-      text: "#fff8dc",
-      qr: "#2d1f00",
-      footer: "#101010",
-    },
-    "ocean-landscape": {
-      bg: "linear-gradient(120deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
-      header: "linear-gradient(180deg,#0074d9,#00b4d8)",
-      accent: "#00b4d9",
-      text: "#ffffff",
-      qr: "#003366",
-      footer: "#101010",
-    },
-    "ember-landscape": {
-      bg: "linear-gradient(120deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
-      header: "linear-gradient(180deg,#ff4500,#ff8c00)",
-      accent: "#ff4500",
-      text: "#fff5f0",
-      qr: "#3d0c00",
-      footer: "#101010",
-    },
-  };
+  // Compute layout using the shared engine
+  const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
+  const emailSections = computeEmailSections(computed);
   
-  const colors = templateColors[templateId || ""] || templateColors["midnight-portrait"] || {
-    bg: "#0b0b0b",
-    header: "#ff3b3b",
-    accent: "#ff3b3b",
-    text: "#f5f5f5",
-    qr: "#ffffff",
-    footer: "#101010",
-  };
-  
-  // Use uploaded background if available
-  // For email compatibility, use a table-based layout with background attribute
-  // This works better across email clients than CSS background-image
-  const hasUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url
+  // Get page width from computed layout
+  const ticketWidth = Math.min(computed.pageWidth, 600);
   
   const photoLinkSection = photoUploadLink
     ? `
@@ -159,38 +69,64 @@ function buildTicketEmailHtml({
       `
     : "";
   
-// Build QR section based on position
-  const qrAlign = qrPosition === "right" ? "right" : (qrPosition === "left" ? "left" : "center");
-  const qrSection = `
-      <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:${qrAlign}; margin-bottom:20px; border:1px solid #2a2a2a;">
-        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
-      </div>
-      <p style="text-align:${qrAlign}; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
-        Present this QR code at the event entrance
-      </p>
-    `;
+  // Build section HTML for each block based on its computed position
+  function blockToHtml(block) {
+    const align = block.align || "center";
+    const marginDir = align === "center" ? "0 auto" : (align === "right" ? "0 0 0 auto" : "0 auto 0 0");
+    
+    if (block.id === "qr") {
+      return `
+        <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:${align}; margin-bottom:20px; max-width:${block.width}px; margin-left:${align === "right" ? "auto" : "0"}; margin-right:${align === "left" ? "auto" : "0"}; border:1px solid #2a2a2a;">
+          <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:${Math.min(block.width, 200)}px; height:${Math.min(block.height, 200)}px; display:block; margin:0 auto;" />
+        </div>
+        <p style="text-align:${align}; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
+          Present this QR code at the event entrance
+        </p>
+      `;
+    }
+    
+    if (block.id === "title") {
+      return `
+        <div style="text-align:${align}; margin-bottom:16px;">
+          <p style="margin:0 0 4px; font-size:26px; font-weight:800; color:${colors.text}; text-shadow:0 2px 8px rgba(0,0,0,0.6);">${escapeHtml(eventName)}</p>
+          <span style="display:inline-block; background:${colors.accent}; color:#ffffff; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(ticketType)}</span>
+        </div>
+      `;
+    }
+    
+    if (block.id === "info") {
+      return `
+        <div style="display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.45); border-radius:10px; padding:14px 16px; border:1px solid rgba(167,139,250,0.25); max-width:${block.width}px; margin-bottom:20px; margin-left:${align === "right" ? "auto" : "0"}; margin-right:${align === "left" ? "auto" : "0"}; text-align:${align};">
+          ${row("Event", escapeHtml(eventName))}
+          ${row("Ticket Type", escapeHtml(ticketType))}
+          ${venue ? row("Venue", escapeHtml(venue)) : ""}
+          ${row("Date", escapeHtml(date))}
+          ${row("Time", escapeHtml(time))}
+          ${row("Ticket Ref", escapeHtml(ticketRef))}
+        </div>
+      `;
+    }
+    
+    if (block.id === "poster") {
+      return ``;
+    }
+    
+    return "";
+  }
   
-  // Build the inner ticket content
+  const sectionsHtml = emailSections.map(function(block) {
+    return blockToHtml(block);
+  }).filter(function(s) { return s; }).join("\n");
+  
+  // Build the full ticket HTML
   const ticketContent = `
     <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
       <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
     </div>
-
     <div style="padding:24px;">
       <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
-
-      ${qrSection}
-
-      <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
-        ${row("Event", escapeHtml(eventName))}
-        ${row("Ticket Type", escapeHtml(ticketType))}
-        ${venue ? row("Venue", escapeHtml(venue)) : ""}
-        ${row("Date", escapeHtml(date))}
-        ${row("Time", escapeHtml(time))}
-        ${row("Ticket Ref", escapeHtml(ticketRef))}
-      </div>
+      ${sectionsHtml}
     </div>
-
     <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
       <p style="margin:0; font-size:11px; color:#6b6b6b;">
         This ticket is verified and secured by YoVibe
@@ -199,19 +135,19 @@ function buildTicketEmailHtml({
     ${photoLinkSection}
   `;
   
-  // Use custom dimensions if available, otherwise use defaults
-  const ticketWidth = customDims?.width || 480;
-  const ticketHeight = customDims?.height || 560;
+  // Apply background image transform to the ticket card
+  function bgStyleFromTransform(bg) {
+    return `background-image:url('${computed.bgImage}'); background-size:${bg.scale * 100}%; background-position:calc(50% + ${bg.x}px) calc(50% + ${bg.y}px); background-repeat:no-repeat;`;
+  }
   
-  // For uploaded backgrounds, apply background-image to the ticket card itself
-  if (hasUploadBg) {
+  if (computed.isUploadBg) {
     return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
       <tr>
         <td align="center">
-          <table role="presentation" width="${ticketWidth}" cellpadding="0" cellspacing="0" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
+          <table role="presentation" width="${ticketWidth}" cellpadding="0" cellspacing="0" style="${bgStyleFromTransform(computed.bgTransform)} border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
             <tr>
-              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
+              <td style="padding:0; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
                 ${ticketContent}
               </td>
             </tr>
@@ -229,7 +165,7 @@ function buildTicketEmailHtml({
       ${ticketContent}
     </div>
   </div>
-`;
+  `;
 }
 
 function row(label, value, valueColor) {
@@ -323,33 +259,22 @@ async function buildTicketPdf({
   buyerName,
   ticketDesign,
 }) {
-  // Use dimensions from ticket design if available
-  const isLandscape = ticketDesign?.orientation === "landscape";
-  const qrPosition = ticketDesign?.qr_position || "center";
-  const customDims = ticketDesign?.dimensions;
-  
-  // PDF page dimensions: use custom dimensions or defaults
-  // Default: portrait 600x900, landscape 900x500
-  const pdfWidth = customDims?.width || (isLandscape ? 900 : 600);
-  const pdfHeight = customDims?.height || (isLandscape ? 500 : 900);
+  // Compute layout from ticket design using the shared engine
+  const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
   
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([pdfWidth, pdfHeight]);
+  const page = pdfDoc.addPage([computed.pageWidth, computed.pageHeight]);
   const { width, height } = page.getSize();
   
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
   
-  const textGrey = rgb(0.6, 0.6, 0.6);
   const textWhite = rgb(0.96, 0.96, 0.96);
-  const green = rgb(0.29, 0.87, 0.5);
   const brandRed = rgb(1, 0.23, 0.23);
   
   // Extract colors from ticket design or use defaults
-  const isEnabled = ticketDesign?.enabled !== false;
   const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
   
-  // Define color schemes for different templates
   const templateColors = {
     "midnight-portrait": { bg: rgb(0.07, 0.07, 0.07), accent: rgb(0.49, 0.51, 0.73), text: textWhite, qr: rgb(0.12, 0.18, 0.31) },
     "neon-night-portrait": { bg: rgb(0.04, 0.04, 0.04), accent: rgb(1, 0, 0.5), text: textWhite, qr: rgb(0.10, 0.02, 0.20) },
@@ -370,10 +295,9 @@ async function buildTicketPdf({
     qr: rgb(1, 1, 1),
   };
   
-  // Load and embed background image if available
+  // Load and draw background image with transform from layout
   let bgImageEmbed = null;
-  const isUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url
-  if (isUploadBg) {
+  if (computed.isUploadBg) {
     try {
       const bgImg = await loadBackgroundImageBytes(ticketDesign.background_url);
       if (bgImg) {
@@ -387,127 +311,88 @@ async function buildTicketPdf({
     }
   }
   
-  // Draw background image if available
   if (bgImageEmbed) {
+    const bg = computed.bgTransform;
+    const bgW = width * bg.scale;
+    const bgH = height * bg.scale;
+    const bgX = (width - bgW) / 2 + bg.x;
+    const bgY = (height - bgH) / 2 + bg.y;
     page.drawImage(bgImageEmbed, {
-      x: 0,
-      y: 0,
-      width: width,
-      height: height,
-      opacity: 0.3, // Semi-transparent for text readability
+      x: bgX,
+      y: bgY,
+      width: bgW,
+      height: bgH,
+      opacity: 0.3,
     });
   }
   
-  let cursorY = height - 36;
-
-  // Brand header
-  page.drawText("YoVibe", {
-    x: 24,
-    y: cursorY,
-    size: 16,
-    font: fontBold,
-    color: colors.accent,
-  });
-  cursorY -= 28;
-
-  page.drawText(buyerName ? `Ticket for ${buyerName}` : "Your Ticket", {
-    x: 24,
-    y: cursorY,
-    size: 11,
-    font: fontRegular,
-    color: colors.text,
-  });
-  cursorY -= 24;
-
-  // QR code image — fetched from R2/hosted URL or decoded from inline base64
-  const decoded = await loadQrImageBytes(qrCodeDataUrl);
-  const qrSize = isLandscape ? 140 : 200;
+  // Get PDF positions (Y-axis flipped) for all blocks
+  const pdfPositions = computePdfPositions(computed, height);
   
-  // Position QR based on qr_position
-  let qrX = (width - qrSize) / 2;
-  if (qrPosition === "right") {
-    qrX = width - qrSize - 24;
-  } else if (qrPosition === "left") {
-    qrX = 24;
+  // Draw each block at its computed position
+  const qrDecoded = await loadQrImageBytes(qrCodeDataUrl);
+  let qrEmbed = null;
+  if (qrDecoded) {
+    qrEmbed = qrDecoded.isPng
+      ? await pdfDoc.embedPng(qrDecoded.bytes)
+      : await pdfDoc.embedJpg(qrDecoded.bytes);
   }
   
-  // For right position, move QR section earlier in the layout
-  if (qrPosition === "right" && isLandscape) {
-    // In landscape with right QR, we need to adjust layout
-    // For simplicity, keep centered in PDF for now
-    qrX = (width - qrSize) / 2;
+  for (const pos of pdfPositions) {
+    if (pos.id === "qr" && qrEmbed) {
+      const qrW = Math.min(pos.width, qrEmbed.width);
+      const qrH = Math.min(pos.height, qrEmbed.height);
+      page.drawRectangle({
+        x: pos.x - 6,
+        y: pos.y - 6,
+        width: qrW + 12,
+        height: qrH + 12,
+        color: rgb(1, 1, 1),
+      });
+      page.drawImage(qrEmbed, {
+        x: pos.x,
+        y: pos.y,
+        width: qrW,
+        height: qrH,
+      });
+    }
+    
+    if (pos.id === "title") {
+      const titleFontSize = Math.max(10, Math.min(16, pos.scale * 14));
+      page.drawText(eventName, {
+        x: pos.x,
+        y: pos.y + pos.height - titleFontSize,
+        size: titleFontSize,
+        font: fontBold,
+        color: colors.text,
+      });
+    }
+    
+    if (pos.id === "info") {
+      const infoLines = [
+        `${buyerName ? "Ticket for " + buyerName : "Your Ticket"}`,
+        `${eventName}`,
+        venue ? `Venue: ${venue}` : "",
+        date ? `Date: ${date}` : "",
+        time ? `Time: ${time}` : "",
+        `Ref: ${ticketRef}`,
+      ].filter(Boolean);
+      
+      const lineHeight = Math.max(8, Math.min(12, pos.scale * 10));
+      let infoY = pos.y + pos.height - lineHeight;
+      for (const line of infoLines) {
+        page.drawText(line.slice(0, 40), {
+          x: pos.x,
+          y: infoY,
+          size: lineHeight * 0.9,
+          font: fontRegular,
+          color: colors.text,
+        });
+        infoY -= lineHeight + 2;
+      }
+    }
   }
-
-  if (decoded) {
-    const qrImage = decoded.isPng
-      ? await pdfDoc.embedPng(decoded.bytes)
-      : await pdfDoc.embedJpg(decoded.bytes);
-
-    // White card behind QR for contrast/scan-ability
-    page.drawRectangle({
-      x: qrX - 12,
-      y: cursorY - qrSize - 12,
-      width: qrSize + 24,
-      height: qrSize + 24,
-      color: rgb(1, 1, 1),
-    });
-    page.drawImage(qrImage, {
-      x: qrX,
-      y: cursorY - qrSize,
-      width: qrSize,
-      height: qrSize,
-    });
-  }
-  cursorY -= qrSize + 30;
-
-  page.drawText("Present this QR code at the event entrance", {
-    x: 24,
-    y: cursorY,
-    size: 9,
-    font: fontRegular,
-    color: colors.text,
-  });
-  cursorY -= 26;
-
-  // Divider
-  page.drawLine({
-    start: { x: 24, y: cursorY },
-    end: { x: width - 24, y: cursorY },
-    thickness: 1,
-    color: rgb(0.2, 0.2, 0.2),
-  });
-  cursorY -= 22;
-
-  // Detail rows
-  const fields = [
-    ["Event", eventName],
-    ["Ticket Type", ticketType],
-    ...(venue ? [["Venue", venue]] : []),
-    ["Date", date],
-    ["Time", time],
-    ["Ticket Ref", ticketRef],
-  ];
-
-  for (const [label, value, isAmount] of fields) {
-    page.drawText(label, {
-      x: 24,
-      y: cursorY,
-      size: 10,
-      font: fontRegular,
-      color: colors.qr,
-    });
-    const valueText = String(value);
-    const valueWidth = fontBold.widthOfTextAtSize(valueText, 10);
-    page.drawText(valueText, {
-      x: width - 24 - valueWidth,
-      y: cursorY,
-      size: 10,
-      font: fontBold,
-      color: isAmount ? green : colors.text,
-    });
-    cursorY -= 20;
-  }
-
+  
   // Footer
   page.drawText("This ticket is verified and secured by YoVibe", {
     x: 24,
@@ -516,8 +401,8 @@ async function buildTicketPdf({
     font: fontRegular,
     color: colors.qr,
   });
-
-  return pdfDoc.save(); // returns Uint8Array
+  
+  return pdfDoc.save();
 }
 
 async function sendViaZeptoMail({ to, subject, html, pdfBytes, ticketRef }) {
