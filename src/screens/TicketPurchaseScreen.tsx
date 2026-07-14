@@ -90,11 +90,18 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   const openSeatMap = async (fee: any) => {
-    if (!fee.seatMap || fee.seatMap.type === "none") return
+    console.log(`[openSeatMap] 🚀 Opening seat map for fee: ${fee.name}, seatMap type: ${fee.seatMap?.type}`);
+    if (!fee.seatMap || fee.seatMap.type === "none") {
+      console.log(`[openSeatMap] ⚠️ No seat map available for this fee type`);
+      return
+    }
     setSelectedSeat(null)
+    console.log(`[openSeatMap] 📞 Calling getOccupiedSeats for eventId="${eventId}", fee.name="${fee.name}"`);
     const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
+    console.log(`[openSeatMap] 📊 Occupied seats received: ${JSON.stringify(occupied)}`);
     setOccupiedSeats(occupied)
     setSeatMapFee(fee)
+    console.log(`[openSeatMap] ✅ Setting occupiedSeats state with ${occupied.length} seats`);
     setShowSeatMapModal(true)
   }
   
@@ -1399,6 +1406,7 @@ const handleInstallmentPurchase = async () => {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
+              {console.log(`[SeatMap] 🎨 Rendering seat map, occupiedSeats: ${JSON.stringify(occupiedSeats)}, seatMapFee: ${JSON.stringify(seatMapFee?.seatMap?.type)}`)}
               {seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
                 Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
                   const rowLabel = String.fromCharCode(65 + rowIdx)
@@ -1411,6 +1419,7 @@ const handleInstallmentPurchase = async () => {
                           const seatNum = rowIdx * cols + colIdx + 1
                           const taken = occupiedSeats.includes(seatNum)
                           const picked = selectedSeat === seatNum
+                          if (taken) console.log(`[SeatMap] Seat ${seatNum} is TAKEN (type: ${typeof seatNum}, in array: ${occupiedSeats.includes(seatNum)})`);
                           return (
                             <TouchableOpacity key={seatNum}
                               style={[seatMapStyles.seat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
@@ -1429,6 +1438,7 @@ const handleInstallmentPurchase = async () => {
                     const seatNum = idx + 1
                     const taken = occupiedSeats.includes(seatNum)
                     const picked = selectedSeat === seatNum
+                    if (taken) console.log(`[SeatMap] Seat ${seatNum} is TAKEN (type: ${typeof seatNum}, in array: ${occupiedSeats.includes(seatNum)})`);
                     return (
                       <TouchableOpacity key={seatNum}
                         style={[seatMapStyles.numberedSeat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}

@@ -1520,8 +1520,10 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
   async saveTicket(ticket: any): Promise<string> {
     try {
+      const { seatNumber, ...restTicket } = ticket
       const ticketData = {
-        ...ticket,
+        ...restTicket,
+        seat_number: seatNumber,
         event_slug: ticket.eventSlug || ticket.eventId,
         created_at: new Date().toISOString(),
       };
@@ -1573,7 +1575,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     }
   }
 
-  async updateTicket(ticketId: string, data: any): Promise<void> {
+async updateTicket(ticketId: string, data: any): Promise<void> {
     try {
       // Map camelCase to snake_case
       const dbData: any = {};
@@ -1583,7 +1585,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data.status) dbData.status = data.status;
       if (data.isScanned !== undefined) dbData.is_scanned = data.isScanned;
       if (data.scannedAt) dbData.scanned_at = data.scannedAt;
-      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined) {
+      if (data.seatNumber !== undefined) dbData.seat_number = data.seatNumber;
+      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined && data.seatNumber === undefined) {
         // No mapped fields found, use raw data as fallback
         Object.assign(dbData, data);
       }
@@ -1847,15 +1850,24 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
   async getOccupiedSeats(eventSlug: string, feeTypeName: string): Promise<number[]> {
     try {
+      console.log(`[getOccupiedSeats] 🔍 Fetching occupied seats for eventSlug="${eventSlug}", feeTypeName="${feeTypeName}"`);
       const { data, error } = await supabase
-        .from("tickets")
-        .select("seat_number")
+        .from("tickets_api")
+        .select("seatNumber, entryFeeType")
         .eq("event_slug", eventSlug)
-        .eq("entry_fee_type", feeTypeName)
-        .not("seat_number", "is", null)
+        .eq("entryFeeType", feeTypeName)
         .in("status", ["active", "used", "pending"])
-      if (error) throw error
-      return (data || []).map((r: any) => r.seat_number).filter(Boolean)
+      console.log(`[getOccupiedSeats] Query result: ${JSON.stringify(data)}`);
+      if (error) {
+        console.error(`[getOccupiedSeats] ❌ Query error:`, error);
+        throw error
+      }
+      const seatNumbers = (data || [])
+        .map((r: any) => r.seatNumber)
+        .filter(Boolean)
+        .map((n: any) => typeof n === 'number' ? n : parseInt(n, 10));
+      console.log(`[getOccupiedSeats] ✅ Final occupied seats: ${JSON.stringify(seatNumbers)}`);
+      return seatNumbers;
     } catch (error) {
       console.error("SupabaseService: Error getting occupied seats:", error)
       return []

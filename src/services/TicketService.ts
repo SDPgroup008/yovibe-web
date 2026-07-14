@@ -557,7 +557,7 @@ private static async createSingleTicket(
       if (updateError) {
         console.error("❌ Database update failed:", updateError)
         console.error("❌ Error code:", updateError.code)
-        console.error("❌ Error details:", updateError.details)
+console.error("❌ Error details:", updateError.details)
         console.error("❌ Error hint:", updateError.hint)
         
         // Try alternative approach: use the tickets_api view
@@ -566,13 +566,13 @@ private static async createSingleTicket(
           .from("tickets_api")
           .update({ 
             status: "used", 
-            is_scanned: true, 
-            scanned_at: now.toISOString(), 
-            payout_eligible: true, 
-            payout_status: "pending" 
+            isScanned: true, 
+            scannedAt: now.toISOString(), 
+            payoutEligible: true, 
+            payoutStatus: "pending" 
           })
           .eq("id", t.id)
-          
+        
         if (apiError) {
           console.error("❌ API view update also failed:", apiError)
           throw apiError
