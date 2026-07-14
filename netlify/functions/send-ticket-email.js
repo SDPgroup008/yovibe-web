@@ -138,12 +138,10 @@ function buildTicketEmailHtml({
   };
   
   // Use uploaded background if available
-  // Note: data URLs contain ' characters in the base64, so we need to use double quotes
-  // and ensure the URL doesn't break the CSS
-  const bgStyle = ticketDesign?.source === "upload" && ticketDesign.background_url
-    ? `background-image:url("${ticketDesign.background_url}");background-size:cover;background-position:center;`
-    : `background:${colors.bg};`;
-
+  // For email compatibility, use a table-based layout with background attribute
+  // This works better across email clients than CSS background-image
+  const hasUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url
+  
   const photoLinkSection = photoUploadLink
     ? `
       <div style="margin-top:20px; padding:16px; background:#1a1a1a; border-radius:10px; border:1px solid #2a2a2a; text-align:center;">
@@ -156,40 +154,65 @@ function buildTicketEmailHtml({
       </div>
       `
     : "";
+  
+  // Build the inner ticket content (this stays the same)
+  const ticketContent = `
+    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
+      <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
+    </div>
 
+    <div style="padding:24px;">
+      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
+
+      <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:center; margin-bottom:20px; border:1px solid #2a2a2a;">
+        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
+      </div>
+      <p style="text-align:center; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
+        Present this QR code at the event entrance
+      </p>
+
+      <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
+        ${row("Event", escapeHtml(eventName))}
+        ${row("Ticket Type", escapeHtml(ticketType))}
+        ${venue ? row("Venue", escapeHtml(venue)) : ""}
+        ${row("Date", escapeHtml(date))}
+        ${row("Time", escapeHtml(time))}
+        ${row("Ticket Ref", escapeHtml(ticketRef))}
+      </div>
+    </div>
+
+    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
+      <p style="margin:0; font-size:11px; color:#6b6b6b;">
+        This ticket is verified and secured by YoVibe
+      </p>
+    </div>
+    ${photoLinkSection}
+  `
+  
+  // For uploaded backgrounds, use a table with background attribute for email compatibility
+  if (hasUploadBg) {
+    return `
+    <table role="presentation" width="100%" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat;">
+      <tr>
+        <td align="center" style="padding:24px;">
+          <table role="presentation" width="480" style="background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
+            <tr>
+              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif;">
+                ${ticketContent}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    `
+  }
+  
+  // Default gradient background
   return `
-  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${bgStyle}; padding:24px; color:${colors.text};">
+  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${colors.bg}; padding:24px; color:${colors.text};">
     <div style="max-width:480px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
-      <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
-        <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
-      </div>
-
-      <div style="padding:24px;">
-        <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
-
-        <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:center; margin-bottom:20px; border:1px solid #2a2a2a;">
-          <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
-        </div>
-        <p style="text-align:center; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
-          Present this QR code at the event entrance
-        </p>
-
-        <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
-          ${row("Event", escapeHtml(eventName))}
-          ${row("Ticket Type", escapeHtml(ticketType))}
-          ${venue ? row("Venue", escapeHtml(venue)) : ""}
-          ${row("Date", escapeHtml(date))}
-          ${row("Time", escapeHtml(time))}
-          ${row("Ticket Ref", escapeHtml(ticketRef))}
-        </div>
-      </div>
-
-      <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
-        <p style="margin:0; font-size:11px; color:#6b6b6b;">
-          This ticket is verified and secured by YoVibe
-        </p>
-      </div>
-      ${photoLinkSection}
+      ${ticketContent}
     </div>
   </div>
   `;
@@ -235,6 +258,42 @@ async function loadQrImageBytes(qrCodeInput) {
   }
 
   return null;
+}
+
+// Load background image bytes from R2 URL or data URL
+async function loadBackgroundImageBytes(backgroundUrl) {
+  if (!backgroundUrl) return null;
+  
+  // Check if it's a data URL
+  if (backgroundUrl.startsWith('data:image/')) {
+    const dataUrlMatch = /^data:(image\/(png|jpeg|jpg));base64,(.+)$/i.exec(backgroundUrl);
+    if (dataUrlMatch) {
+      return {
+        isPng: dataUrlMatch[1].toLowerCase().includes("png"),
+        bytes: Buffer.from(dataUrlMatch[3], "base64"),
+      };
+    }
+    return null;
+  }
+  
+  // Fetch from URL (R2 or other hosted URL)
+  try {
+    const response = await fetch(backgroundUrl);
+    if (!response.ok) {
+      console.warn(`Failed to fetch background image: ${response.status}`);
+      return null;
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "";
+    const isPng = contentType.includes("png") || /\.png($|\?)/i.test(backgroundUrl);
+    return {
+      isPng,
+      bytes: Buffer.from(arrayBuffer),
+    };
+  } catch (error) {
+    console.warn("Error fetching background image:", error.message);
+    return null;
+  }
 }
 
 // Builds a single-page PDF ticket using pdf-lib (no headless browser needed,
@@ -286,6 +345,36 @@ async function buildTicketPdf({
     text: textWhite,
     qr: rgb(1, 1, 1),
   };
+  
+  // Load and embed background image if available
+  let bgImageEmbed = null;
+  const isUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url
+  if (isUploadBg) {
+    try {
+      const bgImg = await loadBackgroundImageBytes(ticketDesign.background_url);
+      if (bgImg) {
+        bgImageEmbed = bgImg.isPng
+          ? await pdfDoc.embedPng(bgImg.bytes)
+          : await pdfDoc.embedJpg(bgImg.bytes);
+        console.log("PDF: Background image loaded and embedded");
+      }
+    } catch (error) {
+      console.warn("PDF: Failed to load background image:", error.message);
+    }
+  }
+  
+  // Draw background image if available
+  if (bgImageEmbed) {
+    const bgWidth = width;
+    const bgHeight = height;
+    page.drawImage(bgImageEmbed, {
+      x: 0,
+      y: 0,
+      width: bgWidth,
+      height: bgHeight,
+      opacity: 0.3, // Semi-transparent for text readability
+    });
+  }
 
   let cursorY = height - 36;
 

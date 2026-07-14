@@ -853,12 +853,6 @@ const AddEventScreen: React.FC<any> = (props) => {
         }
       }
     })
-    if (customTicketDesign && designSource === "template" && !selectedTemplateId) {
-      newErrors.entryFees = "Please select a ticket design template for the event"
-    }
-    if (customTicketDesign && designSource === "upload" && !uploadedBackgroundUrl) {
-      newErrors.entryFees = "Please upload a background image for the event ticket design"
-    }
 
     // If there are errors, display them and highlight fields
     if (Object.keys(newErrors).length > 0) {
@@ -918,7 +912,6 @@ const AddEventScreen: React.FC<any> = (props) => {
       }
 
       let processedEntryFees = entryFees
-      let processedEventDesignBg: string | null = null
 
       if (entryFees.length > 0) {
         console.log("Processing entry fees and uploading backgrounds...")
@@ -927,15 +920,6 @@ const AddEventScreen: React.FC<any> = (props) => {
         } catch (error) {
           console.error("Error processing fee backgrounds:", error)
           Alert.alert("Warning", "Some ticket design backgrounds could not be uploaded")
-        }
-      }
-
-      if (customTicketDesign && designSource === "upload" && uploadedBackgroundUrl) {
-        console.log("Processing event ticket design background...")
-        try {
-          processedEventDesignBg = await uploadEventDesignBackgroundToR2(`event-${Date.now()}`)
-        } catch (error) {
-          console.error("Error processing event design background:", error)
         }
       }
 
@@ -958,16 +942,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         createdByType: user.userType,
         priceIndicator: processedEntryFees.length > 0 ? Math.min(...processedEntryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
-        ticket_design: customTicketDesign ? {
-          enabled: true,
-          orientation: ticketOrientation,
-          source: designSource,
-          template_id: designSource === "template" ? selectedTemplateId : null,
-          background_url: processedEventDesignBg || (designSource === "upload" ? uploadedBackgroundUrl : null),
-          dimensions: ticketOrientation === "portrait"
-            ? { width: 1080, height: 1920 }
-            : { width: 1920, height: 1080 },
-        } : null,
+        ticket_design: null,
         createdAt: new Date(),
       }
 
@@ -1254,93 +1229,8 @@ const AddEventScreen: React.FC<any> = (props) => {
             </TouchableOpacity>
             <Text style={styles.checkboxLabel}>Feature this event manually</Text>
           </View>
-        )}
-
-        {/* Event-level custom ticket design */}
-        <View style={styles.checkboxContainer}>
-          <TouchableOpacity style={styles.checkbox} onPress={() => setCustomTicketDesign(!customTicketDesign)}>
-            {customTicketDesign ? (
-              <Ionicons name="checkbox" size={24} color="#2196F3" />
-            ) : (
-              <Ionicons name="square-outline" size={24} color="#FFFFFF" />
-            )}
-          </TouchableOpacity>
-          <Text style={styles.checkboxLabel}>Custom Ticket Design</Text>
-        </View>
-
-        {customTicketDesign && (
-          <View style={styles.customDesignContainer}>
-            <Text style={styles.designLabel}>Ticket Orientation</Text>
-            <View style={styles.orientationToggle}>
-              <TouchableOpacity
-                style={[styles.orientationButton, ticketOrientation === "portrait" && styles.orientationButtonActive]}
-                onPress={() => setTicketOrientation("portrait")}
-              >
-                <Text style={[styles.orientationButtonText, ticketOrientation === "portrait" && styles.orientationButtonTextActive]}>Portrait</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.orientationButton, ticketOrientation === "landscape" && styles.orientationButtonActive]}
-                onPress={() => setTicketOrientation("landscape")}
-              >
-                <Text style={[styles.orientationButtonText, ticketOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.designLabel}>Design Source</Text>
-            <View style={styles.orientationToggle}>
-              <TouchableOpacity
-                style={[styles.orientationButton, designSource === "template" && styles.orientationButtonActive]}
-                onPress={() => setDesignSource("template")}
-              >
-                <Text style={[styles.orientationButtonText, designSource === "template" && styles.orientationButtonTextActive]}>Template</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.orientationButton, designSource === "upload" && styles.orientationButtonActive]}
-                onPress={() => setDesignSource("upload")}
-              >
-                <Text style={[styles.orientationButtonText, designSource === "upload" && styles.orientationButtonTextActive]}>Upload Custom</Text>
-              </TouchableOpacity>
-            </View>
-            {designSource === "template" ? (
-              <>
-                <Text style={styles.designLabel}>Select Template</Text>
-                <ScrollView horizontal style={styles.templateGallery} showsHorizontalScrollIndicator={false}>
-                  {getTemplatesByOrientation(ticketOrientation).map((template) => (
-                    <TouchableOpacity
-                      key={template.id}
-                      style={[styles.templateCard, selectedTemplateId === template.id && styles.templateCardSelected]}
-                      onPress={() => setSelectedTemplateId(template.id)}
-                    >
-                      <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
-                      <Text style={styles.templateLabel}>{template.label}</Text>
-                      {selectedTemplateId === template.id && (
-                        <View style={styles.selectedOverlay}>
-                          <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
-                        </View>
-                      )}
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
-              </>
-            ) : (
-              <>
-                <Text style={styles.designLabel}>Upload Background Image</Text>
-                <TouchableOpacity
-                  style={styles.uploadButton}
-                  onPress={pickEventBackgroundImage}
-                >
-                  <Ionicons name="image-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.uploadButtonText}>Choose Image</Text>
-                </TouchableOpacity>
-                {uploadedBackgroundUrl && (
-                  <View style={{ marginTop: 8 }}>
-                    <Text style={{ color: "#888", fontSize: 12 }}>Image selected: {uploadedBackgroundUrl.substring(0, 50)}...</Text>
-                  </View>
-                )}
-              </>
-            )}
-          </View>
-        )}
-
+)}
+        
         <View style={styles.labelContainer}>
           <Text style={styles.label}>Location (City) *</Text>
           {errors.location && <Text style={styles.errorStar}>*</Text>}
