@@ -40,9 +40,13 @@ function buildTicketEmailHtml({
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
   
-  // Extract colors from ticket design or use defaults
+  // Extract colors and layout from ticket design or use defaults
   const isEnabled = ticketDesign?.enabled !== false;
   const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
+  const isLandscape = ticketDesign?.orientation === "landscape";
+  const qrPosition = ticketDesign?.qr_position || "center";
+  const isUploadBg = ticketDesign?.source === "upload" && ticketDesign.background_url;
+  const customDims = ticketDesign?.dimensions || null;
   
   // Define color schemes for different templates
   const templateColors = {
@@ -155,7 +159,18 @@ function buildTicketEmailHtml({
       `
     : "";
   
-  // Build the inner ticket content (this stays the same)
+// Build QR section based on position
+  const qrAlign = qrPosition === "right" ? "right" : (qrPosition === "left" ? "left" : "center");
+  const qrSection = `
+      <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:${qrAlign}; margin-bottom:20px; border:1px solid #2a2a2a;">
+        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
+      </div>
+      <p style="text-align:${qrAlign}; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
+        Present this QR code at the event entrance
+      </p>
+    `;
+  
+  // Build the inner ticket content
   const ticketContent = `
     <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
       <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
@@ -164,12 +179,68 @@ function buildTicketEmailHtml({
     <div style="padding:24px;">
       <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
 
-      <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:center; margin-bottom:20px; border:1px solid #2a2a2a;">
-        <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:200px; height:200px; display:block; margin:0 auto;" />
+      ${qrSection}
+
+      <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
+        ${row("Event", escapeHtml(eventName))}
+        ${row("Ticket Type", escapeHtml(ticketType))}
+        ${venue ? row("Venue", escapeHtml(venue)) : ""}
+        ${row("Date", escapeHtml(date))}
+        ${row("Time", escapeHtml(time))}
+        ${row("Ticket Ref", escapeHtml(ticketRef))}
       </div>
-      <p style="text-align:center; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
-        Present this QR code at the event entrance
+    </div>
+
+    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
+      <p style="margin:0; font-size:11px; color:#6b6b6b;">
+        This ticket is verified and secured by YoVibe
       </p>
+    </div>
+    ${photoLinkSection}
+  `;
+  
+  // Use custom dimensions if available, otherwise use defaults
+  const ticketWidth = customDims?.width || 480;
+  const ticketHeight = customDims?.height || 560;
+  
+  // For uploaded backgrounds, apply background-image to the ticket card itself
+  if (hasUploadBg) {
+    return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="${ticketWidth}" cellpadding="0" cellspacing="0" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
+            <tr>
+              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
+                ${ticketContent}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+    `
+  }
+  
+  // Default gradient background
+  return `
+  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${colors.bg}; padding:24px; color:${colors.text};">
+    <div style="max-width:${ticketWidth}px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
+      ${ticketContent}
+    </div>
+  </div>
+  `;
+  
+  // Build the inner ticket content
+  const ticketContent = `
+    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
+      <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
+    </div>
+
+    <div style="padding:24px;">
+      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
+
+      ${qrSection}
 
       <div style="border-top:1px solid #2a2a2a; padding-top:16px;">
         ${row("Event", escapeHtml(eventName))}
@@ -189,15 +260,15 @@ function buildTicketEmailHtml({
     ${photoLinkSection}
   `
   
-  // For uploaded backgrounds, use a table with background attribute for email compatibility
+  // For uploaded backgrounds, apply background-image to the ticket card itself
   if (hasUploadBg) {
     return `
-    <table role="presentation" width="100%" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
       <tr>
-        <td align="center" style="padding:24px;">
-          <table role="presentation" width="480" style="background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
+        <td align="center">
+          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-image:url('${ticketDesign.background_url}'); background-size:cover; background-position:center; background-repeat:no-repeat; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
             <tr>
-              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif;">
+              <td style="padding:24px; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
                 ${ticketContent}
               </td>
             </tr>
@@ -309,13 +380,23 @@ async function buildTicketPdf({
   buyerName,
   ticketDesign,
 }) {
+  // Use dimensions from ticket design if available
+  const isLandscape = ticketDesign?.orientation === "landscape";
+  const qrPosition = ticketDesign?.qr_position || "center";
+  const customDims = ticketDesign?.dimensions;
+  
+  // PDF page dimensions: use custom dimensions or defaults
+  // Default: portrait 600x900, landscape 900x500
+  const pdfWidth = customDims?.width || (isLandscape ? 900 : 600);
+  const pdfHeight = customDims?.height || (isLandscape ? 500 : 900);
+  
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([320, 560]); // narrow, receipt-like ticket shape
+  const page = pdfDoc.addPage([pdfWidth, pdfHeight]);
   const { width, height } = page.getSize();
-
+  
   const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-
+  
   const textGrey = rgb(0.6, 0.6, 0.6);
   const textWhite = rgb(0.96, 0.96, 0.96);
   const green = rgb(0.29, 0.87, 0.5);
@@ -365,17 +446,15 @@ async function buildTicketPdf({
   
   // Draw background image if available
   if (bgImageEmbed) {
-    const bgWidth = width;
-    const bgHeight = height;
     page.drawImage(bgImageEmbed, {
       x: 0,
       y: 0,
-      width: bgWidth,
-      height: bgHeight,
+      width: width,
+      height: height,
       opacity: 0.3, // Semi-transparent for text readability
     });
   }
-
+  
   let cursorY = height - 36;
 
   // Brand header
@@ -399,8 +478,22 @@ async function buildTicketPdf({
 
   // QR code image — fetched from R2/hosted URL or decoded from inline base64
   const decoded = await loadQrImageBytes(qrCodeDataUrl);
-  const qrSize = 200;
-  const qrX = (width - qrSize) / 2;
+  const qrSize = isLandscape ? 140 : 200;
+  
+  // Position QR based on qr_position
+  let qrX = (width - qrSize) / 2;
+  if (qrPosition === "right") {
+    qrX = width - qrSize - 24;
+  } else if (qrPosition === "left") {
+    qrX = 24;
+  }
+  
+  // For right position, move QR section earlier in the layout
+  if (qrPosition === "right" && isLandscape) {
+    // In landscape with right QR, we need to adjust layout
+    // For simplicity, keep centered in PDF for now
+    qrX = (width - qrSize) / 2;
+  }
 
   if (decoded) {
     const qrImage = decoded.isPng
