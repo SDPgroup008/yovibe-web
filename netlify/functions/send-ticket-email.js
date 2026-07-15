@@ -42,6 +42,7 @@ function buildTicketEmailHtml({
   qrCodeDataUrl,
   buyerName,
   photoUploadLink,
+  posterUrl,
   ticketDesign,
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
@@ -53,8 +54,8 @@ function buildTicketEmailHtml({
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
   const emailSections = computeEmailSections(computed);
   
-  // Get page width from computed layout
-  const ticketWidth = Math.min(computed.pageWidth, 600);
+  // Get email width from computed layout (proportionally scaled)
+  const ticketWidth = computed.emailWidth;
   
   // Define color schemes for different templates
   const templateColors = {
@@ -201,6 +202,13 @@ function buildTicketEmailHtml({
     }
     
     if (block.id === "poster") {
+      if (posterUrl) {
+        return `
+          <div style="text-align:${align}; margin-bottom:16px;">
+            <img src="${posterUrl}" alt="Event Poster" style="width:${Math.min(block.width, 200)}px; height:auto; border-radius:8px; border:2px solid ${colors.accent}; box-shadow:0 4px 20px rgba(0,0,0,0.5);" />
+          </div>
+        `;
+      }
       return ``;
     }
     
@@ -350,6 +358,7 @@ async function buildTicketPdf({
   ticketRef,
   qrCodeDataUrl,
   buyerName,
+  posterUrl,
   ticketDesign,
 }) {
   // Compute layout from ticket design using the shared engine
@@ -484,6 +493,22 @@ async function buildTicketPdf({
         infoY -= lineHeight + 2;
       }
     }
+    
+    if (pos.id === "poster" && posterUrl) {
+      try {
+        const posterBytes = await loadQrImageBytes(posterUrl);
+        if (posterBytes) {
+          const posterImg = posterBytes.isPng
+            ? await pdfDoc.embedPng(posterBytes.bytes)
+            : await pdfDoc.embedJpg(posterBytes.bytes);
+          const pw = Math.min(pos.width, posterImg.width);
+          const ph = Math.min(pos.height, posterImg.height);
+          page.drawImage(posterImg, { x: pos.x, y: pos.y, width: pw, height: ph });
+        }
+      } catch (e) {
+        console.warn("PDF: Failed to embed poster image:", e.message);
+      }
+    }
   }
   
   // Footer
@@ -586,6 +611,7 @@ exports.handler = async function (event) {
     ticketRef,
     qrCodeDataUrl,
     photoUploadLink,
+    posterUrl,
     ticketDesign,
   } = payload;
 
@@ -616,6 +642,7 @@ exports.handler = async function (event) {
     qrCodeDataUrl,
     buyerName,
     photoUploadLink,
+    posterUrl,
     ticketDesign,
   });
 
@@ -630,6 +657,7 @@ exports.handler = async function (event) {
       ticketRef,
       qrCodeDataUrl,
       buyerName,
+      posterUrl,
       ticketDesign,
     });
   } catch (err) {

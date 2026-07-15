@@ -265,6 +265,7 @@ export class InstallmentService {
             qrCodeDataUrl: ticket.qrCodeDataUrl,
             photoUploadLink,
             ticketDesign,
+            posterUrl: event.posterImageUrl,
           }),
         })
       } catch (err) {

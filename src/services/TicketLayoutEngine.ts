@@ -26,7 +26,6 @@ export interface TicketDesignInput {
   background_url?: string | null
   orientation?: "portrait" | "landscape"
   dimensions?: { width: number; height: number }
-  qr_position?: string
   layout?: TicketLayout
 }
 
@@ -42,6 +41,7 @@ export interface ComputedBlock {
 }
 
 export interface ComputedLayout {
+  layoutVersion: number
   blocks: ComputedBlock[]
   bgTransform: BgTransform
   pageWidth: number
@@ -49,6 +49,10 @@ export interface ComputedLayout {
   isLandscape: boolean
   isUploadBg: boolean
   bgImage: string
+  /** Scale factor to fit the design within ~600px for email */
+  emailScale: number
+  /** Clamped width for email rendering */
+  emailWidth: number
 }
 
 const DEFAULT_BLOCK_SIZES: Record<string, { width: number; height: number }> = {
@@ -58,7 +62,9 @@ const DEFAULT_BLOCK_SIZES: Record<string, { width: number; height: number }> = {
   qr: { width: 160, height: 200 },
 }
 
-export function getDefaultLayout(orientation: "portrait" | "landscape", hasPoster: boolean): TicketLayout {
+const EMAIL_MAX_WIDTH = 600
+
+export function getDefaultLayout(orientation: "portrait" | "landscape", _hasPoster: boolean): TicketLayout {
   if (orientation === "landscape") {
     return {
       blocks: [
@@ -102,6 +108,9 @@ export function computeTicketLayout(
     contentHints?.hasPoster ?? true
   )
 
+  const emailScale = Math.min(EMAIL_MAX_WIDTH, pageWidth) / pageWidth
+  const emailWidth = Math.round(pageWidth * emailScale)
+
   const blocks: ComputedBlock[] = layout.blocks.map((block, idx) => {
     const defaultSize = DEFAULT_BLOCK_SIZES[block.id] || { width: 200, height: 150 }
     const scale = block.scale ?? 1
@@ -119,13 +128,14 @@ export function computeTicketLayout(
       y: block.y,
       width: Math.round(defaultSize.width * scale),
       height: Math.round(defaultSize.height * scale),
-      scale: scale,
+      scale,
       zIndex: idx,
       align,
     }
   })
 
   return {
+    layoutVersion: 1,
     blocks,
     bgTransform: layout.bg,
     pageWidth,
@@ -133,21 +143,31 @@ export function computeTicketLayout(
     isLandscape,
     isUploadBg,
     bgImage,
+    emailScale,
+    emailWidth,
   }
 }
 
 /**
  * Convert a computed layout into an ordered list of sections for email tables.
- * Blocks are ordered by Y (top to bottom), then grouped by horizontal region.
+ * Blocks are ordered by Y (top to bottom), then grouped by type.
+ * Each block's width/height are proportionally scaled to fit email width.
  */
 export function computeEmailSections(layout: ComputedLayout): ComputedBlock[] {
-  return [...layout.blocks].sort((a, b) => {
+  const sorted = [...layout.blocks].sort((a, b) => {
     if (Math.abs(a.y - b.y) < 50) {
       const order = { poster: 0, title: 1, info: 2, qr: 3 }
       return (order[a.id as keyof typeof order] ?? 0) - (order[b.id as keyof typeof order] ?? 0)
     }
     return a.y - b.y
   })
+
+  // Scale each block proportionally for email rendering
+  return sorted.map((block) => ({
+    ...block,
+    width: Math.max(80, Math.round(block.width * layout.emailScale)),
+    height: Math.max(40, Math.round(block.height * layout.emailScale)),
+  }))
 }
 
 /**

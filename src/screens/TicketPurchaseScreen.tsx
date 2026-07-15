@@ -427,6 +427,7 @@ const handlePaymentComplete = async () => {
               qrCodeDataUrl: ticket.qrCodeDataUrl,
               photoUploadLink,
               ticketDesign,
+              posterUrl: event.posterImageUrl,
             }),
           })
           console.log(`Email sent for ticket ${ticket.id}`)

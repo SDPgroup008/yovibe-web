@@ -69,6 +69,7 @@ const ResendTicketScreen: React.FC = () => {
               qrCodeDataUrl: ticket.qrCodeDataUrl,
               // Find the ticket design from the entry fee
               ticketDesign: event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,
+              posterUrl: event?.posterImageUrl,
             }),
           })
 

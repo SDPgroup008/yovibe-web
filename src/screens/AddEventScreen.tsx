@@ -39,7 +39,7 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; qr_position?: "top" | "bottom" | "center" | "left" | "right"; dimensions: { width: number; height: number }; layout?: TicketLayout } }
+type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number }; layout?: TicketLayout } }
 
 // ─── Interactive ticket editor (web only) ────────────────────────────────────
 const TicketEditor: React.FC<{
@@ -521,7 +521,6 @@ const AddEventScreen: React.FC<any> = (props) => {
         source: newFeeDesignSource,
         template_id: newFeeDesignSource === "template" ? newFeeSelectedTemplate : null,
         background_url: newFeeDesignSource === "upload" ? newFeeUploadedBackgroundUrl : null,
-        qr_position: newFeeQrPosition,
         dimensions: newFeeDesignSource === "upload"
           ? { width: uploadW, height: uploadH }
           : { width: tplW, height: tplH },

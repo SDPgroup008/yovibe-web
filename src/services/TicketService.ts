@@ -1203,6 +1203,7 @@ console.error("❌ Error details:", updateError.details)
             ticketRef: ticketId,
             qrCodeDataUrl: "",
             ticketDesign: bulkTicketDesign,
+            posterUrl: event.posterImageUrl,
           }),
         })
       }
@@ -1446,6 +1447,7 @@ console.error("❌ Error details:", updateError.details)
             photoUploadLink: ticket.photoUploadToken ? `${FUNCTIONS_BASE_URL}/.netlify/functions/upload-buyer-photo?ticketId=${ticket.id}&token=${ticket.photoUploadToken}` : undefined,
             // Include ticket design from entry fee
             ticketDesign: event.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,
+            posterUrl: event.posterImageUrl,
           }
 
           // Use AbortController with 120s timeout (accounts for Netlify cold starts + PDF generation + Resend)

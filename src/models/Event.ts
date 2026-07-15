@@ -37,7 +37,6 @@ export interface Event {
       source: "template" | "upload"
       template_id: string | null
       background_url: string | null
-      qr_position?: "top" | "bottom" | "center" | "left" | "right"
       dimensions: { width: number; height: number }
       layout?: {
         blocks: Array<{ id: string; x: number; y: number; scale?: number }>
@@ -57,7 +56,6 @@ export interface Event {
     source: "template" | "upload"
     template_id: string | null
     background_url: string | null
-    qr_position?: "top" | "bottom" | "center" | "left" | "right"
     dimensions: { width: number; height: number }
     layout?: {
       blocks: Array<{ id: string; x: number; y: number; scale?: number }>
@@ -72,7 +70,6 @@ export interface TicketDesign {
   source: "template" | "upload"
   template_id: string | null
   background_url: string | null
-  qr_position?: "top" | "bottom" | "center" | "left" | "right"
   dimensions: { width: number; height: number }
   layout?: {
     blocks: Array<{ id: string; x: number; y: number; scale?: number }>

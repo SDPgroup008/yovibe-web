@@ -9,6 +9,8 @@ const DEFAULT_BLOCK_SIZES = {
   qr: { width: 160, height: 200 },
 };
 
+const EMAIL_MAX_WIDTH = 600;
+
 function getDefaultLayout(orientation, hasPoster) {
   if (orientation === "landscape") {
     return {
@@ -49,6 +51,9 @@ function computeTicketLayout(design, contentHints) {
     contentHints?.hasPoster ?? true
   );
 
+  const emailScale = Math.min(EMAIL_MAX_WIDTH, pageWidth) / pageWidth;
+  const emailWidth = Math.round(pageWidth * emailScale);
+
   const blocks = layout.blocks.map(function(block, idx) {
     const defaultSize = DEFAULT_BLOCK_SIZES[block.id] || { width: 200, height: 150 };
     const scale = block.scale ?? 1;
@@ -73,6 +78,7 @@ function computeTicketLayout(design, contentHints) {
   });
 
   return {
+    layoutVersion: 1,
     blocks: blocks,
     bgTransform: layout.bg,
     pageWidth: pageWidth,
@@ -80,11 +86,14 @@ function computeTicketLayout(design, contentHints) {
     isLandscape: isLandscape,
     isUploadBg: isUploadBg,
     bgImage: bgImage,
+    emailScale: emailScale,
+    emailWidth: emailWidth,
   };
 }
 
 /**
  * Convert computed layout into an ordered list for email table layout.
+ * Blocks are proportionally scaled to fit email width.
  */
 function computeEmailSections(layout) {
   var orderBy = { poster: 0, title: 1, info: 2, qr: 3 };
@@ -94,7 +103,20 @@ function computeEmailSections(layout) {
     }
     return a.y - b.y;
   });
-  return sorted;
+
+  // Scale each block proportionally for email rendering
+  return sorted.map(function(block) {
+    return {
+      id: block.id,
+      x: block.x,
+      y: block.y,
+      width: Math.max(80, Math.round(block.width * layout.emailScale)),
+      height: Math.max(40, Math.round(block.height * layout.emailScale)),
+      scale: block.scale,
+      zIndex: block.zIndex,
+      align: block.align,
+    };
+  });
 }
 
 /**
