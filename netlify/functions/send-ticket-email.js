@@ -56,6 +56,99 @@ function buildTicketEmailHtml({
   // Get page width from computed layout
   const ticketWidth = Math.min(computed.pageWidth, 600);
   
+  // Define color schemes for different templates
+  const templateColors = {
+    "midnight-portrait": {
+      bg: "linear-gradient(160deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      header: "linear-gradient(90deg,#302b63,#24243e)",
+      accent: "#7c3aed",
+      text: "#ffffff",
+      qr: "#1e1b4b",
+      footer: "#101010",
+    },
+    "neon-night-portrait": {
+      bg: "linear-gradient(160deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
+      header: "linear-gradient(90deg,#ff0080,#7928ca)",
+      accent: "#ff0080",
+      text: "#ffffff",
+      qr: "#1a0533",
+      footer: "#101010",
+    },
+    "golden-vip-portrait": {
+      bg: "linear-gradient(160deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
+      header: "linear-gradient(90deg,#b8860b,#ffd700)",
+      accent: "#ffd700",
+      text: "#fff8dc",
+      qr: "#2d1f00",
+      footer: "#101010",
+    },
+    "ocean-portrait": {
+      bg: "linear-gradient(160deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
+      header: "linear-gradient(90deg,#0074d9,#00b4d8)",
+      accent: "#00b4d9",
+      text: "#ffffff",
+      qr: "#003366",
+      footer: "#101010",
+    },
+    "ember-portrait": {
+      bg: "linear-gradient(160deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
+      header: "linear-gradient(90deg,#ff4500,#ff8c00)",
+      accent: "#ff4500",
+      text: "#fff5f0",
+      qr: "#3d0c00",
+      footer: "#101010",
+    },
+    "midnight-landscape": {
+      bg: "linear-gradient(120deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
+      header: "linear-gradient(180deg,#302b63,#24243e)",
+      accent: "#7c3aed",
+      text: "#ffffff",
+      qr: "#1e1b4b",
+      footer: "#101010",
+    },
+    "neon-night-landscape": {
+      bg: "linear-gradient(120deg,#0a0a0a 0%,#1a0533 60%,#0d0d0d 100%)",
+      header: "linear-gradient(180deg,#ff0080,#7928ca)",
+      accent: "#ff0080",
+      text: "#ffffff",
+      qr: "#1a0533",
+      footer: "#101010",
+    },
+    "golden-vip-landscape": {
+      bg: "linear-gradient(120deg,#1a1200 0%,#2d1f00 50%,#1a1200 100%)",
+      header: "linear-gradient(180deg,#b8860b,#ffd700)",
+      accent: "#ffd700",
+      text: "#fff8dc",
+      qr: "#2d1f00",
+      footer: "#101010",
+    },
+    "ocean-landscape": {
+      bg: "linear-gradient(120deg,#001f3f 0%,#003366 50%,#0074d9 100%)",
+      header: "linear-gradient(180deg,#0074d9,#00b4d8)",
+      accent: "#00b4d9",
+      text: "#ffffff",
+      qr: "#003366",
+      footer: "#101010",
+    },
+    "ember-landscape": {
+      bg: "linear-gradient(120deg,#1a0500 0%,#3d0c00 50%,#7c1900 100%)",
+      header: "linear-gradient(180deg,#ff4500,#ff8c00)",
+      accent: "#ff4500",
+      text: "#fff5f0",
+      qr: "#3d0c00",
+      footer: "#101010",
+    },
+  };
+  
+  const colors = templateColors[templateId || ""] || templateColors["midnight-portrait"] || {
+    bg: "#0b0b0b",
+    header: "#ff3b3b",
+    accent: "#ff3b3b",
+    text: "#f5f5f5",
+    qr: "#ffffff",
+    footer: "#101010",
+  };
+  
   const photoLinkSection = photoUploadLink
     ? `
       <div style="margin-top:20px; padding:16px; background:#1a1a1a; border-radius:10px; border:1px solid #2a2a2a; text-align:center;">
