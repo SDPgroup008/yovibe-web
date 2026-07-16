@@ -16,6 +16,7 @@ import PesaPalService from "../services/PesaPalService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
+import { renderCanonicalTicketSvg, svgDataUri } from "../services/TicketCanonicalRenderer"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
 const shortTicketRef = (ticket: Ticket): string => {
@@ -42,6 +43,7 @@ const MyTicketsScreen: React.FC = () => {
   const tickets = ticketsRaw || []
   const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
+  const [selectedEvent, setSelectedEvent] = useState<any | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
@@ -145,12 +147,18 @@ const MyTicketsScreen: React.FC = () => {
     return "Active"
   }
 
-  const handleViewTicket = (ticket: Ticket) => {
+  const handleViewTicket = async (ticket: Ticket) => {
     setSelectedTicket(ticket)
+    try {
+      setSelectedEvent(await SupabaseService.getEventById(ticket.eventId))
+    } catch {
+      setSelectedEvent(null)
+    }
   }
 
   const handleCloseTicket = () => {
     setSelectedTicket(null)
+    setSelectedEvent(null)
   }
 
   const handleDownloadTicket = async (ticket: Ticket) => {
@@ -522,65 +530,18 @@ const MyTicketsScreen: React.FC = () => {
               </View>
             </View>
 
-            {/* Event Name – big */}
-            <Text style={styles.modalEventName}>{selectedTicket.eventName}</Text>
+            {/* Canonical organizer-designed ticket. This same SVG is used by
+                the browser PDF path and the email visual renderer. */}
+            <Image
+              source={{ uri: svgDataUri(renderCanonicalTicketSvg(selectedTicket, selectedEvent || undefined)) }}
+              style={{ width: "100%", aspectRatio: 2 / 3, marginBottom: 18, borderRadius: 12, backgroundColor: "#111827" }}
+              resizeMode="contain"
+              accessibilityLabel="Organizer-designed ticket"
+            />
 
-            {/* Venue & Attendee – medium */}
-            <View style={styles.modalMetaRow}>
-              <Ionicons name="location-outline" size={15} color="#00D4FF" />
-              <Text style={styles.modalMetaText}>{selectedTicket.venueName || "Venue TBA"}</Text>
-            </View>
-            {selectedTicket.buyerName && (
-              <View style={styles.modalMetaRow}>
-                <Ionicons name="person-outline" size={15} color="#888" />
-                <Text style={styles.modalMetaText}>{selectedTicket.buyerName}</Text>
-              </View>
-            )}
-
-            {/* QR Code Display */}
-            <View style={styles.qrContainer}>
-              {selectedTicket.qrCodeDataUrl ? (
-                <Image 
-                  source={{ uri: selectedTicket.qrCodeDataUrl }} 
-                  style={styles.qrImage}
-                  resizeMode="contain"
-                />
-              ) : (
-                <View style={styles.qrPlaceholder}>
-                  <Ionicons name="qr-code" size={120} color="#00D4FF" />
-                  <Text style={styles.qrText}>{selectedTicket.qrCode}</Text>
-                </View>
-              )}
-              <Text style={styles.qrInstruction}>
-                Present this QR code at the event entrance
-              </Text>
-            </View>
-
-            {/* Ticket Information – small details */}
-            <View style={styles.ticketInfoCard}>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Ticket Type</Text>
-                <Text style={styles.infoValue}>{selectedTicket.entryFeeType || "Standard"}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Date & Time</Text>
-                <Text style={styles.infoValue}>{formatDate(selectedTicket.eventStartTime)} • {formatTime(selectedTicket.eventStartTime)}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Ticket ID</Text>
-                <Text style={styles.infoValueMono}>{shortTicketRef(selectedTicket)}</Text>
-              </View>
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Purchase Date</Text>
-                <Text style={styles.infoValueSmall}>{formatDate(selectedTicket.purchaseDate)}</Text>
-              </View>
-            </View>
-
-            {/* Security Badge */}
-            <View style={styles.securityBadge}>
-              <Ionicons name="shield-checkmark" size={20} color="#4CAF50" />
-              <Text style={styles.securityText}>This ticket is verified and secured by YoVibe</Text>
-            </View>
+            <Text style={{ color: "#9CA3AF", textAlign: "center", marginBottom: 18 }}>
+              Present this ticket and QR code at the event entrance.
+            </Text>
 
             {/* Download Button */}
             <TouchableOpacity style={styles.downloadButton} onPress={() => handleDownloadTicket(selectedTicket)}>

@@ -22,7 +22,8 @@ import LocationService from "../services/LocationService"
 import { uploadToR2 } from "../services/R2Service"
 import { useAuth } from "../contexts/AuthContext"
 import { getTemplatesByOrientation, type TicketTemplateConfig } from "../constants/ticketTemplates"
-import { generateEditorHTML, generatePreviewHTML, defaultLayout, type TicketLayout } from "../services/TicketPDFService"
+import { generateEditorHTML, generatePreviewHTML, defaultLayout } from "../services/TicketPDFService"
+import type { TicketLayout } from "../services/TicketLayoutEngine"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -39,7 +40,7 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
-type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number }; layout?: TicketLayout } }
+type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number }; qr_position?: "top" | "bottom" | "center" | "left" | "right"; layout?: TicketLayout } }
 
 // ─── Interactive ticket editor (web only) ────────────────────────────────────
 const TicketEditor: React.FC<{
@@ -515,6 +516,22 @@ const AddEventScreen: React.FC<any> = (props) => {
       const uploadH = Math.round((parseFloat(newFeeHeightCm) || 29.7) * CM_TO_PX)
       const tplW = newFeeDesignOrientation === "landscape" ? 900 : 600
       const tplH = newFeeDesignOrientation === "landscape" ? 500 : 900
+      const savedLayout = {
+        ...newFeeLayout,
+        blocks: newFeeLayout.blocks.map((block) => ({ ...block })),
+      }
+      // QR position is a template preset. The saved block layout remains the
+      // source of truth after the organiser has positioned/resized blocks.
+      if (newFeeDesignSource === "template") {
+        const qr = savedLayout.blocks.find((block) => block.id === "qr")
+        if (qr) {
+          if (newFeeQrPosition === "top") { qr.x = Math.round((tplW - 160) / 2); qr.y = 110 }
+          if (newFeeQrPosition === "center") { qr.x = Math.round((tplW - 160) / 2); qr.y = Math.round((tplH - 200) / 2) }
+          if (newFeeQrPosition === "bottom") { qr.x = Math.round((tplW - 160) / 2); qr.y = tplH - 250 }
+          if (newFeeQrPosition === "left") { qr.x = 24; qr.y = Math.round((tplH - 200) / 2) }
+          if (newFeeQrPosition === "right") { qr.x = tplW - 184; qr.y = Math.round((tplH - 200) / 2) }
+        }
+      }
       fee.ticketDesign = {
         enabled: true,
         orientation: newFeeDesignOrientation,
@@ -524,7 +541,8 @@ const AddEventScreen: React.FC<any> = (props) => {
         dimensions: newFeeDesignSource === "upload"
           ? { width: uploadW, height: uploadH }
           : { width: tplW, height: tplH },
-        layout: newFeeLayout,
+        qr_position: newFeeQrPosition,
+        layout: savedLayout,
       } as any
     }
     setEntryFees([...entryFees, fee])

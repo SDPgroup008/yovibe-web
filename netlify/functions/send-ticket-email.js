@@ -18,6 +18,8 @@ const {
   computeEmailSections,
   computePdfPositions,
 } = require("./ticketLayoutEngine");
+const { renderCanonicalTicketSvg } = require("./ticketCanonicalRenderer");
+const { Resvg } = require("@resvg/resvg-js");
 
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
@@ -56,6 +58,20 @@ function buildTicketEmailHtml({
   
   // Get email width from computed layout (proportionally scaled)
   const ticketWidth = computed.emailWidth;
+
+  // The canonical SVG is the organizer's actual canvas, including absolute
+  // block coordinates, dimensions, background transform, styling and QR.
+  // Email clients receive this same visual artifact instead of a reflowed
+  // approximation of the canvas.
+  const canonicalSvg = renderCanonicalTicketSvg({
+    eventName, ticketType, venue, date, time, buyerName, ticketRef,
+    qrCodeDataUrl, posterUrl, ticketDesign,
+  });
+  const canonicalSvgUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(canonicalSvg)}`;
+  const canonicalPhotoLink = photoUploadLink
+    ? `<p style="font-family:Arial,sans-serif;color:#9a9a9a;text-align:center"><a href="${escapeHtml(photoUploadLink)}" style="color:#00b4d9">Add security photo</a></p>`
+    : "";
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:24px;border-collapse:collapse"><tr><td align="center"><img src="${canonicalSvgUri}" width="${ticketWidth}" style="display:block;width:${ticketWidth}px;max-width:100%;height:auto" alt="${escapeHtml(eventName)} ticket" />${canonicalPhotoLink}</td></tr></table>`;
   
   // Define color schemes for different templates
   const templateColors = {
@@ -361,6 +377,18 @@ async function buildTicketPdf({
   posterUrl,
   ticketDesign,
 }) {
+  // Rasterize the exact canonical artwork used in the email and app, then
+  // place that single image on the PDF page. This removes the former third
+  // renderer and makes the email attachment pixel-identical to the ticket.
+  const svg = renderCanonicalTicketSvg({ eventName, ticketType, venue, date, time, buyerName, ticketRef, qrCodeDataUrl, posterUrl, ticketDesign });
+  const pngBytes = new Resvg(svg, { fitTo: { mode: 'original' } }).render().asPng();
+  const exactDoc = await PDFDocument.create();
+  const exactLayout = computeTicketLayout(ticketDesign || {}, { hasPoster: !!posterUrl });
+  const exactPage = exactDoc.addPage([exactLayout.pageWidth, exactLayout.pageHeight]);
+  const exactImage = await exactDoc.embedPng(pngBytes);
+  exactPage.drawImage(exactImage, { x: 0, y: 0, width: exactLayout.pageWidth, height: exactLayout.pageHeight });
+  return exactDoc.save();
+
   // Compute layout from ticket design using the shared engine
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
   

@@ -348,6 +348,7 @@ const handlePaymentComplete = async () => {
         buyerId: user?.id,
         eventId: event!.id,
         eventName: event!.name,
+        ticketType: selectedTicketTypeName,
         quantity: actualTicketCount,
         amount: total,
         attendeeNames: buyerNamesList,

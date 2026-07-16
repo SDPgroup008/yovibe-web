@@ -30,10 +30,13 @@ export interface TicketLayout {
 }
 
 export interface TicketDesignInput {
+  enabled?: boolean
   source?: "template" | "upload"
+  template_id?: string | null
   background_url?: string | null
   orientation?: "portrait" | "landscape"
   dimensions?: { width: number; height: number }
+  qr_position?: "top" | "bottom" | "center" | "left" | "right"
   layout?: TicketLayout
 }
 

@@ -7,6 +7,7 @@ export interface PendingFulfillment {
   buyerId?: string
   eventId: string
   eventName?: string
+  ticketType?: string
   quantity: number
   amount: number
   status: "payment_confirmed" | "fulfilling" | "fulfilled" | "failed"
@@ -30,6 +31,7 @@ export interface CreateFulfillmentInput {
   buyerId?: string
   eventId: string
   eventName?: string
+  ticketType?: string
   quantity?: number
   amount: number
   attendeeNames?: string[]

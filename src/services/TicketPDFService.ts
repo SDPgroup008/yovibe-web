@@ -10,6 +10,7 @@ import {
   type TicketLayout,
   getDefaultLayout,
 } from "./TicketLayoutEngine"
+import { canonicalTicketHtml } from "./TicketCanonicalRenderer"
 
 const PORTRAIT_W = 600
 const PORTRAIT_H = 900
@@ -452,6 +453,36 @@ export function generatePreviewHTML(
   uploadedBgUrl?: string | null,
   sampleData?: { eventName?: string; venueName?: string; posterUrl?: string; layout?: TicketLayout; qrPosition?: "top" | "bottom" | "center" | "left" | "right" }
 ): string {
+  const previewDesign: any = {
+    enabled: true,
+    orientation,
+    source: uploadedBgUrl ? "upload" : "template",
+    template_id: templateId,
+    background_url: uploadedBgUrl || null,
+    dimensions: { width: orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W, height: orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H },
+    layout: sampleData?.layout,
+  }
+  const previewEvent: any = {
+    name: sampleData?.eventName || "Sample Event Night",
+    venueName: sampleData?.venueName || "The Grand Venue",
+    location: "KAMPALA",
+    posterImageUrl: sampleData?.posterUrl || "",
+    entryFees: [{ name: "VIP", amount: "0", ticketDesign: previewDesign }],
+    ticket_design: previewDesign,
+  }
+  const previewTicket: any = {
+    id: "preview-ticket",
+    eventId: "preview-event",
+    eventName: previewEvent.name,
+    buyerName: "John Doe",
+    entryFeeType: "VIP",
+    ticketRef: "YV-PREVIEW",
+    eventStartTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    qrCodeDataUrl: FAKE_QR,
+  }
+  return canonicalTicketHtml(previewTicket, previewEvent)
+
+  /* Legacy preview retained below for editor compatibility history. */
   const isLandscape = orientation === "landscape"
   const W = isLandscape ? LANDSCAPE_W : PORTRAIT_W
   const H = isLandscape ? LANDSCAPE_H : PORTRAIT_H
@@ -522,6 +553,10 @@ export function generateEditorHTML(
 
 // ─── Main ticket HTML (for actual tickets) ────────────────────────────────────
 export function generateTicketHTML(ticket: Ticket, event?: Event, overrideQrDataUrl?: string, layout?: TicketLayout): string {
+  // All final client-side ticket outputs use the canonical SVG renderer. The
+  // legacy HTML builders below remain available to the organizer editor only.
+  if (!overrideQrDataUrl && !layout) return canonicalTicketHtml(ticket, event)
+
   const eventName = event?.name || ticket.eventName || "Event"
   const venueName = event?.venueName || ticket.venueName || "TBA"
   const location  = event?.location || "TBA"
