@@ -837,6 +837,7 @@ console.error("❌ Error details:", updateError.details)
       id: row.id,
       eventId: row.event_id || row.eventId,
       eventName: row.event_name || row.eventName,
+      venueName: row.venue_name || row.venueName,
       buyerId: row.buyer_id || row.buyerId,
       buyerName: row.buyer_name || row.buyerName,
       buyerEmail: row.buyer_email || row.buyerEmail,
