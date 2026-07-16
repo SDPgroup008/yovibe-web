@@ -599,18 +599,43 @@ export class TicketPDFService {
 
   static async downloadTicketPDF(ticket: Ticket, event?: Event): Promise<{ success: boolean; error?: string }> {
     try {
-      const html = generateTicketHTML(ticket, event)
-      const { uri } = await Print.printToFileAsync({ html, base64: false })
+      // Web expo-print prints the current browser document in some runtimes.
+      // Generate the same flattened canonical artwork used by the email
+      // attachment instead, so the browser downloads only the ticket.
       if (Platform.OS === "web") {
-        const response = await fetch(uri)
+        const eventDate = ticket.eventStartTime instanceof Date ? ticket.eventStartTime : new Date(ticket.eventStartTime)
+        const feeDesign = event?.entryFees?.find((fee: any) => fee.name === ticket.entryFeeType)?.ticketDesign
+        const response = await fetch("/.netlify/functions/download-ticket-pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            eventName: event?.name || ticket.eventName || "Event",
+            ticketType: ticket.entryFeeType || "Standard",
+            venue: event?.venueName || ticket.venueName || "Venue TBA",
+            date: eventDate.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" }),
+            time: eventDate.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+            ticketRef: ticket.ticketRef || ticket.id?.slice(0, 8).toUpperCase() || "XXXXXXXX",
+            qrCodeDataUrl: ticket.qrCodeDataUrl || "",
+            buyerName: ticket.buyerName || "Guest",
+            posterUrl: event?.posterImageUrl || null,
+            ticketDesign: feeDesign || event?.ticket_design || undefined,
+          }),
+        })
+        if (!response.ok) throw new Error("The ticket PDF service could not generate this ticket")
         const blob = await response.blob()
         const url = URL.createObjectURL(blob)
-        const a = document.createElement("a")
-        a.href = url; a.download = `ticket-${ticket.ticketRef || ticket.id}.pdf`
-        document.body.appendChild(a); a.click(); document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = `ticket-${ticket.ticketRef || ticket.id}.pdf`
+        document.body.appendChild(anchor)
+        anchor.click()
+        document.body.removeChild(anchor)
+        setTimeout(() => URL.revokeObjectURL(url), 1000)
         return { success: true }
       }
+
+      const html = generateTicketHTML(ticket, event)
+      const { uri } = await Print.printToFileAsync({ html, base64: false })
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `YoVibe Ticket - ${ticket.eventName}` })
         return { success: true }

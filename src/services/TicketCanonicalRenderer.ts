@@ -142,6 +142,36 @@ export function svgDataUri(svg: string) {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`
 }
 
+/**
+ * React Native's Image component cannot reliably load remote images nested
+ * inside an SVG data URI. Inline the ticket assets first so the in-app ticket
+ * and browser export receive a self-contained artifact.
+ */
+export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput) {
+  let svg = renderCanonicalTicketSvg(ticket, event, designOverride)
+  const assets = [ticket.qrCodeDataUrl, event?.posterImageUrl, designOverride?.background_url || resolveTicketDesign(event, ticket).background_url]
+    .filter((value): value is string => !!value && !value.startsWith("data:"))
+
+  for (const asset of Array.from(new Set(assets))) {
+    try {
+      const response = await fetch(asset)
+      if (!response.ok) continue
+      const blob = await response.blob()
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+      const escaped = xmlUrl(asset)
+      svg = svg.split(`href="${escaped}"`).join(`href="${dataUrl}"`)
+    } catch (error) {
+      console.warn("Ticket asset could not be embedded", asset, error)
+    }
+  }
+  return svg
+}
+
 export function canonicalTicketHtml(ticket: Ticket, event?: Event) {
   const design = resolveTicketDesign(event, ticket)
   const computed = computeTicketLayout(design, { hasPoster: !!event?.posterImageUrl })

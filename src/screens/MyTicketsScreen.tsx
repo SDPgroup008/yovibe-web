@@ -16,7 +16,7 @@ import PesaPalService from "../services/PesaPalService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
-import { renderCanonicalTicketSvg, svgDataUri } from "../services/TicketCanonicalRenderer"
+import { renderCanonicalTicketSvgWithEmbeddedAssets, svgDataUri } from "../services/TicketCanonicalRenderer"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
 const shortTicketRef = (ticket: Ticket): string => {
@@ -44,6 +44,7 @@ const MyTicketsScreen: React.FC = () => {
   const { scrollRef, onScroll } = useMyTicketsScroll()
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null)
+  const [selectedTicketSvg, setSelectedTicketSvg] = useState<string | null>(null)
   const [filter, setFilter] = useState<"all" | "active" | "used" | "upcoming">("all")
   const [loading, setLoading] = useState(true)
   const [localTickets, setLocalTickets] = useState<Ticket[]>([])
@@ -149,16 +150,21 @@ const MyTicketsScreen: React.FC = () => {
 
   const handleViewTicket = async (ticket: Ticket) => {
     setSelectedTicket(ticket)
+    setSelectedTicketSvg(null)
     try {
-      setSelectedEvent(await SupabaseService.getEventById(ticket.eventId))
+      const event = await SupabaseService.getEventById(ticket.eventId)
+      setSelectedEvent(event)
+      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket, event || undefined))
     } catch {
       setSelectedEvent(null)
+      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket))
     }
   }
 
   const handleCloseTicket = () => {
     setSelectedTicket(null)
     setSelectedEvent(null)
+    setSelectedTicketSvg(null)
   }
 
   const handleDownloadTicket = async (ticket: Ticket) => {
@@ -533,7 +539,7 @@ const MyTicketsScreen: React.FC = () => {
             {/* Canonical organizer-designed ticket. This same SVG is used by
                 the browser PDF path and the email visual renderer. */}
             <Image
-              source={{ uri: svgDataUri(renderCanonicalTicketSvg(selectedTicket, selectedEvent || undefined)) }}
+              source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
               style={{ width: "100%", aspectRatio: 2 / 3, marginBottom: 18, borderRadius: 12, backgroundColor: "#111827" }}
               resizeMode="contain"
               accessibilityLabel="Organizer-designed ticket"

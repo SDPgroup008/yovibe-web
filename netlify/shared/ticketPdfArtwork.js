@@ -63,7 +63,20 @@ async function renderTicketPng(data) {
     svg = svg.replaceAll(`href="${href(asset)}"`, `href="${await asData(asset)}"`);
   }
   const layout = computeTicketLayout(data.ticketDesign || {}, { hasPoster: !!data.posterUrl });
-  return { bytes: new Resvg(svg, { fitTo: { mode: 'original' } }).render().asPng(), width: layout.pageWidth, height: layout.pageHeight };
+  return {
+    bytes: new Resvg(svg, {
+      fitTo: { mode: 'original' },
+      textRendering: 2,
+      font: {
+        loadSystemFonts: true,
+        defaultFontFamily: 'DejaVu Sans',
+        sansSerifFamily: 'DejaVu Sans',
+        monospaceFamily: 'DejaVu Sans Mono',
+      },
+    }).render().asPng(),
+    width: layout.pageWidth,
+    height: layout.pageHeight,
+  };
 }
 
 module.exports = { renderTicketPng };
