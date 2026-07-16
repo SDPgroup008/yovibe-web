@@ -1,4 +1,5 @@
 const { computeTicketLayout } = require('./ticketLayoutEngine');
+const { Resvg } = require('@resvg/resvg-js');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 const url = (v) => esc(v).replace(/#/g, '%23');
@@ -46,4 +47,28 @@ function renderCanonicalTicketSvg({ eventName, ticketType, venue, date, time, bu
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${bg}${design.source === 'upload' ? `<rect width="${W}" height="${H}" fill="#000" opacity=".16"/>` : ''}<g${g(poster)}>${posterSvg}</g><g${g(title)}><rect width="${title.width}" height="${title.height}" rx="10" fill="#000" opacity=".46"/><text x="16" y="34" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(16, Math.min(30, title.height / 3))}px" font-weight="800" fill="${esc(text)}">${esc(eventName)}</text><rect x="16" y="${title.height - 32}" width="${Math.min(title.width - 32, Math.max(90, String(ticketType || 'Standard').length * 8 + 28))}" height="20" rx="10" fill="${esc(accent)}"/><text x="${Math.min(title.width - 32, Math.max(90, String(ticketType || 'Standard').length * 8 + 28)) / 2 + 16}" y="${title.height - 18}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle">${esc(String(ticketType || 'Standard').toUpperCase())}</text></g><g${g(info)}><rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity=".48" stroke="${esc(secondary)}"/>${rows.map((r, i) => `${escText(16, 22 + i * rowHeight, r[0], 9, secondary, 700)}${escText(16, 36 + i * rowHeight, r[1], 12, text, 600)}`).join('')}</g><g${g(qr)}><rect width="${qr.width}" height="${qr.height}" rx="12" fill="${esc(qrBg)}" stroke="${esc(accent)}" stroke-width="2"/>${qrSvg}${escText(qr.width / 2, qr.height - 20, ticketRef, 10, accent, 700, 'middle')}</g><rect y="${H - 34}" width="${W}" height="34" fill="#000" opacity=".55"/><text x="18" y="${H - 13}" font-size="10px" font-weight="700" fill="${esc(accent)}">YOVIBE</text><text x="${W - 18}" y="${H - 13}" font-family="Courier New, monospace" font-size="10px" fill="${esc(secondary)}" text-anchor="end">${esc(ticketRef)}</text></svg>`;
 }
 
-module.exports = { renderCanonicalTicketSvg };
+async function loadAssetAsDataUri(value) {
+  if (!value || value.startsWith('data:')) return value;
+  if (!/^https?:\/\//i.test(value)) return value;
+  const response = await fetch(value);
+  if (!response.ok) throw new Error(`Failed to load ticket image: ${response.status}`);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  const mime = response.headers.get('content-type') || (value.toLowerCase().includes('.png') ? 'image/png' : 'image/jpeg');
+  return `data:${mime};base64,${bytes.toString('base64')}`;
+}
+
+async function renderCanonicalTicketPng(data) {
+  let svg = renderCanonicalTicketSvg(data);
+  const assets = [data.qrCodeDataUrl, data.posterUrl, data.ticketDesign?.background_url].filter(Boolean);
+  for (const asset of assets) {
+    try {
+      const embedded = await loadAssetAsDataUri(asset);
+      svg = svg.split(`href="${esc(asset)}"`).join(`href="${embedded}"`);
+    } catch (error) {
+      console.warn('Ticket artwork image could not be embedded:', error.message);
+    }
+  }
+  return new Resvg(svg, { fitTo: { mode: 'original' } }).render().asPng();
+}
+
+module.exports = { renderCanonicalTicketSvg, renderCanonicalTicketPng };

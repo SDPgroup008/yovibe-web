@@ -18,7 +18,7 @@ const {
   computeEmailSections,
   computePdfPositions,
 } = require("./ticketLayoutEngine");
-const { renderCanonicalTicketSvg } = require("./ticketCanonicalRenderer");
+const { renderCanonicalTicketPng } = require("./ticketCanonicalRenderer");
 const { Resvg } = require("@resvg/resvg-js");
 
 // Basic email format check — not exhaustive, just catches obvious bad input
@@ -34,7 +34,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-function buildTicketEmailHtml({
+async function buildTicketEmailHtml({
   eventName,
   ticketType,
   venue,
@@ -63,15 +63,16 @@ function buildTicketEmailHtml({
   // block coordinates, dimensions, background transform, styling and QR.
   // Email clients receive this same visual artifact instead of a reflowed
   // approximation of the canvas.
-  const canonicalSvg = renderCanonicalTicketSvg({
+  const canonicalPng = await renderCanonicalTicketPng({
     eventName, ticketType, venue, date, time, buyerName, ticketRef,
     qrCodeDataUrl, posterUrl, ticketDesign,
   });
-  const canonicalSvgUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(canonicalSvg)}`;
+  const canonicalPngUri = `cid:ticket-artwork`;
   const canonicalPhotoLink = photoUploadLink
     ? `<p style="font-family:Arial,sans-serif;color:#9a9a9a;text-align:center"><a href="${escapeHtml(photoUploadLink)}" style="color:#00b4d9">Add security photo</a></p>`
     : "";
-  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:24px;border-collapse:collapse"><tr><td align="center"><img src="${canonicalSvgUri}" width="${ticketWidth}" style="display:block;width:${ticketWidth}px;max-width:100%;height:auto" alt="${escapeHtml(eventName)} ticket" />${canonicalPhotoLink}</td></tr></table>`;
+  const fallback = `<div style="font-family:Arial,sans-serif;color:#fff;background:#111;padding:16px;text-align:left"><strong>${escapeHtml(eventName)}</strong><br>${escapeHtml(ticketType)}<br>${escapeHtml(venue || "Venue TBA")}<br>${escapeHtml(date)} · ${escapeHtml(time)}<br>${escapeHtml(buyerName || "Guest")}<br><code>${escapeHtml(ticketRef)}</code></div>`;
+  return { html: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:24px;border-collapse:collapse"><tr><td align="center"><img src="${canonicalPngUri}" width="${ticketWidth}" style="display:block;width:${ticketWidth}px;max-width:100%;height:auto" alt="${escapeHtml(eventName)} ticket" />${fallback}${canonicalPhotoLink}</td></tr></table>`, pngBytes: canonicalPng };
   
   // Define color schemes for different templates
   const templateColors = {
@@ -380,8 +381,7 @@ async function buildTicketPdf({
   // Rasterize the exact canonical artwork used in the email and app, then
   // place that single image on the PDF page. This removes the former third
   // renderer and makes the email attachment pixel-identical to the ticket.
-  const svg = renderCanonicalTicketSvg({ eventName, ticketType, venue, date, time, buyerName, ticketRef, qrCodeDataUrl, posterUrl, ticketDesign });
-  const pngBytes = new Resvg(svg, { fitTo: { mode: 'original' } }).render().asPng();
+  const pngBytes = await renderCanonicalTicketPng({ eventName, ticketType, venue, date, time, buyerName, ticketRef, qrCodeDataUrl, posterUrl, ticketDesign });
   const exactDoc = await PDFDocument.create();
   const exactLayout = computeTicketLayout(ticketDesign || {}, { hasPoster: !!posterUrl });
   const exactPage = exactDoc.addPage([exactLayout.pageWidth, exactLayout.pageHeight]);
@@ -577,7 +577,7 @@ async function buildTicketPdf({
   return pdfDoc.save();
 }
 
-async function sendViaZeptoMail({ to, subject, html, pdfBytes, ticketRef }) {
+async function sendViaZeptoMail({ to, subject, html, pdfBytes, inlinePng, ticketRef }) {
   if (!ZEPTOMAIL_TOKEN) {
     return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
   }
@@ -589,15 +589,9 @@ async function sendViaZeptoMail({ to, subject, html, pdfBytes, ticketRef }) {
     htmlbody: html,
   };
 
-  if (pdfBytes) {
-    body.attachments = [
-      {
-        content: Buffer.from(pdfBytes).toString("base64"),
-        mime_type: "application/pdf",
-        name: `${ticketRef}.pdf`,
-      },
-    ];
-  }
+  body.attachments = [];
+  if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
+  if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
 
   try {
     const res = await fetch("https://api.zeptomail.com/v1.1/email", {
@@ -620,15 +614,16 @@ async function sendViaZeptoMail({ to, subject, html, pdfBytes, ticketRef }) {
   }
 }
 
-async function sendViaResendFallback({ to, subject, html, pdfBytes, ticketRef }) {
+async function sendViaResendFallback({ to, subject, html, pdfBytes, inlinePng, ticketRef }) {
   const { data, error } = await resend.emails.send({
     from: "YoVibe Tickets <tickets@yovibe.net>",
     to: [to],
     subject,
     html,
-    attachments: pdfBytes
-      ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }]
-      : undefined,
+    attachments: [
+      ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
+      ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
+    ],
   });
 
   if (error) {
@@ -686,7 +681,7 @@ exports.handler = async function (event) {
     };
   }
 
-  const html = buildTicketEmailHtml({
+  const emailArtwork = await buildTicketEmailHtml({
     eventName,
     ticketType,
     venue,
@@ -699,6 +694,8 @@ exports.handler = async function (event) {
     posterUrl,
     ticketDesign,
   });
+  const html = emailArtwork.html;
+  const inlinePng = emailArtwork.pngBytes;
 
   let pdfBytes;
   try {
@@ -727,6 +724,7 @@ exports.handler = async function (event) {
     subject: emailSubject,
     html,
     pdfBytes,
+    inlinePng,
     ticketRef,
   });
 
@@ -742,6 +740,7 @@ exports.handler = async function (event) {
     subject: emailSubject,
     html,
     pdfBytes,
+    inlinePng,
     ticketRef,
     eventName,
   });

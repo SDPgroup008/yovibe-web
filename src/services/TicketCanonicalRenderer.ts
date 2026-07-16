@@ -67,7 +67,10 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
 function colorsFor(design: TicketDesignInput) {
   const template = design.source === "template" && design.template_id ? getTemplateById(design.template_id) : undefined
   return {
-    background: template?.background || "#111827",
+    // Ticket templates store CSS gradients. SVG stop-color only accepts a
+    // color, so use a valid base color here and apply the accent as the second
+    // gradient stop below.
+    background: "#111827",
     accent: template?.accentColor || "#7c3aed",
     text: template?.textPrimary || "#ffffff",
     secondary: template?.textSecondary || "#c4b5fd",
