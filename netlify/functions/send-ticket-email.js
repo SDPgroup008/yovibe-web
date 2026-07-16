@@ -18,8 +18,7 @@ const {
   computeEmailSections,
   computePdfPositions,
 } = require("./ticketLayoutEngine");
-const { renderCanonicalTicketPng } = require("./ticketCanonicalRenderer");
-const { Resvg } = require("@resvg/resvg-js");
+const { renderTicketPng } = require("../shared/ticketPdfArtwork");
 
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
@@ -34,7 +33,7 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
-async function buildTicketEmailHtml({
+function buildTicketEmailHtml({
   eventName,
   ticketType,
   venue,
@@ -63,7 +62,7 @@ async function buildTicketEmailHtml({
   // block coordinates, dimensions, background transform, styling and QR.
   // Email clients receive this same visual artifact instead of a reflowed
   // approximation of the canvas.
-  const canonicalPng = await renderCanonicalTicketPng({
+  /*
     eventName, ticketType, venue, date, time, buyerName, ticketRef,
     qrCodeDataUrl, posterUrl, ticketDesign,
   });
@@ -72,8 +71,9 @@ async function buildTicketEmailHtml({
     ? `<p style="font-family:Arial,sans-serif;color:#9a9a9a;text-align:center"><a href="${escapeHtml(photoUploadLink)}" style="color:#00b4d9">Add security photo</a></p>`
     : "";
   const fallback = `<div style="font-family:Arial,sans-serif;color:#fff;background:#111;padding:16px;text-align:left"><strong>${escapeHtml(eventName)}</strong><br>${escapeHtml(ticketType)}<br>${escapeHtml(venue || "Venue TBA")}<br>${escapeHtml(date)} · ${escapeHtml(time)}<br>${escapeHtml(buyerName || "Guest")}<br><code>${escapeHtml(ticketRef)}</code></div>`;
-  return { html: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:24px;border-collapse:collapse"><tr><td align="center"><img src="${canonicalPngUri}" width="${ticketWidth}" style="display:block;width:${ticketWidth}px;max-width:100%;height:auto" alt="${escapeHtml(eventName)} ticket" />${fallback}${canonicalPhotoLink}</td></tr></table>`, pngBytes: canonicalPng };
+  return { html: `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#111;padding:24px;border-collapse:collapse"><tr><td align="center"><img src="${canonicalPngUri}" width="${ticketWidth}" style="display:block;width:${ticketWidth}px;max-width:100%;height:auto" alt="${escapeHtml(eventName)} ticket" />${fallback}${canonicalPhotoLink}</td></tr></table>`, pngBytes: canonicalPng }; }
   
+  */
   // Define color schemes for different templates
   const templateColors = {
     "midnight-portrait": {
@@ -378,15 +378,11 @@ async function buildTicketPdf({
   posterUrl,
   ticketDesign,
 }) {
-  // Rasterize the exact canonical artwork used in the email and app, then
-  // place that single image on the PDF page. This removes the former third
-  // renderer and makes the email attachment pixel-identical to the ticket.
-  const pngBytes = await renderCanonicalTicketPng({ eventName, ticketType, venue, date, time, buyerName, ticketRef, qrCodeDataUrl, posterUrl, ticketDesign });
+  const artwork = await renderTicketPng({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign });
   const exactDoc = await PDFDocument.create();
-  const exactLayout = computeTicketLayout(ticketDesign || {}, { hasPoster: !!posterUrl });
-  const exactPage = exactDoc.addPage([exactLayout.pageWidth, exactLayout.pageHeight]);
-  const exactImage = await exactDoc.embedPng(pngBytes);
-  exactPage.drawImage(exactImage, { x: 0, y: 0, width: exactLayout.pageWidth, height: exactLayout.pageHeight });
+  const exactPage = exactDoc.addPage([artwork.width, artwork.height]);
+  const exactImage = await exactDoc.embedPng(artwork.bytes);
+  exactPage.drawImage(exactImage, { x: 0, y: 0, width: artwork.width, height: artwork.height });
   return exactDoc.save();
 
   // Compute layout from ticket design using the shared engine
@@ -681,7 +677,7 @@ exports.handler = async function (event) {
     };
   }
 
-  const emailArtwork = await buildTicketEmailHtml({
+  const html = buildTicketEmailHtml({
     eventName,
     ticketType,
     venue,
@@ -694,8 +690,7 @@ exports.handler = async function (event) {
     posterUrl,
     ticketDesign,
   });
-  const html = emailArtwork.html;
-  const inlinePng = emailArtwork.pngBytes;
+  const inlinePng = undefined;
 
   let pdfBytes;
   try {
