@@ -181,7 +181,7 @@ function buildTicketEmailHtml({
     
     if (block.id === "title") {
       return `
-        <div style="text-align:${align}; margin-bottom:16px;">
+        <div style="display:inline-block; background:rgba(0,0,0,0.5); padding:10px 16px; border-radius:8px; text-align:${align}; margin-bottom:16px; max-width:${block.width}px;">
           <p style="margin:0 0 4px; font-size:26px; font-weight:800; color:${colors.text}; text-shadow:0 2px 8px rgba(0,0,0,0.6);">${escapeHtml(eventName)}</p>
           <span style="display:inline-block; background:${colors.accent}; color:#ffffff; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(ticketType)}</span>
         </div>
@@ -415,16 +415,24 @@ async function buildTicketPdf({
   
   if (bgImageEmbed) {
     const bg = computed.bgTransform;
-    const bgW = width * bg.scale;
-    const bgH = height * bg.scale;
-    const bgX = (width - bgW) / 2 + bg.x;
-    const bgY = (height - bgH) / 2 + bg.y;
+    const imgW = bgImageEmbed.width;
+    const imgH = bgImageEmbed.height;
+    
+    // Scale to cover the page (like CSS background-size: cover)
+    const coverScale = Math.max(width / imgW, height / imgH);
+    const totalScale = coverScale * (bg.scale || 1);
+    
+    const drawW = imgW * totalScale;
+    const drawH = imgH * totalScale;
+    const drawX = (width - drawW) / 2 + (bg.x || 0);
+    const drawY = (height - drawH) / 2 + (bg.y || 0);
+    
     page.drawImage(bgImageEmbed, {
-      x: bgX,
-      y: bgY,
-      width: bgW,
-      height: bgH,
-      opacity: 0.3,
+      x: drawX,
+      y: drawY,
+      width: drawW,
+      height: drawH,
+      opacity: 0.6,
     });
   }
   
@@ -460,10 +468,19 @@ async function buildTicketPdf({
     }
     
     if (pos.id === "title") {
+      // Background overlay for readability
+      page.drawRectangle({
+        x: pos.x - 4,
+        y: pos.y,
+        width: pos.width + 8,
+        height: pos.height,
+        color: rgb(0, 0, 0),
+        opacity: 0.45,
+      });
       const titleFontSize = Math.max(10, Math.min(16, pos.scale * 14));
       page.drawText(eventName, {
-        x: pos.x,
-        y: pos.y + pos.height - titleFontSize,
+        x: pos.x + 6,
+        y: pos.y + pos.height - titleFontSize - 4,
         size: titleFontSize,
         font: fontBold,
         color: colors.text,
@@ -471,6 +488,15 @@ async function buildTicketPdf({
     }
     
     if (pos.id === "info") {
+      // Background overlay for readability
+      page.drawRectangle({
+        x: pos.x - 4,
+        y: pos.y,
+        width: pos.width + 8,
+        height: pos.height,
+        color: rgb(0, 0, 0),
+        opacity: 0.45,
+      });
       const infoLines = [
         `${buyerName ? "Ticket for " + buyerName : "Your Ticket"}`,
         `${eventName}`,

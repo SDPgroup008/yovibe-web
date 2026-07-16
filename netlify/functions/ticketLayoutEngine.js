@@ -15,22 +15,22 @@ function getDefaultLayout(orientation, hasPoster) {
   if (orientation === "landscape") {
     return {
       blocks: [
-        { id: "poster", x: 630, y: 20, scale: 1 },
-        { id: "title",  x: 24,  y: 24, scale: 1 },
-        { id: "info",   x: 24,  y: 130, scale: 1 },
-        { id: "qr",     x: 660, y: 170, scale: 1 },
+        { id: "poster", x: 630, y: 20, scale: 1, width: 200, height: 200 },
+        { id: "title",  x: 24,  y: 24, scale: 1, width: 280, height: 80 },
+        { id: "info",   x: 24,  y: 130, scale: 1, width: 260, height: 180 },
+        { id: "qr",     x: 660, y: 170, scale: 1, width: 160, height: 200 },
       ],
-      bg: { x: 0, y: 0, scale: 1 },
+      bg: { x: 0, y: 0, scale: 1, sourceWidth: 0, sourceHeight: 0 },
     };
   }
   return {
     blocks: [
-      { id: "poster", x: 330, y: 20, scale: 1 },
-      { id: "title",  x: 24,  y: 24, scale: 1 },
-      { id: "info",   x: 24,  y: 430, scale: 1 },
-      { id: "qr",     x: 190, y: 250, scale: 1 },
+      { id: "poster", x: 330, y: 20, scale: 1, width: 200, height: 200 },
+      { id: "title",  x: 24,  y: 24, scale: 1, width: 280, height: 80 },
+      { id: "info",   x: 24,  y: 430, scale: 1, width: 260, height: 180 },
+      { id: "qr",     x: 190, y: 250, scale: 1, width: 160, height: 200 },
     ],
-    bg: { x: 0, y: 0, scale: 1 },
+    bg: { x: 0, y: 0, scale: 1, sourceWidth: 0, sourceHeight: 0 },
   };
 }
 
@@ -69,8 +69,9 @@ function computeTicketLayout(design, contentHints) {
       id: block.id,
       x: block.x,
       y: block.y,
-      width: Math.round(defaultSize.width * scale),
-      height: Math.round(defaultSize.height * scale),
+      // Use stored explicit dimensions if available, otherwise compute from defaults * scale
+      width: block.width ?? Math.round(defaultSize.width * scale),
+      height: block.height ?? Math.round(defaultSize.height * scale),
       scale: scale,
       zIndex: idx,
       align: align,
@@ -135,9 +136,32 @@ function computePdfPositions(layout, pageHeight) {
   });
 }
 
+/**
+ * Given background transform and canvas dimensions, compute crop rect.
+ */
+function computeBgCrop(bgTransform, pageWidth, pageHeight, imageWidth, imageHeight) {
+  var panX = bgTransform.x || 0;
+  var panY = bgTransform.y || 0;
+  var zoom = bgTransform.scale || 1;
+
+  var visibleW = imageWidth / zoom;
+  var visibleH = imageHeight / zoom;
+
+  var sx = (imageWidth - visibleW) / 2 - (panX / pageWidth) * visibleW;
+  var sy = (imageHeight - visibleH) / 2 - (panY / pageHeight) * visibleH;
+
+  return {
+    sx: Math.max(0, sx),
+    sy: Math.max(0, sy),
+    sw: Math.min(visibleW, imageWidth - sx),
+    sh: Math.min(visibleH, imageHeight - sy),
+  };
+}
+
 module.exports = {
   computeTicketLayout: computeTicketLayout,
   computeEmailSections: computeEmailSections,
   computePdfPositions: computePdfPositions,
   getDefaultLayout: getDefaultLayout,
+  computeBgCrop: computeBgCrop,
 };

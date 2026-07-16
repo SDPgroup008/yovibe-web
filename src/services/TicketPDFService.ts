@@ -120,6 +120,7 @@ function sharedCSS(t: TicketTemplateConfig, W: number, H: number): string {
   .poster-block img { width:200px; height:200px; object-fit:cover; border-radius:8px; border:2px solid ${t.accentColor}; box-shadow:0 4px 20px rgba(0,0,0,0.5); display:block; }
   .poster-placeholder { width:200px; height:200px; border-radius:8px; border:2px dashed ${t.accentColor}; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.3); }
   .poster-placeholder span { color:${t.textSecondary}; font-size:12px; text-align:center; padding:8px; }
+  .title-block { background:rgba(0,0,0,0.4); border-radius:8px; padding:8px 14px; max-width:300px; }
   .title-block .event-name { font-size:26px; font-weight:800; color:${t.textPrimary}; line-height:1.2; text-shadow:0 2px 8px rgba(0,0,0,0.6); max-width:280px; }
   .title-block .badge { display:inline-block; background:${t.badgeBg}; color:${t.badgeText}; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; margin-top:8px; letter-spacing:0.5px; text-transform:uppercase; }
   .info-block { display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.45); backdrop-filter:blur(6px); border-radius:10px; padding:14px 16px; border:1px solid ${t.dividerColor}; max-width:260px; }
@@ -564,16 +565,17 @@ export class TicketPDFService {
   static async downloadTicketPDF(ticket: Ticket, event?: Event): Promise<{ success: boolean; error?: string }> {
     try {
       const html = generateTicketHTML(ticket, event)
+      const { uri } = await Print.printToFileAsync({ html, base64: false })
       if (Platform.OS === "web") {
-        const blob = new Blob([html], { type: "text/html" })
+        const response = await fetch(uri)
+        const blob = await response.blob()
         const url = URL.createObjectURL(blob)
         const a = document.createElement("a")
-        a.href = url; a.download = `ticket-${ticket.ticketRef || ticket.id}.html`
+        a.href = url; a.download = `ticket-${ticket.ticketRef || ticket.id}.pdf`
         document.body.appendChild(a); a.click(); document.body.removeChild(a)
         URL.revokeObjectURL(url)
         return { success: true }
       }
-      const { uri } = await Print.printToFileAsync({ html, base64: false })
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, { mimeType: "application/pdf", dialogTitle: `YoVibe Ticket - ${ticket.eventName}` })
         return { success: true }

@@ -8,12 +8,20 @@ export interface BlockLayout {
   x: number
   y: number
   scale?: number
+  /** Explicit rendered width after scale (px); computed at editor save time. Falls back to defaultSize * scale when absent. */
+  width?: number
+  /** Explicit rendered height after scale (px); computed at editor save time. Falls back to defaultSize * scale when absent. */
+  height?: number
 }
 
 export interface BgTransform {
   x: number
   y: number
   scale: number
+  /** Original source image width (px) for crop computation */
+  sourceWidth?: number
+  /** Original source image height (px) for crop computation */
+  sourceHeight?: number
 }
 
 export interface TicketLayout {
@@ -68,22 +76,22 @@ export function getDefaultLayout(orientation: "portrait" | "landscape", _hasPost
   if (orientation === "landscape") {
     return {
       blocks: [
-        { id: "poster", x: 630, y: 20, scale: 1 },
-        { id: "title",  x: 24,  y: 24, scale: 1 },
-        { id: "info",   x: 24,  y: 130, scale: 1 },
-        { id: "qr",     x: 660, y: 170, scale: 1 },
+        { id: "poster", x: 630, y: 20, scale: 1, width: 200, height: 200 },
+        { id: "title",  x: 24,  y: 24, scale: 1, width: 280, height: 80 },
+        { id: "info",   x: 24,  y: 130, scale: 1, width: 260, height: 180 },
+        { id: "qr",     x: 660, y: 170, scale: 1, width: 160, height: 200 },
       ],
-      bg: { x: 0, y: 0, scale: 1 },
+      bg: { x: 0, y: 0, scale: 1, sourceWidth: 0, sourceHeight: 0 },
     }
   }
   return {
     blocks: [
-      { id: "poster", x: 330, y: 20, scale: 1 },
-      { id: "title",  x: 24,  y: 24, scale: 1 },
-      { id: "info",   x: 24,  y: 430, scale: 1 },
-      { id: "qr",     x: 190, y: 250, scale: 1 },
+      { id: "poster", x: 330, y: 20, scale: 1, width: 200, height: 200 },
+      { id: "title",  x: 24,  y: 24, scale: 1, width: 280, height: 80 },
+      { id: "info",   x: 24,  y: 430, scale: 1, width: 260, height: 180 },
+      { id: "qr",     x: 190, y: 250, scale: 1, width: 160, height: 200 },
     ],
-    bg: { x: 0, y: 0, scale: 1 },
+    bg: { x: 0, y: 0, scale: 1, sourceWidth: 0, sourceHeight: 0 },
   }
 }
 
@@ -126,8 +134,9 @@ export function computeTicketLayout(
       id: block.id,
       x: block.x,
       y: block.y,
-      width: Math.round(defaultSize.width * scale),
-      height: Math.round(defaultSize.height * scale),
+      // Use stored explicit dimensions if available, otherwise compute from defaults * scale
+      width: block.width ?? Math.round(defaultSize.width * scale),
+      height: block.height ?? Math.round(defaultSize.height * scale),
       scale,
       zIndex: idx,
       align,
@@ -186,4 +195,34 @@ export function computePdfPositions(
     height: block.height,
     scale: block.scale,
   }))
+}
+
+/**
+ * Given a background transform and the page/canvas dimensions,
+ * compute the crop rectangle to apply when rendering the source image.
+ * Returns the source rect (sx, sy, sw, sh) and destination rect (dw, dh).
+ */
+export function computeBgCrop(
+  bgTransform: BgTransform,
+  pageWidth: number,
+  pageHeight: number,
+  imageWidth: number,
+  imageHeight: number
+): { sx: number; sy: number; sw: number; sh: number } {
+  const { x: panX, y: panY, scale: zoom } = bgTransform
+
+  // How much of the source image is visible after zoom
+  const visibleW = imageWidth / zoom
+  const visibleH = imageHeight / zoom
+
+  // Center the visible region, then apply pan offset
+  const sx = (imageWidth - visibleW) / 2 - (panX / pageWidth) * visibleW
+  const sy = (imageHeight - visibleH) / 2 - (panY / pageHeight) * visibleH
+
+  return {
+    sx: Math.max(0, sx),
+    sy: Math.max(0, sy),
+    sw: Math.min(visibleW, imageWidth - sx),
+    sh: Math.min(visibleH, imageHeight - sy),
+  }
 }
