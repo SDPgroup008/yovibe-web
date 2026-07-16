@@ -1,5 +1,4 @@
-const { PDFDocument } = require("pdf-lib");
-const { renderTicketPng } = require("../shared/ticketPdfArtwork");
+const { renderTicketPdf } = require("../shared/ticketPdfArtwork");
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -14,12 +13,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "Missing ticket fields", missing }) };
     }
 
-    const artwork = await renderTicketPng(input);
-    const pdf = await PDFDocument.create();
-    const page = pdf.addPage([artwork.width, artwork.height]);
-    const image = await pdf.embedPng(artwork.bytes);
-    page.drawImage(image, { x: 0, y: 0, width: artwork.width, height: artwork.height });
-    const bytes = await pdf.save();
+    const bytes = await renderTicketPdf(input);
 
     return {
       statusCode: 200,

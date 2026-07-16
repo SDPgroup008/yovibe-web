@@ -1,5 +1,6 @@
 const { computeTicketLayout } = require('../functions/ticketLayoutEngine');
 const { Resvg } = require('@resvg/resvg-js');
+const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const href = (v) => esc(v).replace(/#/g, '%23');
@@ -19,7 +20,7 @@ function colorsFor(design) {
   return { background, accent, text, secondary, qr, border };
 }
 
-function renderSvg(data) {
+function renderSvg(data, options = {}) {
   const design = data.ticketDesign || { source: 'template', template_id: 'midnight-portrait', orientation: 'portrait', dimensions: { width: 600, height: 900 } };
   const layout = computeTicketLayout(design, { hasPoster: !!data.posterUrl });
   const colors = colorsFor(design);
@@ -39,7 +40,7 @@ function renderSvg(data) {
     if (design.qr_position === 'right') { qr.x = W - qr.width - 24; qr.y = Math.round((H - qr.height) / 2); }
   }
   const g = (b) => ` transform="translate(${b.x} ${b.y}) scale(${b.scale || 1})"`;
-  const text = (x, y, v, size, color, weight = 500, anchor = 'start') => `<text x="${x}" y="${y}" font-family="Arial, Helvetica, sans-serif" font-size="${size}px" font-weight="${weight}" fill="${color}" text-anchor="${anchor}">${esc(v)}</text>`;
+  const text = (x, y, v, size, color, weight = 500, anchor = 'start') => options.includeText === false ? '' : `<text x="${x}" y="${y}" font-family="Arial, Helvetica, sans-serif" font-size="${size}px" font-weight="${weight}" fill="${color}" text-anchor="${anchor}">${esc(v)}</text>`;
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36));
   const rows = [['DATE', data.date], ['TIME', data.time], ['VENUE', data.venue || 'Venue TBA'], ['ATTENDEE', data.buyerName || 'Guest']];
   const rowH = Math.max(22, (info.height - 24) / rows.length);
@@ -57,8 +58,8 @@ async function asData(value) {
   return `data:${response.headers.get('content-type') || 'image/jpeg'};base64,${bytes.toString('base64')}`;
 }
 
-async function renderTicketPng(data) {
-  let svg = renderSvg(data);
+async function renderTicketPng(data, options = {}) {
+  let svg = renderSvg(data, options);
   for (const asset of [data.qrCodeDataUrl, data.posterUrl, data.ticketDesign?.background_url].filter(Boolean)) {
     svg = svg.replaceAll(`href="${href(asset)}"`, `href="${await asData(asset)}"`);
   }
@@ -79,4 +80,63 @@ async function renderTicketPng(data) {
   };
 }
 
-module.exports = { renderTicketPng };
+function hexColor(value, fallback = '#ffffff') {
+  const match = String(value || fallback).match(/^#([0-9a-f]{6})$/i);
+  if (!match) return rgb(1, 1, 1);
+  const n = parseInt(match[1], 16);
+  return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+
+function drawPdfText(page, text, x, topBaseline, size, color, options = {}) {
+  const { pageHeight } = options;
+  page.drawText(String(text ?? ''), {
+    x,
+    y: pageHeight - topBaseline,
+    size,
+    font: options.font,
+    color: hexColor(color),
+    ...(options.align === 'center' ? { x: x - options.font.widthOfTextAtSize(String(text ?? ''), size) / 2 } : {}),
+    ...(options.align === 'right' ? { x: x - options.font.widthOfTextAtSize(String(text ?? ''), size) } : {}),
+  });
+}
+
+async function renderTicketPdf(data) {
+  const artwork = await renderTicketPng(data, { includeText: false });
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([artwork.width, artwork.height]);
+  const image = await pdf.embedPng(artwork.bytes);
+  page.drawImage(image, { x: 0, y: 0, width: artwork.width, height: artwork.height });
+
+  const design = data.ticketDesign || {};
+  const layout = computeTicketLayout(design, { hasPoster: !!data.posterUrl });
+  const get = (id, fallback) => layout.blocks.find((b) => b.id === id) || fallback;
+  const title = get('title', { x: 24, y: 24, width: 280, height: 80, scale: 1 });
+  const info = get('info', { x: 24, y: 430, width: 260, height: 180, scale: 1 });
+  const qr = get('qr', { x: 190, y: 250, width: 160, height: 200, scale: 1 });
+  const colors = colorsFor(design);
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const ref = data.ticketRef || data.ticketId || 'XXXXXXXX';
+  const ticketType = data.ticketType || 'Standard';
+  const badgeWidth = Math.min(title.width - 32, Math.max(90, String(ticketType).length * 8 + 28));
+  const titleScale = title.scale || 1;
+  const infoScale = info.scale || 1;
+  const qrScale = qr.scale || 1;
+  const titleX = title.x;
+  const titleY = title.y;
+  drawPdfText(page, data.eventName || 'Event', titleX + 16 * titleScale, titleY + 34 * titleScale, Math.max(16, Math.min(30, title.height / 3)) * titleScale, colors.text, { pageHeight: artwork.height, font: bold });
+  drawPdfText(page, String(ticketType).toUpperCase(), titleX + (badgeWidth / 2 + 16) * titleScale, titleY + (title.height - 18) * titleScale, 10 * titleScale, '#ffffff', { pageHeight: artwork.height, font: bold, align: 'center' });
+
+  const rows = [['DATE', data.date], ['TIME', data.time], ['VENUE', data.venue || 'Venue TBA'], ['ATTENDEE', data.buyerName || 'Guest']];
+  const rowH = Math.max(22, (info.height - 24) / rows.length);
+  rows.forEach(([label, value], index) => {
+    drawPdfText(page, label, info.x + 16 * infoScale, info.y + (22 + index * rowH) * infoScale, 9 * infoScale, colors.secondary, { pageHeight: artwork.height, font: bold });
+    drawPdfText(page, value, info.x + 16 * infoScale, info.y + (36 + index * rowH) * infoScale, 12 * infoScale, colors.text, { pageHeight: artwork.height, font: bold });
+  });
+  drawPdfText(page, ref, qr.x + (qr.width / 2) * qrScale, qr.y + (qr.height - 20) * qrScale, 10 * qrScale, colors.accent, { pageHeight: artwork.height, font: bold, align: 'center' });
+  drawPdfText(page, 'YOVIBE', 18, artwork.height - 13, 10, colors.accent, { pageHeight: artwork.height, font: bold });
+  drawPdfText(page, ref, artwork.width - 18, artwork.height - 13, 10, colors.secondary, { pageHeight: artwork.height, font, align: 'right' });
+  return pdf.save();
+}
+
+module.exports = { renderTicketPng, renderTicketPdf };

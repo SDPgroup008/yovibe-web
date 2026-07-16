@@ -1668,6 +1668,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
           eventStartTime: row.event_start_time || row.eventStartTime ? new Date(row.event_start_time || row.eventStartTime) : new Date(),
           purchaseDeadline: row.purchase_deadline || row.purchaseDeadline ? new Date(row.purchase_deadline || row.purchaseDeadline) : new Date(),
           qrCode: row.qr_code || row.qrCode,
+          ticketRef: row.ticket_ref || row.ticketRef || row.ticket_id || row.id,
           qrCodeDataUrl: row.qr_code_data_url || row.qrCodeDataUrl,
           qrSignature: row.qr_signature || row.qrSignature,
           buyerPhotoUrl: row.buyer_photo_url || row.buyerPhotoUrl,

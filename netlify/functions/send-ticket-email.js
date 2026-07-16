@@ -18,7 +18,7 @@ const {
   computeEmailSections,
   computePdfPositions,
 } = require("./ticketLayoutEngine");
-const { renderTicketPng } = require("../shared/ticketPdfArtwork");
+const { renderTicketPdf } = require("../shared/ticketPdfArtwork");
 
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
@@ -378,12 +378,7 @@ async function buildTicketPdf({
   posterUrl,
   ticketDesign,
 }) {
-  const artwork = await renderTicketPng({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign });
-  const exactDoc = await PDFDocument.create();
-  const exactPage = exactDoc.addPage([artwork.width, artwork.height]);
-  const exactImage = await exactDoc.embedPng(artwork.bytes);
-  exactPage.drawImage(exactImage, { x: 0, y: 0, width: artwork.width, height: artwork.height });
-  return exactDoc.save();
+  return renderTicketPdf({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign });
 
   // Compute layout from ticket design using the shared engine
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
