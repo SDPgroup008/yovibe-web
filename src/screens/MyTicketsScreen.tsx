@@ -56,6 +56,7 @@ const MyTicketsScreen: React.FC = () => {
   const [payInstallmentLoading, setPayInstallmentLoading] = useState(false)
   const [payInstallmentStatus, setPayInstallmentStatus] = useState<"idle" | "polling" | "success" | "error">("idle")
   const [payInstallmentMessage, setPayInstallmentMessage] = useState("")
+  const [installmentsExpanded, setInstallmentsExpanded] = useState(false)
 
   // Load tickets on mount and when user changes
   useEffect(() => {
@@ -293,10 +294,16 @@ const MyTicketsScreen: React.FC = () => {
       {/* Installment Plans */}
       {installmentPlans.length > 0 && (
         <View style={{ paddingHorizontal: 16, paddingTop: 12 }}>
-          <Text style={{ color: "#F59E0B", fontWeight: "700", fontSize: 13, marginBottom: 8, letterSpacing: 0.5 }}>
-            RESERVED TICKETS — INSTALLMENTS
-          </Text>
-          {installmentPlans.map((plan) => {
+          <TouchableOpacity
+            onPress={() => setInstallmentsExpanded(prev => !prev)}
+            style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}
+          >
+            <Text style={{ color: "#F59E0B", fontWeight: "700", fontSize: 13, letterSpacing: 0.5 }}>
+              RESERVED TICKETS — INSTALLMENTS
+            </Text>
+            <Ionicons name={installmentsExpanded ? "chevron-up" : "chevron-down"} size={18} color="#F59E0B" />
+          </TouchableOpacity>
+          {installmentsExpanded && installmentPlans.map((plan) => {
             const next = getNextPendingInstallment(plan)
             const paidCount = plan.installments.filter((i) => i.status === "paid").length
             const total = plan.installments.length
