@@ -588,8 +588,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    padding: 16,
-    paddingTop: 48,
+    padding: 12,
+    paddingTop: 24,
     backgroundColor: "#1a1a1a",
   },
   headerTitle: {
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     flexDirection: "row",
-    padding: 16,
+    padding: 6,
     backgroundColor: "#1a1a1a",
     marginBottom: 8,
   },
