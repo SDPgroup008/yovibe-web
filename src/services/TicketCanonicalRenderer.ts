@@ -58,7 +58,7 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
     date: formatDate(ticket.eventStartTime),
     time: formatTime(ticket.eventStartTime),
     attendee: ticket.buyerName || "Guest",
-    ticketRef: ticket.ticketRef || ticket.id?.slice(0, 8).toUpperCase() || "XXXXXXXX",
+    ticketRef: ticket.ticketRef || (ticket as any).ticket_ref || ticket.tableGroupId || ticket.id?.slice(0, 8).toUpperCase() || "XXXXXXXX",
     qr: ticket.qrCodeDataUrl || "",
     poster: event?.posterImageUrl || null,
   }
@@ -117,7 +117,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const infoRowHeight = Math.max(22, (info.height - 24) / infoRows.length)
   const blockScale = (b: any) => ` transform="translate(${b.x} ${b.y}) scale(${b.scale || 1})"`
   const bgImage = computed.isUploadBg
-    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bg.x}" y="${bg.y}" width="${W * (bg.scale || 1)}" height="${H * (bg.scale || 1)}" preserveAspectRatio="xMidYMid slice" opacity="0.96"/>`
+    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bg.x}" y="${bg.y}" width="${W * (bg.scale || 1)}" height="${H * (bg.scale || 1)}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`
     : ""
   const posterSvg = data.poster ? `<image href="${xmlUrl(data.poster)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>` : ""
   const qrSvg = data.qr ? `<image href="${xmlUrl(data.qr)}" x="${(qr.width - qrSize) / 2}" y="10" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>` : text(qr.width / 2, qr.height / 2, "QR unavailable", 14, colors.secondary, 600, "middle")
@@ -126,12 +126,13 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     <defs>
       <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${esc(colors.background)}"/><stop offset="100%" stop-color="${esc(colors.accent)}" stop-opacity="0.72"/></linearGradient>
       <clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath>
+      <filter id="titleShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.75"/></filter>
     </defs>
     <rect width="${W}" height="${H}" fill="${bgPaint}"/>
     ${bgImage}
     <rect width="${W}" height="${H}" fill="#000000" opacity="0.16"/>
     <g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/>${posterSvg}` : ""}</g>
-    <g${blockScale(title)}><rect width="${title.width}" height="${title.height}" rx="10" fill="#000" opacity="0.46" stroke="${esc(colors.border)}"/><text x="16" y="34" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(16, Math.min(30, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}">${esc(data.eventName)}</text><rect x="16" y="${title.height - 32}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="20" rx="10" fill="${esc(colors.accent)}"/><text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 18}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle">${esc(data.ticketType.toUpperCase())}</text></g>
+    <g${blockScale(title)}><text x="16" y="34" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(16, Math.min(30, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)">${esc(data.eventName)}</text><rect x="16" y="${title.height - 28}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="20" rx="10" fill="${esc(colors.accent)}"/><text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 14}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle">${esc(data.ticketType.toUpperCase())}</text></g>
     <g${blockScale(info)}><rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity="0.48" stroke="${esc(colors.border)}"/>${infoRows.map(([label, value], i) => `${text(16, 22 + i * infoRowHeight, label.toUpperCase(), 9, colors.secondary, 700)}${text(16, 36 + i * infoRowHeight, value, 12, colors.text, 600)}`).join("")}</g>
     <g${blockScale(qr)}><rect width="${qr.width}" height="${qr.height}" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="2"/>${qrSvg}${text(qr.width / 2, qr.height - 20, data.ticketRef, 10, colors.accent, 700, "middle")}</g>
     <rect x="0" y="${H - 34}" width="${W}" height="34" fill="#000" opacity="0.55"/><text x="18" y="${H - 13}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="${esc(colors.accent)}">YOVIBE</text><text x="${W - 18}" y="${H - 13}" font-family="Courier New, monospace" font-size="10px" fill="${esc(colors.secondary)}" text-anchor="end">${esc(data.ticketRef)}</text>

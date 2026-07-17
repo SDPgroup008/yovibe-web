@@ -1651,7 +1651,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
         const eventKey = row.event_slug || row.event_id || row.eventId
         return {
           id: row.id,
-          eventId: row.event_id || row.eventId,
+          eventId: row.event_slug || row.event_id || row.eventId,
           eventName: row.event_name || row.eventName,
           venueName: eventVenueMap[eventKey] || "Venue TBA",
           buyerId: row.buyer_id || row.buyerId,
