@@ -488,14 +488,14 @@ async function buildTicketPdf({
     
     if (pos.id === "title") {
       // Background overlay for readability
-      page.drawRectangle({
-        x: pos.x - 4,
-        y: pos.y,
-        width: pos.width + 8,
-        height: pos.height,
-        color: rgb(0, 0, 0),
-        opacity: 0.45,
-      });
+      // page.drawRectangle({
+      //   x: pos.x - 4,
+      //   y: pos.y,
+      //   width: pos.width + 8,
+      //   height: pos.height,
+      //   color: rgb(0, 0, 0),
+      //   opacity: 0.45,
+      // });
       const titleFontSize = Math.max(10, Math.min(16, pos.scale * 14));
       page.drawText(eventName, {
         x: pos.x + 6,
