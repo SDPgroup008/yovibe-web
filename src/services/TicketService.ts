@@ -434,6 +434,9 @@ private static async createSingleTicket(
     isReentry?: boolean;
     reentryGrantedByName?: string;
     reentryGrantedAt?: string;
+    ticketRef?: string;
+    entryFeeType?: string;
+    seatNumber?: number;
   }> {
     try {
       console.log("========================================")
@@ -483,7 +486,7 @@ private static async createSingleTicket(
       if (t.expiresAt && new Date(t.expiresAt) < now) {
         await supabase.from("tickets").update({ status: "expired" }).eq("id", t.id)
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Ticket has expired" })
-        return { success: false, reason: "Ticket has expired" }
+        return { success: false, reason: "Ticket has expired", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
       }
 
       // Step 3: Check status
@@ -511,17 +514,20 @@ private static async createSingleTicket(
             buyerName: t.buyerName,
             reentryGrantedByName: t.reentryPass.grantedByName,
             reentryGrantedAt: t.reentryPass.grantedAt,
+            ticketRef: t.ticketRef,
+            entryFeeType: t.entryFeeType,
+            seatNumber: t.seatNumber,
           }
         }
         const reason = t.status === "used" ? "Ticket already used" : t.status === "cancelled" ? "Ticket was cancelled" : "Invalid ticket status"
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason })
-        return { success: false, reason }
+        return { success: false, reason, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
       }
 
       // Step 4: Verify event
       if (scanningEventId && t.eventId !== scanningEventId) {
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Wrong event" })
-        return { success: false, reason: "Ticket is for a different event" }
+        return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
       }
 
       console.log("✅ All checks passed - updating ticket")
@@ -535,6 +541,9 @@ private static async createSingleTicket(
           buyerPhotoUrl: t.buyerPhotoUrl,
           buyerName: t.buyerName,
           ticketDocId: t.id,
+          ticketRef: t.ticketRef,
+          entryFeeType: t.entryFeeType,
+          seatNumber: t.seatNumber,
         }
       }
 
@@ -590,7 +599,7 @@ console.error("❌ Error details:", updateError.details)
       console.log("========================================")
       console.log("🔍 TICKET VALIDATION SUCCESSFUL")
       console.log("========================================")
-      return { success: true }
+      return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error?.message || error)
       return { success: false, reason: error?.message || "Validation failed" }
@@ -857,6 +866,7 @@ console.error("❌ Error details:", updateError.details)
       buyerPhotoUrl: row.buyer_photo_url || row.buyerPhotoUrl,
       status: row.status || "pending",
       validationHistory: row.validation_history || row.validationHistory || [],
+      ticketRef: row.ticket_ref || row.ticketRef,
       entryFeeType: row.entry_fee_type || row.entryFeeType,
       isLatePurchase: row.is_late_purchase ?? row.isLatePurchase ?? false,
       isScanned: row.is_scanned ?? row.isScanned ?? false,

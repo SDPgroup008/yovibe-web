@@ -31,7 +31,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
 
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
-  const [scanHistory, setScanHistory] = useState<Array<{ ticketId: string; status: string; time: string; reason?: string }>>([])
+  const [scanHistory, setScanHistory] = useState<Array<{ ticketRef: string; feeType: string; seatNumber: string; status: string; time: string; reason?: string }>>([])
   
   const streamRef = useRef<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -177,8 +177,13 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
       setValidating(true)
       const result = await TicketService.validateTicket(qrCodeData, user?.id || "", eventName || "Event Entrance")
       
+      const ticketRef = result.ticketRef || qrCodeData.substring(0, 12) + "..."
+      const feeType = result.entryFeeType || "—"
+      const seatNumber = result.seatNumber != null ? String(result.seatNumber) : "—"
       setScanHistory((prev) => [{
-        ticketId: qrCodeData.substring(0, 12) + "...",
+        ticketRef,
+        feeType,
+        seatNumber,
         status: result.success ? "Valid" : "Invalid",
         time: new Date().toLocaleTimeString(),
         reason: result.reason || (result.success ? "Valid ticket" : "Validation failed")
@@ -208,7 +213,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
         Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
       }
     } catch (error: any) {
-      setScanHistory((prev) => [{ ticketId: qrCodeData.substring(0, 12) + "...", status: "Invalid", time: new Date().toLocaleTimeString(), reason: error?.message || "Failed" }, ...prev].slice(0, 10))
+      setScanHistory((prev) => [{ ticketRef: qrCodeData.substring(0, 12) + "...", feeType: "—", seatNumber: "—", status: "Invalid", time: new Date().toLocaleTimeString(), reason: error?.message || "Failed" }, ...prev].slice(0, 10))
       Alert.alert("Error", error?.message || "Failed to validate ticket")
     } finally {
       setValidating(false)
@@ -294,8 +299,11 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
             <Text style={styles.historyTitle}>Recent Scans</Text>
             {scanHistory.map((scan, i) => (
               <View key={i} style={styles.historyItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.historyRef}>{scan.ticketRef}</Text>
+                  <Text style={styles.historyDetail}>{scan.feeType}{scan.seatNumber !== "—" ? ` · Seat ${scan.seatNumber}` : ""}</Text>
+                </View>
                 <Text style={styles.historyTime}>{scan.time}</Text>
-                <Text style={styles.historyId}>{scan.ticketId}</Text>
                 <View style={[styles.historyStatus, scan.status === "Valid" ? styles.historyValid : styles.historyInvalid]}>
                   <Text style={[styles.historyStatusText, scan.status === "Valid" ? styles.historyValidText : styles.historyInvalidText]}>{scan.status}</Text>
                 </View>
@@ -389,8 +397,9 @@ const styles = StyleSheet.create({
   historySection: { backgroundColor: "#1E1E1E", borderRadius: 12, padding: 16, marginBottom: 24 },
   historyTitle: { fontSize: 16, fontWeight: "bold", color: "#FFF", marginBottom: 12 },
   historyItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#333" },
-  historyTime: { color: "#888", fontSize: 12, width: 80 },
-  historyId: { color: "#FFF", fontSize: 12, flex: 1, fontFamily: "monospace" },
+  historyRef: { color: "#FFF", fontSize: 13, fontWeight: "600" },
+  historyDetail: { color: "#888", fontSize: 11, marginTop: 1 },
+  historyTime: { color: "#666", fontSize: 11, marginRight: 8 },
   historyStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   historyValid: { backgroundColor: "#1B5E20" }, historyInvalid: { backgroundColor: "#B71C1C" },
   historyStatusText: { fontSize: 11, fontWeight: "bold" }, historyValidText: { color: "#4CAF50" }, historyInvalidText: { color: "#FF6B6B" },

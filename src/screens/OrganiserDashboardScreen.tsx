@@ -226,7 +226,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [allowLatePurchases, setAllowLatePurchases] = useState(true)
   const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
-  const [scanLogs, setScanLogs] = useState<Array<{ time: string; ticketId: string; status: string }>>([])
+  const [scanLogs, setScanLogs] = useState<Array<{ time: string; ticketRef: string; feeType: string; seatNumber: string; status: string }>>([])
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
@@ -442,7 +442,22 @@ const OrganiserDashboardScreen: React.FC = () => {
     try {
       const { data, error } = await supabase.from("ticket_validations").select("*").eq("event_slug", eventId).order("validatedAt", { ascending: false, nullsFirst: false }).limit(10)
       if (error) throw error
-      setScanLogs((data || []).map((v: any) => ({ time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "", ticketId: v.ticketId ? v.ticketId.substring(0, 8) + "..." : "Unknown", status: v.status === "granted" ? "Valid" : "Invalid" })))
+      const ticketIds = [...new Set((data || []).map((v: any) => v.ticketId).filter(Boolean))]
+      let ticketMap: Record<string, any> = {}
+      if (ticketIds.length > 0) {
+        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number").in("id", ticketIds)
+        for (const t of tickets || []) ticketMap[t.id] = t
+      }
+      setScanLogs((data || []).map((v: any) => {
+        const ticket = ticketMap[v.ticketId] || {}
+        return {
+          time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+          ticketRef: ticket.ticket_ref || v.ticketId?.substring(0, 8) || "—",
+          feeType: ticket.entry_fee_type || "—",
+          seatNumber: ticket.seat_number != null ? String(ticket.seat_number) : "—",
+          status: v.status === "granted" ? "Valid" : "Invalid",
+        }
+      }))
     } catch (error) { console.error("OrganiserDashboardScreen: Error fetching scan logs:", error) }
   }, [eventId])
 
@@ -1223,9 +1238,14 @@ const OrganiserDashboardScreen: React.FC = () => {
               <View style={styles.dashboardCard}>
                 {scanLogs.length > 0 ? scanLogs.map((log, i) => (
                   <View key={i} style={styles.scanLogItem}>
-                    <Text style={styles.scanLogTime}>{log.time}</Text>
-                    <Text style={styles.scanLogTicketId}>{log.ticketId}</Text>
-                    <Text style={[styles.scanLogStatus, log.status === 'Valid' ? styles.scanLogValid : styles.scanLogInvalid]}>{log.status}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
+                      <Text style={styles.scanLogDetail}>{log.feeType}{log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
+                    </View>
+                    <View style={{ alignItems: "flex-end" }}>
+                      <Text style={styles.scanLogTime}>{log.time}</Text>
+                      <Text style={[styles.scanLogStatus, log.status === 'Valid' ? styles.scanLogValid : styles.scanLogInvalid]}>{log.status}</Text>
+                    </View>
                   </View>
                 )) : <Text style={styles.noDataText}>No scan logs</Text>}
               </View>
@@ -1409,9 +1429,10 @@ const styles = StyleSheet.create({
   salesTableSummaryCount: { color: "#00D4FF", fontSize: 14, fontWeight: "bold" },
   noDataText: { color: "#888", fontSize: 14, textAlign: "center", paddingVertical: 20 },
   scanLogItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#2a2a2a" },
-  scanLogTime: { color: "#888", fontSize: 12, flex: 1 },
-  scanLogTicketId: { color: "#FFF", fontSize: 12, flex: 1, fontFamily: "monospace" },
-  scanLogStatus: { fontSize: 12, fontWeight: "bold", width: 60, textAlign: "right" },
+  scanLogTicketRef: { color: "#FFF", fontSize: 13, fontWeight: "600" },
+  scanLogDetail: { color: "#888", fontSize: 11, marginTop: 1 },
+  scanLogTime: { color: "#666", fontSize: 11 },
+  scanLogStatus: { fontSize: 11, fontWeight: "bold", marginTop: 2 },
   scanLogValid: { color: "#4CAF50" }, scanLogInvalid: { color: "#FF6B6B" },
   eligibleCard: { backgroundColor: "#1a1a1a", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "rgba(0,212,255,0.2)" },
   eligibleRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 },
