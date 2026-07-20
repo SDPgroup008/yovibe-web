@@ -337,13 +337,13 @@ const handlePaymentComplete = async () => {
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
       const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
-      const buyerEmailFinal = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim()
+      const buyerEmailFinal = user?.email || buyerContactEmail.trim() || ""
       const buyerNameFinal = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
       
       fulfillmentId = await TicketService.createPendingFulfillment({
         paymentId,
         pawapayDepositId: isMobileMoney ? verificationResult.depositId : undefined,
-        buyerEmail: user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim(),
+        buyerEmail: user?.email || buyerContactEmail.trim() || "",
         buyerName: buyerNameFinal,
         buyerId: user?.id,
         eventId: event!.id,
@@ -585,11 +585,11 @@ const handleInstallmentPurchase = async () => {
       return
     }
 
-    const buyerEmailFinal = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
+    const buyerEmailFinal = user?.email || buyerContactEmail.trim() || ""
     const buyerNameFinal = visitorName.trim() || buyerEmailFinal.split("@")[0] || "Guest"
     const buyerEmailsList = getBuyerEmails()
     const deliveryEmails = emailDistribution === "single"
-      ? Array(actualTicketCount).fill(buyerEmailFinal)
+      ? Array(actualTicketCount).fill(visitorEmail.trim() || buyerEmails[0]?.trim() || "")
       : buyerEmailsList
 
     try {
