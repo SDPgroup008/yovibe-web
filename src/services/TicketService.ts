@@ -486,7 +486,7 @@ private static async createSingleTicket(
       if (t.expiresAt && new Date(t.expiresAt) < now) {
         await supabase.from("tickets").update({ status: "expired" }).eq("id", t.id)
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Ticket has expired" })
-        return { success: false, reason: "Ticket has expired", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
+        return { success: false, reason: "Ticket has expired", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
       }
 
       // Step 3: Check status
@@ -521,13 +521,13 @@ private static async createSingleTicket(
         }
         const reason = t.status === "used" ? "Ticket already used" : t.status === "cancelled" ? "Ticket was cancelled" : "Invalid ticket status"
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason })
-        return { success: false, reason, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
+        return { success: false, reason, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
       }
 
       // Step 4: Verify event
       if (scanningEventId && t.eventId !== scanningEventId) {
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Wrong event" })
-        return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
+        return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
       }
 
       console.log("✅ All checks passed - updating ticket")
@@ -599,7 +599,7 @@ console.error("❌ Error details:", updateError.details)
       console.log("========================================")
       console.log("🔍 TICKET VALIDATION SUCCESSFUL")
       console.log("========================================")
-      return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber }
+      return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error?.message || error)
       return { success: false, reason: error?.message || "Validation failed" }

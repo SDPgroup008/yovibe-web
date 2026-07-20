@@ -28,6 +28,7 @@ export interface InstallmentPlan {
   isTableEntry: boolean
   tableSize: number
   buyerPhotoUrl?: string
+  seatNumber?: number
   paymentProvider?: string   // last used provider, for convenience
   paymentNumber?: string     // last used number
   // Financials

@@ -67,6 +67,7 @@ export class InstallmentService {
       isTableEntry: boolean
       tableSize: number
       buyerPhotoUrl?: string
+      seatNumber?: number
     },
     paymentDetails: {
       method: "mobile_money" | "credit_card" | "bank_transfer"
@@ -93,6 +94,7 @@ export class InstallmentService {
       isTableEntry: buyerInfo.isTableEntry,
       tableSize: buyerInfo.tableSize,
       buyerPhotoUrl: buyerInfo.buyerPhotoUrl,
+      seatNumber: buyerInfo.seatNumber,
       paymentProvider: paymentDetails.provider,
       paymentNumber: paymentDetails.number,
       baseTotal: totalAmount - lateFee,
@@ -223,7 +225,8 @@ export class InstallmentService {
       },
       plan.buyerId ?? null,
       plan.payerEmail,
-      plan.deliveryEmails
+      plan.deliveryEmails,
+      plan.seatNumber
     )
 
     const ticketIds = tickets.map((t) => t.id)
@@ -392,6 +395,7 @@ export class InstallmentService {
       is_table_entry: plan.isTableEntry,
       table_size: plan.tableSize,
       buyer_photo_url: plan.buyerPhotoUrl,
+      seat_number: plan.seatNumber,
       payment_provider: plan.paymentProvider,
       payment_number: plan.paymentNumber,
       base_total: plan.baseTotal,
@@ -437,6 +441,7 @@ export class InstallmentService {
       isTableEntry: row.is_table_entry || false,
       tableSize: row.table_size || 1,
       buyerPhotoUrl: row.buyer_photo_url,
+      seatNumber: row.seat_number,
       paymentProvider: row.payment_provider,
       paymentNumber: row.payment_number,
       baseTotal: row.base_total,

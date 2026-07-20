@@ -610,6 +610,7 @@ const handleInstallmentPurchase = async () => {
           isTableEntry,
           tableSize,
           buyerPhotoUrl: photoCaptured ? buyerPhotoUrl : undefined,
+          seatNumber: selectedSeat ?? undefined,
         },
         {
           method: paymentMethod,

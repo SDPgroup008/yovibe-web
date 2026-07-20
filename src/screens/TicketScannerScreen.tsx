@@ -31,7 +31,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
 
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
-  const [scanHistory, setScanHistory] = useState<Array<{ ticketRef: string; feeType: string; seatNumber: string; status: string; time: string; reason?: string }>>([])
+  const [scanHistory, setScanHistory] = useState<Array<{ ticketRef: string; name: string; feeType: string; seatNumber: string; status: string; time: string; reason?: string }>>([])
   
   const streamRef = useRef<MediaStream | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
@@ -180,8 +180,10 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
       const ticketRef = result.ticketRef || qrCodeData.substring(0, 12) + "..."
       const feeType = result.entryFeeType || "—"
       const seatNumber = result.seatNumber != null ? String(result.seatNumber) : "—"
+      const buyerName = result.buyerName || "—"
       setScanHistory((prev) => [{
         ticketRef,
+        name: buyerName,
         feeType,
         seatNumber,
         status: result.success ? "Valid" : "Invalid",
@@ -213,7 +215,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
         Alert.alert("❌ Entry Denied", `Validation failed: ${result.reason}`, [{ text: "OK" }])
       }
     } catch (error: any) {
-      setScanHistory((prev) => [{ ticketRef: qrCodeData.substring(0, 12) + "...", feeType: "—", seatNumber: "—", status: "Invalid", time: new Date().toLocaleTimeString(), reason: error?.message || "Failed" }, ...prev].slice(0, 10))
+      setScanHistory((prev) => [{ ticketRef: qrCodeData.substring(0, 12) + "...", name: "—", feeType: "—", seatNumber: "—", status: "Invalid", time: new Date().toLocaleTimeString(), reason: error?.message || "Failed" }, ...prev].slice(0, 10))
       Alert.alert("Error", error?.message || "Failed to validate ticket")
     } finally {
       setValidating(false)
@@ -301,6 +303,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
               <View key={i} style={styles.historyItem}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.historyRef}>{scan.ticketRef}</Text>
+                  <Text style={styles.historyName}>{scan.name}</Text>
                   <Text style={styles.historyDetail}>{scan.feeType}{scan.seatNumber !== "—" ? ` · Seat ${scan.seatNumber}` : ""}</Text>
                 </View>
                 <Text style={styles.historyTime}>{scan.time}</Text>
@@ -398,6 +401,7 @@ const styles = StyleSheet.create({
   historyTitle: { fontSize: 16, fontWeight: "bold", color: "#FFF", marginBottom: 12 },
   historyItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#333" },
   historyRef: { color: "#FFF", fontSize: 13, fontWeight: "600" },
+  historyName: { color: "#AAA", fontSize: 12, marginTop: 1 },
   historyDetail: { color: "#888", fontSize: 11, marginTop: 1 },
   historyTime: { color: "#666", fontSize: 11, marginRight: 8 },
   historyStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },

@@ -226,7 +226,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [allowLatePurchases, setAllowLatePurchases] = useState(true)
   const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
-  const [scanLogs, setScanLogs] = useState<Array<{ time: string; ticketRef: string; feeType: string; seatNumber: string; status: string }>>([])
+  const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; status: string }>>([])
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
@@ -445,13 +445,14 @@ const OrganiserDashboardScreen: React.FC = () => {
       const ticketIds = [...new Set((data || []).map((v: any) => v.ticketId).filter(Boolean))]
       let ticketMap: Record<string, any> = {}
       if (ticketIds.length > 0) {
-        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number").in("id", ticketIds)
+        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number, buyer_name").in("id", ticketIds)
         for (const t of tickets || []) ticketMap[t.id] = t
       }
       setScanLogs((data || []).map((v: any) => {
         const ticket = ticketMap[v.ticketId] || {}
         return {
           time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
+          name: ticket.buyer_name || "—",
           ticketRef: ticket.ticket_ref || v.ticketId?.substring(0, 8) || "—",
           feeType: ticket.entry_fee_type || "—",
           seatNumber: ticket.seat_number != null ? String(ticket.seat_number) : "—",
@@ -1240,6 +1241,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                   <View key={i} style={styles.scanLogItem}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
+                      <Text style={styles.scanLogName}>{log.name}</Text>
                       <Text style={styles.scanLogDetail}>{log.feeType}{log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
@@ -1430,6 +1432,7 @@ const styles = StyleSheet.create({
   noDataText: { color: "#888", fontSize: 14, textAlign: "center", paddingVertical: 20 },
   scanLogItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: "#2a2a2a" },
   scanLogTicketRef: { color: "#FFF", fontSize: 13, fontWeight: "600" },
+  scanLogName: { color: "#AAA", fontSize: 12, marginTop: 1 },
   scanLogDetail: { color: "#888", fontSize: 11, marginTop: 1 },
   scanLogTime: { color: "#666", fontSize: 11 },
   scanLogStatus: { fontSize: 11, fontWeight: "bold", marginTop: 2 },
