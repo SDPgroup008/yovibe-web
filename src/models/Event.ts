@@ -10,6 +10,8 @@ export interface Event {
   description: string
   date: Date
   time: string
+  eventStatus?: "scheduled" | "cancelled" | "postponed"
+  postponedTo?: Date
   posterImageUrl: string
   artists: string[]
   isFeatured: boolean
@@ -20,6 +22,7 @@ export interface Event {
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
+  lateFeePercent?: number
   entryFees: Array<{
     name: string
     amount: string
@@ -97,6 +100,7 @@ export interface FirestoreEvent {
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
+  lateFeePercent?: number
   entryFees: Array<{
     name: string
     amount: string

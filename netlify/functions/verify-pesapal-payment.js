@@ -105,6 +105,7 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         status,
         transactionId: data.transaction_id || data.pesapal_transaction_tracking_id || orderId,
+        confirmationCode: data.confirmation_code || data.confirmationCode || undefined,
         amount: parseFloat(data.amount) || 0,
         paymentMethod: data.payment_method,
         rawStatus: data.status || data,

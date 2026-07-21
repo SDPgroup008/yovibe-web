@@ -221,8 +221,9 @@ const TermsAndConditionsScreen: React.FC = () => {
             digitally signed using HMAC-SHA256 for security;
           </Text>
           <Text style={styles.paragraph}>
-            (e) Ticket purchases within 24 hours of the Event start time are subject to a 15% late fee
-            added to the base ticket price;
+            (e) Ticket purchases made on the event date from 7am onwards may be subject to a late fee
+            set by the Organizer, displayed at the time of purchase. The default late fee is 0% unless
+            otherwise configured by the Organizer;
           </Text>
           <Text style={styles.paragraph}>
             (f) Bulk purchases, table reservations, and group bookings may be subject to additional terms
@@ -244,7 +245,7 @@ const TermsAndConditionsScreen: React.FC = () => {
             This commission is included in the price displayed to the purchaser;
           </Text>
           <Text style={styles.paragraph}>
-            (c) The 15% late fee is applied to purchases made within 24 hours of the Event start time
+            (c) The late fee is applied to purchases made on the event date from 7am onwards
             and is calculated on the base ticket price before commission;
           </Text>
           <Text style={styles.paragraph}>
@@ -271,8 +272,57 @@ const TermsAndConditionsScreen: React.FC = () => {
             addresses, spam filtering, or other delivery issues outside its reasonable control;
           </Text>
           <Text style={styles.paragraph}>
-            (d) Ticket re-delivery may be requested by contacting support, subject to identity verification
-            and a reasonable administrative fee.
+            (d) Ticket re-delivery may be requested either:
+              (i) Through the self-service "Resend Ticket" feature on the Platform, which will re-send
+              Ticket emails to the original email address on file without additional verification; or
+              (ii) By contacting support, subject to identity verification and a reasonable administrative fee.
+            </Text>
+            <Text style={styles.paragraph}>
+              (e) The Company reserves the right to limit the frequency of re-delivery requests to prevent abuse.
+            </Text>
+            <Text style={styles.paragraph}>
+              6.4 Ticket Formats and Presentation:
+            </Text>
+            <Text style={styles.paragraph}>
+              (a) Tickets are presented in digital format within the Platform and may include:
+                (i) A QR code for validation scanning at the Event entrance;
+                (ii) A canonical ticket view rendered within the Platform;
+                (iii) A downloadable PDF version provided for convenience.
+            </Text>
+            <Text style={styles.paragraph}>
+              (b) The QR code is the authoritative validation credential. SVG and PDF representations are
+              provided for informational purposes only and do not replace the QR code for entry validation.
+            </Text>
+            <Text style={styles.paragraph}>
+              (c) Duplicating, copying, or screenshotting a Ticket does not create a valid additional entry
+              credential. Only the original digital Ticket as authenticated by the Platform shall be valid.
+            </Text>
+            <Text style={styles.paragraph}>
+              (d) PDF downloads are provided "as is" and may not reflect real-time status updates, including
+              refunds, cancellations, or re-issuance.
+            </Text>
+            <Text style={styles.paragraph}>
+              6.5 Table Bookings and Group Seating:
+            </Text>
+            <Text style={styles.paragraph}>
+              (a) Where offered by the Organizer, Tickets may be purchased as table bookings rather than
+              individual entry. Table bookings are indicated at the time of purchase.
+            </Text>
+            <Text style={styles.paragraph}>
+              (b) Table prices are displayed as a total price for the table based on the stated table
+              capacity. The purchaser pays for the entire table regardless of how many individuals actually attend.
+            </Text>
+            <Text style={styles.paragraph}>
+              (c) Attendees associated with a table booking must not exceed the stated table capacity.
+              Event staff may refuse entry to individuals exceeding the table capacity.
+            </Text>
+            <Text style={styles.paragraph}>
+              (d) Table location or specific table assignment is at the sole discretion of the Organizer
+              and Venue. The Platform does not guarantee specific table locations.
+            </Text>
+            <Text style={styles.paragraph}>
+              (e) Cancellation and refund terms for table bookings follow the general refund policies in
+              Section 11, unless otherwise stated at the time of purchase.
           </Text>
 
           <Text style={styles.sectionTitle}>7. SECURITY PHOTO AND IDENTITY VERIFICATION</Text>
@@ -363,6 +413,50 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (c) Users experiencing payment confirmation without ticket receipt should contact support
             within 48 hours of purchase.
+          </Text>
+          <Text style={styles.paragraph}>
+            8.4 Installment Payment Plans:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) For eligible Events, purchasers may elect to pay for Tickets through an installment plan
+            instead of paying in full at the time of purchase.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Available installment plan types include 2-pay, 3-pay, 4-pay, and 5-pay options, as
+            displayed at the time of purchase. The number of installments is selected by the purchaser
+            before payment.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) The first installment is due at the time of purchase and must be paid to reserve the
+            Ticket(s). The first installment is 40% to 50% of the total base Ticket price, depending on
+            the plan type selected.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) A service fee of 8% of each installment amount is applied to each installment payment.
+            This fee covers the cost of processing and administering the installment plan and is
+            non-refundable.
+          </Text>
+          <Text style={styles.paragraph}>
+            (e) Subsequent installments are due on the dates specified in the installment schedule
+            provided at the time of purchase. All installments must be paid before the Event start time.
+          </Text>
+          <Text style={styles.paragraph}>
+            (f) The QR code for the Ticket is issued only after all installments have been paid in full.
+            Until the final installment is paid, the Ticket remains pending and cannot be used for Event entry.
+          </Text>
+          <Text style={styles.paragraph}>
+            (g) If an installment payment is missed, the purchaser may still complete payment of any
+            outstanding installment at any time before the Event start time. The Company reserves the
+            right to cancel the installment plan and void the Ticket(s) if payments are not completed
+            by the Event start time.
+          </Text>
+          <Text style={styles.paragraph}>
+            (h) Refunds for installment plans are governed by Section 11.1(e)-(f) of these Terms.
+          </Text>
+          <Text style={styles.paragraph}>
+            (i) The installment plan option may not be available for all Events, Ticket types, or payment
+            methods. The Company reserves the right to limit or withdraw the installment plan option at
+            its sole discretion.
           </Text>
 
           <Text style={styles.sectionTitle}>9. COMMISSION, REVENUE SPLIT, AND PAYOUTS</Text>
@@ -472,14 +566,54 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (d) Re-entry policies are at the discretion of the Organizer and venue management.
           </Text>
+          <Text style={styles.paragraph}>
+            10.3 Seat Allocation:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) Where an Event offers seat selection or assigned seating, seat numbers will be indicated
+            on the Ticket.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Seat selection availability and seating charts are determined by the Organizer and
+            displayed at the time of purchase.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) The Company does not guarantee specific seat locations. The Organizer reserves the right
+            to modify seating arrangements due to operational requirements, safety considerations, or
+            Event configuration changes.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) Ticket holders must occupy only the seat indicated on their Ticket. Event staff may
+            relocate ticket holders as necessary for safety or operational purposes.
+          </Text>
+          <Text style={styles.paragraph}>
+            10.4 Staff Scanning and Access Tokens:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) Authorized Event staff and Organizers may be issued unique access tokens that permit
+            use of the Platform's scanning functionality without requiring a full registered Account.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Access tokens are generated by the Organizer or Administrator and are intended solely
+            for authorized personnel for the purpose of validating Tickets at the Event.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) Token holders are responsible for maintaining the confidentiality of their access tokens.
+            The Organizer is responsible for all scanning activity performed using tokens issued under
+            their Account.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) Access tokens may be revoked or expired at any time by the Company, Organizer, or
+            Administrator without prior notice.
+          </Text>
 
-          <Text style={styles.sectionTitle}>11. REFUNDS, CANCELLATIONS, AND CHARGEBACKS</Text>
+           <Text style={styles.sectionTitle}>11. REFUNDS, CANCELLATIONS, AND CHARGEBACKS</Text>
           <Text style={styles.paragraph}>
             11.1 Event Cancellations by Organizer:
           </Text>
           <Text style={styles.paragraph}>
-            (a) If an Event is cancelled by the Organizer, all Ticket purchasers are entitled to a full
-            refund of the Ticket price paid;
+            (a) If an Event is cancelled by the Organizer, all Ticket purchasers are entitled to a
+            refund of the Ticket price paid, net of payment gateway fees;
           </Text>
           <Text style={styles.paragraph}>
             (b) The Company will process refunds within 14 business days of receiving confirmation of
@@ -492,6 +626,16 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (d) The Company may charge Organizers an administrative cancellation fee of up to 5% of total
             Ticket sales for cancellations made within 7 days of the Event date.
+          </Text>
+          <Text style={styles.paragraph}>
+            (e) For Tickets purchased via an installment plan where the event is cancelled or postponed
+            after partial payment, the refund amount is calculated as 40% of the sum of all paid
+            installment base amounts. Service fees charged per installment are non-refundable.
+          </Text>
+          <Text style={styles.paragraph}>
+            (f) For installment plans with incomplete payments after the event has taken place,
+            purchasers may request a refund of 40% of the base installment amounts paid (excluding
+            service fees), subject to admin review and approval.
           </Text>
           <Text style={styles.paragraph}>
             11.2 Event Postponement or Rescheduling:
@@ -543,6 +687,11 @@ const TermsAndConditionsScreen: React.FC = () => {
             have their payout privileges suspended pending review.
           </Text>
           <Text style={styles.paragraph}>
+            (e) The Company reserves the right to dispute chargebacks on behalf of Organizers where
+            valid Ticket delivery and service can be demonstrated. Chargeback disputes are handled
+            through the manual admin refund workflow.
+          </Text>
+          <Text style={styles.paragraph}>
             11.5 Refund Processing:
           </Text>
           <Text style={styles.paragraph}>
@@ -555,6 +704,20 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (c) The Company is not liable for delays in refund processing caused by third-party payment
             processors.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) Refund requests submitted by Users are subject to administrative review. The review
+            workflow includes:
+              (i) Submission of refund request with supporting reason;
+              (ii) Review by an Administrator who may approve, reject, or request additional information;
+              (iii) If approved, manual execution of the refund through the payment provider by an
+              Administrator;
+              (iv) If the refund processing fails, the Administrator may retry the refund;
+              (v) If a refund request is rejected, the User will be notified with the reason.
+          </Text>
+          <Text style={styles.paragraph}>
+            (e) Refund processing is not fully automated. Administrator review and manual execution may
+            result in additional processing time beyond the timeframes stated in Section 11.5(b).
           </Text>
 
           <Text style={styles.sectionTitle}>12. DATA PRIVACY, COLLECTION, AND PROTECTION</Text>
@@ -645,8 +808,9 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (a) The Platform integrates with third-party services including but not limited to: Supabase
-            (database and authentication), Firebase (notifications and real-time data), Cloudflare R2
-            (image and file storage), PesaPal (card payment processing), PawaPay (mobile money processing),
+            (primary database, authentication, and real-time data synchronization), Firebase and Firestore
+            (real-time event and venue data queries, and push notifications), Cloudflare R2 (image and
+            file storage), PesaPal (card payment processing), PawaPay (mobile money processing),
             Google Maps (location services), and Google Analytics (analytics);
           </Text>
           <Text style={styles.paragraph}>
@@ -682,6 +846,30 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (d) The Company will respond to data rights requests within 30 days.
+          </Text>
+          <Text style={styles.paragraph}>
+            12.8 Data Caching:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) To improve performance and reduce data usage, the Platform may cache certain data locally
+            on your device, including Event listings, Ticket information, venue details, and user preferences.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Cached data is stored in your browser's sessionStorage, localStorage, or equivalent
+            application storage mechanisms.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) Cached data may become stale or out of date. The Platform makes reasonable efforts to
+            refresh cached data, but you should not rely solely on cached data for time-sensitive
+            information such as Ticket validity or Event changes.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) You may clear cached data through your device or browser settings. Clearing cached data
+            may affect Platform performance and require re-downloading of data.
+          </Text>
+          <Text style={styles.paragraph}>
+            (e) The Company is not responsible for discrepancies between cached data and live data that
+            result from caching delays.
           </Text>
 
           <Text style={styles.sectionTitle}>13. INTELLECTUAL PROPERTY RIGHTS</Text>

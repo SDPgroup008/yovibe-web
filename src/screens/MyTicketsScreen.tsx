@@ -13,10 +13,12 @@ import TicketPDFService from "../services/TicketPDFService"
 import InstallmentService from "../services/InstallmentService"
 import PawaPayService from "../services/PawaPayService"
 import PesaPalService from "../services/PesaPalService"
+import RefundService, { type RefundReason } from "../services/RefundService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
 import { renderCanonicalTicketSvgWithEmbeddedAssets, svgDataUri } from "../services/TicketCanonicalRenderer"
+import { computeTicketLayout } from "../services/TicketLayoutEngine"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
 const shortTicketRef = (ticket: Ticket): string => {
@@ -56,6 +58,12 @@ const MyTicketsScreen: React.FC = () => {
   const [payInstallmentLoading, setPayInstallmentLoading] = useState(false)
   const [payInstallmentStatus, setPayInstallmentStatus] = useState<"idle" | "polling" | "success" | "error">("idle")
   const [payInstallmentMessage, setPayInstallmentMessage] = useState("")
+
+  const selectedFeeDesign = selectedEvent?.entryFees?.find((fee: any) => fee.name === selectedTicket?.entryFeeType)?.ticketDesign
+    || selectedEvent?.ticket_design
+    || { orientation: "portrait", dimensions: { width: 600, height: 900 } }
+  const selectedTicketLayout = computeTicketLayout(selectedFeeDesign, { hasPoster: !!selectedEvent?.posterImageUrl })
+  const selectedPosterBlock = selectedTicketLayout.blocks.find((block) => block.id === "poster")
   const [installmentsExpanded, setInstallmentsExpanded] = useState(false)
 
   // Load tickets on mount and when user changes
@@ -179,6 +187,17 @@ const MyTicketsScreen: React.FC = () => {
       console.error("Error generating PDF:", error)
       Alert.alert("Error", "Failed to generate ticket PDF. Please try again.")
     }
+  }
+
+  const handleRefundRequest = (ticket: Ticket) => {
+    const status = String(selectedEvent?.event_status || "").toLowerCase()
+    const options: { label: string; reason: RefundReason }[] = []
+    if (status === "cancelled") options.push({ label: "Event cancelled", reason: "event_cancelled" })
+    if (status === "postponed") options.push({ label: "Event postponed", reason: "event_postponed" })
+    const plan = installmentPlans.find((p) => p.ticketIds?.includes(ticket.id) || (p.eventId === ticket.eventId && p.status === "expired"))
+    if (plan) options.push({ label: "Installments incomplete", reason: "installments_incomplete" })
+    if (!options.length) return Alert.alert("Refund unavailable", "Refunds are available only for a cancelled or postponed event, or an incomplete installment plan after the event.")
+    Alert.alert("Request refund", "Select the applicable reason. An administrator must review and execute every refund.", options.map((option) => ({ text: option.label, onPress: async () => { try { await RefundService.request(ticket.id, option.reason, plan?.id); Alert.alert("Submitted", "Your refund request was submitted for admin review.") } catch (e: any) { Alert.alert("Refund request", e.message) } } })))
   }
 
   const handleRefresh = () => {
@@ -545,12 +564,29 @@ const MyTicketsScreen: React.FC = () => {
 
             {/* Canonical organizer-designed ticket. This same SVG is used by
                 the browser PDF path and the email visual renderer. */}
-            <Image
-              source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
-              style={{ width: "100%", aspectRatio: 2 / 3, marginBottom: 18, borderRadius: 12, backgroundColor: "#111827" }}
-              resizeMode="contain"
-              accessibilityLabel="Organizer-designed ticket"
-            />
+            <View style={{ width: "100%", aspectRatio: selectedTicketLayout.pageWidth / selectedTicketLayout.pageHeight, marginBottom: 18, borderRadius: 12, overflow: "hidden", backgroundColor: "#111827" }}>
+              <Image
+                source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
+                style={{ ...StyleSheet.absoluteFillObject }}
+                resizeMode="contain"
+                accessibilityLabel="Organizer-designed ticket"
+              />
+              {selectedEvent?.posterImageUrl && selectedPosterBlock && (
+                <Image
+                  source={{ uri: selectedEvent.posterImageUrl }}
+                  style={{
+                    position: "absolute",
+                    left: `${(selectedPosterBlock.x / selectedTicketLayout.pageWidth) * 100}%`,
+                    top: `${(selectedPosterBlock.y / selectedTicketLayout.pageHeight) * 100}%`,
+                    width: `${((selectedPosterBlock.width * selectedPosterBlock.scale) / selectedTicketLayout.pageWidth) * 100}%`,
+                    height: `${((selectedPosterBlock.height * selectedPosterBlock.scale) / selectedTicketLayout.pageHeight) * 100}%`,
+                    borderRadius: 10,
+                  }}
+                  resizeMode="cover"
+                  accessibilityLabel="Event poster"
+                />
+              )}
+            </View>
 
             <Text style={{ color: "#9CA3AF", textAlign: "center", marginBottom: 18 }}>
               Present this ticket and QR code at the event entrance.
@@ -561,6 +597,17 @@ const MyTicketsScreen: React.FC = () => {
               <Ionicons name="download-outline" size={20} color="#FFFFFF" />
               <Text style={styles.downloadButtonText}>Download Ticket PDF</Text>
             </TouchableOpacity>
+            {selectedTicket && selectedEvent && (() => {
+              const evStatus = String(selectedEvent?.event_status || "").toLowerCase()
+              const hasPlan = installmentPlans.some((p) => p.ticketIds?.includes(selectedTicket.id) || (p.eventId === selectedTicket.eventId && p.status === "expired"))
+              const canRefund = !["used", "refunded"].includes(selectedTicket.status) && (evStatus === "cancelled" || evStatus === "postponed" || hasPlan)
+              return canRefund ? (
+                <TouchableOpacity style={[styles.downloadButton, { backgroundColor: "#374151", marginTop: 10 }]} onPress={() => handleRefundRequest(selectedTicket)}>
+                  <Ionicons name="return-down-back-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.downloadButtonText}>Request refund</Text>
+                </TouchableOpacity>
+              ) : null
+            })()}
           </ScrollView>
         </View>
       )}

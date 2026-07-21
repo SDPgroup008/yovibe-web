@@ -85,6 +85,7 @@ export type ProfileStackParamList = {
   AdminOwnershipRequests: undefined
   AdminDashboard: undefined
   AdminStrandedPurchases: undefined
+  AdminRefunds: undefined
   Notification: undefined
   AddVibe: { venueId: string; venueName: string }
   TodaysVibe: { venueId: string; venueName: string }

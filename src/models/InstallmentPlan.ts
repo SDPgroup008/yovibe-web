@@ -40,6 +40,8 @@ export interface InstallmentPlan {
   amountPaid: number         // sum of base amounts paid (excluding service fees)
   status: "active" | "completed" | "cancelled" | "expired"
   ticketIds?: string[]       // populated after final installment
+  refundStatus?: "none" | "pending" | "completed" | "failed"
+  refundClosedAt?: Date
   created_at: Date
   updated_at: Date
 }

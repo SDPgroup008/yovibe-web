@@ -130,7 +130,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     </defs>
     <rect width="${W}" height="${H}" fill="${bgPaint}"/>
     ${bgImage}
-    <rect width="${W}" height="${H}" fill="#000000" opacity="0.16"/>
+    <rect width="${W}" height="${H}" fill="#000000" opacity="${computed.isUploadBg ? 0 : 0.16}"/>
     <g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/>${posterSvg}` : ""}</g>
     <g${blockScale(title)}><text x="16" y="34" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(16, Math.min(30, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)">${esc(data.eventName)}</text><rect x="16" y="${title.height - 28}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="20" rx="10" fill="${esc(colors.accent)}"/><text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 14}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle">${esc(data.ticketType.toUpperCase())}</text></g>
     <g${blockScale(info)}><rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity="0.48" stroke="${esc(colors.border)}"/>${infoRows.map(([label, value], i) => `${text(16, 22 + i * infoRowHeight, label.toUpperCase(), 9, colors.secondary, 700)}${text(16, 36 + i * infoRowHeight, value, 12, colors.text, 600)}`).join("")}</g>

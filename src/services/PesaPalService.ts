@@ -15,7 +15,7 @@ const generateOrderId = (): string => {
 
 export class PesaPalService {
   private static APP_COMMISSION_RATE = 0.15 // 15%
-  private static LATE_FEE_PERCENTAGE = 0.15 // 15%
+  private static LATE_FEE_PERCENTAGE = 0 // 0% default (configurable per event)
 
 
 
@@ -25,7 +25,8 @@ export class PesaPalService {
   static calculateTicketPrice(
     basePrice: number,
     quantity: number,
-    eventStartTime: Date
+    eventStartTime: Date,
+    lateFeePercent?: number,
   ): {
     subtotal: number
     lateFee: number
@@ -33,14 +34,15 @@ export class PesaPalService {
     isLatePurchase: boolean
   } {
     const now = new Date()
-    const hoursUntilEvent = (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
-    const LATE_FEE_THRESHOLD_HOURS = 24
+    const sevenAm = new Date(eventStartTime)
+    sevenAm.setHours(7, 0, 0, 0)
 
     const subtotal = basePrice * quantity
     let lateFee = 0
 
-    if (hoursUntilEvent < LATE_FEE_THRESHOLD_HOURS) {
-      lateFee = Math.round(subtotal * this.LATE_FEE_PERCENTAGE)
+    if (now >= sevenAm) {
+      const pct = lateFeePercent ?? this.LATE_FEE_PERCENTAGE
+      lateFee = Math.round(subtotal * pct / 100)
     }
 
     return {
@@ -140,13 +142,7 @@ export class PesaPalService {
       console.error("   - Error name:", error.name)
       console.error("   - Error message:", error.message)
       console.log("⚠️ Using fallback mock iframe URL for testing")
-      const mockIframeUrl = `${PESAPAL_CONFIG.baseUrl}/iframe?amount=${amount}&description=${encodeURIComponent(description)}&orderId=${orderId}&email=${encodeURIComponent(buyerEmail)}`
-      
-      return {
-        iframeUrl: mockIframeUrl,
-        orderId,
-        merchantReference,
-      }
+      throw error
     }
   }
 
@@ -157,6 +153,7 @@ export class PesaPalService {
     status: "completed" | "failed" | "pending"
     transactionId?: string
     amount?: number
+    confirmationCode?: string
   }> {
     console.log("========================================")
     console.log("🔍 PESAPAL PAYMENT VERIFICATION (Netlify Functions)")
@@ -198,16 +195,12 @@ export class PesaPalService {
         status,
         transactionId: data.transactionId,
         amount: data.amount,
+        confirmationCode: data.confirmationCode,
       }
     } catch (error) {
       console.error("❌ Error verifying payment:", error)
       // For testing purposes, return completed if API fails
-      console.log("⚠️ API failed, returning simulated success for testing")
-      return {
-        status: "completed",
-        transactionId: `PESAPAL-${Date.now()}`,
-        amount: 0,
-      }
+      return { status: "pending" }
     }
   }
 
@@ -242,6 +235,11 @@ export class PesaPalService {
    * In production, this would handle the post-payment flow
    */
   static async processPayment(paymentIntentId: string): Promise<boolean> {
+    const verification = await this.verifyPayment(paymentIntentId)
+    if (verification.status === "failed") throw new Error("Payment failed")
+    return verification.status === "completed"
+
+    /* Legacy simulation retained below only as unreachable historical code.
     console.log("========================================")
     console.log("💳 PESAPAL PAYMENT PROCESSING")
     console.log("========================================")
@@ -291,6 +289,7 @@ export class PesaPalService {
       console.error("❌ Error processing payment:", error)
       throw error
     }
+    */
   }
 
   /**
@@ -427,7 +426,8 @@ export class PesaPalService {
       console.error("❌ Error processing PesaPal payout:", error.message)
       console.log("⚠️ Falling back to simulated payout for demo/testing...")
       
-      // Fallback: Simulate successful payout for demo/testing purposes
+      return { success: false, error: error?.message || "Payout failed" }
+      // Legacy fallback removed
       return new Promise((resolve) => {
         setTimeout(() => {
           const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -471,7 +471,8 @@ export class PesaPalService {
     console.log("📋 PesaPalService.verifyPayoutStatus: Checking payout status")
     console.log("   - Payout ID:", payoutId)
     
-    // Simulate API call for demo
+    return { status: "pending", error: "Payout status verification is not available" }
+    // Legacy simulation removed
     return new Promise((resolve) => {
       setTimeout(() => {
         console.log("✅ Payout status verified: COMPLETED")
@@ -487,6 +488,7 @@ export class PesaPalService {
    * Request refund for a payment
    */
   static async refundPayment(paymentIntentId: string, amount: number): Promise<boolean> {
+    throw new Error("Refunds must be requested and executed through the manual admin refund workflow")
     console.log("📋 PesaPalService.refundPayment: Processing refund")
     console.log("   - Payment ID:", paymentIntentId)
     console.log("   - Amount:", amount)

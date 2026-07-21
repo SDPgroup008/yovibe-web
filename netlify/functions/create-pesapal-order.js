@@ -113,7 +113,8 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           success: true,
           iframeUrl: data.redirect_url,
-          orderId: data.order_tracking_id || orderId,
+          orderId: data.merchant_reference || orderId,
+          trackingId: data.order_tracking_id,
           merchantReference: data.merchant_reference || orderId,
         }),
       };
@@ -133,7 +134,8 @@ exports.handler = async (event) => {
         body: JSON.stringify({
           success: true,
           iframeUrl: `${baseUrl}/iframe?merchant_reference=${orderId}`,
-          orderId: data.order_tracking_id || orderId,
+          orderId: data.merchant_reference || orderId,
+          trackingId: data.order_tracking_id,
           merchantReference: data.merchant_reference || orderId,
         }),
       };

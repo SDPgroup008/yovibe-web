@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator } from "react-native"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator, Modal, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
@@ -13,6 +13,11 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   const { user: currentUser } = useAuth()
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
+  const [statusModalVisible, setStatusModalVisible] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null)
+  const [actionStatus, setActionStatus] = useState<"cancelled" | "postponed" | null>(null)
+  const [postponedDate, setPostponedDate] = useState("")
+  const [statusUpdating, setStatusUpdating] = useState(false)
 
   useEffect(() => {
     if (currentUser?.userType !== "admin") {
@@ -20,7 +25,6 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
       navigation.goBack()
       return
     }
-
     loadEvents()
   }, [currentUser, navigation])
 
@@ -38,26 +42,18 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   }
 
   const handleDeleteEvent = (eventId: string) => {
-    // Use a simple confirm dialog instead of Alert.alert for web compatibility
     const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
-    
-    if (confirmed) {
-      performDelete(eventId)
-    }
+    if (confirmed) performDelete(eventId)
   }
 
   const performDelete = async (eventId: string) => {
     try {
       setLoading(true)
-      console.log("[AdminEventsScreen] Deleting event:", eventId)
-      
       await SupabaseService.deleteEvent(eventId)
-      console.log("[AdminEventsScreen] Event deleted successfully")
-      
       Alert.alert("Success", "Event deleted successfully")
       loadEvents()
     } catch (error) {
-      console.error("[AdminEventsScreen] Error deleting event:", error)
+      console.error("Error deleting event:", error)
       Alert.alert("Error", "Failed to delete event")
       setLoading(false)
     }
@@ -74,49 +70,92 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     }
   }
 
+  const openStatusModal = (event: Event, action: "cancelled" | "postponed") => {
+    setSelectedEvent(event)
+    setActionStatus(action)
+    setPostponedDate("")
+    setStatusModalVisible(true)
+  }
+
+  const confirmStatusChange = async () => {
+    if (!selectedEvent || !actionStatus) return
+    if (actionStatus === "postponed" && !postponedDate.trim()) {
+      Alert.alert("Date Required", "Please enter a new date for the postponed event")
+      return
+    }
+    setStatusUpdating(true)
+    try {
+      await SupabaseService.updateEvent(selectedEvent.slug || selectedEvent.id, {
+        eventStatus: actionStatus,
+        ...(actionStatus === "postponed" && postponedDate.trim()
+          ? { postponedTo: new Date(postponedDate) }
+          : {}),
+      } as any)
+      setStatusModalVisible(false)
+      Alert.alert("Success", `Event ${actionStatus === "cancelled" ? "cancelled" : "postponed"} successfully`)
+      loadEvents()
+    } catch (error) {
+      console.error("Error updating event status:", error)
+      Alert.alert("Error", "Failed to update event status")
+    } finally {
+      setStatusUpdating(false)
+    }
+  }
+
   const handleViewEvent = (eventId: string) => {
     navigation.navigate("EventDetail", { eventId })
   }
 
-  const renderEventItem = ({ item }: { item: Event }) => (
-    <View style={styles.eventCard}>
-      <Image source={{ uri: item.posterImageUrl }} style={styles.eventImage} />
-      <View style={styles.eventContent}>
-        <Text style={styles.eventName}>{item.name}</Text>
-        <Text style={styles.eventVenue}>{item.venueName}</Text>
-        <Text style={styles.eventDate}>{item.date.toDateString()}</Text>
+  const getStatusBadge = (event: Event) => {
+    const status = event.eventStatus || "scheduled"
+    const config: Record<string, { label: string; color: string; bg: string }> = {
+      scheduled: { label: "Scheduled", color: "#4CAF50", bg: "rgba(76,175,80,0.15)" },
+      cancelled: { label: "Cancelled", color: "#FF6B6B", bg: "rgba(255,107,107,0.15)" },
+      postponed: { label: "Postponed", color: "#F59E0B", bg: "rgba(245,158,11,0.15)" },
+    }
+    return config[status] || config.scheduled
+  }
 
-        {item.isFeatured && (
-          <View style={styles.featuredBadge}>
-            <Text style={styles.featuredText}>Featured</Text>
+  const renderEventItem = ({ item }: { item: Event }) => {
+    const badge = getStatusBadge(item)
+    return (
+      <View style={styles.eventCard}>
+        <Image source={{ uri: item.posterImageUrl }} style={styles.eventImage} />
+        <View style={styles.eventContent}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <Text style={styles.eventName}>{item.name}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: badge.color }]}>{badge.label}</Text>
+            </View>
           </View>
-        )}
-
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.actionButton, styles.viewButton]} onPress={() => handleViewEvent(item.id)}>
-            <Ionicons name="eye-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>View</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, item.isFeatured ? styles.unfeaturedButton : styles.featuredButton]}
-            onPress={() => handleToggleFeature(item.id, item.isFeatured)}
-          >
-            <Ionicons name={item.isFeatured ? "star-outline" : "star"} size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>{item.isFeatured ? "Unfeature" : "Feature"}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteEvent(item.id)}
-          >
-            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Delete</Text>
-          </TouchableOpacity>
+          <Text style={styles.eventVenue}>{item.venueName}</Text>
+          <Text style={styles.eventDate}>{item.date.toDateString()}</Text>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={[styles.actionButton, styles.viewButton]} onPress={() => handleViewEvent(item.id)}>
+              <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>View</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.cancelButton]} onPress={() => openStatusModal(item, "cancelled")}>
+              <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.postponeButton]} onPress={() => openStatusModal(item, "postponed")}>
+              <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Postpone</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, item.isFeatured ? styles.unfeaturedButton : styles.featuredButton]} onPress={() => handleToggleFeature(item.id, item.isFeatured)}>
+              <Ionicons name={item.isFeatured ? "star-outline" : "star"} size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>{item.isFeatured ? "Unfeature" : "Feature"}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDeleteEvent(item.id)}>
+              <Ionicons name="trash-outline" size={18} color="#FFFFFF" />
+              <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  )
+    )
+  }
 
   if (loading) {
     return (
@@ -131,7 +170,6 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     <View style={styles.container}>
       <Text style={styles.headerText}>Manage Events</Text>
       <Text style={styles.subHeaderText}>Total Events: {events.length}</Text>
-
       <FlatList
         data={events}
         keyExtractor={(item) => item.id}
@@ -143,122 +181,85 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
           </View>
         }
       />
+      <Modal visible={statusModalVisible} transparent animationType="fade" onRequestClose={() => setStatusModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>
+              {actionStatus === "cancelled" ? "Cancel Event" : "Postpone Event"}
+            </Text>
+            <Text style={styles.modalSub}>
+              {actionStatus === "cancelled"
+                ? "This will mark the event as cancelled. All ticket purchasers will be eligible for refunds."
+                : "Set a new date for this event. Existing tickets remain valid."}
+            </Text>
+            <Text style={styles.modalEventName}>{selectedEvent?.name}</Text>
+            {actionStatus === "postponed" && (
+              <TextInput
+                style={styles.dateInput}
+                value={postponedDate}
+                onChangeText={setPostponedDate}
+                placeholder="New date (YYYY-MM-DD)"
+                placeholderTextColor="#888"
+              />
+            )}
+            <View style={styles.modalRow}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setStatusModalVisible(false)}>
+                <Text style={styles.modalCancelBtnText}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={confirmStatusChange} disabled={statusUpdating}>
+                {statusUpdating ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.modalConfirmBtnText}>
+                    {actionStatus === "cancelled" ? "Confirm Cancellation" : "Confirm Postponement"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#121212",
-    padding: 16,
-  },
-  headerText: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 8,
-  },
-  subHeaderText: {
-    fontSize: 16,
-    color: "#BBBBBB",
-    marginBottom: 16,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "#121212",
-  },
-  loadingText: {
-    color: "#FFFFFF",
-    marginTop: 16,
-  },
-  listContainer: {
-    paddingBottom: 16,
-  },
-  eventCard: {
-    backgroundColor: "#1E1E1E",
-    borderRadius: 8,
-    overflow: "hidden",
-    marginBottom: 16,
-  },
-  eventImage: {
-    width: "100%",
-    height: 120,
-  },
-  eventContent: {
-    padding: 16,
-  },
-  eventName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  eventVenue: {
-    fontSize: 14,
-    color: "#2196F3",
-    marginBottom: 4,
-  },
-  eventDate: {
-    fontSize: 14,
-    color: "#BBBBBB",
-    marginBottom: 16,
-  },
-  featuredBadge: {
-    position: "absolute",
-    top: 16,
-    right: 16,
-    backgroundColor: "#FFD700",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  featuredText: {
-    color: "#000000",
-    fontWeight: "bold",
-    fontSize: 12,
-  },
-  actionButtons: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    flexWrap: "wrap",
-  },
-  actionButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    marginLeft: 8,
-    marginBottom: 8,
-  },
-  viewButton: {
-    backgroundColor: "#2196F3",
-  },
-  featuredButton: {
-    backgroundColor: "#FFD700",
-  },
-  unfeaturedButton: {
-    backgroundColor: "#333333",
-  },
-  deleteButton: {
-    backgroundColor: "#FF3B30",
-  },
-  actionButtonText: {
-    color: "#FFFFFF",
-    marginLeft: 4,
-    fontSize: 14,
-  },
-  emptyContainer: {
-    padding: 24,
-    alignItems: "center",
-  },
-  emptyText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-  },
+  container: { flex: 1, backgroundColor: "#0a0a0f", padding: 16 },
+  headerText: { fontSize: 24, fontWeight: "800", color: "#FFFFFF", marginBottom: 4, letterSpacing: -0.5 },
+  subHeaderText: { fontSize: 14, color: "#888", marginBottom: 16 },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#0a0a0f" },
+  loadingText: { color: "#FFFFFF", marginTop: 16 },
+  listContainer: { paddingBottom: 16 },
+  eventCard: { backgroundColor: "#13131a", borderRadius: 14, overflow: "hidden", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
+  eventImage: { width: "100%", height: 140 },
+  eventContent: { padding: 16 },
+  eventName: { fontSize: 18, fontWeight: "700", color: "#FFFFFF", flex: 1 },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
+  statusBadgeText: { fontSize: 11, fontWeight: "700" },
+  eventVenue: { fontSize: 14, color: "#2196F3", marginBottom: 2 },
+  eventDate: { fontSize: 13, color: "#888", marginBottom: 14 },
+  actionButtons: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  actionButton: { flexDirection: "row", alignItems: "center", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, gap: 4 },
+  actionButtonText: { color: "#FFFFFF", fontSize: 12, fontWeight: "600" },
+  viewButton: { backgroundColor: "#2196F3" },
+  cancelButton: { backgroundColor: "#DC2626" },
+  postponeButton: { backgroundColor: "#F59E0B" },
+  featuredButton: { backgroundColor: "#FFD700" },
+  unfeaturedButton: { backgroundColor: "#333" },
+  deleteButton: { backgroundColor: "rgba(255,59,48,0.2)" },
+  emptyContainer: { padding: 24, alignItems: "center" },
+  emptyText: { color: "#888", fontSize: 16 },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.7)", justifyContent: "center", alignItems: "center", padding: 24 },
+  modalBox: { backgroundColor: "#1a1a2e", borderRadius: 20, padding: 24, width: "100%", maxWidth: 420, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  modalTitle: { fontSize: 20, fontWeight: "800", color: "#FFF", marginBottom: 8 },
+  modalSub: { fontSize: 13, color: "#888", lineHeight: 20, marginBottom: 16 },
+  modalEventName: { fontSize: 16, fontWeight: "600", color: "#F59E0B", marginBottom: 16 },
+  dateInput: { backgroundColor: "#0a0a0f", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 14, marginBottom: 20, borderWidth: 1, borderColor: "rgba(255,255,255,0.08)" },
+  modalRow: { flexDirection: "row", gap: 12 },
+  modalCancelBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#222", alignItems: "center" },
+  modalCancelBtnText: { color: "#888", fontWeight: "600", fontSize: 14 },
+  modalConfirmBtn: { flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#2196F3", alignItems: "center" },
+  modalConfirmBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 })
 
 export default AdminEventsScreen

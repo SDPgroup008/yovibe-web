@@ -33,7 +33,12 @@ export interface Ticket {
   paymentStatus?: "pending" | "completed" | "failed"
   paymentReference?: string
   pesapalTransactionId?: string
+  pesapalConfirmationCode?: string
   pawapayDepositId?: string
+  gatewayFee?: number
+  installmentPlanId?: string
+  refundedAmount?: number
+  refundStatus?: "none" | "pending" | "completed" | "failed"
   isLatePurchase: boolean
   isScanned: boolean
   purchaseDeadline: Date

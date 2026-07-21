@@ -362,6 +362,81 @@ export class NotificationService {
     }
   }
 
+  // Send refund lifecycle notifications
+  async sendRefundNotification(
+    userId: string | undefined,
+    requestReference: string,
+    refundId: string,
+    status: string,
+    amount?: number,
+    reason?: string,
+  ): Promise<void> {
+    try {
+      const config: Record<string, { title: string; body: string }> = {
+        pending_admin_review: {
+          title: "🔄 Refund Request Submitted",
+          body: `Your refund request ${requestReference} has been submitted for admin review.`,
+        },
+        approved: {
+          title: "✅ Refund Approved",
+          body: `Your refund ${requestReference} of UGX ${(amount || 0).toLocaleString()} has been approved.`,
+        },
+        rejected: {
+          title: "❌ Refund Rejected",
+          body: `Your refund request ${requestReference} has been rejected.${reason ? ` Reason: ${reason}` : ""}`,
+        },
+        submitted: {
+          title: "💰 Refund Submitted",
+          body: `Your refund ${requestReference} has been sent to the payment provider for processing.`,
+        },
+        completed: {
+          title: "✅ Refund Completed",
+          body: `Your refund ${requestReference} of UGX ${(amount || 0).toLocaleString()} has been completed.`,
+        },
+        needs_attention: {
+          title: "⚠️ Refund Needs Attention",
+          body: `There was an issue processing refund ${requestReference}. An admin is reviewing it.`,
+        },
+      }
+      const c = config[status] || { title: "Refund Update", body: `Refund ${requestReference} updated to ${status}.` }
+      await this.saveNotification({
+        userId: userId || "",
+        title: c.title,
+        body: c.body,
+        type: "refund_update",
+        data: { refundId, requestReference, status, amount },
+        isRead: false,
+      })
+    } catch (error) {
+      console.error("NotificationService: Error sending refund notification:", error)
+    }
+  }
+
+  // Send event cancellation/postponement notification to ticket buyers
+  async sendEventStatusNotification(
+    buyerId: string,
+    eventName: string,
+    status: "cancelled" | "postponed",
+    postponedTo?: string,
+  ): Promise<void> {
+    try {
+      const title = status === "cancelled" ? "🚫 Event Cancelled" : "📅 Event Postponed"
+      const body = status === "cancelled"
+        ? `${eventName} has been cancelled. You are eligible for a refund.`
+        : `${eventName} has been postponed${postponedTo ? ` to ${postponedTo}` : ""}. Your tickets remain valid.`
+      await this.saveNotification({
+        userId: buyerId,
+        title,
+        body,
+        type: "event_status_change",
+        data: { eventName, status, postponedTo },
+        isRead: false,
+      })
+    } catch (error) {
+      console.error("NotificationService: Error sending event status notification:", error)
+    }
+  }
+
   // Notification listeners for real-time updates
   private notificationListeners: Array<() => void> = []
 

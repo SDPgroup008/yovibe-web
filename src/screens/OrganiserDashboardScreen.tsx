@@ -29,6 +29,7 @@ import TicketService from "../services/TicketService"
 import PesaPalService from "../services/PesaPalService"
 import PawaPayService from "../services/PawaPayService"
 import StaffTokenService from "../services/StaffTokenService"
+import RefundService from "../services/RefundService"
 import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import type {
@@ -267,7 +268,70 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [pendingTicketDocId, setPendingTicketDocId] = useState<string | null>(null)
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
+
+  // Admin dashboard state
+  const [adminTotalAppCommission, setAdminTotalAppCommission] = useState(0)
+  const [adminTotalGatewayFees, setAdminTotalGatewayFees] = useState(0)
+  const [eventRefunds, setEventRefunds] = useState<any[]>([])
+  const [refundsLoading, setRefundsLoading] = useState(false)
+  const [adminPhone, setAdminPhone] = useState("")
+  const [adminPhoneConfirm, setAdminPhoneConfirm] = useState("")
+  const [showAdminWithdrawModal, setShowAdminWithdrawModal] = useState(false)
+  const [adminWithdrawLoading, setAdminWithdrawLoading] = useState(false)
+  const [adminOTPSent, setAdminOTPSent] = useState(false)
+  const [adminOTPCode, setAdminOTPCode] = useState("")
+  const [adminOTPLoading, setAdminOTPLoading] = useState(false)
+  const [adminOTPError, setAdminOTPError] = useState("")
+
+  const [showEventStatusModal, setShowEventStatusModal] = useState(false)
+  const [pendingEventAction, setPendingEventAction] = useState<"cancelled" | "postponed" | null>(null)
+  const [pendingEventDate, setPendingEventDate] = useState("")
+  const [eventStatusUpdating, setEventStatusUpdating] = useState(false)
+
   const [eventCreatorPaymentDetails, setEventCreatorPaymentDetails] = useState<any>(null)
+  const [eventStatusExpanded, setEventStatusExpanded] = useState(false)
+  const [lateFeeExpanded, setLateFeeExpanded] = useState(false)
+
+  const confirmEventStatusChange = async () => {
+    if (!event || !pendingEventAction) {
+      console.log("[EventStatus] ❌ Aborted: no event or no pending action")
+      return
+    }
+    console.log("[EventStatus] 🚀 Starting event status change...")
+    console.log("[EventStatus]   Event ID (slug):", event.id)
+    console.log("[EventStatus]   Event slug:", event.slug)
+    console.log("[EventStatus]   Current status:", event.eventStatus)
+    console.log("[EventStatus]   Target action:", pendingEventAction)
+    console.log("[EventStatus]   User ID:", user?.uid)
+    console.log("[EventStatus]   User type:", user?.userType)
+    if (pendingEventAction === "postponed" && !pendingEventDate.trim()) {
+      console.log("[EventStatus] ❌ Aborted: postponed but no date provided")
+      Alert.alert("Date Required", "Enter a new date for the postponed event"); return
+    }
+    setEventStatusUpdating(true)
+    try {
+      if (pendingEventAction === "cancelled") {
+        console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='cancelled'")
+        await SupabaseService.updateEvent(event.id, { eventStatus: "cancelled" } as any)
+      } else {
+        const newDate = new Date(pendingEventDate)
+        console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='postponed', postponedTo=", newDate.toISOString())
+        await SupabaseService.updateEvent(event.id, { eventStatus: "postponed", postponedTo: newDate } as any)
+      }
+      console.log("[EventStatus] ✅ SupabaseService.updateEvent completed without error")
+      setShowEventStatusModal(false)
+      Alert.alert("Success", `Event ${pendingEventAction === "cancelled" ? "cancelled" : "postponed"} successfully`)
+      setEvent(prev => prev ? { ...prev, eventStatus: pendingEventAction, postponedTo: pendingEventAction === "postponed" ? new Date(pendingEventDate) : prev.postponedTo } as any : prev)
+      console.log("[EventStatus] ✅ Local state updated:", pendingEventAction)
+    } catch (error: any) {
+      console.log("[EventStatus] ❌ CAUGHT ERROR:", error.message)
+      console.log("[EventStatus] ❌ Error stack:", error.stack)
+      Alert.alert("Error", error.message || "Failed to update event status")
+    } finally {
+      setEventStatusUpdating(false)
+      console.log("[EventStatus] ✅ Done (setEventStatusUpdating=false)")
+    }
+  }
 
   type StaffToken = { id: string; token: string; label?: string; expires_at: string; created_at: string }
   const [activeTokens, setActiveTokens] = useState<StaffToken[]>([])
@@ -358,6 +422,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       totalAmount: row.total_amount ?? row.totalAmount ?? 0,
       venueRevenue: row.venue_revenue ?? row.venueRevenue ?? 0,
       appCommission: row.app_commission ?? row.appCommission ?? 0,
+      gatewayFee: row.gateway_fee ?? row.gatewayFee ?? 0,
       isLatePurchase: row.is_late_purchase ?? row.isLatePurchase ?? false,
       isScanned: row.is_scanned ?? row.isScanned ?? false,
       status: row.status || "pending",
@@ -375,6 +440,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const processTicketData = useCallback((tickets: any[]) => {
     let earlyCount = 0, lateCount = 0, totalRevenue = 0, eligibleTotal = 0
+    let totalAppCommission = 0, totalGatewayFees = 0
     const salesByType: TicketSalesByType = {}
     const payoutTypes: Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }> = {}
 
@@ -396,6 +462,8 @@ const OrganiserDashboardScreen: React.FC = () => {
       if (isLate) lateCount++; else earlyCount++
       totalRevenue += amount
       if (isEligible) eligibleTotal += t.venueRevenue || 0
+      totalAppCommission += t.appCommission || 0
+      totalGatewayFees += t.gatewayFee || 0
 
       if (!salesByType[ticketType]) salesByType[ticketType] = { early: { count: 0, revenue: 0 }, late: { count: 0, revenue: 0 }, scanned: { count: 0, revenue: 0 } }
       if (isLate) { salesByType[ticketType].late.count++; salesByType[ticketType].late.revenue += amount }
@@ -424,6 +492,8 @@ const OrganiserDashboardScreen: React.FC = () => {
     setEligiblePayoutTotal(eligibleTotal)
     setTicketSalesByType(salesByType)
     setPayoutTicketTypes(payoutTypes)
+    setAdminTotalAppCommission(totalAppCommission)
+    setAdminTotalGatewayFees(totalGatewayFees)
   }, [event])
 
   const fetchTicketData = useCallback(async () => {
@@ -514,6 +584,64 @@ const OrganiserDashboardScreen: React.FC = () => {
       }
     }).catch(() => {})
   }, [user])
+
+  // Fetch refund requests for this event
+  useEffect(() => {
+    if (!eventId) return
+    setRefundsLoading(true)
+    supabase.from('refund_requests').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).limit(50).then(({ data }) => {
+      setEventRefunds(data || [])
+    }).catch(() => {}).finally(() => setRefundsLoading(false))
+  }, [eventId])
+
+  // Admin withdraw via PawaPay
+  const adminNetRevenue = Math.max(0, adminTotalAppCommission - adminTotalGatewayFees)
+  const adminWithdrawFee = calculatePayoutFee(adminNetRevenue, payoutProvider)
+  const adminNetAfterFee = Math.max(0, adminNetRevenue - adminWithdrawFee)
+
+  const handleAdminSendOtp = async () => {
+    if (!user?.email) return
+    const p1 = toInternationalPhone(adminPhone)
+    const p2 = toInternationalPhone(adminPhoneConfirm)
+    if (p1 !== p2) { setAdminOTPError("Numbers don't match"); return }
+    setAdminOTPLoading(true); setAdminOTPError("")
+    try {
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      if (!sessionUser) { setAdminOTPError("Session expired"); return }
+      await supabase.from('payout_otps').update({ used: true }).eq('user_id', sessionUser.id).eq('used', false)
+      const otp = Math.floor(100000 + Math.random() * 900000).toString()
+      await supabase.from('payout_otps').insert({ user_id: sessionUser.id, email: user.email, otp, expires_at: new Date(Date.now() + 90 * 1000) })
+      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', { body: { email: user.email, otp } })
+      if (emailError) throw emailError
+      setAdminOTPSent(true)
+    } catch (err) { console.error(err); setAdminOTPError("Failed to send code") }
+    finally { setAdminOTPLoading(false) }
+  }
+
+  const handleAdminConfirmPayout = async () => {
+    if (!adminOTPCode.trim()) { setAdminOTPError("Enter the code"); return }
+    setAdminOTPLoading(true); setAdminOTPError("")
+    try {
+      const { data: { user: sessionUser } } = await supabase.auth.getUser()
+      if (!sessionUser) { setAdminOTPError("Session expired"); return }
+      const { data: otpRow } = await supabase.from('payout_otps').select('*').eq('user_id', sessionUser.id).eq('otp', adminOTPCode.trim()).eq('used', false).single()
+      if (!otpRow || new Date(otpRow.expires_at) < new Date()) { setAdminOTPError("Invalid or expired code"); return }
+      await supabase.from('payout_otps').update({ used: true }).eq('id', otpRow.id)
+      setAdminOTPLoading(false)
+      setAdminWithdrawLoading(true)
+      try {
+        const intPhone = toInternationalPhone(adminPhone)
+        const payoutResult = await PawaPayService.initiatePayout(adminNetAfterFee, "UGX", intPhone, payoutProvider)
+        if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
+        Alert.alert("✅ Payout Submitted!", `UGX ${adminNetAfterFee.toLocaleString()} sent to ${intPhone}\nPayout ID: ${payoutResult.payoutId}`)
+        setShowAdminWithdrawModal(false)
+        setAdminOTPSent(false)
+        setAdminOTPCode("")
+      } catch (e: any) { Alert.alert("Error", e.message) }
+      finally { setAdminWithdrawLoading(false) }
+    } catch (err) { console.error(err); setAdminOTPError("Failed to verify code") }
+    finally { setAdminOTPLoading(false) }
+  }
 
   const handleScanTicket = () => {
     navigation.navigate("TicketScanner", { eventId, eventName: event?.name || "Event" })
@@ -1048,6 +1176,90 @@ const OrganiserDashboardScreen: React.FC = () => {
               </View>
             </View>
 
+            {/* Event Status — Organizer can cancel or postpone */}
+            {event && (
+              <View style={styles.dashboardSection}>
+                <TouchableOpacity onPress={() => setEventStatusExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: eventStatusExpanded ? 8 : 0 }}>
+                  <Text style={styles.dashboardSectionTitle}>📋 Event Status</Text>
+                  <Ionicons name={eventStatusExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+                </TouchableOpacity>
+                {eventStatusExpanded && <View style={styles.dashboardCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <Text style={{ color: "#888", fontSize: 13 }}>Current:</Text>
+                    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: (event.eventStatus === "cancelled" ? "rgba(255,107,107,0.15)" : event.eventStatus === "postponed" ? "rgba(245,158,11,0.15)" : "rgba(76,175,80,0.15)") }}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: event.eventStatus === "cancelled" ? "#FF6B6B" : event.eventStatus === "postponed" ? "#F59E0B" : "#4CAF50" }}>
+                        {(event.eventStatus || "scheduled").toUpperCase()}
+                      </Text>
+                    </View>
+                    {eventRefunds.length > 0 && (
+                      <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(245,158,11,0.12)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+                        <Ionicons name="receipt-outline" size={14} color="#F59E0B" />
+                        <Text style={{ color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>{eventRefunds.filter(r => r.status === "pending_admin_review").length} refund{(eventRefunds.filter(r => r.status === "pending_admin_review").length) !== 1 ? "s" : ""}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {event.eventStatus !== "cancelled" && event.eventStatus !== "postponed" && (
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#DC2626", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("cancelled"); setPendingEventDate("") }}>
+                        <Ionicons name="close-circle-outline" size={18} color="#FFF" />
+                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Cancel Event</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#F59E0B", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("postponed"); setPendingEventDate("") }}>
+                        <Ionicons name="calendar-outline" size={18} color="#FFF" />
+                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Postpone Event</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>}
+              </View>
+            )}
+
+            {/* Late Fee Setting */}
+            {event && (
+              <View style={styles.dashboardSection}>
+                <TouchableOpacity onPress={() => setLateFeeExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: lateFeeExpanded ? 8 : 0 }}>
+                  <Text style={styles.dashboardSectionTitle}>⚡ Late Fee</Text>
+                  <Ionicons name={lateFeeExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+                </TouchableOpacity>
+                {lateFeeExpanded && <View style={styles.dashboardCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+                    <TextInput
+                      style={[styles.input, { width: 80, marginBottom: 0, textAlign: "center", fontSize: 16, fontWeight: "700" }]}
+                      value={String(event.lateFeePercent ?? 0)}
+                      onChangeText={(t) => {
+                        const val = Math.max(0, Math.min(100, Number(t) || 0))
+                        setEvent(prev => prev ? { ...prev, lateFeePercent: val } : prev)
+                      }}
+                      keyboardType="numeric"
+                      placeholderTextColor="#555"
+                    />
+                    <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700" }}>%</Text>
+                    <Text style={{ color: "#888", fontSize: 12, flex: 1 }}>Applied to purchases made on the event date from 7am onwards</Text>
+                    <TouchableOpacity
+                      style={{ backgroundColor: "#00D4FF", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
+                      onPress={async () => {
+                        console.log("[LateFee] 🚀 Save clicked")
+                        console.log("[LateFee]   Event ID:", event.slug || event.id)
+                        console.log("[LateFee]   Value to save:", event.lateFeePercent ?? 0)
+                        console.log("[LateFee]   User ID:", user?.uid)
+                        console.log("[LateFee]   User type:", user?.userType)
+                        try {
+                          await SupabaseService.updateEvent(event.slug || event.id, { lateFeePercent: event.lateFeePercent ?? 0 } as any)
+                          console.log("[LateFee] ✅ Saved successfully to Supabase")
+                          Alert.alert("Saved", `Late fee set to ${event.lateFeePercent ?? 0}%`)
+                        } catch (e: any) {
+                          console.log("[LateFee] ❌ ERROR:", e.message)
+                          Alert.alert("Error", e.message)
+                        }
+                      }}
+                    >
+                      <Text style={{ color: "#000", fontWeight: "700", fontSize: 12 }}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>}
+              </View>
+            )}
+
             <View style={styles.dashboardSection}>
               <Text style={styles.dashboardSectionTitle}>📊 Sales by Type</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -1324,17 +1536,104 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
           </>
         ) : (
-          <View style={styles.dashboardSection}>
-            <Text style={styles.dashboardSectionTitle}>Event Creator Payment Details</Text>
-            <View style={styles.dashboardCard}>
-              {eventCreatorPaymentDetails ? (
-                <View>
-                  {eventCreatorPaymentDetails.mobileMoney && <><Text style={styles.dashboardLabel}>Mobile Money</Text><Text style={{ color: "#FFF" }}>{eventCreatorPaymentDetails.mobileMoney.provider?.toUpperCase()} - {eventCreatorPaymentDetails.mobileMoney.phoneNumber}</Text></>}
-                  {eventCreatorPaymentDetails.bankAccount && <><Text style={[styles.dashboardLabel, { marginTop: 8 }]}>Bank</Text><Text style={{ color: "#FFF" }}>{eventCreatorPaymentDetails.bankAccount.bankName} - {eventCreatorPaymentDetails.bankAccount.accountNumber}</Text></>}
+          <>
+            {/* Event Status — Admin can cancel or postpone */}
+            {event && (
+              <View style={styles.dashboardSection}>
+                <TouchableOpacity onPress={() => setEventStatusExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: eventStatusExpanded ? 8 : 0 }}>
+                  <Text style={styles.dashboardSectionTitle}>📋 Event Status</Text>
+                  <Ionicons name={eventStatusExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+                </TouchableOpacity>
+                {eventStatusExpanded && <View style={styles.dashboardCard}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                    <Text style={{ color: "#888", fontSize: 13 }}>Current:</Text>
+                    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: (event.eventStatus === "cancelled" ? "rgba(255,107,107,0.15)" : event.eventStatus === "postponed" ? "rgba(245,158,11,0.15)" : "rgba(76,175,80,0.15)") }}>
+                      <Text style={{ fontSize: 12, fontWeight: "700", color: event.eventStatus === "cancelled" ? "#FF6B6B" : event.eventStatus === "postponed" ? "#F59E0B" : "#4CAF50" }}>
+                        {(event.eventStatus || "scheduled").toUpperCase()}
+                      </Text>
+                    </View>
+                  </View>
+                  {event.eventStatus !== "cancelled" && event.eventStatus !== "postponed" && (
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#DC2626", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("cancelled"); setPendingEventDate("") }}>
+                        <Ionicons name="close-circle-outline" size={18} color="#FFF" />
+                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Cancel Event</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#F59E0B", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("postponed"); setPendingEventDate("") }}>
+                        <Ionicons name="calendar-outline" size={18} color="#FFF" />
+                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Postpone Event</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>}
+              </View>
+            )}
+
+            {/* Admin Revenue Summary */}
+            <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>💰 Admin Revenue</Text>
+              <View style={styles.dashboardCard}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Text style={{ color: "#888", fontSize: 13 }}>App Commission Collected</Text>
+                  <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "700" }}>UGX {adminTotalAppCommission.toLocaleString()}</Text>
                 </View>
-              ) : <Text style={styles.noDataText}>No details</Text>}
+                <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
+                  <Text style={{ color: "#888", fontSize: 13 }}>Gateway Fees</Text>
+                  <Text style={{ color: "#FF6B6B", fontSize: 14, fontWeight: "700" }}>- UGX {adminTotalGatewayFees.toLocaleString()}</Text>
+                </View>
+                <View style={{ borderTopWidth: 1, borderTopColor: "#2a2a2a", paddingTop: 8, marginTop: 4 }}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
+                    <Text style={{ color: "#00D4FF", fontSize: 15, fontWeight: "700" }}>Net Revenue</Text>
+                    <Text style={{ color: "#00D4FF", fontSize: 18, fontWeight: "800" }}>UGX {adminNetRevenue.toLocaleString()}</Text>
+                  </View>
+                </View>
+                {adminNetRevenue > 0 && (
+                  <TouchableOpacity style={styles.withdrawBtn} onPress={() => { setAdminPhone(""); setAdminPhoneConfirm(""); setAdminOTPSent(false); setAdminOTPCode(""); setAdminOTPError(""); setShowAdminWithdrawModal(true) }}>
+                    <Ionicons name="cash-outline" size={20} color="#FFF" />
+                    <Text style={styles.withdrawBtnText}>Withdraw Net Revenue</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
-          </View>
+
+            {/* Admin Refund Management */}
+            <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>↩️ Refund Requests</Text>
+              <View style={styles.dashboardCard}>
+                {refundsLoading ? (
+                  <ActivityIndicator size="small" color="#F59E0B" />
+                ) : eventRefunds.length === 0 ? (
+                  <Text style={styles.noDataText}>No refund requests for this event</Text>
+                ) : (
+                  eventRefunds.slice(0, 10).map((ref, i) => {
+                    const statusColors: Record<string, string> = { pending_admin_review: "#F59E0B", approved: "#3B82F6", rejected: "#EF4444", completed: "#10B981", needs_attention: "#F97316", failed: "#DC2626" }
+                    return (
+                      <View key={ref.id} style={{ paddingVertical: 10, borderBottomWidth: i < Math.min(eventRefunds.length, 10) - 1 ? 1 : 0, borderBottomColor: "#2a2a2a" }}>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 4 }}>
+                          <Text style={{ color: "#FFF", fontSize: 12, fontFamily: "monospace" }}>{ref.request_reference}</Text>
+                          <Text style={{ color: statusColors[ref.status] || "#888", fontSize: 11, fontWeight: "700" }}>{ref.status?.replace(/_/g, " ")}</Text>
+                        </View>
+                        <Text style={{ color: "#888", fontSize: 11 }}>{ref.reason_code?.replace(/_/g, " ")} · UGX {Number(ref.requested_amount).toLocaleString()} · {ref.buyer_email}</Text>
+                      </View>
+                    )
+                  })
+                )}
+              </View>
+            </View>
+
+            {/* Event Creator Payment Details (admin visibility) */}
+            <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>Event Creator Payment Details</Text>
+              <View style={styles.dashboardCard}>
+                {eventCreatorPaymentDetails ? (
+                  <View>
+                    {eventCreatorPaymentDetails.mobileMoney && <><Text style={styles.dashboardLabel}>Mobile Money</Text><Text style={{ color: "#FFF" }}>{eventCreatorPaymentDetails.mobileMoney.provider?.toUpperCase()} - {eventCreatorPaymentDetails.mobileMoney.phoneNumber}</Text></>}
+                    {eventCreatorPaymentDetails.bankAccount && <><Text style={[styles.dashboardLabel, { marginTop: 8 }]}>Bank</Text><Text style={{ color: "#FFF" }}>{eventCreatorPaymentDetails.bankAccount.bankName} - {eventCreatorPaymentDetails.bankAccount.accountNumber}</Text></>}
+                  </View>
+                ) : <Text style={styles.noDataText}>No details</Text>}
+              </View>
+            </View>
+          </>
         )}
       </ScrollView>
 
@@ -1358,6 +1657,76 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       {/* Withdraw Modal */}
       {renderWithdrawModal()}
+
+      {/* Event Status Change Modal */}
+      <Modal visible={showEventStatusModal} transparent animationType="fade" onRequestClose={() => setShowEventStatusModal(false)}>
+        <View style={styles.overlay}>
+          <View style={[styles.modalBox, { maxWidth: 400 }]}>
+            <Text style={styles.modalTitle}>{pendingEventAction === "cancelled" ? "Cancel Event" : "Postpone Event"}</Text>
+            <Text style={[styles.modalSub, { marginBottom: 12 }]}>
+              {pendingEventAction === "cancelled"
+                ? "This will mark the event as cancelled. All ticket buyers will be eligible for refunds."
+                : "Set a new date for this event. Existing tickets remain valid for the new date."}
+            </Text>
+            <Text style={{ color: "#F59E0B", fontSize: 16, fontWeight: "700", marginBottom: 16 }}>{event?.name}</Text>
+            {pendingEventAction === "postponed" && (
+              <TextInput
+                style={[styles.input, { marginBottom: 16 }]}
+                value={pendingEventDate}
+                onChangeText={setPendingEventDate}
+                placeholder="New date (YYYY-MM-DD)"
+                placeholderTextColor="#666"
+              />
+            )}
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#222", alignItems: "center" }} onPress={() => setShowEventStatusModal(false)}>
+                <Text style={{ color: "#888", fontWeight: "600" }}>Go Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: pendingEventAction === "cancelled" ? "#DC2626" : "#F59E0B", alignItems: "center" }} onPress={confirmEventStatusChange} disabled={eventStatusUpdating}>
+                {eventStatusUpdating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={{ color: "#FFF", fontWeight: "700" }}>{pendingEventAction === "cancelled" ? "Confirm Cancellation" : "Confirm Postponement"}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Admin Withdraw Modal */}
+      <Modal visible={showAdminWithdrawModal} transparent animationType="slide" onRequestClose={() => setShowAdminWithdrawModal(false)}>
+        <View style={styles.tokenModalOverlay}>
+          <View style={styles.tokenModalContainer}>
+            <View style={styles.tokenModalHeader}>
+              <Text style={styles.tokenModalTitle}>💰 Withdraw Admin Revenue</Text>
+              <TouchableOpacity onPress={() => { setShowAdminWithdrawModal(false); setAdminOTPSent(false); setAdminOTPCode("") }}>
+                <Ionicons name="close-circle" size={28} color="#888" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={{ padding: 20 }}>
+              <Text style={{ color: "#888", fontSize: 13, marginBottom: 4 }}>Net Revenue</Text>
+              <Text style={{ color: "#00D4FF", fontSize: 28, fontWeight: "800", marginBottom: 4 }}>UGX {adminNetRevenue.toLocaleString()}</Text>
+              <Text style={{ color: "#666", fontSize: 12, marginBottom: 20 }}>Withdraw fee: UGX {adminWithdrawFee.toLocaleString()} · You receive: UGX {adminNetAfterFee.toLocaleString()}</Text>
+
+              <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "600", marginBottom: 8 }}>Mobile Money Number</Text>
+              <TextInput style={styles.staffInput} value={adminPhone} onChangeText={setAdminPhone} placeholder="e.g. 0772123456" placeholderTextColor="#555" keyboardType="phone-pad" />
+              <TextInput style={[styles.staffInput, { marginTop: 8 }]} value={adminPhoneConfirm} onChangeText={setAdminPhoneConfirm} placeholder="Confirm number" placeholderTextColor="#555" keyboardType="phone-pad" />
+
+              {!adminOTPSent ? (
+                <TouchableOpacity style={[styles.withdrawBtn, { marginTop: 16 }, (!adminPhone || !adminPhoneConfirm || adminOTPLoading) && { opacity: 0.4 }]} onPress={handleAdminSendOtp} disabled={!adminPhone || !adminPhoneConfirm || adminOTPLoading}>
+                  {adminOTPLoading ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="lock-closed-outline" size={20} color="#FFF" /><Text style={styles.withdrawBtnText}>Send Verification Code</Text></>}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "600", marginTop: 16, marginBottom: 8 }}>Enter Code Sent to Email</Text>
+                  <TextInput style={styles.staffInput} value={adminOTPCode} onChangeText={setAdminOTPCode} placeholder="Enter code" placeholderTextColor="#555" keyboardType="number-pad" maxLength={6} />
+                  {adminOTPError ? <Text style={{ color: "#FF6B6B", fontSize: 12, marginTop: 4 }}>{adminOTPError}</Text> : null}
+                  <TouchableOpacity style={[styles.withdrawBtn, { marginTop: 16 }, (!adminOTPCode || adminOTPLoading) && { opacity: 0.4 }]} onPress={handleAdminConfirmPayout} disabled={!adminOTPCode || adminOTPLoading}>
+                    {adminWithdrawLoading ? <ActivityIndicator color="#FFF" /> : <><Ionicons name="cash-outline" size={20} color="#FFF" /><Text style={styles.withdrawBtnText}>Confirm Withdrawal</Text></>}
+                  </TouchableOpacity>
+                </>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Staff Token Modal */}
       <Modal visible={showTokenModal} transparent animationType="slide" onRequestClose={() => setShowTokenModal(false)}>

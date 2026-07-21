@@ -60,6 +60,7 @@ export class TicketService {
       ticketType?: string
       paymentReference?: string
       pesapalTransactionId?: string
+      pesapalConfirmationCode?: string
     },
   ): Promise<Ticket[]> {
     return this.purchaseTicketsForTable(event, buyerNames, [buyerEmail], quantity, false, 1, quantity, buyerPhotoUrl, totalAmount, paymentDetails)
@@ -88,6 +89,7 @@ export class TicketService {
       ticketType?: string
       paymentReference?: string
       pesapalTransactionId?: string
+      pesapalConfirmationCode?: string
     },
     buyerId?: string | null,
     payerEmail?: string,
@@ -167,6 +169,7 @@ export class TicketService {
       ticketType?: string
       paymentReference?: string
       pesapalTransactionId?: string
+      pesapalConfirmationCode?: string
     },
   ): Promise<Ticket> {
     try {
@@ -221,6 +224,7 @@ private static async createSingleTicket(
       ticketType?: string
       paymentReference?: string
       pesapalTransactionId?: string
+      pesapalConfirmationCode?: string
     },
     shouldCreatePaymentIntent: boolean = true,
     tableTotalAmount?: number,
@@ -241,9 +245,11 @@ private static async createSingleTicket(
     let pricing
     if (totalAmount !== undefined && totalAmount > 0) {
       const perTicketBasePrice = totalAmount
-      const lateFeePercent = 0.15
-      const isLatePurchase = eventStartTime.getTime() - Date.now() < 24 * 60 * 60 * 1000
-      const lateFee = isLatePurchase ? perTicketBasePrice * lateFeePercent : 0
+      const lateFeePct = (event as any).lateFeePercent ?? 0
+      const sevenAm = new Date(eventStartTime)
+      sevenAm.setHours(7, 0, 0, 0)
+      const isLatePurchase = new Date() >= sevenAm
+      const lateFee = isLatePurchase ? Math.round(perTicketBasePrice * lateFeePct / 100) : 0
       pricing = { 
         subtotal: perTicketBasePrice, 
         lateFee, 
@@ -357,6 +363,7 @@ private static async createSingleTicket(
       paymentNumber: paymentDetails?.number,
       paymentName: paymentDetails?.name,
       pesapalTransactionId: paymentDetails?.method !== "mobile_money" ? paymentIntent?.paymentId || paymentDetails?.pesapalTransactionId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined,
+      pesapalConfirmationCode: paymentDetails?.pesapalConfirmationCode,
     }
 
     console.log("📝 Ticket object created:")
@@ -884,6 +891,10 @@ console.error("❌ Error details:", updateError.details)
       paymentName: row.payment_name || row.paymentName,
       pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
       pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
+      gatewayFee: row.gateway_fee ?? row.gatewayFee ?? 0,
+      installmentPlanId: row.installment_plan_id || row.installmentPlanId,
+      refundedAmount: row.refunded_amount ?? row.refundedAmount ?? 0,
+      refundStatus: row.refund_status || row.refundStatus || "none",
       tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
       tableGroupId: row.table_group_id || row.tableGroupId,
       seatNumber: row.seat_number ?? row.seatNumber,

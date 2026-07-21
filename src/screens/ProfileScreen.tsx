@@ -169,6 +169,12 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToAdminRefunds = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminRefunds");
+    }
+  };
+
   const navigateToAdminOwnershipRequests = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminOwnershipRequests");
@@ -391,6 +397,12 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminEvents}>
               <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
               <Text style={styles.menuText}>Manage Events</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminRefunds}>
+              <Ionicons name="return-down-back-outline" size={24} color="#F59E0B" />
+              <Text style={styles.menuText}>Refund Requests</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
 

@@ -192,3 +192,5 @@ netlify/functions/package.json
 
 # Netlify functions (auto-generated)
 # netlify/functions/*.js
+
+supabase/migrations/

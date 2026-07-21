@@ -754,6 +754,9 @@ class SupabaseService {
             createdBy: doc.created_by,
             createdByType: doc.created_by_type,
             createdAt: new Date(doc.created_at),
+            eventStatus: doc.event_status || "scheduled",
+            postponedTo: doc.postponed_to ? new Date(doc.postponed_to) : undefined,
+            lateFeePercent: doc.late_fee_percent ?? 0,
           });
         });
       }
@@ -773,7 +776,7 @@ class SupabaseService {
       }
 
       // Fetch event by slug (events table uses slug as primary identifier)
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("events")
         .select("*, created_by_auth, ticket_design")
         .eq("slug", eventSlug)
@@ -781,6 +784,19 @@ class SupabaseService {
         .single();
 
       if (error && error.code !== 'PGRST116') throw error;
+      // Tickets created through the API may contain the event UUID rather
+      // than the public slug. Retry by id so My Tickets can load the poster
+      // and fee-level ticket design in either storage format.
+      if (!data) {
+        const fallback = await supabase
+          .from("events")
+          .select("*, created_by_auth, ticket_design")
+          .eq("id", eventSlug)
+          .eq("is_deleted", false)
+          .single();
+        if (fallback.error && fallback.error.code !== 'PGRST116') throw fallback.error;
+        data = fallback.data;
+      }
       if (!data) return null;
 
       return {
@@ -806,6 +822,9 @@ class SupabaseService {
         createdByType: data.created_by_type,
         createdAt: new Date(data.created_at),
         ticket_design: data.ticket_design,
+        eventStatus: data.event_status || "scheduled",
+        postponedTo: data.postponed_to ? new Date(data.postponed_to) : undefined,
+        lateFeePercent: data.late_fee_percent ?? 0,
       };
     } catch (error) {
       console.error("SupabaseService: Error getting event by slug:", error);
@@ -966,9 +985,14 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
   }
 
   async updateEvent(eventSlug: string, data: Partial<Event>): Promise<void> {
+    console.log("[SupabaseService.updateEvent] 🚀 Called")
+    console.log("[SupabaseService.updateEvent]   eventSlug:", eventSlug)
+    console.log("[SupabaseService.updateEvent]   data keys:", Object.keys(data))
+    console.log("[SupabaseService.updateEvent]   data.eventStatus:", data.eventStatus)
+    console.log("[SupabaseService.updateEvent]   data.lateFeePercent:", data.lateFeePercent)
+    console.log("[SupabaseService.updateEvent]   data.postponedTo:", data.postponedTo)
     try {
       const updateData: any = {};
-
       if (data.name) updateData.name = data.name;
       if (data.description) updateData.description = data.description;
       if (data.date) updateData.date = data.date;
@@ -981,17 +1005,45 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data.ticketContacts) updateData.ticket_contacts = data.ticketContacts;
       if (data.paymentMethods) updateData.payment_methods = data.paymentMethods;
       if (data.attendees) updateData.attendees = data.attendees;
+      if (data.eventStatus) updateData.event_status = data.eventStatus;
+      if (data.postponedTo) updateData.postponed_to = data.postponedTo.toISOString();
+      if (data.lateFeePercent !== undefined) updateData.late_fee_percent = data.lateFeePercent;
 
-      const { error } = await supabase
+      console.log("[SupabaseService.updateEvent]   updateData payload:", JSON.stringify(updateData))
+
+      let { error } = await supabase
         .from("events")
         .update(updateData)
         .eq("slug", eventSlug);
+      console.log("[SupabaseService.updateEvent]   Slug update result — error:", error?.message || "none")
 
       if (error) throw error;
 
-      console.log("SupabaseService: Event updated successfully");
+      // Check if any rows were affected by re-fetching the slug
+      const { data: checkSlug } = await supabase.from("events").select("slug, event_status, late_fee_percent").eq("slug", eventSlug).maybeSingle();
+      if (checkSlug) {
+        console.log("[SupabaseService.updateEvent] ✅ Slug lookup found row — event_status:", checkSlug.event_status, "late_fee_percent:", checkSlug.late_fee_percent)
+      } else {
+        console.log("[SupabaseService.updateEvent] ⚠️ Slug lookup returned NO ROWS — slug may not exist in DB")
+        console.log("[SupabaseService.updateEvent] ⚠️ Falling back to id lookup...")
+        if (eventSlug && eventSlug.length > 20) {
+          const { error: idError, data: idCheck } = await supabase
+            .from("events")
+            .update(updateData)
+            .eq("id", eventSlug)
+            .select("id, event_status, late_fee_percent")
+            .maybeSingle();
+          if (idError) {
+            console.log("[SupabaseService.updateEvent] ❌ ID fallback also failed:", idError.message)
+            throw idError
+          }
+          console.log("[SupabaseService.updateEvent] ✅ ID fallback succeeded — event_status:", idCheck?.event_status, "late_fee_percent:", idCheck?.late_fee_percent)
+        } else {
+          console.log("[SupabaseService.updateEvent] ❌ eventSlug is too short for UUID, likely not a valid id")
+        }
+      }
     } catch (error) {
-      console.error("SupabaseService: Error updating event:", error);
+      console.error("[SupabaseService.updateEvent] ❌ ERROR:", error);
       throw error;
     }
   }
@@ -1690,6 +1742,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
           paymentNumber: row.payment_number || row.paymentNumber,
           paymentName: row.payment_name || row.paymentName,
           pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
+          pesapalConfirmationCode: row.pesapal_confirmation_code || row.pesapalConfirmationCode,
           pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
           purchase_date: row.purchase_date,
           created_at: row.created_at,

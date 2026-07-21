@@ -1,9 +1,8 @@
-const PAWAPAY_BASE_URL = "https://api.pawapay.io/v2"
+const PAWAPAY_BASE_URL = process.env.PAWAPAY_API_URL || "https://api.pawapay.io/v2"
 
 const getApiKey = () => {
-  const key = process.env.PAWAPAY_API_KEY || 
-    "eyJraWQiOiIxIiwiYWxnIjoiRVMyNTYifQ.eyJ0dCI6IkFBVCIsInN1YiI6IjMyMzAiLCJtYXYiOiIxIiwiZXhwIjoyMDk2ODk4NzE5LCJpYXQiOjE3ODEyNzk1MTksInBtIjoiREFGLFBBRiIsImp0aSI6IjU5MDE0Njc2LWEyNTgtNDVhOS05NjI4LTQ4MWQ5YTdjMmUzMiJ9.pxopQYuQqM-QztluHaE9RAq9fgIZCRVdYQ7-XMuzL21UV7qf7M9R2DQ9qeyiXxAJt30gXQ3i3BOm_YdKIVSGYg"
-  return key
+  if (!process.env.PAWAPAY_API_KEY) throw new Error("PAWAPAY_API_KEY is not configured")
+  return process.env.PAWAPAY_API_KEY
 }
 
 const generateUUID = () => {

@@ -188,7 +188,6 @@ const TicketPurchaseScreen: React.FC = () => {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
   const [pawaPayDepositId, setPawaPayDepositId] = useState<string | null>(null)
-  const [showPaymentModal, setShowPaymentModal] = useState(false)
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
@@ -287,45 +286,37 @@ const TicketPurchaseScreen: React.FC = () => {
     return { status, verificationResult, attempts }
   }
 
-const handlePaymentComplete = async () => {
-    if (!paymentOrderId) return
-
-    try {
-      setCheckingPayment(true)
-      setShowPaymentModal(false)
-
-      let verificationResult
-      let isMobileMoney = paymentMethod === "mobile_money"
-      
-      if (isMobileMoney) {
-        console.log("🔍 Checking PawaPay deposit status (polling)...")
-        await pollPaymentStatus(paymentOrderId!, 0)
-        return
-      } else {
-        console.log("🔍 Verifying payment with PesaPal...")
-        verificationResult = await PesaPalService.verifyPayment(paymentOrderId)
+  // PesaPal has no trusted client-side "payment complete" signal. Verify the
+  // merchant reference server-side until the processor reports COMPLETED.
+  // Ticket creation is deliberately gated on that verified result.
+  const pollPesapalStatus = async (merchantReference: string) => {
+    const maxAttempts = 60
+    setCheckingPayment(true)
+    setStatusMessage("Complete payment in the PesaPal window. We are verifying it automatically.")
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        const verification = await PesaPalService.verifyPayment(merchantReference)
+        if (verification.status === "completed") {
+          setCheckingPayment(false)
+          setPurchaseStatus("success")
+          setStatusMessage("Payment verified! Creating your ticket...")
+          await createTicketAndNavigate(false, verification)
+          return
+        }
+        if (verification.status === "failed") {
+          setCheckingPayment(false)
+          setPurchaseStatus("error")
+          setStatusMessage("PesaPal reported that the payment failed or was cancelled.")
+          return
+        }
+      } catch (error) {
+        console.warn("PesaPal verification attempt failed; retaining pending state", error)
       }
-
-      const resultStatus = (verificationResult.status || "").toUpperCase()
-      if (resultStatus === "COMPLETED") {
-        console.log("✅ Payment verified, creating ticket...")
-        await createTicketAndNavigate(isMobileMoney, verificationResult)
-      } else if (resultStatus === "FAILED") {
-        const failMsg = verificationResult.failureMessage || "Payment was rejected. Please try again."
-        Alert.alert("Payment Failed", failMsg, [{ text: "OK" }])
-      } else {
-        const errorMsg = isMobileMoney 
-          ? "Payment is still processing. Please check your mobile money and try again."
-          : "Payment is still processing. Please check back later."
-        Alert.alert("Processing", errorMsg, [{ text: "OK" }])
-      }
-
-    } catch (error: any) {
-      console.error("Payment completion error:", error)
-      Alert.alert("Error", "Failed to complete purchase. Please contact support.", [{ text: "OK" }])
-    } finally {
-      setCheckingPayment(false)
+      await new Promise((resolve) => setTimeout(resolve, 3000))
     }
+    setCheckingPayment(false)
+    setPurchaseStatus("error")
+    setStatusMessage("Payment is still being verified. Please check My Tickets shortly; do not pay again unless the payment is confirmed failed.")
   }
 
   const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
@@ -393,6 +384,7 @@ const handlePaymentComplete = async () => {
           ticketType: selectedTicketTypeName,
           paymentReference: paymentOrderId || undefined,
           pesapalTransactionId: !isMobileMoney ? verificationResult.transactionId : undefined,
+          pesapalConfirmationCode: !isMobileMoney ? verificationResult.confirmationCode : undefined,
         },
         user?.id ?? null,
         payerEmail,
@@ -428,7 +420,7 @@ const handlePaymentComplete = async () => {
               qrCodeDataUrl: ticket.qrCodeDataUrl,
               photoUploadLink,
               ticketDesign,
-              posterUrl: event.posterImageUrl,
+              posterUrl: event?.posterImageUrl,
             }),
           })
           console.log(`Email sent for ticket ${ticket.id}`)
@@ -493,7 +485,7 @@ const handlePaymentComplete = async () => {
     if (!event || !event.date) {
       return { subtotal: 0, lateFee: 0, total: 0, isLatePurchase: false }
     }
-    return PesaPalService.calculateTicketPrice(basePrice, actualTicketCount, event.date)
+    return PesaPalService.calculateTicketPrice(basePrice, actualTicketCount, event.date, event.lateFeePercent)
   }, [basePrice, actualTicketCount, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
@@ -637,7 +629,8 @@ const handleInstallmentPurchase = async () => {
           window.open(result.paymentUrl, "_blank")
         }
         setPaymentOrderId(result.orderId || null)
-        setShowPaymentModal(true)
+        setPaymentStatus("pending")
+        void pollPesapalInstallmentStatus(result.planId, result.orderId || "")
       }
     } catch (error: any) {
       setPurchaseStatus("error")
@@ -682,6 +675,33 @@ const handleInstallmentPurchase = async () => {
       return true
     }
     return false
+  }
+
+  const pollPesapalInstallmentStatus = async (planId: string, merchantReference: string) => {
+    if (!merchantReference) return
+    setCheckingPayment(true)
+    setStatusMessage("Complete the installment payment in the PesaPal window. Verification is automatic.")
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const verification = await PesaPalService.verifyPayment(merchantReference)
+      if (verification.status === "completed") {
+        await InstallmentService.onInstallmentPaid(planId, 0, verification.transactionId || merchantReference, "credit_card")
+        setCheckingPayment(false)
+        setPurchaseStatus("success")
+        setStatusMessage("Installment payment verified. Your installment plan has been updated.")
+        setTimeout(() => navigation.navigate("MyTickets"), 1500)
+        return
+      }
+      if (verification.status === "failed") {
+        setCheckingPayment(false)
+        setPurchaseStatus("error")
+        setStatusMessage("PesaPal reported that the installment payment failed or was cancelled.")
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 3000))
+    }
+    setCheckingPayment(false)
+    setPurchaseStatus("error")
+    setStatusMessage("The installment payment is still pending. Check My Tickets later before trying again.")
   }
 
   const handlePurchase = async () => {
@@ -773,7 +793,7 @@ const handleInstallmentPurchase = async () => {
         console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail)
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
-        const callbackUrl = typeof window !== "undefined" ? window.location.origin : ""
+        const callbackUrl = typeof window !== "undefined" ? `${window.location.origin}/events/payment-callback` : ""
 
         console.log("💳 Submitting order to PesaPal...")
         const orderResult = await PesaPalService.submitOrder(
@@ -806,9 +826,9 @@ const handleInstallmentPurchase = async () => {
           await Linking.openURL(paymentUrl)
         }
 
-        setPaymentUrl(paymentUrl)
         setPaymentOrderId(orderId)
-        setShowPaymentModal(true)
+        setPaymentStatus("pending")
+        void pollPesapalStatus(orderId)
       }
     } catch (error: any) {
       console.error("Purchase error:", error)
@@ -1270,7 +1290,7 @@ const handleInstallmentPurchase = async () => {
 
         {isLatePurchase && (
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Late Fee (15%):</Text>
+            <Text style={styles.summaryLabel}>Late Fee ({(event?.lateFeePercent ?? 0)}%):</Text>
             <Text style={styles.summaryValue}>UGX {lateFee.toLocaleString()}</Text>
           </View>
         )}
@@ -1413,7 +1433,7 @@ const handleInstallmentPurchase = async () => {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {console.log(`[SeatMap] 🎨 Rendering seat map, occupiedSeats: ${JSON.stringify(occupiedSeats)}, seatMapFee: ${JSON.stringify(seatMapFee?.seatMap?.type)}`)}
+              {null}
               {seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
                 Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
                   const rowLabel = String.fromCharCode(65 + rowIdx)
@@ -1475,47 +1495,6 @@ const handleInstallmentPurchase = async () => {
         </View>
       </Modal>
 
-      {/* Payment Modal (for card/bank transfer) */}
-      <Modal
-        visible={showPaymentModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowPaymentModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.paymentModalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Complete Payment</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => setShowPaymentModal(false)}
-              >
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.paymentModalSubtitle}>
-              Complete your payment of UGX {total.toLocaleString()} for {quantity}x ticket(s)
-            </Text>
-
-            {paymentOrderId && (
-              <View style={styles.paymentIframeContainer}>
-                <Text style={styles.paymentIframeText}>
-                  Processing payment...
-                </Text>
-                <TouchableOpacity
-                  style={styles.paymentCompleteButton}
-                  onPress={handlePaymentComplete}
-                >
-                  <Text style={styles.paymentCompleteButtonText}>
-                    I've Completed Payment
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-        </View>
-      </Modal>
       </ScrollView>
     </View>
   )
