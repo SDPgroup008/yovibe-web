@@ -53,6 +53,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminOwnershipRequests': () => navigate('/profile/admin/ownership-requests'),
         'AdminStrandedPurchases': () => navigate('/profile/admin/stranded-purchases'),
         'AdminRefunds': () => navigate('/profile/admin/refunds'),
+        'AdminWithdrawals': () => navigate('/profile/admin/withdrawals'),
         'Auth': () => navigate('/login'),
         'Login': () => navigate('/login'),
         'SignUp': () => navigate('/signup'),

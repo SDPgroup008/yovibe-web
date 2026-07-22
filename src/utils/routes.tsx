@@ -36,6 +36,7 @@ import AdminEventsScreen from '../screens/admin/AdminEventsScreen';
 import AdminOwnershipRequestsScreen from '../screens/admin/AdminOwnershipRequestsScreen';
 import AdminStrandedPurchasesScreen from '../screens/admin/AdminStrandedPurchasesScreen';
 import AdminRefundsScreen from '../screens/admin/AdminRefundsScreen';
+import AdminWithdrawalsScreen from '../screens/admin/AdminWithdrawalsScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
 import TokenScannerScreen from '../screens/auth/TokenScannerScreen';
 
@@ -311,6 +312,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/profile/admin/refunds',
     component: withCompatNavigation(AdminRefundsScreen),
+    exact: true
+  },
+  {
+    path: '/profile/admin/withdrawals',
+    component: withCompatNavigation(AdminWithdrawalsScreen),
     exact: true
   },
   {
