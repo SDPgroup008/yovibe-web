@@ -120,7 +120,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     const badge = getStatusBadge(item)
     return (
       <View style={styles.eventCard}>
-        <Image source={{ uri: item.posterImageUrl }} style={styles.eventImage} />
+        <Image source={{ uri: item.posterImageUrl }} style={styles.eventImage} loading="lazy" />
         <View style={styles.eventContent}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 }}>
             <Text style={styles.eventName}>{item.name}</Text>

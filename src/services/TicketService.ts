@@ -772,12 +772,18 @@ console.error("❌ Error details:", updateError.details)
       const eligibleTickets: Ticket[] = []
       
       for (const ticketId of ticketIds) {
-        const { data: ticket } = await supabase.from("tickets").select("*").eq("id", ticketId).single()
-        if (ticket && ticket.payout_eligible && ticket.payout_status === "pending") {
-          eligibleTickets.push(ticket as any)
-          console.log("   ✅ Ticket", ticketId, "eligible for payout")
-        } else {
-          console.log("   ❌ Ticket", ticketId, "not eligible")
+        // Skip fetching — use the provided ticket data or skip
+      }
+      
+      if (ticketIds.length > 0) {
+        const { data: tickets } = await supabase.from("tickets").select("*").in("id", ticketIds)
+        for (const ticket of tickets || []) {
+          if (ticket.payout_eligible && ticket.payout_status === "pending") {
+            eligibleTickets.push(ticket as any)
+            console.log("   ✅ Ticket", ticket.id, "eligible for payout")
+          } else {
+            console.log("   ❌ Ticket", ticket.id, "not eligible")
+          }
         }
       }
 
@@ -805,9 +811,9 @@ console.error("❌ Error details:", updateError.details)
         console.log("❌ PesaPal payout failed:", payoutResult.error)
         
         // Update ticket statuses to failed
-        for (const ticket of eligibleTickets) {
-          await supabase.from("tickets").update({ payout_status: "failed" }).eq("id", ticket.id)
-        }
+        await Promise.all(eligibleTickets.map(ticket =>
+          supabase.from("tickets").update({ payout_status: "failed" }).eq("id", ticket.id)
+        ))
         
         return { success: false, error: payoutResult.error }
       }
@@ -818,10 +824,11 @@ console.error("❌ Error details:", updateError.details)
 
       // Step 3: Update ticket statuses
       console.log("--- Step 3: Updating ticket payout statuses ---")
-      for (const ticket of eligibleTickets) {
-        await supabase.from("tickets").update({ payout_status: "processing" }).eq("id", ticket.id)
-        console.log("   ✅ Ticket", ticket.id, "marked as processing")
-      }
+      await Promise.all(eligibleTickets.map(ticket =>
+        supabase.from("tickets").update({ payout_status: "processing" }).eq("id", ticket.id).then(() => {
+          console.log("   ✅ Ticket", ticket.id, "marked as processing")
+        })
+      ))
 
       console.log("========================================")
       console.log("💰 PAYOUT REQUEST COMPLETED SUCCESSFULLY")
@@ -1212,8 +1219,8 @@ console.error("❌ Error details:", updateError.details)
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
       // Get ticket design from first entry fee as fallback for bulk fulfillment
       const bulkTicketDesign = event.entryFees?.[0]?.ticketDesign
-      for (const ticketId of createdTicketIds) {
-        await fetch(`${baseUrl}/.netlify/functions/send-ticket-email`, {
+      await Promise.allSettled(createdTicketIds.map(ticketId =>
+        fetch(`${baseUrl}/.netlify/functions/send-ticket-email`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -1232,7 +1239,7 @@ console.error("❌ Error details:", updateError.details)
             posterUrl: event.posterImageUrl,
           }),
         })
-      }
+      ))
 
       await this.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
         ticketIds: createdTicketIds,

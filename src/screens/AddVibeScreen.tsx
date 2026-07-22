@@ -16,6 +16,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
+import VibeMLService from "../services/VibeMLService"
 import { blobToDataURL } from "../utils/expoHelpers"
 import { useCompatNavigation, useRouter } from "../utils/compatNavigation"
 
@@ -28,7 +29,7 @@ const AddVibeScreen: React.FC = () => {
 
   // Extract venueId from current path: /profile/add-vibe/:venueId
   const pathParts = currentPath.split('/').filter(Boolean)
-  const venueId = pathParts[3] // profile/add-vibe/:venueId, so [profile, add-vibe, venueId]
+  const venueId = pathParts[2] // profile/add-vibe/:venueId, so pathParts[2] is the venueId
   const venueName = "Venue" // We'll need to fetch this or pass it differently
   const { user } = useAuth()
 
@@ -44,6 +45,9 @@ const AddVibeScreen: React.FC = () => {
     analysisData: any
   } | null>(null)
   const [modelLoaded, setModelLoaded] = useState(false)
+  const [modelLoading, setModelLoading] = useState(false)
+  const [modelProgress, setModelProgress] = useState(0)
+  const [modelError, setModelError] = useState<string | null>(null)
 
   // hidden file input ref (used to open camera on mobile)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -193,24 +197,35 @@ const AddVibeScreen: React.FC = () => {
    * VibeAnalysisService.analyzeVibeImage should accept a data URL or object URL.
    */
   const analyzeVibe = async () => {
-    console.log('AddVibeScreen: analyzeVibe called', { hasImage: !!image, imageType: typeof image })
+    console.log('AddVibeScreen: analyzeVibe called', { hasImage: !!image })
     if (!image) {
       Alert.alert("Error", "Please capture an image first")
       return
     }
 
     setAnalyzing(true)
-    console.log('AddVibeScreen: setAnalyzing(true) called')
     try {
-      console.log('AddVibeScreen: Calling VibeAnalysisService.analyzeVibeImage...')
-      const result = await VibeAnalysisService.analyzeVibeImage(image)
-      console.log('AddVibeScreen: Got result:', result)
-      setAnalysisResult(result)
+      if (VibeMLService.modelReady) {
+        console.log('AddVibeScreen: Using ML model...')
+        const { predictedClass, confidence } = await VibeMLService.predict(image)
+        const result = VibeAnalysisService.formatMLResult(predictedClass, confidence)
+        console.log('AddVibeScreen: ML result:', result)
+        setAnalysisResult(result)
+      } else {
+        console.log('AddVibeScreen: ML not ready, using heuristic fallback...')
+        const result = await VibeAnalysisService.analyzeVibeImage(image)
+        setAnalysisResult(result)
+      }
     } catch (error: any) {
       console.error("AddVibeScreen: Error analyzing vibe:", error)
-      Alert.alert("Error", "Failed to analyze vibe: " + (error?.message || error))
+      // Fallback to heuristic on any ML error
+      try {
+        const result = await VibeAnalysisService.analyzeVibeImage(image)
+        setAnalysisResult(result)
+      } catch (fallbackErr: any) {
+        Alert.alert("Error", "Failed to analyze vibe: " + (fallbackErr?.message || fallbackErr))
+      }
     } finally {
-      console.log('AddVibeScreen: Setting analyzing to false')
       setAnalyzing(false)
     }
   }
@@ -283,33 +298,86 @@ const AddVibeScreen: React.FC = () => {
     }
   }, [])
 
-  // Monitor ML model loading status
+  // Load ML model on mount with progress tracking
   useEffect(() => {
-    const checkModelStatus = async () => {
-      const loaded = await VibeAnalysisService.ensureModelLoaded()
-      setModelLoaded(loaded)
+    let cancelled = false
+    const start = async () => {
+      setModelLoading(true)
+      setModelProgress(0)
+      setModelError(null)
+      try {
+        await VibeMLService.loadModel((pct) => {
+          if (!cancelled) setModelProgress(pct)
+        })
+        if (!cancelled) {
+          setModelLoaded(true)
+          setModelLoading(false)
+          setModelProgress(100)
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setModelLoaded(false)
+          setModelLoading(false)
+          setModelError(err.message || 'Failed to load AI model')
+          console.error('[AddVibeScreen] Model load failed:', err.message)
+        }
+      }
     }
-
-    // Check immediately
-    checkModelStatus()
-
-    // Set up interval to check model status
-    const interval = setInterval(checkModelStatus, 1000)
-
-    return () => clearInterval(interval)
+    start()
+    return () => { cancelled = true }
   }, [])
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Text style={styles.headerTitle}>Add Today's Vibe</Text>
-          <View style={[styles.modelStatusIndicator, { backgroundColor: modelLoaded ? '#4CAF50' : '#FF3B30' }]}>
-            <Text style={styles.modelStatusText}>{modelLoaded ? '✓' : '○'}</Text>
+          <View style={styles.headerTop}>
+            <Text style={styles.headerTitle}>Add Today's Vibe</Text>
+            <View style={[styles.modelStatusIndicator, {
+              backgroundColor: modelLoaded ? '#4CAF50' : modelError ? '#FF3B30' : modelLoading ? '#F59E0B' : '#666'
+            }]}>
+              <Text style={styles.modelStatusText}>
+                {modelLoaded ? '✓' : modelError ? '✗' : modelLoading ? `${modelProgress}%` : '○'}
+              </Text>
+            </View>
           </View>
-        </View>
         <Text style={styles.headerSubtitle}>{venueName}</Text>
         <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
+
+        {/* Model loading progress */}
+        {modelLoading && (
+          <View style={styles.modelLoadingRow}>
+            <View style={styles.modelLoadingBarTrack}>
+              <View style={[styles.modelLoadingBarFill, { width: `${Math.max(2, modelProgress)}%` }]} />
+            </View>
+            <Text style={styles.modelLoadingText}>AI Loading: {modelProgress}%</Text>
+          </View>
+        )}
+        {modelError && (
+          <View style={styles.modelErrorRow}>
+            <Text style={styles.modelErrorText}>AI model failed to load. Using fallback analysis.</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={async () => {
+              setModelLoading(true)
+              setModelProgress(0)
+              setModelError(null)
+              try {
+                await VibeMLService.reloadModel((pct) => setModelProgress(pct))
+                setModelLoaded(true)
+                setModelLoading(false)
+                setModelProgress(100)
+              } catch (err: any) {
+                setModelLoaded(false)
+                setModelLoading(false)
+                setModelError(err.message || 'Retry failed')
+              }
+            }}>
+              <Ionicons name="refresh" size={14} color="#FFF" />
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {modelLoaded && !modelLoading && !modelError && (
+          <Text style={styles.modelReadyText}>✓ AI model ready</Text>
+        )}
       </View>
 
       <View style={styles.imageSection}>
@@ -499,6 +567,62 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#BBBBBB",
     lineHeight: 20,
+  },
+  modelLoadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 8,
+  },
+  modelLoadingBarTrack: {
+    flex: 1,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#2a2a2a",
+    overflow: "hidden",
+  },
+  modelLoadingBarFill: {
+    height: "100%",
+    borderRadius: 3,
+    backgroundColor: "#F59E0B",
+  },
+  modelLoadingText: {
+    color: "#F59E0B",
+    fontSize: 11,
+    fontWeight: "600",
+    width: 90,
+    textAlign: "right",
+  },
+  modelErrorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 10,
+    gap: 8,
+  },
+  modelErrorText: {
+    color: "#FF6B6B",
+    fontSize: 11,
+    flex: 1,
+  },
+  retryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,107,107,0.15)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    gap: 4,
+  },
+  retryButtonText: {
+    color: "#FFF",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  modelReadyText: {
+    color: "#4CAF50",
+    fontSize: 11,
+    fontWeight: "600",
+    marginTop: 10,
   },
   imageSection: {
     padding: 16,

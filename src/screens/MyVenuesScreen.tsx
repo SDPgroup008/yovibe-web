@@ -115,7 +115,7 @@ const MyVenuesScreen: React.FC = () => {
       ) : (
         <FlatList
           data={venues}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item.slug || item.id || item.name || Math.random().toString()}
           renderItem={({ item }) => (
             <View style={styles.venueCard}>
               <TouchableOpacity style={styles.venueContent} onPress={() => handleVenueSelect(item.slug || item.id)}>

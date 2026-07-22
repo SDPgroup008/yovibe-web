@@ -499,7 +499,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const fetchTicketData = useCallback(async () => {
     if (!eventId) return
     try {
-      const { data, error } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
+      const { data, error } = await supabase.from("tickets").select("*").eq("event_slug", eventId).limit(500)
       if (error) throw error
       const rows = data || []
       rows.sort((a: any, b: any) => { const da = a.purchase_date || a.created_at || ""; const db = b.purchase_date || b.created_at || ""; return db.localeCompare(da) })
@@ -739,7 +739,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const loadEventCreatorPaymentDetails = async (creatorId: string) => {
     try { return (await SupabaseService.getUserProfileOrNull(creatorId))?.paymentDetails || null } catch { return null }
   }
-  useEffect(() => { loadPaymentDetails(); if (user?.userType === 'admin' && event?.createdBy) loadEventCreatorPaymentDetails(event.createdBy).then(setEventCreatorPaymentDetails) }, [user, event])
+  useEffect(() => { loadPaymentDetails(); if (user?.userType === 'admin' && event?.createdBy) loadEventCreatorPaymentDetails(event.createdBy).then(setEventCreatorPaymentDetails) }, [user?.uid, user?.userType, event?.slug, event?.createdBy])
 
   useEffect(() => {
     if (resendCooldown > 0) {

@@ -103,14 +103,15 @@ const VenueDetailScreen: React.FC = () => {
         console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId)
         console.log("[VenueDetailScreen] User logged in:", !!user)
 
-const venueData = await SupabaseService.getVenueById(venueId)
+        const [venueData, venueEvents] = await Promise.all([
+          SupabaseService.getVenueById(venueId),
+          SupabaseService.getEventsByVenue(venueId),
+        ])
+
         if (venueData) {
           setVenue(venueData)
           console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
 
-          // Fetch events regardless of user authentication (events are public data)
-           console.log("[VenueDetailScreen] Fetching events for venue:", venueId)
-            const venueEvents = await SupabaseService.getEventsByVenue(venueId)
           console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
           setEvents(venueEvents)
 
@@ -126,19 +127,16 @@ const venueData = await SupabaseService.getVenueById(venueId)
             console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
             setIsOwner(venueData.ownerId === user.id)
             setIsAdmin(user.userType === "admin")
-            console.log("[VenueDetailScreen] isAdmin set to:", user.userType === "admin")
 
-            // Check if user has existing ownership request for this venue
-            const existingRequest = await SupabaseService.getUserOwnershipRequest(venueId, user.id)
+            const [existingRequest, vibeImages] = await Promise.all([
+              SupabaseService.getUserOwnershipRequest(venueId, user.id),
+              SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date()),
+            ])
+
             if (existingRequest) {
               setExistingRequestStatus(existingRequest.status)
             }
-          }
 
-          // Load initial vibe rating for today (only when user is logged in and venue data exists)
-          if (user) {
-            const today = new Date()
-            const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venueId, today)
             if (vibeImages.length > 0) {
               const latestVibe = vibeImages.reduce((latest, image) => {
                 return image.uploadedAt > latest.uploadedAt ? image : latest

@@ -272,6 +272,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       <ImageBackground 
         source={{ uri: item.posterImageUrl }} 
         style={[styles.eventImage, { height: cardHeight }]}
+        loading="lazy"
         accessibilityLabel={`Event poster for ${item.name}`}
       >
         <View style={styles.eventOverlay}>

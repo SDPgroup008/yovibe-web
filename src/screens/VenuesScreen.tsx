@@ -234,6 +234,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       <ImageBackground 
         source={{ uri: item.backgroundImageUrl }} 
         style={[styles.venueImage, { width: cardWidth, height: cardHeight }]}
+        loading="lazy"
         resizeMode="cover"
         accessibilityLabel={`Venue image for ${item.name}`}
       >

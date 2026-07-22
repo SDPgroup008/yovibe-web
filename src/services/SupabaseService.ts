@@ -299,14 +299,15 @@ class SupabaseService {
       const { data, error } = await supabase
         .from("users")
         .select("*")
-        .eq("is_deleted", false);
+        .eq("is_deleted", false)
+        .limit(10000);
 
       if (error) throw error;
 
       const users: User[] = [];
       if (data) {
         data.forEach((doc) => {
-          users.push({
+          venues.push({
             id: doc.id,
             uid: doc.uid,
             email: doc.email,
@@ -376,7 +377,8 @@ class SupabaseService {
         .from("venues")
         .select("*")
         .eq("is_deleted", false)
-        .order("name", { ascending: true });
+        .order("name", { ascending: true })
+        .limit(10000);
 
       if (error) throw error;
 
@@ -384,7 +386,7 @@ class SupabaseService {
       if (data) {
         data.forEach((doc) => {
           venues.push({
-            id: doc.id,
+            id: doc.slug,
             slug: doc.slug,
             name: doc.name,
             location: doc.location,
@@ -537,7 +539,8 @@ class SupabaseService {
         .from("venues")
         .select("*")
         .eq("owner_id", ownerId)
-        .eq("is_deleted", false);
+        .eq("is_deleted", false)
+        .limit(10000);
 
       if (error) throw error;
 
@@ -545,7 +548,7 @@ class SupabaseService {
       if (data) {
         data.forEach((doc) => {
           venues.push({
-            id: doc.id,
+            id: doc.slug,
             slug: doc.slug,
             name: doc.name,
             location: doc.location,
@@ -688,12 +691,13 @@ class SupabaseService {
       const { data, error } = await supabase
         .from("venues")
         .select("*")
-        .eq("is_deleted", true);
+        .eq("is_deleted", true)
+        .limit(10000);
 
       if (error) throw error;
 
       return (data || []).map((doc) => ({
-        id: doc.id,
+        id: doc.slug,
         slug: doc.slug,
         name: doc.name,
         location: doc.location,
@@ -726,7 +730,8 @@ class SupabaseService {
         .select("*")
         .eq("is_deleted", false)
         .gte("date", today.toISOString())
-        .order("date", { ascending: true });
+        .order("date", { ascending: true })
+        .limit(10000);
 
       if (error) throw error;
 
@@ -843,7 +848,8 @@ class SupabaseService {
         .eq("venue_slug", venueSlug)
         .eq("is_deleted", false)
         .gte("date", today.toISOString())
-        .order("date", { ascending: true });
+        .order("date", { ascending: true })
+        .limit(10000);
 
       if (error) throw error;
 
@@ -1053,7 +1059,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       const { data, error } = await supabase
         .from("venue_ownership_requests")
         .select("*")
-        .eq("venue_slug", venueSlug)
+        .eq("venue_id", venueSlug)
         .eq("user_id", userId)
         .single();
 
@@ -1170,15 +1176,16 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .select("*")
         .eq("venue_slug", venueId)
         .gte("uploaded_at", startOfDay.toISOString())
-        .lte("uploaded_at", endOfDay.toISOString());
+        .lte("uploaded_at", endOfDay.toISOString())
+        .limit(100);
 
       if (error) throw error;
 
       const vibeImages: VibeImage[] = [];
       if (data) {
         data.forEach((doc) => {
-          vibeImages.push({
-            id: doc.id,
+          venues.push({
+            id: doc.slug,
             venueId: doc.venue_slug,
             imageUrl: doc.image_url,
             vibeRating: doc.vibe_rating || Math.random() * 5,
@@ -1232,7 +1239,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       const { data, error } = await supabase
         .from("venue_ownership_requests")
         .select("*")
-        .order("requested_at", { ascending: false });
+        .order("requested_at", { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
 
@@ -1271,7 +1279,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .from("venue_ownership_requests")
         .select("*")
         .eq("status", "pending")
-        .order("requested_at", { ascending: false });
+        .order("requested_at", { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
 
@@ -1496,7 +1505,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .from("vibe_images")
         .select("*")
         .eq("venue_slug", venueId)
-        .order("uploaded_at", { ascending: false });
+        .order("uploaded_at", { ascending: false })
+        .limit(100);
 
       if (error) throw error;
 
@@ -1664,7 +1674,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       const { data, error } = await supabase
         .from("tickets")
         .select("*")
-        .eq("event_slug", eventId);
+        .eq("event_slug", eventId)
+        .limit(10000);
 
       if (error) throw error;
       return data || [];
@@ -1679,7 +1690,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       // First get all events for venue name lookup
       const { data: allEvents } = await supabase
         .from("events")
-        .select("id, venue_name, name, event_slug");
+        .select("id, venue_name, name, event_slug")
+        .limit(10000);
 
       const eventVenueMap: Record<string, string> = {}
       if (allEvents) {
@@ -1692,7 +1704,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       const { data, error } = await supabase
         .from("tickets")
         .select("*")
-        .eq("buyer_id", userId);
+        .eq("buyer_id", userId)
+        .limit(10000);
 
       if (error) throw error;
 
@@ -1954,7 +1967,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
         .from("tickets")
         .select("*")
         .eq("payout_status", "pending")
-        .eq("payout_eligible", true);
+        .eq("payout_eligible", true)
+        .limit(10000);
 
       // Note: In a real implementation you would also filter by the organizer's venues/events
       if (error) throw error;
@@ -1972,7 +1986,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
         .select("*")
         .eq("event_slug", eventId)
         .eq("payout_status", "pending")
-        .eq("payout_eligible", true);
+        .eq("payout_eligible", true)
+        .limit(10000);
 
       if (error) throw error;
       return data || [];
