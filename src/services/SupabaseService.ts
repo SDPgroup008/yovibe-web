@@ -307,7 +307,7 @@ class SupabaseService {
       const users: User[] = [];
       if (data) {
         data.forEach((doc) => {
-          venues.push({
+          users.push({
             id: doc.id,
             uid: doc.uid,
             email: doc.email,
@@ -1184,7 +1184,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       const vibeImages: VibeImage[] = [];
       if (data) {
         data.forEach((doc) => {
-          venues.push({
+          vibeImages.push({
             id: doc.slug,
             venueId: doc.venue_slug,
             imageUrl: doc.image_url,
