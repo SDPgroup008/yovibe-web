@@ -1996,6 +1996,77 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       return [];
     }
   }
+
+  async getOccupiedTables(eventSlug: string, feeTypeName: string): Promise<number[]> {
+    try {
+      const { data, error } = await supabase
+        .from("tickets")
+        .select("table_group_id")
+        .eq("event_slug", eventSlug)
+        .eq("entry_fee_type", feeTypeName)
+        .in("status", ["active", "used", "pending"])
+        .not("table_group_id", "is", null);
+      if (error) throw error;
+      const tableIds = [...new Set((data || []).map((r: any) => r.table_group_id).filter(Boolean))];
+      const tableNumbers = tableIds.map((id: any) => {
+        const match = typeof id === "string" ? id.match(/TABLE_(\d+)/) : null;
+        return match ? parseInt(match[1], 10) : null;
+      }).filter((n: number | null) => n !== null);
+      return tableNumbers;
+    } catch (error) {
+      console.error("SupabaseService: Error getting occupied tables:", error);
+      return [];
+    }
+  }
+
+  async getHeldSeats(eventSlug: string, feeType: string, excludeSessionId?: string): Promise<number[]> {
+    try {
+      const { data, error } = await supabase
+        .rpc("get_held_seats", {
+          p_event_slug: eventSlug,
+          p_fee_type: feeType,
+          p_exclude_session_id: excludeSessionId || null,
+        });
+      if (error) throw error;
+      return (data || []).map((r: any) => r.seat_number);
+    } catch (error) {
+      console.error("SupabaseService: Error getting held seats:", error);
+      return [];
+    }
+  }
+
+  async acquireSeatHold(
+    eventSlug: string, feeType: string, seatNumber: number, sessionId: string, ttlMinutes = 10
+  ): Promise<boolean> {
+    try {
+      const { data, error } = await supabase
+        .rpc("acquire_seat_hold", {
+          p_event_slug: eventSlug,
+          p_fee_type: feeType,
+          p_seat_number: seatNumber,
+          p_session_id: sessionId,
+          p_ttl_minutes: ttlMinutes,
+        });
+      if (error) throw error;
+      return data === true;
+    } catch (error) {
+      console.error("SupabaseService: Error acquiring seat hold:", error);
+      return false;
+    }
+  }
+
+  async releaseSeatHolds(sessionId: string, eventSlug?: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .rpc("release_seat_holds", {
+          p_session_id: sessionId,
+          p_event_slug: eventSlug || null,
+        });
+      if (error) throw error;
+    } catch (error) {
+      console.error("SupabaseService: Error releasing seat holds:", error);
+    }
+  }
 }
 
 export default SupabaseService.getInstance();

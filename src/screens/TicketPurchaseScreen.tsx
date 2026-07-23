@@ -46,8 +46,12 @@ const TicketPurchaseScreen: React.FC = () => {
   const [soldCounts, setSoldCounts] = useState<Record<string, number>>({})
   const [showSeatMapModal, setShowSeatMapModal] = useState(false)
   const [occupiedSeats, setOccupiedSeats] = useState<number[]>([])
-  const [selectedSeat, setSelectedSeat] = useState<number | null>(null)
+  const [perPersonSeats, setPerPersonSeats] = useState<(number | null)[]>([])
+  const [pickSeatIndex, setPickSeatIndex] = useState<number | null>(null)
   const [seatMapFee, setSeatMapFee] = useState<any>(null)
+  const [pickerMode, setPickerMode] = useState<"seat" | "table">("seat")
+  const [occupiedTables, setOccupiedTables] = useState<number[]>([])
+  const [tableSeats, setTableSeats] = useState<(number | null)[]>([])
   
   // Load event data
   useEffect(() => {
@@ -89,19 +93,23 @@ const TicketPurchaseScreen: React.FC = () => {
     return (soldCounts[fee.name] ?? 0) >= fee.maxTickets
   }
 
-  const openSeatMap = async (fee: any) => {
-    console.log(`[openSeatMap] 🚀 Opening seat map for fee: ${fee.name}, seatMap type: ${fee.seatMap?.type}`);
-    if (!fee.seatMap || fee.seatMap.type === "none") {
-      console.log(`[openSeatMap] ⚠️ No seat map available for this fee type`);
+  const openSeatMap = async (fee: any, personIndex?: number, mode?: "seat" | "table") => {
+    const m = mode || "seat"
+    console.log(`[openSeatMap] Opening seat map for fee: ${fee.name}, mode: ${m}, personIndex: ${personIndex}`);
+    if (!fee.seatMap || fee.seatMap.type === "none") return
+    setPickerMode(m)
+    setSeatMapFee(fee)
+
+    if (m === "table") {
+      const occupied = await SupabaseService.getOccupiedTables(eventId, fee.name)
+      setOccupiedTables(occupied)
+      setShowSeatMapModal(true)
       return
     }
-    setSelectedSeat(null)
-    console.log(`[openSeatMap] 📞 Calling getOccupiedSeats for eventId="${eventId}", fee.name="${fee.name}"`);
+
     const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
-    console.log(`[openSeatMap] 📊 Occupied seats received: ${JSON.stringify(occupied)}`);
     setOccupiedSeats(occupied)
-    setSeatMapFee(fee)
-    console.log(`[openSeatMap] ✅ Setting occupiedSeats state with ${occupied.length} seats`);
+    setPickSeatIndex(personIndex ?? null)
     setShowSeatMapModal(true)
   }
   
@@ -146,6 +154,13 @@ const TicketPurchaseScreen: React.FC = () => {
         newEmails.push("")
       }
       return newEmails.slice(0, actualTicketCount)
+    })
+    setPerPersonSeats(prev => {
+      const newSeats: (number | null)[] = [...prev]
+      while (newSeats.length < actualTicketCount) {
+        newSeats.push(null)
+      }
+      return newSeats.slice(0, actualTicketCount)
     })
   }, [actualTicketCount])
   
@@ -389,7 +404,7 @@ const TicketPurchaseScreen: React.FC = () => {
         user?.id ?? null,
         payerEmail,
         deliveryEmails,
-        selectedSeat ?? undefined,
+        isTableEntry ? tableSeats : perPersonSeats,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
@@ -418,6 +433,8 @@ const TicketPurchaseScreen: React.FC = () => {
               time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
+              seatNumber: ticket.seatNumber,
+              tableGroupId: ticket.tableGroupId,
               photoUploadLink,
               ticketDesign,
               posterUrl: event?.posterImageUrl,
@@ -602,7 +619,7 @@ const handleInstallmentPurchase = async () => {
           isTableEntry,
           tableSize,
           buyerPhotoUrl: photoCaptured ? buyerPhotoUrl : undefined,
-          seatNumber: selectedSeat ?? undefined,
+          seatNumber: isTableEntry ? (tableSeats[0] ?? undefined) : (perPersonSeats.filter(s => s != null)[0] ?? undefined),
         },
         {
           method: paymentMethod,
@@ -715,6 +732,25 @@ const handleInstallmentPurchase = async () => {
       if (!buyerNamesList[i]?.trim()) {
         Alert.alert("Name Required", `Please enter name for person ${i + 1}`)
         return
+      }
+    }
+
+    // Validate seat assignment for seat-mapped ticket types
+    const hasSeatMap = selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none"
+    if (hasSeatMap) {
+      if (isTableEntry) {
+        const unassignedTables = tableSeats.slice(0, quantity).filter(s => s == null)
+        if (unassignedTables.length > 0) {
+          Alert.alert("Table Required", `Please select a table for Table ${unassignedTables.length === quantity ? "1" : quantity - unassignedTables.length + 1}`)
+          return
+        }
+      } else {
+        const unassignedSeats = perPersonSeats.slice(0, ticketCount).filter(s => s == null)
+        if (unassignedSeats.length > 0) {
+          const firstMissing = perPersonSeats.findIndex(s => s == null) + 1
+          Alert.alert("Seat Required", `Please select a seat for Person ${firstMissing}`)
+          return
+        }
       }
     }
 
@@ -1015,21 +1051,82 @@ const handleInstallmentPurchase = async () => {
       {/* Buyer Names Section - One input per ticket */}
       <View style={styles.buyerNamesSection}>
         <Text style={styles.sectionTitle}>
-          Names ({actualTicketCount} ticket{actualTicketCount > 1 ? "s" : ""})
+          {isTableEntry
+            ? `Names (${quantity} x ${tableSize} pax)`
+            : `Names (${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""})`}
         </Text>
         {!user && (
           <Text style={styles.sectionSubtitle}>Each ticket requires a unique name</Text>
         )}
-        {Array.from({ length: actualTicketCount }).map((_, index) => (
-          <TextInput
-            key={index}
-            style={styles.input}
-            value={buyerNames[index] || ""}
-            onChangeText={(text) => updateBuyerName(index, text)}
-            placeholder={`Person ${index + 1} Name`}
-            placeholderTextColor="#999"
-          />
-        ))}
+
+        {isTableEntry ? (
+          /* ── Table mode: group names by table ── */
+          Array.from({ length: quantity }).map((_, tableIdx) => {
+            const start = tableIdx * tableSize
+            const end = start + tableSize
+            return (
+              <View key={tableIdx} style={styles.tableGroupCard}>
+                <View style={styles.tableGroupHeader}>
+                  <Text style={styles.tableGroupTitle}>Table {tableIdx + 1}</Text>
+                  <TouchableOpacity
+                    style={[styles.seatSelectBtn, tableSeats[tableIdx] != null && styles.seatSelectBtnActive]}
+                    onPress={() => {
+                      const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
+                      if (fee) openSeatMap(fee, tableIdx, "table")
+                    }}
+                  >
+                    <Text style={[styles.seatSelectBtnText, tableSeats[tableIdx] != null && styles.seatSelectBtnTextActive]}>
+                      {tableSeats[tableIdx] != null ? `Table ${tableSeats[tableIdx]}` : "Select Table"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                {Array.from({ length: tableSize }).map((_, seatIdx) => {
+                  const personIdx = start + seatIdx
+                  return (
+                    <View key={seatIdx} style={styles.tablePersonRow}>
+                      <TextInput
+                        style={[styles.input, { flex: 1 }]}
+                        value={buyerNames[personIdx] || ""}
+                        onChangeText={(text) => updateBuyerName(personIdx, text)}
+                        placeholder={`Person ${personIdx + 1} Name`}
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+                  )
+                })}
+              </View>
+            )
+          })
+        ) : (
+          /* ── Normal mode: one name per ticket with seat picker ── */
+          Array.from({ length: actualTicketCount }).map((_, index) => {
+            const hasSeatMap = selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none"
+            return (
+              <View key={index} style={styles.nameRow}>
+                <TextInput
+                  style={[styles.input, { flex: 1, marginRight: hasSeatMap ? 8 : 0 }]}
+                  value={buyerNames[index] || ""}
+                  onChangeText={(text) => updateBuyerName(index, text)}
+                  placeholder={`Person ${index + 1} Name`}
+                  placeholderTextColor="#999"
+                />
+                {hasSeatMap && (
+                  <TouchableOpacity
+                    style={[styles.seatSelectBtn, perPersonSeats[index] != null && styles.seatSelectBtnActive]}
+                    onPress={() => {
+                      const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
+                      if (fee) openSeatMap(fee, index, "seat")
+                    }}
+                  >
+                    <Text style={[styles.seatSelectBtnText, perPersonSeats[index] != null && styles.seatSelectBtnTextActive]}>
+                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat —"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )
+          })
+        )}
       </View>
 
       {/* Email Distribution Section */}
@@ -1422,19 +1519,45 @@ const handleInstallmentPurchase = async () => {
         </View>
       </Modal>
 
-      {/* Seat Map Modal */}
+      {/* Seat / Table Picker Modal */}
       <Modal visible={showSeatMapModal} transparent animationType="slide" onRequestClose={() => setShowSeatMapModal(false)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: "85%", width: "92%" }]}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Your Seat</Text>
+              <Text style={styles.modalTitle}>
+                {pickerMode === "table" ? "Select Table" : pickSeatIndex != null ? `Select Seat for Person ${pickSeatIndex + 1}` : "Select Seat"}
+              </Text>
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setShowSeatMapModal(false)}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {null}
-              {seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
+              {pickerMode === "table" ? (
+                /* ── Table selection grid ── */
+                <View style={seatMapStyles.numberedGrid}>
+                  {Array.from({ length: (seatMapFee as any)?.maxTickets || quantity }).map((_, idx) => {
+                    const tableNum = idx + 1
+                    const taken = occupiedTables.includes(tableNum)
+                    const picked = tableSeats.includes(tableNum)
+                    return (
+                      <TouchableOpacity key={tableNum}
+                        style={[seatMapStyles.numberedSeat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
+                        onPress={() => {
+                          if (taken) return
+                          const newTableSeats = [...tableSeats]
+                          newTableSeats[pickSeatIndex ?? 0] = tableNum
+                          setTableSeats(newTableSeats)
+                          setShowSeatMapModal(false)
+                        }} disabled={taken}>
+                        <Text style={[seatMapStyles.numberedSeatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>
+                          {tableNum}
+                        </Text>
+                      </TouchableOpacity>
+                    )
+                  })}
+                </View>
+              ) : seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
+                /* ── Cinema seat layout ── */
                 Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
                   const rowLabel = String.fromCharCode(65 + rowIdx)
                   const cols = (seatMapFee as any).seatMap.cols || 10
@@ -1445,13 +1568,30 @@ const handleInstallmentPurchase = async () => {
                         {Array.from({ length: cols }).map((_, colIdx) => {
                           const seatNum = rowIdx * cols + colIdx + 1
                           const taken = occupiedSeats.includes(seatNum)
-                          const picked = selectedSeat === seatNum
-                          if (taken) console.log(`[SeatMap] Seat ${seatNum} is TAKEN (type: ${typeof seatNum}, in array: ${occupiedSeats.includes(seatNum)})`);
+                          const selectedByMe = perPersonSeats.includes(seatNum)
+                          const isMine = pickSeatIndex != null && perPersonSeats[pickSeatIndex] === seatNum
+                          const isDisabled = taken || (selectedByMe && !isMine)
                           return (
                             <TouchableOpacity key={seatNum}
-                              style={[seatMapStyles.seat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
-                              onPress={() => !taken && setSelectedSeat(seatNum)} disabled={taken}>
-                              <Text style={[seatMapStyles.seatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>{colIdx + 1}</Text>
+                              style={[
+                                seatMapStyles.seat,
+                                taken && seatMapStyles.seatTaken,
+                                selectedByMe && !isMine && seatMapStyles.seatSelectedByMe,
+                                isMine && seatMapStyles.seatPicked,
+                              ]}
+                              onPress={() => {
+                                if (isDisabled) return
+                                const newSeats = [...perPersonSeats]
+                                newSeats[pickSeatIndex ?? 0] = seatNum
+                                setPerPersonSeats(newSeats)
+                                setShowSeatMapModal(false)
+                              }} disabled={isDisabled}>
+                              <Text style={[
+                                seatMapStyles.seatLabel,
+                                taken && { color: "#555" },
+                                selectedByMe && !isMine && { color: "#FFD700" },
+                                isMine && { color: "#000" },
+                              ]}>{colIdx + 1}</Text>
                             </TouchableOpacity>
                           )
                         })}
@@ -1460,36 +1600,53 @@ const handleInstallmentPurchase = async () => {
                   )
                 })
               ) : (
+                /* ── Numbered seat grid ── */
                 <View style={seatMapStyles.numberedGrid}>
                   {Array.from({ length: (seatMapFee as any)?.maxTickets || 0 }).map((_, idx) => {
                     const seatNum = idx + 1
                     const taken = occupiedSeats.includes(seatNum)
-                    const picked = selectedSeat === seatNum
-                    if (taken) console.log(`[SeatMap] Seat ${seatNum} is TAKEN (type: ${typeof seatNum}, in array: ${occupiedSeats.includes(seatNum)})`);
+                    const selectedByMe = perPersonSeats.includes(seatNum)
+                    const isMine = pickSeatIndex != null && perPersonSeats[pickSeatIndex] === seatNum
+                    const isDisabled = taken || (selectedByMe && !isMine)
                     return (
                       <TouchableOpacity key={seatNum}
-                        style={[seatMapStyles.numberedSeat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
-                        onPress={() => !taken && setSelectedSeat(seatNum)} disabled={taken}>
-                        <Text style={[seatMapStyles.numberedSeatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>{seatNum}</Text>
+                        style={[
+                          seatMapStyles.numberedSeat,
+                          taken && seatMapStyles.seatTaken,
+                          selectedByMe && !isMine && seatMapStyles.seatSelectedByMe,
+                          isMine && seatMapStyles.seatPicked,
+                        ]}
+                        onPress={() => {
+                          if (isDisabled) return
+                          const newSeats = [...perPersonSeats]
+                          newSeats[pickSeatIndex ?? 0] = seatNum
+                          setPerPersonSeats(newSeats)
+                          setShowSeatMapModal(false)
+                        }} disabled={isDisabled}>
+                        <Text style={[
+                          seatMapStyles.numberedSeatLabel,
+                          taken && { color: "#555" },
+                          selectedByMe && !isMine && { color: "#FFD700" },
+                          isMine && { color: "#000" },
+                        ]}>{seatNum}</Text>
                       </TouchableOpacity>
                     )
                   })}
                 </View>
               )}
+              {/* Legend */}
               <View style={seatMapStyles.legend}>
                 <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#2a2a2a" }]} /><Text style={seatMapStyles.legendText}>Available</Text></View>
                 <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#FF4444" }]} /><Text style={seatMapStyles.legendText}>Taken</Text></View>
-                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#00D4FF" }]} /><Text style={seatMapStyles.legendText}>Selected</Text></View>
+                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#FFD700" }]} /><Text style={seatMapStyles.legendText}>Selected</Text></View>
+                <View style={seatMapStyles.legendItem}><View style={[seatMapStyles.legendDot, { backgroundColor: "#00D4FF" }]} /><Text style={seatMapStyles.legendText}>Mine</Text></View>
               </View>
             </ScrollView>
             <TouchableOpacity
-              style={[styles.purchaseButton, { margin: 0, marginTop: 12 }, !selectedSeat && styles.purchaseButtonDisabled]}
+              style={[styles.purchaseButton, { marginHorizontal: 16, marginBottom: 20 }]}
               onPress={() => setShowSeatMapModal(false)}
-              disabled={!selectedSeat}
             >
-              <Text style={styles.purchaseButtonText}>
-                {selectedSeat ? `Confirm Seat ${selectedSeat}` : "Pick a seat to continue"}
-              </Text>
+              <Text style={styles.purchaseButtonText}>Done</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1668,12 +1825,61 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-buyerNamesSection: {
+  buyerNamesSection: {
     padding: 16,
     backgroundColor: "#1E1E1E",
     margin: 16,
     marginTop: 0,
     borderRadius: 12,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  seatSelectBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#2a2a2a",
+    borderWidth: 1,
+    borderColor: "#444",
+  },
+  seatSelectBtnActive: {
+    backgroundColor: "rgba(0,212,255,0.12)",
+    borderColor: "#00D4FF",
+  },
+  seatSelectBtnText: {
+    color: "#888",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  seatSelectBtnTextActive: {
+    color: "#00D4FF",
+  },
+  tableGroupCard: {
+    backgroundColor: "#252525",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
+  },
+  tableGroupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  tableGroupTitle: {
+    color: "#00D4FF",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  tablePersonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 6,
   },
   visitorInfoSection: {
     padding: 16,
@@ -2285,6 +2491,7 @@ const seatMapStyles = StyleSheet.create({
   seat: { width: 28, height: 28, borderRadius: 4, backgroundColor: "#2a2a2a", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#444" },
   seatTaken: { backgroundColor: "#3a1a1a", borderColor: "#FF4444" },
   seatPicked: { backgroundColor: "#00D4FF", borderColor: "#00D4FF" },
+  seatSelectedByMe: { backgroundColor: "#3a3a00", borderColor: "#FFD700", opacity: 0.7 },
   seatLabel: { color: "#CCC", fontSize: 10, fontWeight: "600" },
   numberedGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, paddingVertical: 8 },
   numberedSeat: { width: 44, height: 44, borderRadius: 8, backgroundColor: "#2a2a2a", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#444" },

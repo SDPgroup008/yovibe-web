@@ -95,7 +95,7 @@ export class TicketService {
     buyerId?: string | null,
     payerEmail?: string,
     deliveryEmails?: string[],
-    seatNumber?: number,
+    seatNumbers?: (number | null)[],
   ): Promise<Ticket[]> {
     try {
       console.log("========================================")
@@ -133,7 +133,7 @@ export class TicketService {
           tableGroupId,
           buyerId ?? null,
           deliveryEmail,
-          seatNumber,
+          seatNumbers?.[i] ?? undefined,
         )
         createdTickets.push(ticket)
       }
