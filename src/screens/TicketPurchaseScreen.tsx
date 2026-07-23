@@ -405,8 +405,11 @@ const TicketPurchaseScreen: React.FC = () => {
         payerEmail,
         deliveryEmails,
         isTableEntry
-          ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
+          ? undefined
           : perPersonSeats,
+        isTableEntry
+          ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
+          : undefined,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
@@ -435,7 +438,8 @@ const TicketPurchaseScreen: React.FC = () => {
               time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
-              seatNumber: ticket.seatNumber,
+              seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
+              tableNumber: ticket.tableNumber,
               tableGroupId: ticket.tableGroupId,
               photoUploadLink,
               ticketDesign,

@@ -1586,10 +1586,11 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
   async saveTicket(ticket: any): Promise<string> {
     try {
-      const { seatNumber, ...restTicket } = ticket
+      const { seatNumber, tableNumber, ...restTicket } = ticket
       const ticketData = {
         ...restTicket,
         seat_number: seatNumber,
+        table_number: tableNumber,
         event_slug: ticket.eventSlug || ticket.eventId,
         created_at: new Date().toISOString(),
       };
@@ -1652,7 +1653,8 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       if (data.isScanned !== undefined) dbData.is_scanned = data.isScanned;
       if (data.scannedAt) dbData.scanned_at = data.scannedAt;
       if (data.seatNumber !== undefined) dbData.seat_number = data.seatNumber;
-      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined && data.seatNumber === undefined) {
+      if (data.tableNumber !== undefined) dbData.table_number = data.tableNumber;
+      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined && data.seatNumber === undefined && data.tableNumber === undefined) {
         // No mapped fields found, use raw data as fallback
         Object.assign(dbData, data);
       }
@@ -1758,6 +1760,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
           pesapalConfirmationCode: row.pesapal_confirmation_code || row.pesapalConfirmationCode,
           pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
           seatNumber: row.seat_number ?? row.seatNumber ?? undefined,
+          tableNumber: row.table_number ?? row.tableNumber ?? undefined,
           tableGroupId: row.table_group_id || row.tableGroupId,
           tableTotalAmount: row.table_total_amount ?? row.tableTotalAmount ?? 0,
           purchase_date: row.purchase_date,
@@ -2004,17 +2007,13 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
     try {
       const { data, error } = await supabase
         .from("tickets")
-        .select("table_group_id")
+        .select("table_number")
         .eq("event_slug", eventSlug)
         .eq("entry_fee_type", feeTypeName)
         .in("status", ["active", "used", "pending"])
-        .not("table_group_id", "is", null);
+        .not("table_number", "is", null);
       if (error) throw error;
-      const tableIds = [...new Set((data || []).map((r: any) => r.table_group_id).filter(Boolean))];
-      const tableNumbers = tableIds.map((id: any) => {
-        const match = typeof id === "string" ? id.match(/TABLE_(\d+)/) : null;
-        return match ? parseInt(match[1], 10) : null;
-      }).filter((n: number | null) => n !== null);
+      const tableNumbers = [...new Set((data || []).map((r: any) => r.table_number).filter((n: any) => n != null))];
       return tableNumbers;
     } catch (error) {
       console.error("SupabaseService: Error getting occupied tables:", error);

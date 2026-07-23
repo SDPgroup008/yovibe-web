@@ -43,6 +43,7 @@ function buildTicketEmailHtml({
   qrCodeDataUrl,
   buyerName,
   seatNumber,
+  tableNumber,
   tableGroupId,
   photoUploadLink,
   posterUrl,
@@ -217,7 +218,8 @@ function buildTicketEmailHtml({
           ${row("Time", escapeHtml(time))}
           ${row("Ticket Ref", escapeHtml(ticketRef))}
           ${seatNumber != null ? row("Seat", String(seatNumber)) : ""}
-          ${tableGroupId ? row("Table", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : ""}
+          ${tableNumber != null ? row("Table", String(tableNumber)) : ""}
+          ${tableGroupId && tableNumber == null ? row("Table", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : ""}
         </div>
       `;
     }

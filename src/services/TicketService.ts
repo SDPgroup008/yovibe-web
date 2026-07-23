@@ -96,6 +96,7 @@ export class TicketService {
     payerEmail?: string,
     deliveryEmails?: string[],
     seatNumbers?: (number | null)[],
+    tableNumbers?: (number | null)[],
   ): Promise<Ticket[]> {
     try {
       console.log("========================================")
@@ -134,6 +135,7 @@ export class TicketService {
           buyerId ?? null,
           deliveryEmail,
           seatNumbers?.[i] ?? undefined,
+          tableNumbers?.[i] ?? undefined,
         )
         createdTickets.push(ticket)
       }
@@ -233,6 +235,7 @@ private static async createSingleTicket(
     buyerId?: string | null,
     deliveryEmail?: string,
     seatNumber?: number,
+    tableNumber?: number,
   ): Promise<Ticket> {
     console.log("--- Step 1: Calculating ticket price ---")
     const basePrice = event.entryFees && event.entryFees.length > 0
@@ -334,7 +337,8 @@ private static async createSingleTicket(
       totalAmount: total,
       tableTotalAmount: tableTotalAmount,
       tableGroupId: tableGroupId,
-      seatNumber: seatNumber,
+      seatNumber: tableNumber != null ? undefined : seatNumber,
+      tableNumber: tableNumber ?? undefined,
       basePrice: subtotal,
       lateFee: lateFee,
       venueRevenue,
@@ -445,6 +449,7 @@ private static async createSingleTicket(
     ticketRef?: string;
     entryFeeType?: string;
     seatNumber?: number;
+    tableNumber?: number;
   }> {
     try {
       console.log("========================================")
@@ -503,7 +508,7 @@ private static async createSingleTicket(
       if (t.expiresAt && new Date(t.expiresAt) < now) {
         await supabase.from("tickets").update({ status: "expired" }).eq("id", t.id)
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Ticket has expired" })
-        return { success: false, reason: "Ticket has expired", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
+        return { success: false, reason: "Ticket has expired", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
       }
 
       // Step 3: Check status
@@ -534,17 +539,18 @@ private static async createSingleTicket(
             ticketRef: t.ticketRef,
             entryFeeType: t.entryFeeType,
             seatNumber: t.seatNumber,
+            tableNumber: t.tableNumber,
           }
         }
         const reason = t.status === "used" ? "Ticket already used" : t.status === "cancelled" ? "Ticket was cancelled" : "Invalid ticket status"
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason })
-        return { success: false, reason, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
+        return { success: false, reason, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
       }
 
       // Step 4: Verify event
       if (scanningEventId && t.eventId !== scanningEventId) {
         await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "denied", reason: "Wrong event" })
-        return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
+        return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
       }
 
       console.log("✅ All checks passed - updating ticket")
@@ -561,6 +567,7 @@ private static async createSingleTicket(
           ticketRef: t.ticketRef,
           entryFeeType: t.entryFeeType,
           seatNumber: t.seatNumber,
+          tableNumber: t.tableNumber,
         }
       }
 
@@ -616,7 +623,7 @@ console.error("❌ Error details:", updateError.details)
       console.log("========================================")
       console.log("🔍 TICKET VALIDATION SUCCESSFUL")
       console.log("========================================")
-      return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, buyerName: t.buyerName }
+      return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error?.message || error)
       return { success: false, reason: error?.message || "Validation failed" }
@@ -915,6 +922,7 @@ console.error("❌ Error details:", updateError.details)
       tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
       tableGroupId: row.table_group_id || row.tableGroupId,
       seatNumber: row.seat_number ?? row.seatNumber,
+      tableNumber: row.table_number ?? row.tableNumber,
       reentryPass: row.reentry_pass ?? row.reentryPass ?? undefined,
       photoUploadToken: row.photo_upload_token || row.photoUploadToken,
       photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,

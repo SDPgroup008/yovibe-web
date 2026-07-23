@@ -227,7 +227,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [allowLatePurchases, setAllowLatePurchases] = useState(true)
   const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
-  const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; status: string }>>([])
+  const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; tableNumber: string; status: string }>>([])
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
@@ -515,7 +515,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const ticketIds = [...new Set((data || []).map((v: any) => v.ticketId).filter(Boolean))]
       let ticketMap: Record<string, any> = {}
       if (ticketIds.length > 0) {
-        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number, buyer_name").in("id", ticketIds)
+        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number, table_number, buyer_name").in("id", ticketIds)
         for (const t of tickets || []) ticketMap[t.id] = t
       }
       setScanLogs((data || []).map((v: any) => {
@@ -526,6 +526,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           ticketRef: ticket.ticket_ref || v.ticketId?.substring(0, 8) || "—",
           feeType: ticket.entry_fee_type || "—",
           seatNumber: ticket.seat_number != null ? String(ticket.seat_number) : "—",
+          tableNumber: ticket.table_number != null ? String(ticket.table_number) : "—",
           status: v.status === "granted" ? "Valid" : "Invalid",
         }
       }))
@@ -1454,7 +1455,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                     <View style={{ flex: 1 }}>
                       <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
                       <Text style={styles.scanLogName}>{log.name}</Text>
-                      <Text style={styles.scanLogDetail}>{log.feeType}{log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
+                      <Text style={styles.scanLogDetail}>{log.feeType}{log.tableNumber !== "—" ? ` · Table ${log.tableNumber}` : log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={styles.scanLogTime}>{log.time}</Text>

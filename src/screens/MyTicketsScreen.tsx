@@ -527,13 +527,19 @@ const MyTicketsScreen: React.FC = () => {
                   <Text style={styles.cardMetaText}>{ticket.buyerName}</Text>
                 </View>
               )}
+              {ticket.tableNumber != null && (
+                <View style={styles.cardMetaRow}>
+                  <Ionicons name="grid-outline" size={14} color="#00D4FF" />
+                  <Text style={styles.cardMetaText}>Table {ticket.tableNumber}</Text>
+                </View>
+              )}
               {ticket.seatNumber != null && (
                 <View style={styles.cardMetaRow}>
                   <Ionicons name="grid-outline" size={14} color="#F59E0B" />
                   <Text style={styles.cardMetaText}>Seat {ticket.seatNumber}</Text>
                 </View>
               )}
-              {ticket.tableGroupId && (
+              {ticket.tableGroupId && !ticket.tableNumber && (
                 <View style={styles.cardMetaRow}>
                   <Ionicons name="grid-outline" size={14} color="#00D4FF" />
                   <Text style={styles.cardMetaText}>{ticket.tableGroupId.includes("TABLE") ? `Table ${ticket.tableGroupId.split("TABLE_").pop()}` : `Table: ${ticket.tableGroupId.slice(-4)}`}</Text>
@@ -575,20 +581,18 @@ const MyTicketsScreen: React.FC = () => {
             </View>
 
             {/* Seat / Table info */}
-            {(selectedTicket.seatNumber != null || selectedTicket.tableGroupId) && (
+            {(selectedTicket.tableNumber != null || selectedTicket.seatNumber != null) && (
               <View style={{ flexDirection: "row", justifyContent: "center", gap: 16, marginBottom: 14 }}>
+                {selectedTicket.tableNumber != null && (
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                    <Ionicons name="grid-outline" size={14} color="#00D4FF" />
+                    <Text style={{ color: "#00D4FF", fontSize: 13, fontWeight: "600" }}>Table {selectedTicket.tableNumber}</Text>
+                  </View>
+                )}
                 {selectedTicket.seatNumber != null && (
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
                     <Ionicons name="grid-outline" size={14} color="#F59E0B" />
                     <Text style={{ color: "#F59E0B", fontSize: 13, fontWeight: "600" }}>Seat {selectedTicket.seatNumber}</Text>
-                  </View>
-                )}
-                {selectedTicket.tableGroupId && (
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-                    <Ionicons name="grid-outline" size={14} color="#00D4FF" />
-                    <Text style={{ color: "#00D4FF", fontSize: 13, fontWeight: "600" }}>
-                      {selectedTicket.tableGroupId.includes("TABLE") ? `Table ${selectedTicket.tableGroupId.split("TABLE_").pop()}` : `Table: ${selectedTicket.tableGroupId.slice(-4)}`}
-                    </Text>
                   </View>
                 )}
               </View>

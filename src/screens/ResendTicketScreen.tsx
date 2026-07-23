@@ -67,7 +67,8 @@ const ResendTicketScreen: React.FC = () => {
               time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               ticketRef: ticket.ticketRef,
               qrCodeDataUrl: ticket.qrCodeDataUrl,
-              seatNumber: ticket.seatNumber,
+              seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
+              tableNumber: ticket.tableNumber,
               tableGroupId: ticket.tableGroupId,
               // Find the ticket design from the entry fee
               ticketDesign: event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,

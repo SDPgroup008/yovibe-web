@@ -226,7 +226,8 @@ export class InstallmentService {
       plan.buyerId ?? null,
       plan.payerEmail,
       plan.deliveryEmails,
-      plan.seatNumber != null ? [plan.seatNumber] : undefined
+      plan.seatNumber != null ? [plan.seatNumber] : undefined,
+      undefined, // tableNumbers — not tracked in installment plans yet
     )
 
     const ticketIds = tickets.map((t) => t.id)
@@ -266,7 +267,8 @@ export class InstallmentService {
             time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             ticketRef: ticket.ticketRef,
             qrCodeDataUrl: ticket.qrCodeDataUrl,
-            seatNumber: ticket.seatNumber,
+            seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
+            tableNumber: ticket.tableNumber,
             tableGroupId: ticket.tableGroupId,
             photoUploadLink,
             ticketDesign,
