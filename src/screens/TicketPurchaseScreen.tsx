@@ -99,6 +99,7 @@ const TicketPurchaseScreen: React.FC = () => {
     if (!fee.seatMap || fee.seatMap.type === "none") return
     setPickerMode(m)
     setSeatMapFee(fee)
+    setPickSeatIndex(personIndex ?? null)
 
     if (m === "table") {
       const occupied = await SupabaseService.getOccupiedTables(eventId, fee.name)
@@ -109,7 +110,6 @@ const TicketPurchaseScreen: React.FC = () => {
 
     const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
     setOccupiedSeats(occupied)
-    setPickSeatIndex(personIndex ?? null)
     setShowSeatMapModal(true)
   }
   
@@ -1482,7 +1482,6 @@ const handleInstallmentPurchase = async () => {
                       if (soldOut) return
                       setSelectedTicketType(item)
                       setShowTicketTypeModal(false)
-                      if (hasSeatMap) openSeatMap(item)
                     }}
                     disabled={soldOut}
                   >
@@ -1532,30 +1531,40 @@ const handleInstallmentPurchase = async () => {
               </TouchableOpacity>
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
-              {pickerMode === "table" ? (
-                /* ── Table selection grid ── */
-                <View style={seatMapStyles.numberedGrid}>
-                  {Array.from({ length: (seatMapFee as any)?.maxTickets || quantity }).map((_, idx) => {
-                    const tableNum = idx + 1
-                    const taken = occupiedTables.includes(tableNum)
-                    const picked = tableSeats.includes(tableNum)
-                    return (
-                      <TouchableOpacity key={tableNum}
-                        style={[seatMapStyles.numberedSeat, taken && seatMapStyles.seatTaken, picked && seatMapStyles.seatPicked]}
-                        onPress={() => {
-                          if (taken) return
-                          const newTableSeats = [...tableSeats]
-                          newTableSeats[pickSeatIndex ?? 0] = tableNum
-                          setTableSeats(newTableSeats)
-                          setShowSeatMapModal(false)
-                        }} disabled={taken}>
-                        <Text style={[seatMapStyles.numberedSeatLabel, taken && { color: "#555" }, picked && { color: "#000" }]}>
-                          {tableNum}
-                        </Text>
-                      </TouchableOpacity>
-                    )
-                  })}
-                </View>
+            {pickerMode === "table" ? (
+              /* ── Table selection grid (same color logic as seats) ── */
+              <View style={seatMapStyles.numberedGrid}>
+                {Array.from({ length: (seatMapFee as any)?.maxTickets || quantity }).map((_, idx) => {
+                  const tableNum = idx + 1
+                  const taken = occupiedTables.includes(tableNum)
+                  const selectedByMe = tableSeats.includes(tableNum)
+                  const isMine = pickSeatIndex != null && tableSeats[pickSeatIndex] === tableNum
+                  const isDisabled = taken || (selectedByMe && !isMine)
+                  return (
+                    <TouchableOpacity key={tableNum}
+                      style={[
+                        seatMapStyles.numberedSeat,
+                        taken && seatMapStyles.seatTaken,
+                        selectedByMe && !isMine && seatMapStyles.seatSelectedByMe,
+                        isMine && seatMapStyles.seatPicked,
+                      ]}
+                      onPress={() => {
+                        if (isDisabled) return
+                        const newTableSeats = [...tableSeats]
+                        newTableSeats[pickSeatIndex ?? 0] = tableNum
+                        setTableSeats(newTableSeats)
+                        setShowSeatMapModal(false)
+                      }} disabled={isDisabled}>
+                      <Text style={[
+                        seatMapStyles.numberedSeatLabel,
+                        taken && { color: "#555" },
+                        selectedByMe && !isMine && { color: "#FFD700" },
+                        isMine && { color: "#000" },
+                      ]}>{tableNum}</Text>
+                    </TouchableOpacity>
+                  )
+                })}
+              </View>
               ) : seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
                 /* ── Cinema seat layout ── */
                 Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
