@@ -136,14 +136,16 @@ const TermsAndConditionsScreen: React.FC = () => {
             4.1 The Platform recognizes the following User types, each with distinct rights and obligations:
           </Text>
           <Text style={styles.paragraph}>
-            (a) Regular User: May browse Events and Venues, purchase Tickets, view purchase history,
-            manage profile settings, and receive notifications. Regular Users may not create Events or
-            manage Venues.
+            (a) Viber (Vibe Master): A user registered primarily to browse and purchase Tickets. Vibe
+            Masters may browse public Events and Venues, purchase Tickets, view purchase history, manage
+            profile settings, and receive notifications. Vibe Masters may not create Events, manage Venues,
+            or access organizer-specific features.
           </Text>
           <Text style={styles.paragraph}>
-            (b) Club Owner (Organizer): Has all Regular User privileges plus the ability to create and
-            manage Events, manage Venues, view ticket sales analytics, receive payouts, and manage
-            Event-specific settings. Club Owners must provide valid payment details for payout processing.
+            (b) Event Organizer (Club Owner / Regular User): Has all Viber privileges plus the ability to
+            create and manage Events, manage Venues, view ticket sales analytics, receive payouts, and
+            configure Event-specific settings. Both Regular Users and Club Owners may operate as Event
+            Organizers. Organizers must provide valid payment details for payout processing.
           </Text>
           <Text style={styles.paragraph}>
             (c) Administrator: Has full access to Platform management functions including user management,
@@ -151,12 +153,13 @@ const TermsAndConditionsScreen: React.FC = () => {
             and system-wide analytics.
           </Text>
           <Text style={styles.paragraph}>
-            (d) Viber: An unregistered user with limited browsing access. Vipers may view public Event
-            and Venue listings but cannot purchase Tickets, create content, or access User-specific features.
+            (d) Unregistered Visitor: May view public Event and Venue listings but cannot purchase Tickets,
+            create content, or access User-specific features.
           </Text>
           <Text style={styles.paragraph}>
-            4.2 Upgrading from Regular User to Club Owner requires approval from the Company and may be
-            subject to additional verification, background checks, and acceptance of supplementary terms.
+            4.2 Upgrading from Viber (Regular User) to Club Owner requires approval from the Company or
+            an Administrator. Upgrade requests are subject to additional verification, background checks,
+            and acceptance of supplementary terms at the Company's sole discretion.
           </Text>
           <Text style={styles.paragraph}>
             4.3 Each User type is bound by these Terms irrespective of their classification. Violation of
@@ -357,10 +360,29 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (c) The use of your photo for security and fraud prevention purposes.
           </Text>
-          <Text style={styles.paragraph}>
-            7.3 Security photos are not a guarantee of entry. Organizers retain the right to deny entry
-            based on their own venue policies and applicable law.
-          </Text>
+           <Text style={styles.paragraph}>
+             7.3 Security photos are not a guarantee of entry. Organizers retain the right to deny entry
+             based on their own venue policies and applicable law.
+           </Text>
+           <Text style={styles.paragraph}>
+             7.4 If the individual presenting the Ticket does not match the security photo associated with
+             that Ticket, Event staff may deny entry. Any attempted use of a Ticket by an individual who
+             does not match the associated security photo may result in:
+           </Text>
+           <Text style={styles.paragraph}>
+             (a) Immediate denial of entry or removal from the Event without refund;
+           </Text>
+           <Text style={styles.paragraph}>
+             (b) Confiscation of the Ticket and revocation of any associated Tickets held by the same
+             purchaser;
+           </Text>
+           <Text style={styles.paragraph}>
+             (c) Notification to applicable law enforcement authorities; and
+           </Text>
+           <Text style={styles.paragraph}>
+             (d) Legal action including potential criminal charges for fraud, identity misrepresentation,
+             or unauthorized Ticket transfer where applicable under Ugandan law.
+           </Text>
 
           <Text style={styles.sectionTitle}>8. PAYMENT TERMS AND PROCESSING</Text>
           <Text style={styles.paragraph}>
@@ -469,11 +491,11 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (b) The commission is calculated as 15% of the total Ticket price paid by the purchaser,
-            including any late fees, before taxes;
+            including any late fees, before gateway transaction fees;
           </Text>
           <Text style={styles.paragraph}>
-            (c) The remaining 85% of the Ticket price constitutes the venue revenue payable to the
-            Organizer;
+            (c) The remaining 85% of the Ticket price, less gateway transaction fees charged by the
+            payment processor, constitutes the venue revenue payable to the Organizer;
           </Text>
           <Text style={styles.paragraph}>
             (d) The Company reserves the right to modify the commission rate upon 30 days' written notice
@@ -483,31 +505,40 @@ const TermsAndConditionsScreen: React.FC = () => {
             9.2 Payouts to Organizers:
           </Text>
           <Text style={styles.paragraph}>
-            (a) Payouts are available to Organizers for Tickets that have been scanned and validated at
-            the Event;
+            (a) Payouts are available to Organizers for Tickets that have been scanned, validated, and
+            marked as "payout-eligible" with a payout status of "pending" in the Platform;
           </Text>
           <Text style={styles.paragraph}>
-            (b) Tickets become payout-eligible once marked as "used" with payout status set to "pending"
-            after successful validation;
+            (b) Organizers may request payouts for eligible Tickets through the Platform dashboard by
+            selecting eligible Ticket types and quantities via the payout interface;
           </Text>
           <Text style={styles.paragraph}>
-            (c) Organizers may request payouts for eligible Tickets through the Platform dashboard;
+            (c) A payout processing fee is applied to each withdrawal, calculated as 1% of the payout
+            amount plus a tiered flat fee (up to 1,200 UGX) depending on the payout bracket;
           </Text>
           <Text style={styles.paragraph}>
-            (d) Payouts are processed via PesaPal and may take 3-10 business days to reflect, depending
-            on the payout method selected;
+            (d) Payouts are processed via PawaPay mobile money to the Organizer's registered MTN or
+            Airtel mobile money number in Uganda. Payouts to bank accounts are not currently supported;
           </Text>
           <Text style={styles.paragraph}>
-            (e) Payout methods include mobile money and bank transfer, subject to Organizer-provided
-            payment details;
+            (e) Before a payout is executed, the Organizer must verify their identity by entering a
+            one-time password (OTP) sent to their registered email address. The OTP expires 90 seconds
+            after issuance;
           </Text>
           <Text style={styles.paragraph}>
-            (f) The Company reserves the right to withhold payouts pending investigation of suspected
+            (f) The net payout amount received by the Organizer is calculated as:
+              Total Venue Revenue (85% of gross sales after commission)
+              - Gateway Transaction Fees
+              - Payout Processing Fee (1% + tiered flat fee)
+              = Net Payout Amount;
+          </Text>
+          <Text style={styles.paragraph}>
+            (g) The Company reserves the right to withhold payouts pending investigation of suspected
             fraud, chargebacks, or violations of these Terms;
           </Text>
           <Text style={styles.paragraph}>
-            (g) Payout statuses include: pending, processing, paid, and failed. Organizers will be
-            notified of any failures and may re-request payouts.
+            (h) Payout statuses include: pending, processing, paid, and failed. Organizers will be
+            notified of any failures and may re-request payouts through the dashboard.
           </Text>
           <Text style={styles.paragraph}>
             9.3 Revenue Reconciliation:
@@ -629,13 +660,14 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (e) For Tickets purchased via an installment plan where the event is cancelled or postponed
-            after partial payment, the refund amount is calculated as 40% of the sum of all paid
-            installment base amounts. Service fees charged per installment are non-refundable.
+            after partial payment, the refund amount is calculated as 100% of the total paid installment
+            amounts, less payment gateway fees. Service fees (8% per installment) applied to each
+            installment payment are non-refundable.
           </Text>
           <Text style={styles.paragraph}>
             (f) For installment plans with incomplete payments after the event has taken place,
             purchasers may request a refund of 40% of the base installment amounts paid (excluding
-            service fees), subject to admin review and approval.
+            service fees and payment gateway fees), subject to admin review and approval.
           </Text>
           <Text style={styles.paragraph}>
             11.2 Event Postponement or Rescheduling:
@@ -658,14 +690,6 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (a) Refunds for change of mind, scheduling conflicts, or other personal reasons are generally
             not provided;
-          </Text>
-          <Text style={styles.paragraph}>
-            (b) Refund requests based on extenuating circumstances (medical emergencies, bereavement,
-            travel disruptions) may be considered on a case-by-case basis at the Company's sole discretion;
-          </Text>
-          <Text style={styles.paragraph}>
-            (c) Any discretionary refund granted by the Company may be subject to a processing fee of up
-            to 10% of the Ticket price.
           </Text>
           <Text style={styles.paragraph}>
             11.4 Chargebacks and Disputed Transactions:
