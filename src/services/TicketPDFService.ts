@@ -617,6 +617,8 @@ export class TicketPDFService {
             ticketRef: ticket.ticketRef || ticket.id?.slice(0, 8).toUpperCase() || "XXXXXXXX",
             qrCodeDataUrl: ticket.qrCodeDataUrl || "",
             buyerName: ticket.buyerName || "Guest",
+            seatNumber: ticket.seatNumber,
+            tableNumber: ticket.tableNumber,
             posterUrl: event?.posterImageUrl || null,
             ticketDesign: feeDesign || event?.ticket_design || undefined,
           }),

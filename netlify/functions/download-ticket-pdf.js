@@ -13,7 +13,7 @@ exports.handler = async (event) => {
       return { statusCode: 400, body: JSON.stringify({ error: "Missing ticket fields", missing }) };
     }
 
-    const bytes = await renderTicketPdf(input);
+    const bytes = await renderTicketPdf({ ...input, seatNumber: input.seatNumber, tableNumber: input.tableNumber });
 
     return {
       statusCode: 200,

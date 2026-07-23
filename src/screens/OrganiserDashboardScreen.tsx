@@ -1279,8 +1279,9 @@ const OrganiserDashboardScreen: React.FC = () => {
                   const tableSize = feeInfo?.tableSize || 1
                   const maxTickets: number | undefined = feeInfo?.maxTickets
                   const totalSold = s.early.count + s.late.count
-                  const remaining = maxTickets ? Math.max(0, maxTickets - totalSold) : null
-                  const pct = maxTickets && maxTickets > 0 ? totalSold / maxTickets : null
+                  const soldTables = isTableTicket ? Math.floor(totalSold / tableSize) : totalSold
+                  const remaining = maxTickets ? Math.max(0, maxTickets - soldTables) : null
+                  const pct = maxTickets && maxTickets > 0 ? soldTables / maxTickets : null
                   const remainColor = pct === null ? "#FFF" : pct >= 1 ? "#FF4444" : pct >= 0.5 ? "#F59E0B" : "#4CAF50"
                   const formatCount = (count: number) => {
                     if (isTableTicket && tableSize > 0) {

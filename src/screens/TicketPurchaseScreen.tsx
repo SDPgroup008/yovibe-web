@@ -367,9 +367,9 @@ const TicketPurchaseScreen: React.FC = () => {
       
       const ticketCount = actualTicketCount
 
-      const payerEmail = visitorEmail.trim() || buyerEmails[0]?.trim()
-      const deliveryEmails = emailDistribution === "single" 
-        ? Array(actualTicketCount).fill(payerEmail)
+      const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
+      const deliveryEmails = emailDistribution === "single"
+        ? Array(actualTicketCount).fill(visitorEmail.trim() || buyerEmails[0]?.trim() || payerEmail)
         : buyerEmailsList
 
       const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
