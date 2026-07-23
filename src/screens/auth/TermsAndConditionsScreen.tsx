@@ -136,29 +136,31 @@ const TermsAndConditionsScreen: React.FC = () => {
             4.1 The Platform recognizes the following User types, each with distinct rights and obligations:
           </Text>
           <Text style={styles.paragraph}>
-            (a) Viber (Vibe Master): A user registered primarily to browse and purchase Tickets. Vibe
-            Masters may browse public Events and Venues, purchase Tickets, view purchase history, manage
-            profile settings, and receive notifications. Vibe Masters may not create Events, manage Venues,
-            or access organizer-specific features.
+            (a) Viber (Vibe Master): An unauthenticated visitor who can browse public Events and Venues
+            and purchase Tickets without creating an Account. Vibe Masters may view Event and Venue
+            listings, purchase Tickets, and receive purchase confirmation. Vibe Masters may not create
+            Events, manage Venues, create an Account, or access User-specific features.
           </Text>
           <Text style={styles.paragraph}>
-            (b) Event Organizer (Club Owner / Regular User): Has all Viber privileges plus the ability to
-            create and manage Events, manage Venues, view ticket sales analytics, receive payouts, and
-            configure Event-specific settings. Both Regular Users and Club Owners may operate as Event
-            Organizers. Organizers must provide valid payment details for payout processing.
+            (b) Regular User: An authenticated User with a registered Account. Regular Users have all
+            Viber privileges plus the ability to create and manage Events, sell Tickets, view sales
+            analytics, receive payouts, manage profile settings, and receive notifications. Regular Users
+            may not create or manage Venues.
           </Text>
           <Text style={styles.paragraph}>
-            (c) Administrator: Has full access to Platform management functions including user management,
+            (c) Club Owner: An authenticated User with all Regular User privileges plus the ability to
+            create and manage Venues. Club Owners may also manage Events associated with their Venues and
+            configure Venue-specific settings. Club Owners must provide valid payment details for payout
+            processing.
+          </Text>
+          <Text style={styles.paragraph}>
+            (d) Administrator: Has full access to all Platform functions including user management,
             content moderation, ticket fulfillment oversight, commission configuration, payout approval,
-            and system-wide analytics.
+            event and venue management, refund processing, and system-wide analytics.
           </Text>
           <Text style={styles.paragraph}>
-            (d) Unregistered Visitor: May view public Event and Venue listings but cannot purchase Tickets,
-            create content, or access User-specific features.
-          </Text>
-          <Text style={styles.paragraph}>
-            4.2 Upgrading from Viber (Regular User) to Club Owner requires approval from the Company or
-            an Administrator. Upgrade requests are subject to additional verification, background checks,
+            4.2 Upgrading from Regular User to Club Owner requires approval from the Company or an
+            Administrator. Upgrade requests are subject to additional verification, background checks,
             and acceptance of supplementary terms at the Company's sole discretion.
           </Text>
           <Text style={styles.paragraph}>
