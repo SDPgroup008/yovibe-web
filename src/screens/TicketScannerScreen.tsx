@@ -47,7 +47,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
 
   // Re-entry state
   const [showReentryModal, setShowReentryModal] = useState(false)
-  const [reentryInfo, setReentryInfo] = useState<{ buyerName: string; grantedByName: string; grantedAt: string } | null>(null)
+  const [reentryInfo, setReentryInfo] = useState<{ buyerName: string; buyerPhotoUrl?: string; grantedByName: string; grantedAt: string } | null>(null)
 
   // Auth check - only for non-token auth
   useEffect(() => {
@@ -195,6 +195,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
         if (result.isReentry) {
           setReentryInfo({
             buyerName: result.buyerName || "Attendee",
+            buyerPhotoUrl: result.buyerPhotoUrl,
             grantedByName: result.reentryGrantedByName || "Organiser",
             grantedAt: result.reentryGrantedAt || new Date().toISOString(),
           })
@@ -320,11 +321,16 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
       <Modal visible={showReentryModal} transparent animationType="fade" onRequestClose={() => setShowReentryModal(false)}>
         <View style={styles.overlay}>
           <View style={[styles.modalBox, { borderWidth: 2, borderColor: "#F59E0B" }]}>
-            <View style={{ backgroundColor: "rgba(245,158,11,0.15)", borderRadius: 50, padding: 16, marginBottom: 16 }}>
-              <Ionicons name="refresh-circle" size={48} color="#F59E0B" />
-            </View>
-            <Text style={[styles.modalTitle, { color: "#F59E0B" }]}>Re-entry Authorised</Text>
-            <Text style={[styles.modalSub, { marginBottom: 8 }]}>This attendee was granted permission to leave and return.</Text>
+             <View style={{ backgroundColor: "rgba(245,158,11,0.15)", borderRadius: 50, padding: 16, marginBottom: 16 }}>
+               <Ionicons name="refresh-circle" size={48} color="#F59E0B" />
+             </View>
+             <Text style={[styles.modalTitle, { color: "#F59E0B" }]}>Re-entry Authorised</Text>
+             <Text style={[styles.modalSub, { marginBottom: 8 }]}>This attendee was granted permission to leave and return.</Text>
+             {reentryInfo?.buyerPhotoUrl && (
+               <View style={{ alignItems: "center", marginBottom: 16 }}>
+                 <Image source={{ uri: reentryInfo.buyerPhotoUrl }} style={{ width: 260, height: 260, borderRadius: 0, borderWidth: 3, borderColor: "#F59E0B" }} resizeMode="cover" />
+               </View>
+             )}
             <View style={{ backgroundColor: "#1a1a1a", borderRadius: 10, padding: 14, width: "100%", marginBottom: 20, gap: 8 }}>
               <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                 <Text style={{ color: "#888", fontSize: 13 }}>Attendee</Text>
@@ -412,8 +418,8 @@ const styles = StyleSheet.create({
   modalTitle: { color: "#FFF", fontSize: 22, fontWeight: "bold", textAlign: "center", marginBottom: 8 },
   modalSub: { color: "#888", fontSize: 14, textAlign: "center", marginBottom: 20 },
   photoWrap: { alignItems: "center", marginBottom: 20 },
-  photo: { width: 180, height: 180, borderRadius: 90, borderWidth: 3, borderColor: "#00D4FF", marginBottom: 12 },
-  photoPlace: { width: 180, height: 180, borderRadius: 90, backgroundColor: "#333", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#666", marginBottom: 12 },
+  photo: { width: 260, height: 260, borderRadius: 0, borderWidth: 3, borderColor: "#00D4FF", marginBottom: 12 },
+  photoPlace: { width: 260, height: 260, borderRadius: 0, backgroundColor: "#333", alignItems: "center", justifyContent: "center", borderWidth: 3, borderColor: "#666", marginBottom: 12 },
   nameText: { color: "#FFF", fontSize: 18, fontWeight: "bold", marginBottom: 4 },
   labelText: { color: "#888", fontSize: 12 },
   questionText: { color: "#FFD700", fontSize: 16, fontWeight: "600", textAlign: "center", marginBottom: 20 },
