@@ -534,6 +534,7 @@ private static async createSingleTicket(
             success: true,
             isReentry: true,
             buyerName: t.buyerName,
+            buyerPhotoUrl: t.buyerPhotoUrl,
             reentryGrantedByName: t.reentryPass.grantedByName,
             reentryGrantedAt: t.reentryPass.grantedAt,
             ticketRef: t.ticketRef,
