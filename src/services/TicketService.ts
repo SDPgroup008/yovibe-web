@@ -11,6 +11,7 @@ import type { Event } from "../models/Event"
 import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
 import { deriveTicketRef } from "../utils/ticketRef"
+import { generateQRPayload, parseAndVerifyQR } from "./TicketQRService"
 
 const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
@@ -315,7 +316,7 @@ private static async createSingleTicket(
 
     console.log("--- Step 6: Creating ticket object ---")
     const photoUploadToken = uuidv4()
-    const ticketId = `ticket_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    const ticketId = uuidv4()
     const isTableEntry = !!tableGroupId
     const ticketRef = deriveTicketRef(ticketId, isTableEntry)
     
@@ -450,20 +451,29 @@ private static async createSingleTicket(
       console.log("🔍 TICKET VALIDATION FLOW STARTED")
       console.log("========================================")
       console.log("📋 TicketService.validateTicket: Starting ticket validation")
-      console.log("📋 Ticket ID:", ticketId)
+      console.log("📋 Ticket QR data:", ticketId)
 
-      // Parse ticket data from QR code
+      // Step 0: Parse and cryptographically verify the QR payload
+      // Rejects forged QR codes without a DB round-trip
       let qrCodeValue = ticketId
       let scanningEventId: string | undefined
-      
-      try {
-        const ticketData = JSON.parse(ticketId)
-        qrCodeValue = (ticketData.id || ticketId).trim()
-        scanningEventId = ticketData.eventId
-        console.log("📋 Parsed QR JSON - ID:", qrCodeValue, "Event:", scanningEventId)
-      } catch {
-        qrCodeValue = ticketId.trim()
-        console.log("📋 Raw QR code string:", qrCodeValue)
+
+      const parsed = parseAndVerifyQR(ticketId)
+      if (parsed) {
+        qrCodeValue = parsed.ticketId
+        console.log("📋 QR verified cryptographically — ticketId:", qrCodeValue)
+      } else {
+        // Fallback: raw string lookup (legacy tickets without HMAC)
+        console.log("📋 QR not in signed URL format — trying legacy fallback...")
+        try {
+          const ticketData = JSON.parse(ticketId)
+          qrCodeValue = (ticketData.id || ticketId).trim()
+          scanningEventId = ticketData.eventId
+          console.log("📋 Parsed legacy JSON QR — ID:", qrCodeValue, "Event:", scanningEventId)
+        } catch {
+          qrCodeValue = ticketId.trim()
+          console.log("📋 Raw QR code string:", qrCodeValue)
+        }
       }
 
       if (!qrCodeValue) {
@@ -950,45 +960,22 @@ console.error("❌ Error details:", updateError.details)
     }
   }
 
-  private static generateHMAC(data: string, secret: string): string {
-    let hash = 0
-    for (let i = 0; i < data.length; i++) {
-      const char = data.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash = hash & hash
-    }
-    return `${secret}_${hash.toString(16)}_${Date.now()}`
-  }
-
   private static async generateSecureQRCode(
     eventId: string,
     eventStartTime: Date
   ): Promise<{ qrCode: string; qrCodeDataUrl: string; qrSignature: string; expiresAt: Date }> {
-    const timestamp = Date.now()
-    const uniqueId = `YOVIBE_${timestamp}_${Math.random().toString(36).substr(2, 9)}`
-    
+    const uniqueId = uuidv4()
     const expiresAt = new Date(eventStartTime.getTime() + 24 * 60 * 60 * 1000)
-    
-    const qrData = JSON.stringify({
-      id: uniqueId,
-      eventId: eventId,
-      timestamp: timestamp,
-      expires: expiresAt.getTime()
-    })
-    
-    const qrSignature = this.generateHMAC(qrData, "YOVIBE_SECURE")
-    
-    const qrCodeDataUrl = await QRCode.toDataURL(qrData, {
+    const { url, signature } = generateQRPayload(uniqueId)
+
+    const qrCodeDataUrl = await QRCode.toDataURL(url, {
       width: 300,
-      margin: 2,
-      color: {
-        dark: "#000000",
-        light: "#FFFFFF"
-      },
-      errorCorrectionLevel: "H"
+      margin: 4,
+      color: { dark: "#000000", light: "#FFFFFF" },
+      errorCorrectionLevel: "H",
     })
-    
-    return { qrCode: uniqueId, qrCodeDataUrl, qrSignature, expiresAt }
+
+    return { qrCode: uniqueId, qrCodeDataUrl, qrSignature: signature, expiresAt }
   }
 
   private static async logValidation(validation: TicketValidation): Promise<void> {

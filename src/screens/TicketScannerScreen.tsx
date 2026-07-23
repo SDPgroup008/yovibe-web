@@ -130,9 +130,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
   const onQrDetected = useCallback((decodedText: string) => {
     stopCamera()
     setScanning(false)
-    let ticketId = decodedText
-    try { const p = JSON.parse(decodedText); ticketId = p.id || decodedText } catch {}
-    handleValidateTicket(ticketId)
+    handleValidateTicket(decodedText)
   }, [stopCamera])
 
   const startScanner = useCallback(async () => {
