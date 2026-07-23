@@ -1757,6 +1757,9 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
           pesapalTransactionId: row.pesapal_transaction_id || row.pesapalTransactionId,
           pesapalConfirmationCode: row.pesapal_confirmation_code || row.pesapalConfirmationCode,
           pawapayDepositId: row.pawapay_deposit_id || row.pawapayDepositId,
+          seatNumber: row.seat_number ?? row.seatNumber ?? undefined,
+          tableGroupId: row.table_group_id || row.tableGroupId,
+          tableTotalAmount: row.table_total_amount ?? row.tableTotalAmount ?? 0,
           purchase_date: row.purchase_date,
           created_at: row.created_at,
         };

@@ -404,7 +404,9 @@ const TicketPurchaseScreen: React.FC = () => {
         user?.id ?? null,
         payerEmail,
         deliveryEmails,
-        isTableEntry ? tableSeats : perPersonSeats,
+        isTableEntry
+          ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
+          : perPersonSeats,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
