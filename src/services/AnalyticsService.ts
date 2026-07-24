@@ -1,5 +1,7 @@
 import { supabase } from '../config/supabase';
 
+const devLog = (...args: any[]) => __DEV__ && console.log('[Analytics]', ...args);
+
 export interface SessionData {
   id?: string;
   userId: string | null; // null for unauthenticated users
@@ -562,16 +564,27 @@ class AnalyticsService {
     try {
       const startOfMonth = new Date(year, month, 1);
       const endOfMonth = new Date(year, month + 1, 0);
-      const weeksInMonth = Math.ceil((endOfMonth.getDate() + startOfMonth.getDay()) / 7);
+      const daysInMonth = endOfMonth.getDate();
+      const weeksInMonth = Math.ceil((daysInMonth + startOfMonth.getDay()) / 7);
 
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .select('*')
-        .gte('start_time', startOfMonth.toISOString())
-        .lte('start_time', endOfMonth.toISOString())
-        .order('start_time', { ascending: true });
-
-      if (error) throw error;
+      const allData: { start_time: string; unique_visitor_id: string }[] = [];
+      const PAGE = 1000;
+      let offset = 0;
+      let fetched = 0;
+      do {
+        const { data, error } = await supabase
+          .from('analytics_sessions')
+          .select('start_time, unique_visitor_id')
+          .gte('start_time', startOfMonth.toISOString())
+          .lte('start_time', endOfMonth.toISOString())
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData.push(...data);
+        fetched = data.length;
+        offset += PAGE;
+      } while (fetched === PAGE);
+      devLog('getWeeklyVisitorsForMonth: fetched', allData.length, `sessions for ${year}/${month + 1}`);
       
       // Initialize weeks
       const weeklyData = Array.from({ length: weeksInMonth }, (_, week) => ({
@@ -597,7 +610,7 @@ class AnalyticsService {
 
       const visitorsThisMonth = new Set<string>();
 
-      (data || []).forEach((session) => {
+      (allData || []).forEach((session) => {
         const sessionDate = new Date(session.start_time);
         const dayOfMonth = sessionDate.getDate();
         const week = Math.floor((dayOfMonth + startOfMonth.getDay() - 1) / 7);
@@ -635,14 +648,25 @@ class AnalyticsService {
       startOfYear.setHours(0, 0, 0, 0);
       const endOfYear = new Date(year + 1, 0, 1);
 
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .select('*')
-        .gte('start_time', startOfYear.toISOString())
-        .lt('start_time', endOfYear.toISOString())
-        .order('start_time', { ascending: true });
-
-      if (error) throw error;
+      // Paginate through all rows (PostgREST caps at 1000 per request)
+      const allData: { start_time: string; unique_visitor_id: string }[] = [];
+      const PAGE = 1000;
+      let offset = 0;
+      let fetched = 0;
+      do {
+        const { data, error } = await supabase
+          .from('analytics_sessions')
+          .select('start_time, unique_visitor_id')
+          .gte('start_time', startOfYear.toISOString())
+          .lt('start_time', endOfYear.toISOString())
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData.push(...data);
+        fetched = data.length;
+        offset += PAGE;
+      } while (fetched === PAGE);
+      devLog('getMonthlyVisitorsForYear: fetched', allData.length, 'sessions for', year);
 
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       const monthlyData = Array.from({ length: 12 }, (_, month) => ({
@@ -656,7 +680,8 @@ class AnalyticsService {
       const { data: previousVisitors, error: prevError } = await supabase
         .from('analytics_sessions')
         .select('unique_visitor_id')
-        .lt('start_time', startOfYear.toISOString());
+        .lt('start_time', startOfYear.toISOString())
+        .limit(50000);
 
       if (prevError) throw prevError;
 
@@ -667,7 +692,7 @@ class AnalyticsService {
 
       const visitorsThisYear = new Set<string>();
 
-      (data || []).forEach((session) => {
+      (allData || []).forEach((session) => {
         const month = new Date(session.start_time).getMonth();
         monthlyData[month].sessions++;
 
@@ -682,6 +707,7 @@ class AnalyticsService {
         }
       });
 
+      devLog('getMonthlyVisitorsForYear: monthly totals', monthlyData.map(m => `${m.monthName}:${m.sessions}`).join(', '));
       return monthlyData;
     } catch (error) {
       console.error('Analytics: Error getting monthly visitors for year', error);
@@ -704,14 +730,24 @@ class AnalyticsService {
       startOfDecade.setHours(0, 0, 0, 0);
       const endOfDecade = new Date(decadeStartYear + 10, 0, 1);
 
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .select('*')
-        .gte('start_time', startOfDecade.toISOString())
-        .lt('start_time', endOfDecade.toISOString())
-        .order('start_time', { ascending: true });
-
-      if (error) throw error;
+      const allData: { start_time: string; unique_visitor_id: string }[] = [];
+      const PAGE = 1000;
+      let offset = 0;
+      let fetched = 0;
+      do {
+        const { data, error } = await supabase
+          .from('analytics_sessions')
+          .select('start_time, unique_visitor_id')
+          .gte('start_time', startOfDecade.toISOString())
+          .lt('start_time', endOfDecade.toISOString())
+          .range(offset, offset + PAGE - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allData.push(...data);
+        fetched = data.length;
+        offset += PAGE;
+      } while (fetched === PAGE);
+      devLog('getYearlyVisitorsForDecade: fetched', allData.length, 'sessions for decade', decadeStartYear);
 
       const yearlyData = Array.from({ length: 10 }, (_, i) => {
         const year = decadeStartYear + i;
@@ -738,7 +774,7 @@ class AnalyticsService {
 
       const visitorsThisDecade = new Set<string>();
 
-      (data || []).forEach((session) => {
+      (allData || []).forEach((session) => {
         const year = new Date(session.start_time).getFullYear();
         const yearIndex = year - decadeStartYear;
         if (yearIndex < 0 || yearIndex > 9) return;

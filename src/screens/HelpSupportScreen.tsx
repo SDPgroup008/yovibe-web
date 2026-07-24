@@ -111,7 +111,6 @@ export default function HelpSupportScreen() {
             <ContactOption icon="mail" title="Email Support" desc="Send us an email with your inquiry" action={openEmailClient} />
             <ContactOption icon="call" title="Call Support" desc="Speak directly with our support team" action={openPhone} />
             <ContactOption icon="chatbubbles" title="Live WhatsApp Chat" desc="Chat with support team in real-time" action={openWhatsApp} />
-            <ContactOption icon="help-circle" title="FAQ & Docs" desc="Browse frequently asked questions" action={() => Alert.alert("Help Center", "Visit our full help documentation")} />
             <TouchableOpacity style={styles.sendMessageButton} onPress={() => setShowContactForm(true)}>
               <Ionicons name="mail" size={20} color="#FFFFFF" /><Text style={styles.sendMessageButtonText}>Send Message</Text>
             </TouchableOpacity>
