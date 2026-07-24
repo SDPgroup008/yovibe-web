@@ -155,7 +155,7 @@ export default function AdminWithdrawalsScreen() {
       setWithdrawLoading(true)
       try {
         const intPhone = toInternationalPhone(phone)
-        const payoutResult = await PawaPayService.initiatePayout(netAfterFee, "UGX", intPhone, provider)
+        const payoutResult = await PawaPayService.initiatePayout(Math.round(netAfterFee * 100) / 100, "UGX", intPhone, provider)
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
 
         // Mark tickets for all selected events

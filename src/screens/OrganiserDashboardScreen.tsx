@@ -633,7 +633,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       setAdminWithdrawLoading(true)
       try {
         const intPhone = toInternationalPhone(adminPhone)
-        const payoutResult = await PawaPayService.initiatePayout(adminNetAfterFee, "UGX", intPhone, payoutProvider)
+        const payoutResult = await PawaPayService.initiatePayout(Math.round(adminNetAfterFee * 100) / 100, "UGX", intPhone, payoutProvider)
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
         Alert.alert("✅ Payout Submitted!", `UGX ${adminNetAfterFee.toLocaleString()} sent to ${intPhone}\nPayout ID: ${payoutResult.payoutId}`)
         setShowAdminWithdrawModal(false)
@@ -895,7 +895,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     try {
       const internationalPhone = toInternationalPhone(payoutPhone)
       const payoutFee = calculatePayoutFee(totalAmount, payoutProvider)
-      const netPayoutAmount = totalAmount - payoutFee
+      const netPayoutAmount = Math.round((totalAmount - payoutFee) * 100) / 100
       console.log(`[PayoutFee] provider=${payoutProvider} gross=${totalAmount} fee=${payoutFee} net=${netPayoutAmount}`)
 
       console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", internationalPhone)

@@ -243,7 +243,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
           const [s, stats] = await Promise.all([
             TokenService.getTokenAnalyticsSummaryWithAuth(),
             TokenService.getDailyTokenStatsWithAuth(7),
-          ]).catch(() => [null, []]);
+          ]).catch(() => [null, []] as [TokenAnalyticsSummary | null, DailyTokenStats[]]);
           setTokenSummary(s);
           setDailyTokenStats(stats);
           cacheSet(tokenKey, { summary: s, stats });
