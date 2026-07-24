@@ -54,6 +54,8 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminStrandedPurchases': () => navigate('/profile/admin/stranded-purchases'),
         'AdminRefunds': () => navigate('/profile/admin/refunds'),
         'AdminWithdrawals': () => navigate('/profile/admin/withdrawals'),
+        'Settings': () => navigate('/profile/settings'),
+        'HelpSupport': () => navigate('/profile/help'),
         'Auth': () => navigate('/login'),
         'Login': () => navigate('/login'),
         'SignUp': () => navigate('/signup'),

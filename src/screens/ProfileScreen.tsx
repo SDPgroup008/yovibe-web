@@ -181,6 +181,14 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToSettings = () => {
+    navigation.navigate("Settings");
+  };
+
+  const navigateToHelpSupport = () => {
+    navigation.navigate("HelpSupport");
+  };
+
   const navigateToAdminOwnershipRequests = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminOwnershipRequests");
@@ -309,14 +317,6 @@ const ProfileScreen: React.FC = () => {
     navigation.navigate("Notification");
   };
 
-  const openSettings = () => {
-    Alert.alert("Settings", "Settings functionality coming soon");
-  };
-
-  const openHelpSupport = () => {
-    Alert.alert("Help & Support", "For help or support, please contact support@yovibe.com");
-  };
-
   return (
     <View style={styles.container}>
       <View style={styles.profileHeader}>
@@ -432,23 +432,24 @@ const ProfileScreen: React.FC = () => {
           </>
         )}
 
+        <TouchableOpacity style={styles.menuItem} onPress={navigateToSettings}>
+          <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
+          <Text style={styles.menuText}>Settings</Text>
+          <Ionicons name="chevron-forward" size={24} color="#666666" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.menuItem} onPress={navigateToHelpSupport}>
+          <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
+          <Text style={styles.menuText}>Help & Support</Text>
+          <Ionicons name="chevron-forward" size={24} color="#666666" />
+        </TouchableOpacity>
+
         <TouchableOpacity style={styles.menuItem} onPress={openNotifications}>
           <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
           <Text style={styles.menuText}>Notifications</Text>
           <Ionicons name="chevron-forward" size={24} color="#666666" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.menuItem} onPress={openSettings}>
-          <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={openHelpSupport}>
-          <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
       </ScrollView>
 
       {user ? (
