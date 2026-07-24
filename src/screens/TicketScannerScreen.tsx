@@ -306,6 +306,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
                   <Text style={styles.historyRef}>{scan.ticketRef}</Text>
                   <Text style={styles.historyName}>{scan.name}</Text>
                   <Text style={styles.historyDetail}>{scan.feeType}{scan.tableNumber && scan.tableNumber !== "—" ? ` · Table ${scan.tableNumber}` : scan.seatNumber && scan.seatNumber !== "—" ? ` · Seat ${scan.seatNumber}` : ""}</Text>
+                  {scan.status === "Invalid" && scan.reason ? <Text style={styles.historyInvalidReason}>{scan.reason}</Text> : null}
                 </View>
                 <Text style={styles.historyTime}>{scan.time}</Text>
                 <View style={[styles.historyStatus, scan.status === "Valid" ? styles.historyValid : styles.historyInvalid]}>
@@ -409,6 +410,7 @@ const styles = StyleSheet.create({
   historyRef: { color: "#FFF", fontSize: 13, fontWeight: "600" },
   historyName: { color: "#AAA", fontSize: 12, marginTop: 1 },
   historyDetail: { color: "#888", fontSize: 11, marginTop: 1 },
+  historyInvalidReason: { color: "#FF4444", fontSize: 12, fontWeight: "700", marginTop: 4, textTransform: "capitalize" },
   historyTime: { color: "#666", fontSize: 11, marginRight: 8 },
   historyStatus: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 4 },
   historyValid: { backgroundColor: "#1B5E20" }, historyInvalid: { backgroundColor: "#B71C1C" },

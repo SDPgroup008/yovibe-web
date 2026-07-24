@@ -1,15 +1,36 @@
 /**
  * Lazily-loaded TensorFlow.js ML model for vibe analysis.
+ * TensorFlow.js is loaded from CDN (not bundled) to avoid Metro/webpack chunk issues.
  * Only imported by AddVibeScreen — never bundled on app startup.
  */
 
-type TFFramework = typeof import('@tensorflow/tfjs')
 type ProgressCallback = (percent: number) => void
 type LoadState = 'idle' | 'loading' | 'ready' | 'error'
 
+/** Load TensorFlow.js from CDN script tag */
+function loadTFJSFromCDN(onProgress?: (frac: number) => void): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const existing = document.getElementById('tfjs-script')
+    if (existing) {
+      resolve((window as any).tf)
+      return
+    }
+    const script = document.createElement('script')
+    script.id = 'tfjs-script'
+    script.src = 'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js'
+    script.async = true
+    script.onload = () => {
+      onProgress?.(1)
+      resolve((window as any).tf)
+    }
+    script.onerror = () => reject(new Error('Failed to load TensorFlow.js from CDN'))
+    document.head.appendChild(script)
+  })
+}
+
 class VibeMLService {
-  private tf: TFFramework | null = null
-  private model: import('@tensorflow/tfjs').LayersModel | null = null
+  private tf: any = null
+  private model: any = null
   private loadState: LoadState = 'idle'
   private loadError: string | null = null
   private loadPromise: Promise<void> | null = null
@@ -19,7 +40,7 @@ class VibeMLService {
   get modelReady(): boolean { return this.loadState === 'ready' && this.model !== null }
 
   /**
-   * Dynamically import TensorFlow.js and load the ML model.
+   * Dynamically import TensorFlow.js from CDN and load the ML model.
    * @param onProgress — called with 0-100 percentage during loading.
    */
   async loadModel(onProgress?: ProgressCallback): Promise<void> {
@@ -67,7 +88,7 @@ class VibeMLService {
             .toFloat()
             .expandDims(0)
 
-          const prediction = this.model!.predict(tensor) as import('@tensorflow/tfjs').Tensor
+          const prediction = this.model.predict(tensor) as any
           const values = await prediction.data()
 
           tensor.dispose()
@@ -88,15 +109,15 @@ class VibeMLService {
 
   private async doLoad(onProgress?: ProgressCallback): Promise<void> {
     onProgress?.(0)
-    console.log('[VibeMLService] Dynamically importing TensorFlow.js...')
+    console.log('[VibeMLService] Loading TensorFlow.js from CDN...')
 
     try {
-      const tf = await import(/* webpackChunkName: "tfjs" */ '@tensorflow/tfjs')
+      const tf = await loadTFJSFromCDN()
       this.tf = tf
       onProgress?.(5)
-      console.log('[VibeMLService] TensorFlow.js loaded, backend:', tf.getBackend())
+      console.log('[VibeMLService] TensorFlow.js loaded, backend:', this.tf?.getBackend())
 
-      await tf.ready()
+      await this.tf.ready()
       onProgress?.(10)
       console.log('[VibeMLService] tf.ready() done')
 
@@ -110,7 +131,6 @@ class VibeMLService {
       const weightFiles = modelJson.weightsManifest?.[0]?.paths || []
       console.log('[VibeMLService] model.json OK, weights:', weightFiles.length)
 
-      // Check each weight file
       for (const wf of weightFiles) {
         const fr = await fetch(`/vibe_model_tfjs/${wf}`, { method: 'HEAD' })
         if (!fr.ok) console.warn(`[VibeMLService] Weight not accessible: ${wf}`)
@@ -121,14 +141,14 @@ class VibeMLService {
       const timeoutMs = 60000
 
       const loadPromise = tf.loadLayersModel(modelUrl, {
-        onProgress: (fraction) => {
+        onProgress: (fraction: number) => {
           const pct = 10 + Math.round(fraction * 80)
           onProgress?.(pct)
           console.log(`[VibeMLService] Load progress: ${pct}%`)
         },
       })
 
-      const timeoutPromise = new Promise<import('@tensorflow/tfjs').LayersModel>((_, reject) =>
+      const timeoutPromise = new Promise<any>((_, reject) =>
         setTimeout(() => reject(new Error('Model loading timeout after 60s')), timeoutMs)
       )
 

@@ -48,6 +48,7 @@ const AddVibeScreen: React.FC = () => {
   const [modelLoading, setModelLoading] = useState(false)
   const [modelProgress, setModelProgress] = useState(0)
   const [modelError, setModelError] = useState<string | null>(null)
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false)
 
   // hidden file input ref (used to open camera on mobile)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
@@ -270,17 +271,18 @@ const AddVibeScreen: React.FC = () => {
          analysisData: analysisResult.analysisData,
        }
 
-       await SupabaseService.addVibeImage(vibeImageData)
+        await SupabaseService.addVibeImage(vibeImageData)
 
-      Alert.alert("Success", "Vibe image uploaded successfully!", [
-        {
-          text: "OK",
-          onPress: () => {
-            navigation.goBack()
-          },
-        },
-      ])
-    } catch (error) {
+        setShowSuccessBanner(true)
+        setImage(null)
+        setAnalysisResult(null)
+        setAnalyzing(false)
+        clearPhoto()
+        setTimeout(() => {
+          setShowSuccessBanner(false)
+          navigation.goBack()
+        }, 2000)
+      } catch (error) {
       console.error("Error uploading vibe:", error)
       Alert.alert("Error", "Failed to upload vibe image")
     } finally {
@@ -342,6 +344,14 @@ const AddVibeScreen: React.FC = () => {
           </View>
         <Text style={styles.headerSubtitle}>{venueName}</Text>
         <Text style={styles.headerDescription}>Capture the current atmosphere and let our AI analyze the vibe!</Text>
+
+        {/* Success Banner */}
+        {showSuccessBanner && (
+          <View style={styles.successBanner}>
+            <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
+            <Text style={styles.successBannerText}>Vibe successfully updated!</Text>
+          </View>
+        )}
 
         {/* Model loading progress */}
         {modelLoading && (
@@ -623,6 +633,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     marginTop: 10,
+  },
+  successBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(76,175,80,0.12)",
+    borderWidth: 1,
+    borderColor: "#4CAF50",
+    borderRadius: 12,
+    padding: 14,
+    marginTop: 12,
+  },
+  successBannerText: {
+    color: "#4CAF50",
+    fontSize: 14,
+    fontWeight: "700",
   },
   imageSection: {
     padding: 16,

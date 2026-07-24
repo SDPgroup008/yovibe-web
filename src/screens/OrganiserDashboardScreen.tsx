@@ -227,7 +227,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [allowLatePurchases, setAllowLatePurchases] = useState(true)
   const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
-  const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; tableNumber: string; status: string }>>([])
+  const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; tableNumber: string; status: string; reason: string }>>([])
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
@@ -528,6 +528,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           seatNumber: ticket.seat_number != null ? String(ticket.seat_number) : "—",
           tableNumber: ticket.table_number != null ? String(ticket.table_number) : "—",
           status: v.status === "granted" ? "Valid" : "Invalid",
+          reason: v.reason || (v.status === "granted" ? "" : "Validation failed"),
         }
       }))
     } catch (error) { console.error("OrganiserDashboardScreen: Error fetching scan logs:", error) }
@@ -1457,6 +1458,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                       <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
                       <Text style={styles.scanLogName}>{log.name}</Text>
                       <Text style={styles.scanLogDetail}>{log.feeType}{log.tableNumber !== "—" ? ` · Table ${log.tableNumber}` : log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
+                      {log.status === "Invalid" && log.reason ? <Text style={styles.scanLogInvalidReason}>{log.reason}</Text> : null}
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={styles.scanLogTime}>{log.time}</Text>
@@ -1807,6 +1809,7 @@ const styles = StyleSheet.create({
   scanLogDetail: { color: "#888", fontSize: 11, marginTop: 1 },
   scanLogTime: { color: "#666", fontSize: 11 },
   scanLogStatus: { fontSize: 11, fontWeight: "bold", marginTop: 2 },
+  scanLogInvalidReason: { color: "#FF4444", fontSize: 12, fontWeight: "700", marginTop: 4, textTransform: "capitalize" },
   scanLogValid: { color: "#4CAF50" }, scanLogInvalid: { color: "#FF6B6B" },
   eligibleCard: { backgroundColor: "#1a1a1a", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "rgba(0,212,255,0.2)" },
   eligibleRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 8 },
