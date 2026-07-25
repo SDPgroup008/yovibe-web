@@ -1,11 +1,17 @@
 import type { PaymentIntent } from "../models/Ticket"
 
 // PesaPal Configuration
-// NOTE: Consumer keys are NOT used in frontend - they are only in Netlify Functions
+// NOTE: Actual API calls go through Netlify Functions which read credentials from environment variables.
+// The values below serve as documentation defaults. Override via environment variables deployed to Netlify:
+//   PESAPAL_CONSUMER_KEY  — Live consumer key from PesaPal
+//   PESAPAL_CONSUMER_SECRET — Live consumer secret from PesaPal
+//   PESAPAL_API_URL    — e.g. https://pay.pesapal.com/v3/api (default: production)
+//   PESAPAL_BASE_URL   — e.g. https://pay.pesapal.com (default: production)
+//   PESAPAL_NOTIFICATION_ID — Notification ID from PesaPal dashboard
 const PESAPAL_CONFIG = {
-  baseUrl: "https://cybqa.pesapal.com",
-  apiUrl: "https://cybqa.pesapal.com/api",
-  sandbox: true,
+  baseUrl: "https://pay.pesapal.com",
+  apiUrl: "https://pay.pesapal.com/v3/api",
+  sandbox: false,
 }
 
 // Generate unique order ID
