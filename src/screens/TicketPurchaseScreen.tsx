@@ -205,6 +205,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [bankAccountName, setBankAccountName] = useState("")
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
+  const [paymentTrackingId, setPaymentTrackingId] = useState<string | null>(null)
   const [pawaPayDepositId, setPawaPayDepositId] = useState<string | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
@@ -313,7 +314,7 @@ const TicketPurchaseScreen: React.FC = () => {
     setStatusMessage("Complete payment in the PesaPal window. We are verifying it automatically.")
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const verification = await PesaPalService.verifyPayment(merchantReference)
+        const verification = await PesaPalService.verifyPayment(merchantReference, paymentTrackingId ?? undefined)
         if (verification.status === "completed") {
           setCheckingPayment(false)
           setPurchaseStatus("success")
@@ -714,7 +715,7 @@ const handleInstallmentPurchase = async () => {
     setCheckingPayment(true)
     setStatusMessage("Complete the installment payment in the PesaPal window. Verification is automatic.")
     for (let attempt = 0; attempt < 60; attempt++) {
-      const verification = await PesaPalService.verifyPayment(merchantReference)
+      const verification = await PesaPalService.verifyPayment(merchantReference, paymentTrackingId ?? undefined)
       if (verification.status === "completed") {
         await InstallmentService.onInstallmentPaid(planId, 0, verification.transactionId || merchantReference, "credit_card")
         setCheckingPayment(false)
@@ -882,6 +883,7 @@ const handleInstallmentPurchase = async () => {
         setPaymentOrderId(orderId)
         setPaymentStatus("pending")
         void pollPesapalStatus(orderId)
+        setPaymentTrackingId(orderResult.trackingId)
       }
     } catch (error: any) {
       console.error("Purchase error:", error)

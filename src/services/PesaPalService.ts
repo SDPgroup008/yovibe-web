@@ -90,7 +90,7 @@ export class PesaPalService {
     buyerName?: string,
     buyerFirstName?: string,
     buyerLastName?: string,
-  ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string }> {
+  ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string; trackingId?: string }> {
     console.log("========================================")
     console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)")
     console.log("========================================")
@@ -137,11 +137,13 @@ export class PesaPalService {
 
       if (data.iframeUrl) {
         console.log("✅ Checkout initialized successfully via Netlify Functions")
+        console.log("   - Tracking ID:", data.trackingId || "Not provided")
         console.log("========================================")
         return {
           iframeUrl: data.iframeUrl,
           orderId: data.orderId,
           merchantReference: data.merchantReference,
+          trackingId: data.trackingId,
         }
       } else {
         console.log("⚠️ No iframe URL in response, using fallback")
@@ -159,7 +161,7 @@ export class PesaPalService {
   /**
    * Verify payment status with PesaPal (via Netlify Functions)
    */
-  static async verifyPayment(orderId: string): Promise<{
+  static async verifyPayment(orderId: string, trackingId?: string): Promise<{
     status: "completed" | "failed" | "pending"
     transactionId?: string
     amount?: number
@@ -169,12 +171,14 @@ export class PesaPalService {
     console.log("🔍 PESAPAL PAYMENT VERIFICATION (Netlify Functions)")
     console.log("========================================")
     console.log("📋 PesaPalService.verifyPayment: Checking payment status")
-    console.log("   - Order ID:", orderId)
+    console.log("   - Merchant Reference:", orderId)
+    console.log("   - Order Tracking ID:", trackingId || "Not provided")
 
     try {
+      const idParam = encodeURIComponent(trackingId || orderId)
       console.log("📤 Querying Netlify Function for payment status...")
 
-      const response = await fetch(`/.netlify/functions/verify-pesapal-payment?orderId=${encodeURIComponent(orderId)}`)
+      const response = await fetch(`/.netlify/functions/verify-pesapal-payment?orderId=${idParam}`)
       const data = await response.json()
 
       if (!response.ok) {
@@ -314,7 +318,7 @@ export class PesaPalService {
     buyerName?: string,
     buyerFirstName?: string,
     buyerLastName?: string,
-  ): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> {
+  ): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; trackingId?: string; error?: string }> {
     console.log("========================================")
     console.log("📝 PESAPAL ORDER SUBMISSION")
     console.log("========================================")
@@ -346,6 +350,7 @@ export class PesaPalService {
         success: true,
         paymentUrl: checkout.iframeUrl,
         orderId: checkout.orderId,
+        trackingId: checkout.trackingId,
       }
     } catch (error) {
       console.error("❌ Error submitting order:", error)
