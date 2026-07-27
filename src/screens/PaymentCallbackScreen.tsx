@@ -14,19 +14,21 @@ const PaymentCallbackScreen: React.FC = () => {
       try {
         // Get URL parameters from PesaPal callback
         const urlParams = new URLSearchParams(window.location.search)
-        const orderId = urlParams.get("pesapal_merchant_reference") || urlParams.get("order_id")
-        const status = urlParams.get("pesapal_response_data")
+        const orderId = urlParams.get("OrderMerchantReference") || urlParams.get("order_id")
+        const trackingId = urlParams.get("OrderTrackingId")
+        const statusFromUrl = urlParams.get("pesapal_response_data")
 
         console.log("💳 Payment callback received:")
-        console.log("   - Order ID:", orderId)
-        console.log("   - Status:", status)
+        console.log("   - Merchant Reference:", orderId)
+        console.log("   - Order Tracking ID:", trackingId)
+        console.log("   - Status from URL:", statusFromUrl)
 
         if (!orderId) {
           throw new Error("No order ID found in callback")
         }
 
-        // Verify payment with PesaPal
-        const verification = await PesaPalService.verifyPayment(orderId)
+        // Verify payment with PesaPal using both merchant reference and tracking ID
+        const verification = await PesaPalService.verifyPayment(orderId, trackingId || undefined)
 
         if (verification.status === "completed") {
           setStatus("success")

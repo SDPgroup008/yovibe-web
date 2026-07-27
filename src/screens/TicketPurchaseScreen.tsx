@@ -205,7 +205,6 @@ const TicketPurchaseScreen: React.FC = () => {
   const [bankAccountName, setBankAccountName] = useState("")
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
-  const [paymentTrackingId, setPaymentTrackingId] = useState<string | null>(null)
   const [pawaPayDepositId, setPawaPayDepositId] = useState<string | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
@@ -308,13 +307,13 @@ const TicketPurchaseScreen: React.FC = () => {
   // PesaPal has no trusted client-side "payment complete" signal. Verify the
   // merchant reference server-side until the processor reports COMPLETED.
   // Ticket creation is deliberately gated on that verified result.
-  const pollPesapalStatus = async (merchantReference: string) => {
+  const pollPesapalStatus = async (merchantReference: string, trackingId?: string) => {
     const maxAttempts = 60
     setCheckingPayment(true)
     setStatusMessage("Complete payment in the PesaPal window. We are verifying it automatically.")
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       try {
-        const verification = await PesaPalService.verifyPayment(merchantReference, paymentTrackingId ?? undefined)
+        const verification = await PesaPalService.verifyPayment(merchantReference, trackingId)
         if (verification.status === "completed") {
           setCheckingPayment(false)
           setPurchaseStatus("success")
@@ -663,7 +662,7 @@ const handleInstallmentPurchase = async () => {
         }
         setPaymentOrderId(result.orderId || null)
         setPaymentStatus("pending")
-        void pollPesapalInstallmentStatus(result.planId, result.orderId || "")
+        void pollPesapalInstallmentStatus(result.planId, result.orderId || "", result.trackingId)
       }
     } catch (error: any) {
       setPurchaseStatus("error")
@@ -710,12 +709,12 @@ const handleInstallmentPurchase = async () => {
     return false
   }
 
-  const pollPesapalInstallmentStatus = async (planId: string, merchantReference: string) => {
+  const pollPesapalInstallmentStatus = async (planId: string, merchantReference: string, trackingId?: string) => {
     if (!merchantReference) return
     setCheckingPayment(true)
     setStatusMessage("Complete the installment payment in the PesaPal window. Verification is automatic.")
     for (let attempt = 0; attempt < 60; attempt++) {
-      const verification = await PesaPalService.verifyPayment(merchantReference, paymentTrackingId ?? undefined)
+      const verification = await PesaPalService.verifyPayment(merchantReference, trackingId)
       if (verification.status === "completed") {
         await InstallmentService.onInstallmentPaid(planId, 0, verification.transactionId || merchantReference, "credit_card")
         setCheckingPayment(false)
@@ -882,8 +881,7 @@ const handleInstallmentPurchase = async () => {
 
         setPaymentOrderId(orderId)
         setPaymentStatus("pending")
-        void pollPesapalStatus(orderId)
-        setPaymentTrackingId(orderResult.trackingId)
+        void pollPesapalStatus(orderId, orderResult.trackingId)
       }
     } catch (error: any) {
       console.error("Purchase error:", error)
