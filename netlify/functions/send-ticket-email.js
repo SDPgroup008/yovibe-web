@@ -182,6 +182,26 @@ function buildTicketEmailHtml({
       </div>
       `
     : "";
+
+  // View in App deep link button
+  const viewInAppLink = `https://yovibe.net/t/${escapeHtml(ticketRef)}`;
+  const viewInAppButton = `
+    <div style="text-align:center; margin:20px 0;">
+      <a href="${viewInAppLink}" style="display:inline-block; padding:14px 32px; background:${colors.accent}; color:#000; text-decoration:none; border-radius:10px; font-size:15px; font-weight:700;">
+        🎟 View Your Ticket
+      </a>
+    </div>
+  `;
+
+  // Dark mode <style> block
+  const darkModeStyles = `
+    @media (prefers-color-scheme: dark) {
+      .yovibe-card { background-color: #121212 !important; }
+      .yovibe-text { color: #e0e0e0 !important; }
+      .yovibe-text-muted { color: #888 !important; }
+      .yovibe-bg-dark { background-color: #1e1e1e !important; }
+    }
+  `;
   
   // Build section HTML for each block based on its computed position
   function blockToHtml(block) {
@@ -244,15 +264,16 @@ function buildTicketEmailHtml({
   
   // Build the full ticket HTML
   const ticketContent = `
-    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
+    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;" class="yovibe-card">
       <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
     </div>
     <div style="padding:24px;">
-      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hi ${greetingName}, here's your ticket.</p>
+      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;" class="yovibe-text">Hi ${greetingName}, here's your ticket.</p>
       ${sectionsHtml}
+      ${viewInAppButton}
     </div>
-    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;">
-      <p style="margin:0; font-size:11px; color:#6b6b6b;">
+    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;" class="yovibe-bg-dark">
+      <p style="margin:0; font-size:11px; color:#6b6b6b;" class="yovibe-text-muted">
         This ticket is verified and secured by YoVibe
       </p>
     </div>
@@ -266,6 +287,7 @@ function buildTicketEmailHtml({
   
   if (computed.isUploadBg) {
     return `
+    <style>${darkModeStyles}</style>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
       <tr>
         <td align="center">
@@ -284,6 +306,7 @@ function buildTicketEmailHtml({
   
   // Default gradient background
   return `
+  <style>${darkModeStyles}</style>
   <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${colors.bg}; padding:24px; color:${colors.text};">
     <div style="max-width:${ticketWidth}px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
       ${ticketContent}
@@ -574,7 +597,7 @@ async function buildTicketPdf({
   return pdfDoc.save();
 }
 
-async function sendViaZeptoMail({ to, subject, html, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
   if (!ZEPTOMAIL_TOKEN) {
     return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
   }
@@ -584,6 +607,7 @@ async function sendViaZeptoMail({ to, subject, html, pdfBytes, inlinePng, ticket
     to: [{ email_address: { address: to } }],
     subject,
     htmlbody: html,
+    textbody: text || undefined,
   };
 
   body.attachments = [];
@@ -611,12 +635,13 @@ async function sendViaZeptoMail({ to, subject, html, pdfBytes, inlinePng, ticket
   }
 }
 
-async function sendViaResendFallback({ to, subject, html, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
   const { data, error } = await resend.emails.send({
     from: "YoVibe Tickets <tickets@yovibe.net>",
     to: [to],
     subject,
     html,
+    text: text || undefined,
     attachments: [
       ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
       ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
@@ -659,6 +684,8 @@ exports.handler = async function (event) {
     photoUploadLink,
     posterUrl,
     ticketDesign,
+    seatNumber,
+    tableNumber,
   } = payload;
 
   // Required fields — fail fast with a clear message rather than a vague 500 later
@@ -713,12 +740,31 @@ exports.handler = async function (event) {
     console.error("send-ticket-email: PDF generation failed", err);
   }
 
+  const plainText = [
+    `YOUR TICKET - ${eventName}`,
+    '',
+    `Type: ${ticketType}`,
+    venue ? `Venue: ${venue}` : '',
+    `Date: ${date}`,
+    `Time: ${time}`,
+    `Ticket Ref: ${ticketRef}`,
+    seatNumber != null ? `Seat: ${seatNumber}` : '',
+    tableNumber != null ? `Table: ${tableNumber}` : '',
+    '',
+    'Present this QR code at the event entrance.',
+    '',
+    `View your ticket: https://yovibe.net/t/${ticketRef}`,
+    '',
+    'This ticket is verified and secured by YoVibe.',
+  ].filter(Boolean).join('\n');
+
   const emailSubject = `Your ticket for ${eventName}`;
 
   const zeptoResult = await sendViaZeptoMail({
     to: buyerEmail,
     subject: emailSubject,
     html,
+    text: plainText,
     pdfBytes,
     inlinePng,
     ticketRef,
@@ -735,6 +781,7 @@ exports.handler = async function (event) {
     to: buyerEmail,
     subject: emailSubject,
     html,
+    text: plainText,
     pdfBytes,
     inlinePng,
     ticketRef,

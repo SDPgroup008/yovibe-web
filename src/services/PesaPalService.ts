@@ -87,7 +87,9 @@ export class PesaPalService {
     callbackUrl: string,
     buyerEmail: string,
     buyerPhone?: string,
-    buyerName?: string
+    buyerName?: string,
+    buyerFirstName?: string,
+    buyerLastName?: string,
   ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string }> {
     console.log("========================================")
     console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)")
@@ -118,6 +120,8 @@ export class PesaPalService {
           buyerPhone,
           callbackUrl,
           buyerName,
+          buyerFirstName,
+          buyerLastName,
         }),
       })
 
@@ -307,7 +311,9 @@ export class PesaPalService {
     buyerEmail: string,
     buyerPhone: string,
     callbackUrl: string,
-    buyerName?: string
+    buyerName?: string,
+    buyerFirstName?: string,
+    buyerLastName?: string,
   ): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; error?: string }> {
     console.log("========================================")
     console.log("📝 PESAPAL ORDER SUBMISSION")
@@ -326,7 +332,9 @@ export class PesaPalService {
         callbackUrl,
         buyerEmail,
         buyerPhone,
-        buyerName
+        buyerName,
+        buyerFirstName,
+        buyerLastName,
       )
 
       console.log("✅ Order submitted successfully!")

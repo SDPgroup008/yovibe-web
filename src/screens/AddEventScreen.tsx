@@ -1374,7 +1374,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                             <TouchableOpacity
                               key={template.id}
                               style={[styles.templateCard, newFeeSelectedTemplate === template.id && styles.templateCardSelected]}
-                              onPress={() => { setNewFeeSelectedTemplate(template.id); setNewFeeLayout(defaultLayout(newFeeDesignOrientation, !!image)) }}
+                              onPress={() => { setNewFeeSelectedTemplate(template.id); setNewFeeLayout(defaultLayout(newFeeDesignOrientation, !!image, template.id)) }}
                             >
                               <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
                               <Text style={styles.templateLabel}>{template.label}</Text>
@@ -1386,6 +1386,17 @@ const AddEventScreen: React.FC<any> = (props) => {
                             </TouchableOpacity>
                           ))}
                         </ScrollView>
+
+                        {/* Live preview of selected template */}
+                        {newFeeSelectedTemplate && (() => {
+                          const tpl = getTemplatesByOrientation(newFeeDesignOrientation).find(t => t.id === newFeeSelectedTemplate);
+                          return tpl ? (
+                            <View style={{ alignItems: "center", marginTop: 12, marginBottom: 4 }}>
+                              <Image source={{ uri: tpl.thumbnailSvg }} style={styles.livePreviewImage} />
+                              <Text style={{ color: "#888", fontSize: 11, marginTop: 4 }}>{tpl.label} · {tpl.orientation}</Text>
+                            </View>
+                          ) : null;
+                        })()}
 
                         {newFeeSelectedTemplate && (
                           <>
@@ -1418,7 +1429,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                                   <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Preview</Text>
                                   <View style={{ width: 360, height: Math.round(srcH * zoom), borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }}>
                                     {/* @ts-ignore */}
-                                    <iframe srcDoc={html} style={{ width: srcW, height: srcH, border: "none", zoom, display: "block", pointerEvents: "none" }} sandbox="allow-same-origin" />
+                                    <iframe srcDoc={html} style={{ width: srcW, height: srcH, border: "none", zoom, display: "block", pointerEvents: "none" }} sandbox="allow-scripts allow-same-origin" />
                                   </View>
                                 </View>
                               )
@@ -2241,6 +2252,13 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     borderWidth: 1,
     borderColor: "rgba(255, 255, 255, 0.1)",
+  },
+  livePreviewImage: {
+    width: 180,
+    height: 300,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: "#2196F3",
   },
   templateLabel: {
     color: "#FFFFFF",

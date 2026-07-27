@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { getAdminClient, requireUser, json } = require('../shared/supabaseAdmin');
+const { getPesapalToken, invalidatePesapalToken } = require('../shared/pesapalAuth');
 
 const PAWAPAY_BASE_URL = process.env.PAWAPAY_API_URL || 'https://api.pawapay.io/v2';
 
@@ -109,31 +110,39 @@ async function calculateEligibility(admin, ticketId, reasonCode, requestedAmount
 
 async function submitPesaPal(refund) {
   const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
-  const key = process.env.PESAPAL_CONSUMER_KEY;
-  const secret = process.env.PESAPAL_CONSUMER_SECRET;
-  if (!key || !secret) throw new Error('PesaPal credentials are not configured');
   if (!refund.processor_confirmation_code) throw new Error('PesaPal confirmation code is missing');
-  const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
-    method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: JSON.stringify({ consumer_key: key, consumer_secret: secret }),
-  });
-  const tokenData = await tokenResponse.json();
-  if (!tokenResponse.ok || !tokenData.token) throw new Error('Unable to authenticate with PesaPal');
-  const response = await fetch(`${apiUrl}/Transactions/RefundRequest`, {
-    method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${tokenData.token}` },
-    body: JSON.stringify({
-      confirmation_code: refund.processor_confirmation_code,
-      amount: String(refund.approved_amount),
-      username: refund.reviewed_by || 'YoVibe Admin',
-      remarks: `YoVibe refund ${refund.request_reference}`,
-    }),
-  });
-  const payload = await response.json();
-  if (!response.ok || String(payload.status || payload.error) === '500') {
-    throw new Error(payload.message || 'PesaPal rejected the refund request');
+
+  let lastError;
+  for (let attempt = 0; attempt <= 1; attempt++) {
+    const token = await getPesapalToken();
+    console.log(`[RefundPesaPal] 📤 Sending refund request (attempt ${attempt + 1})...`);
+    const response = await fetch(`${apiUrl}/Transactions/RefundRequest`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        confirmation_code: refund.processor_confirmation_code,
+        amount: String(refund.approved_amount),
+        username: refund.reviewed_by || 'YoVibe Admin',
+        remarks: `YoVibe refund ${refund.request_reference}`,
+      }),
+    });
+
+    if (response.status === 401 && attempt === 0) {
+      console.log('[RefundPesaPal] 🔑 Token expired, refreshing and retrying...');
+      invalidatePesapalToken();
+      continue;
+    }
+
+    const payload = await response.json();
+    if (!response.ok || String(payload.status || payload.error) === '500') {
+      lastError = new Error(payload.message || payload.error || 'PesaPal rejected the refund request');
+      continue;
+    }
+
+    return { externalRefundId: payload.refund_id || payload.reference || refund.request_reference, status: 'submitted', payload };
   }
-  return { externalRefundId: payload.refund_id || payload.reference || refund.request_reference, status: 'submitted', payload };
+
+  throw lastError || new Error('PesaPal refund failed after retry');
 }
 
 async function submitPawaPay(refund) {

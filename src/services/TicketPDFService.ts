@@ -55,27 +55,15 @@ const FAKE_QR = "data:image/svg+xml;base64," + btoa(
   <rect x="110" y="130" width="10" height="10" fill="black"/>
 </svg>`)
 
-export function defaultLayout(orientation: "portrait" | "landscape", hasPoster: boolean): TicketLayout {
-  if (orientation === "landscape") {
-    return {
-      blocks: [
-        { id: "poster", x: 630, y: 20 },
-        { id: "title",  x: 24,  y: 24 },
-        { id: "info",   x: 24,  y: 130 },
-        { id: "qr",     x: 660, y: 170 },
-      ],
-      bg: { x: 0, y: 0, scale: 1 },
-    }
+export function defaultLayout(orientation: "portrait" | "landscape", hasPoster: boolean, templateId?: string | null): TicketLayout {
+  const design: TicketDesignInput = {
+    enabled: true,
+    orientation,
+    source: "template",
+    template_id: templateId || "midnight-portrait",
+    dimensions: { width: orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W, height: orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H },
   }
-  return {
-    blocks: [
-      { id: "poster", x: 330, y: 20 },
-      { id: "title",  x: 24,  y: 24 },
-      { id: "info",   x: 24,  y: 430 },
-      { id: "qr",     x: 190, y: 250 },
-    ],
-    bg: { x: 0, y: 0, scale: 1 },
-  }
+  return getDefaultLayout(orientation, hasPoster, design)
 }
 
 function resolveTemplate(event?: Event, feeDesign?: any): { t: TicketTemplateConfig; isUploadBg: boolean; bgImage: string; bgGradient: string; isLandscape: boolean; W: number; H: number } {
@@ -460,7 +448,7 @@ export function generatePreviewHTML(
     template_id: templateId,
     background_url: uploadedBgUrl || null,
     dimensions: { width: orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W, height: orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H },
-    layout: sampleData?.layout,
+    layout: uploadedBgUrl ? (sampleData?.layout || undefined) : undefined,
   }
   const previewEvent: any = {
     name: sampleData?.eventName || "Sample Event Night",
@@ -539,7 +527,7 @@ export function generateEditorHTML(
     },
   }
   const { t, isUploadBg, bgImage, bgGradient } = resolveTemplate(fakeEvent)
-  const layout = initialLayout || defaultLayout(orientation, !!posterUrl)
+  const layout = initialLayout || defaultLayout(orientation, !!posterUrl, templateId)
   const fmtDate = new Date(Date.now() + 7*24*60*60*1000).toLocaleDateString("en-US", { weekday:"long", year:"numeric", month:"long", day:"numeric" })
   return buildHTML(
     t, W, H, isUploadBg, bgImage, bgGradient, layout.bg,

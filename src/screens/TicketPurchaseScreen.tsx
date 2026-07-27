@@ -196,6 +196,9 @@ const TicketPurchaseScreen: React.FC = () => {
   const [mobileMoneyName, setMobileMoneyName] = useState("")
   const [cardNumber, setCardNumber] = useState("")
   const [cardExpiry, setCardExpiry] = useState("")
+  const [cardFirstName, setCardFirstName] = useState("")
+  const [cardLastName, setCardLastName] = useState("")
+  const [cardPhone, setCardPhone] = useState("")
   const [cardCvv, setCardCvv] = useState("")
   const [bankName, setBankName] = useState("")
   const [bankAccountNumber, setBankAccountNumber] = useState("")
@@ -600,6 +603,12 @@ const handleInstallmentPurchase = async () => {
       return
     }
 
+    if (paymentMethod === "credit_card") {
+      if (!cardFirstName.trim()) { Alert.alert("Name Required", "Please enter your first name for card billing"); return }
+      if (!cardLastName.trim()) { Alert.alert("Name Required", "Please enter your last name for card billing"); return }
+      if (!cardPhone.trim()) { Alert.alert("Phone Required", "Please enter your phone number for card billing"); return }
+    }
+
     const buyerEmailFinal = user?.email || buyerContactEmail.trim() || ""
     const buyerNameFinal = visitorName.trim() || buyerEmailFinal.split("@")[0] || "Guest"
     const buyerEmailsList = getBuyerEmails()
@@ -844,7 +853,9 @@ const handleInstallmentPurchase = async () => {
           buyerEmail,
           buyerPhone,
           callbackUrl,
-          buyerName
+          buyerName,
+          cardFirstName || undefined,
+          cardLastName || undefined,
         )
 
         if (!orderResult.success || !orderResult.paymentUrl) {
@@ -1319,10 +1330,19 @@ const handleInstallmentPurchase = async () => {
               placeholderTextColor="#999"
             />
           </View>
-        )}
-      </View>
+          )}
+          {/* Credit Card Billing Form */}
+          {paymentMethod === "credit_card" && (
+            <View style={styles.paymentForm}>
+              <Text style={styles.paymentFormTitle}>Billing Details</Text>
+              <TextInput style={styles.input} value={cardFirstName} onChangeText={setCardFirstName} placeholder="First name" placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={cardLastName} onChangeText={setCardLastName} placeholder="Last name" placeholderTextColor="#999" />
+              <TextInput style={styles.input} value={cardPhone} onChangeText={setCardPhone} placeholder="Phone number" placeholderTextColor="#999" keyboardType="phone-pad" />
+            </View>
+          )}
+        </View>
 
-      {/* Installment Plan Toggle */}
+        {/* Installment Plan Toggle */}
       <View style={styles.installmentSection}>
         <Text style={styles.sectionTitle}>Payment Plan</Text>
         <View style={styles.planToggleRow}>
