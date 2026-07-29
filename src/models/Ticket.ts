@@ -15,6 +15,7 @@ export interface Ticket {
   seatNumber?: number
   tableNumber?: number
   tableGroupId?: string
+  tableSize?: number
   basePrice: number
   lateFee: number
   venueRevenue: number

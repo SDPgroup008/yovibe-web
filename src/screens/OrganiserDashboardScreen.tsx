@@ -245,6 +245,12 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [otpError, setOtpError] = useState("")
   const [resendCooldown, setResendCooldown] = useState(0)
   const [payoutProvider, setPayoutProvider] = useState<"MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA">("MTN_MOMO_UGA")
+  const [payoutTab, setPayoutTab] = useState<"mobile_money" | "card">("mobile_money")
+  const [bankName, setBankName] = useState("")
+  const [bankAccountNumber, setBankAccountNumber] = useState("")
+  const [bankAccountName, setBankAccountName] = useState("")
+  // Maps ticketId → payment_method for filtering payouts by tab
+  const [scannedPaymentMethods, setScannedPaymentMethods] = useState<Record<string, string>>({})
 
   const [ticketSalesByType, setTicketSalesByType] = useState<Record<string, { early: { count: number; revenue: number }; late: { count: number; revenue: number }; scanned: { count: number; revenue: number } }>>({})
   const [organizerPaymentDetails, setOrganizerPaymentDetails] = useState<{
@@ -429,6 +435,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       payoutEligible: row.payout_eligible ?? row.payoutEligible ?? false,
       payoutStatus: row.payout_status || row.payoutStatus || "pending",
       purchaseDate: row.purchase_date || row.purchaseDate,
+      paymentMethod: row.payment_method || row.paymentMethod,
       created_at: row.created_at,
     }
   }
@@ -458,6 +465,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const isLate = t.isLatePurchase
       const isScanned = t.isScanned || t.status === "used"
       const isEligible = t.payoutEligible === true && t.payoutStatus === "pending"
+      const tPaymentMethod = t.paymentMethod || "mobile_money"
 
       if (isLate) lateCount++; else earlyCount++
       totalRevenue += amount
@@ -485,6 +493,14 @@ const OrganiserDashboardScreen: React.FC = () => {
         payoutTypes[ticketType].scannedIds.push(t.id)
       }
     })
+
+    // Build payment method map
+    const pmMap: Record<string, string> = {}
+    tickets.forEach((ticket) => {
+      const t = rowToTicket(ticket)
+      pmMap[t.id] = t.paymentMethod || "mobile_money"
+    })
+    setScannedPaymentMethods(pmMap)
 
     setTicketSalesEarly(earlyCount)
     setTicketSalesLate(lateCount)
@@ -757,7 +773,10 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpCode("")
     setOtpSent(false)
     setOtpError("")
-    setResendCooldown(0)
+    setBankName("")
+    setBankAccountNumber("")
+    setBankAccountName("")
+    setPayoutTab("mobile_money")
   }, [])
 
   // --- Payout handler ---
@@ -868,107 +887,151 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const handlePayoutSubmit = async () => {
     if (!user) { Alert.alert("Error", "Sign in required"); return }
-    if (!payoutPhone || payoutPhone.length < 10) { Alert.alert("Error", "Enter a valid mobile money number"); return }
 
-    // Collect selected tickets
+    // Validate based on tab
+    if (payoutTab === "mobile_money") {
+      if (!payoutPhone || payoutPhone.length < 10) { Alert.alert("Error", "Enter a valid mobile money number"); return }
+    } else {
+      if (!bankName.trim()) { Alert.alert("Error", "Enter bank name"); return }
+      if (!bankAccountNumber.trim()) { Alert.alert("Error", "Enter account number"); return }
+      if (!bankAccountName.trim()) { Alert.alert("Error", "Enter account name"); return }
+    }
+
+    // Collect selected tickets filtered by payment method
     const selectedTicketIds: string[] = []
     let totalAmount = 0
+    const targetMethod = payoutTab === "mobile_money" ? "mobile_money" : "credit_card"
+
     for (const [type, count] of Object.entries(payoutSelections)) {
       if (count > 0 && payoutTicketTypes[type]) {
         const data = payoutTicketTypes[type]
         const isTableType = data.isTable || false
         const tableSize = data.tableSize || 1
-        // For table types: slider counts in tables, need to multiply by tableSize for actual tickets
         const actualTicketCount = isTableType ? count * tableSize : count
-        const ticketIds = data.scannedIds.slice(0, actualTicketCount)
-        selectedTicketIds.push(...ticketIds)
-        // Price already accounts for table: sliderPrice = price * tableSize for tables
+        // Filter by payment method
+        const allIds = data.scannedIds.slice(0, actualTicketCount)
+        const filteredIds = allIds.filter(id => (scannedPaymentMethods[id] || "mobile_money") === targetMethod)
+        if (filteredIds.length === 0) continue
+        selectedTicketIds.push(...filteredIds)
         totalAmount += count * (isTableType ? (data.price * tableSize) : (data.price || 0))
       }
     }
-    if (selectedTicketIds.length === 0) { Alert.alert("Error", "Select at least one ticket"); return }
-    // Cap the amount to never exceed eligible payout total (safety net)
+    if (selectedTicketIds.length === 0) {
+      Alert.alert("Notice", `No ${payoutTab === "mobile_money" ? "mobile money" : "card"} tickets selected in your current selections. Try a different ticket type.`)
+      return
+    }
     totalAmount = Math.min(totalAmount, eligiblePayoutTotal)
-    if (totalAmount <= 0) { Alert.alert("Error", "Payout amount cannot be zero after eligibility cap"); setWithdrawLoading(false); return }
+    if (totalAmount <= 0) { Alert.alert("Error", "Payout amount cannot be zero"); return }
 
     setWithdrawLoading(true)
     try {
-      const internationalPhone = toInternationalPhone(payoutPhone)
-      const payoutFee = calculatePayoutFee(totalAmount, payoutProvider)
-      const netPayoutAmount = Math.round((totalAmount - payoutFee) * 100) / 100
-      console.log(`[PayoutFee] provider=${payoutProvider} gross=${totalAmount} fee=${payoutFee} net=${netPayoutAmount}`)
+      if (payoutTab === "mobile_money") {
+        // ── Mobile Money: existing PawaPay flow ──
+        const internationalPhone = toInternationalPhone(payoutPhone)
+        const payoutFee = calculatePayoutFee(totalAmount, payoutProvider)
+        const netPayoutAmount = Math.round((totalAmount - payoutFee) * 100) / 100
+        const provider = payoutProvider
 
-      console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", internationalPhone)
+        console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", internationalPhone)
+        const payoutResult = await PawaPayService.initiatePayout(netPayoutAmount, "UGX", internationalPhone, provider)
 
-      // Map provider string
-      const provider = payoutProvider
+        if (!payoutResult.success) {
+          Alert.alert("Payout Failed", payoutResult.error || "Unknown error"); setWithdrawLoading(false); return
+        }
 
-      // Initiate payout via PawaPay - use net amount
-      const payoutResult = await PawaPayService.initiatePayout(netPayoutAmount, "UGX", internationalPhone, provider)
+        console.log("✅ Payout initiated:", payoutResult.payoutId)
 
-      if (!payoutResult.success) {
-        Alert.alert("Payout Failed", payoutResult.error || "Unknown error")
-        setWithdrawLoading(false)
-        return
-      }
+        // Mark tickets as paid
+        for (const tid of selectedTicketIds) {
+          try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date(), payoutEligible: false }) } catch {}
+        }
 
-      console.log("✅ Payout initiated:", payoutResult.payoutId)
+        // Save payout record
+        try {
+          await SupabaseService.savePayout({
+            organizer_id: user.id,
+            ticket_ids: selectedTicketIds,
+            amount: totalAmount,
+            status: "Completed",
+            processed_date: new Date().toISOString(),
+            transaction_reference: payoutResult.payoutId,
+            payout_method: "mobile_money",
+            recipient_name: user.displayName || user.email || "",
+            recipient_phone_number: toInternationalPhone(payoutPhone),
+          })
+        } catch (err) { console.error("Failed to save payout record:", err) }
 
-      // Mark tickets as paid + set payout_eligible to false
-      for (const tid of selectedTicketIds) {
-        try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date(), payoutEligible: false }) } catch {}
-      }
+        // Update organizer wallet
+        await updateWalletAfterPayout(totalAmount)
 
-      // Save payout to Supabase payouts table
-      try {
-        await SupabaseService.savePayout({
+        setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
+        setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
+        Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${internationalPhone}\nPayout ID: ${payoutResult.payoutId}`)
+
+      } else {
+        // ── Card: save payout request for admin processing with bank details ──
+        const payoutId = await SupabaseService.savePayout({
           organizer_id: user.id,
           ticket_ids: selectedTicketIds,
           amount: totalAmount,
-          status: "Completed",
+          status: "pending_admin_review",
           processed_date: new Date().toISOString(),
-          transaction_reference: payoutResult.payoutId,
-          payout_method: "mobile_money",
-          recipient_name: user.displayName || user.email || "",
-          recipient_phone_number: toInternationalPhone(payoutPhone),
+          payout_method: "bank_transfer",
+          recipient_name: bankAccountName.trim(),
+          recipient_phone_number: "",
+          metadata: { bank_name: bankName.trim(), account_number: bankAccountNumber.trim() },
         })
-      } catch (err) { console.error("Failed to save payout record:", err) }
 
-      // Update organizer wallet (get-or-create pattern)
-      try {
-        let wallet = await SupabaseService.getOrganizerWallet(user.id)
-
-        if (!wallet) {
-          console.log("No existing wallet for organizer — creating one before applying payout")
-          await SupabaseService.createOrUpdateOrganizerWallet(user.id, {
-            available_balance: 0,
-            pending_balance: 0,
-            total_earnings: 0,
-            total_payouts: 0,
-          })
-          wallet = await SupabaseService.getOrganizerWallet(user.id)
+        // Mark tickets as pending review (admin will mark them paid after approval)
+        for (const tid of selectedTicketIds) {
+          try { await SupabaseService.updateTicket(tid, { payoutStatus: "pending_review", payoutEligible: false }) } catch {}
         }
 
-        await SupabaseService.createOrUpdateOrganizerWallet(user.id, {
-          available_balance: (wallet?.available_balance || 0) - totalAmount,
-          total_payouts: (wallet?.total_payouts || 0) + totalAmount,
-          last_payout_date: new Date().toISOString(),
-        })
-      } catch (err) {
-        console.error("Failed to update wallet after successful payout:", err)
+        // Create notification for admin and organizer
+        try {
+          const { supabase } = await import("../config/supabase")
+          await supabase.from("notifications").insert([
+            {
+              user_id: user.id,
+              title: "🔄 Card Payout Requested",
+              body: `UGX ${totalAmount.toLocaleString()} card payout for ${selectedTicketIds.length} ticket(s) pending admin review. Bank: ${bankName.trim()}`,
+              type: "payout_request",
+              data: { payoutId, amount: totalAmount, status: "pending_admin_review" },
+              is_read: false,
+              created_at: new Date().toISOString(),
+            },
+          ])
+        } catch (err) { console.error("Failed to send notification:", err) }
+
+        Alert.alert(
+          "✅ Request Submitted!",
+          `Card payout of UGX ${totalAmount.toLocaleString()} for ${selectedTicketIds.length} ticket(s) sent to admin for review.\nBank: ${bankName.trim()}\nAccount: ${bankAccountNumber.trim()}\nName: ${bankAccountName.trim()}`
+        )
       }
 
-      setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
-      setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
-      Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${toInternationalPhone(payoutPhone)}\nPayout ID: ${payoutResult.payoutId}`)
       setShowWithdrawModal(false)
       resetPayoutState()
-      // Reset selections
       const reset: Record<string, number> = {}; Object.keys(payoutTicketTypes).forEach(k => { reset[k] = 0 }); setPayoutSelections(reset)
     } catch (error: any) {
       console.error("Payout error:", error)
       Alert.alert("Error", error?.message || "Failed")
     } finally { setWithdrawLoading(false) }
+  }
+
+  // Helper to update wallet after payout
+  const updateWalletAfterPayout = async (totalAmount: number) => {
+    try {
+      let wallet = await SupabaseService.getOrganizerWallet(user?.id || "")
+      if (!wallet) {
+        await SupabaseService.createOrUpdateOrganizerWallet(user?.id || "", { available_balance: 0, pending_balance: 0, total_earnings: 0, total_payouts: 0 })
+        wallet = await SupabaseService.getOrganizerWallet(user?.id || "")
+      }
+      await SupabaseService.createOrUpdateOrganizerWallet(user?.id || "", {
+        available_balance: (wallet?.available_balance || 0) - totalAmount,
+        total_payouts: (wallet?.total_payouts || 0) + totalAmount,
+        last_payout_date: new Date().toISOString(),
+      })
+    } catch (err) { console.error("Failed to update wallet:", err) }
   }
 
   // Compute totals (account for table types where count = tables, price = per-person)
@@ -1011,6 +1074,24 @@ const OrganiserDashboardScreen: React.FC = () => {
           </View>
 
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+            {/* Payment method tabs */}
+            <View style={styles.payoutTabRow}>
+              <TouchableOpacity
+                style={[styles.payoutTab, payoutTab === "mobile_money" && styles.payoutTabActive]}
+                onPress={() => setPayoutTab("mobile_money")}
+              >
+                <Ionicons name="phone-portrait" size={20} color={payoutTab === "mobile_money" ? "#00D4FF" : "#666"} />
+                <Text style={[styles.payoutTabText, payoutTab === "mobile_money" && styles.payoutTabTextActive]}>Mobile Money</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.payoutTab, payoutTab === "card" && styles.payoutTabActive]}
+                onPress={() => setPayoutTab("card")}
+              >
+                <Ionicons name="card" size={20} color={payoutTab === "card" ? "#00D4FF" : "#666"} />
+                <Text style={[styles.payoutTabText, payoutTab === "card" && styles.payoutTabTextActive]}>Card</Text>
+              </TouchableOpacity>
+            </View>
+
             {/* Ticket type sliders */}
             {Object.entries(payoutTicketTypes).length === 0 ? (
               <Text style={{ color: "#888", textAlign: "center", padding: 30 }}>No scanned tickets eligible for payout</Text>
@@ -1018,8 +1099,11 @@ const OrganiserDashboardScreen: React.FC = () => {
               Object.entries(payoutTicketTypes).map(([typeName, data]) => {
                 const isTableType = data.isTable || false
                 const tableSize = data.tableSize || 1
+                const targetMethod = payoutTab === "mobile_money" ? "mobile_money" : "credit_card"
+                // Count only tickets matching the active tab's payment method
+                const filteredCount = data.scannedIds.filter(id => (scannedPaymentMethods[id] || "mobile_money") === targetMethod).length
                 // For table types: slider counts in tables (1 = 1 full table)
-                const sliderMax = isTableType ? Math.floor(data.total / tableSize) : data.total
+                const sliderMax = isTableType ? Math.floor(filteredCount / tableSize) : filteredCount
                 const sliderPrice = isTableType ? data.price * tableSize : data.price
                 const currentVal = payoutSelections[typeName] || 0
                 const unitLabel = isTableType ? "table" : "ticket"
@@ -1038,70 +1122,72 @@ const OrganiserDashboardScreen: React.FC = () => {
               })
             )}
 
-            {/* Provider selection */}
-            <View style={styles.phoneSection}>
-              <Text style={styles.phoneLabel}>📱 Provider</Text>
-              <View style={styles.providerRow}>
-                <TouchableOpacity
-                  style={[styles.providerChip, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipActive]}
-                  onPress={() => setPayoutProvider("MTN_MOMO_UGA")}
-                >
-                  <Text style={[styles.providerChipText, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipTextActive]}>MTN</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.providerChip, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipActive]}
-                  onPress={() => setPayoutProvider("AIRTEL_OAPI_UGA")}
-                >
-                  <Text style={[styles.providerChipText, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipTextActive]}>Airtel</Text>
-                </TouchableOpacity>
+            {payoutTab === "mobile_money" && (
+              <>
+              {/* Provider selection */}
+              <View style={styles.phoneSection}>
+                <Text style={styles.phoneLabel}>📱 Provider</Text>
+                <View style={styles.providerRow}>
+                  <TouchableOpacity
+                    style={[styles.providerChip, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipActive]}
+                    onPress={() => setPayoutProvider("MTN_MOMO_UGA")}
+                  >
+                    <Text style={[styles.providerChipText, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipTextActive]}>MTN</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.providerChip, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipActive]}
+                    onPress={() => setPayoutProvider("AIRTEL_OAPI_UGA")}
+                  >
+                    <Text style={[styles.providerChipText, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipTextActive]}>Airtel</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
 
-            {/* Mobile money number */}
-            <View style={styles.phoneSection}>
-              <Text style={styles.phoneLabel}>📱 Mobile Money Number</Text>
-              <View style={styles.phoneRow}>
-                <TextInput
-                  style={styles.phoneInput}
-                  placeholder="07XXXXXXXX"
-                  placeholderTextColor="#555"
-                  value={payoutPhone}
-                  onChangeText={(t) => {
-                    setPayoutPhone(t)
-                    if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
-                  }}
-                  keyboardType="phone-pad"
-                />
-              </View>
-              <Text style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Confirm Number</Text>
-              <View style={styles.phoneRow}>
-                <TextInput
-                  style={styles.phoneInput}
-                  placeholder="07XXXXXXXX"
-                  placeholderTextColor="#555"
-                  value={payoutPhoneConfirm}
-                  onChangeText={(t) => {
-                    setPayoutPhoneConfirm(t)
-                    if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
-                  }}
-                  keyboardType="phone-pad"
-                />
-              </View>
-              <View style={{ height: 12 }} />
-              <TouchableOpacity
-                style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading) && styles.sendOtpBtnDisabled]}
-                onPress={handleSendOtp}
-                disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading}
-              >
-                {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
-              </TouchableOpacity>
-              {otpError ? <Text style={styles.otpErrorText}>{otpError}</Text> : null}
-              {otpSent && (
-                <>
-                  <Text style={styles.otpLabel}>Enter Code</Text>
+              {/* Mobile money number */}
+              <View style={styles.phoneSection}>
+                <Text style={styles.phoneLabel}>📱 Mobile Money Number</Text>
+                <View style={styles.phoneRow}>
                   <TextInput
-                    style={styles.otpInput}
-                    placeholder="6-digit code"
+                    style={styles.phoneInput}
+                    placeholder="07XXXXXXXX"
+                    placeholderTextColor="#555"
+                    value={payoutPhone}
+                    onChangeText={(t) => {
+                      setPayoutPhone(t)
+                      if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
+                    }}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                <Text style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Confirm Number</Text>
+                <View style={styles.phoneRow}>
+                  <TextInput
+                    style={styles.phoneInput}
+                    placeholder="07XXXXXXXX"
+                    placeholderTextColor="#555"
+                    value={payoutPhoneConfirm}
+                    onChangeText={(t) => {
+                      setPayoutPhoneConfirm(t)
+                      if (otpSent) { setOtpSent(false); setOtpCode(""); setResendCooldown(0) }
+                    }}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+                <View style={{ height: 12 }} />
+                <TouchableOpacity
+                  style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading) && styles.sendOtpBtnDisabled]}
+                  onPress={handleSendOtp}
+                  disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading}
+                >
+                  {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
+                </TouchableOpacity>
+                {otpError ? <Text style={styles.otpErrorText}>{otpError}</Text> : null}
+                {otpSent && (
+                  <>
+                    <Text style={styles.otpLabel}>Enter Code</Text>
+                    <TextInput
+                      style={styles.otpInput}
+                      placeholder="6-digit code"
                     placeholderTextColor="#555"
                     value={otpCode}
                     onChangeText={setOtpCode}
@@ -1113,6 +1199,39 @@ const OrganiserDashboardScreen: React.FC = () => {
               {resendCooldown > 0 && <Text style={styles.resendText}>Resend available in {resendCooldown}s</Text>}
               <View style={{ height: 20 }} />
             </View>
+            </>
+          )}
+
+          {payoutTab === "card" && (
+            <View style={styles.phoneSection}>
+              <Text style={styles.phoneLabel}>🏦 Bank Details</Text>
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="Bank name (e.g. Stanbic Uganda)"
+                placeholderTextColor="#555"
+                value={bankName}
+                onChangeText={setBankName}
+              />
+              <View style={{ height: 10 }} />
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="Account number"
+                placeholderTextColor="#555"
+                value={bankAccountNumber}
+                onChangeText={setBankAccountNumber}
+                keyboardType="numeric"
+              />
+              <View style={{ height: 10 }} />
+              <TextInput
+                style={styles.phoneInput}
+                placeholder="Account holder name"
+                placeholderTextColor="#555"
+                value={bankAccountName}
+                onChangeText={setBankAccountName}
+              />
+              <View style={{ height: 20 }} />
+            </View>
+          )}
           </ScrollView>
 
 {/* Summary bar */}
@@ -1132,9 +1251,9 @@ const OrganiserDashboardScreen: React.FC = () => {
               <Text style={styles.netAmount}>UGX {Math.max(0, totalPayoutAmount - calculatePayoutFee(totalPayoutAmount, payoutProvider)).toLocaleString()}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent) && styles.payoutActionBtnDisabled]}
-              onPress={handlePayoutWithOtpCheck}
-              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent}
+              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || (payoutTab === "mobile_money" && !otpSent)) && styles.payoutActionBtnDisabled]}
+              onPress={payoutTab === "mobile_money" ? handlePayoutWithOtpCheck : handlePayoutSubmit}
+              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || (payoutTab === "mobile_money" && !otpSent)}
             >
               {withdrawLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -1870,6 +1989,11 @@ const styles = StyleSheet.create({
   netAmount: { color: "#4CAF50", fontSize: 12, fontWeight: "bold" },
   payoutActionBtn: { backgroundColor: "#2196F3", flexDirection: "row", alignItems: "center", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, gap: 6 },
   payoutActionBtnDisabled: { backgroundColor: "#444" },
+  payoutTabRow: { flexDirection: "row", gap: 8, marginBottom: 16 },
+  payoutTab: { flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: "#1a1a1a", borderWidth: 1, borderColor: "#333" },
+  payoutTabActive: { backgroundColor: "rgba(0,212,255,0.1)", borderColor: "#00D4FF" },
+  payoutTabText: { color: "#666", fontSize: 13, fontWeight: "600" },
+  payoutTabTextActive: { color: "#00D4FF" },
   payoutActionText: { color: "#FFF", fontWeight: "bold", fontSize: 14 },
   sendOtpBtn: { backgroundColor: "#00D4FF", paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, alignItems: "center", marginTop: 8 },
   sendOtpBtnDisabled: { backgroundColor: "#666" },

@@ -33,32 +33,17 @@
 //         <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;">
 //           <span style="color:#ff3b3b; font-weight:700; font-size:18px;">YoVibe</span>
 //         </div>
-
 //         <div style="padding:24px;">
-//           <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">
-//             Hello ${escapedEmail},
-//           </p>
-//           <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">
-//             Your payout verification code is:
-//           </p>
-
+//           <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Hello ${escapedEmail},</p>
+//           <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;">Your payout verification code is:</p>
 //           <div style="background:#1a1a1a; border-radius:10px; padding:24px; text-align:center; margin-bottom:20px; border:1px solid #2a2a2a;">
 //             <p style="margin:0; font-size:32px; font-weight:700; color:#ff3b3b; letter-spacing:8px;">${escapedOtp}</p>
 //           </div>
-
-//           <p style="margin:0 0 16px; font-size:13px; color:#9a9a9a;">
-//             This code is valid for 90 seconds. Enter it to confirm your payout.
-//           </p>
-
-//           <p style="margin:0; font-size:13px; color:#6b6b6b;">
-//             If you didn't request this, ignore this email.
-//           </p>
+//           <p style="margin:0 0 16px; font-size:13px; color:#9a9a9a;">This code is valid for 90 seconds. Enter it to confirm your payout.</p>
+//           <p style="margin:0; font-size:13px; color:#6b6b6b;">If you didn't request this, ignore this email.</p>
 //         </div>
-
 //         <div style="padding:16px 24px; background:#101010; text-align:center;">
-//           <p style="margin:0; font-size:11px; color:#6b6b6b;">
-//             This email is verified and secured by YoVibe
-//           </p>
+//           <p style="margin:0; font-size:11px; color:#6b6b6b;">This email is verified and secured by YoVibe</p>
 //         </div>
 //       </div>
 //     </div>
@@ -145,11 +130,7 @@
 //     zeptoError: zepto.error,
 //     resendError: resendResult.error,
 //   });
-//   return {
-//     ok: false,
-//     provider: "none",
-//     error: `ZeptoMail: ${zepto.error} | Resend: ${resendResult.error}`,
-//   };
+//   return { ok: false, provider: "none", error: `ZeptoMail: ${zepto.error} | Resend: ${resendResult.error}` };
 // }
 
 // serve(async (req) => {

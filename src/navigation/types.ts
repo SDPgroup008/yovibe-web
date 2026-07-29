@@ -87,6 +87,7 @@ export type ProfileStackParamList = {
   AdminStrandedPurchases: undefined
   AdminRefunds: undefined
   AdminWithdrawals: undefined
+  AdminPayouts: undefined
   Settings: undefined
   HelpSupport: undefined
   Notification: undefined

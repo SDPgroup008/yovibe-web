@@ -1586,11 +1586,14 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
   async saveTicket(ticket: any): Promise<string> {
     try {
-      const { seatNumber, tableNumber, ...restTicket } = ticket
+      const { seatNumber, tableNumber, gatewayFee, buyerPhone, tableSize, ...restTicket } = ticket
       const ticketData = {
         ...restTicket,
         seat_number: seatNumber,
         table_number: tableNumber,
+        gateway_fee: gatewayFee,
+        buyer_phone: buyerPhone,
+        table_size: tableSize,
         event_slug: ticket.eventSlug || ticket.eventId,
         created_at: new Date().toISOString(),
       };
@@ -1921,6 +1924,77 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       if (error) throw error;
     } catch (error) {
       console.error("SupabaseService: Error updating payout:", error);
+      throw error;
+    }
+  }
+
+  async getPayoutsByStatus(status: string, limit = 50, offset = 0): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from("payouts")
+        .select("*")
+        .eq("status", status)
+        .order("request_date", { ascending: false })
+        .range(offset, offset + limit - 1);
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error("SupabaseService: Error getting payouts by status:", error);
+      return [];
+    }
+  }
+
+  async approvePayout(payoutId: string, adminId: string, approvedAmount?: number): Promise<void> {
+    try {
+      const update: any = {
+        status: "approved",
+        admin_id: adminId,
+        updated_at: new Date().toISOString(),
+      };
+      if (approvedAmount !== undefined) update.approved_amount = approvedAmount;
+      const { error } = await supabase.from("payouts").update(update).eq("id", payoutId);
+      if (error) throw error;
+    } catch (error) {
+      console.error("SupabaseService: Error approving payout:", error);
+      throw error;
+    }
+  }
+
+  async rejectPayout(payoutId: string, adminId: string, reason: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from("payouts")
+        .update({
+          status: "rejected",
+          admin_id: adminId,
+          admin_note: reason,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payoutId);
+      if (error) throw error;
+    } catch (error) {
+      console.error("SupabaseService: Error rejecting payout:", error);
+      throw error;
+    }
+  }
+
+  async completePayout(payoutId: string, adminId: string, transactionReference: string, notes?: string): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from("payouts")
+        .update({
+          status: "completed",
+          admin_id: adminId,
+          transaction_reference: transactionReference,
+          admin_note: notes || null,
+          processed_date: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", payoutId);
+      if (error) throw error;
+    } catch (error) {
+      console.error("SupabaseService: Error completing payout:", error);
       throw error;
     }
   }

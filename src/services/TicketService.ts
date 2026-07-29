@@ -97,6 +97,9 @@ export class TicketService {
     deliveryEmails?: string[],
     seatNumbers?: (number | null)[],
     tableNumbers?: (number | null)[],
+    buyerPhone?: string,
+    sharedPaymentId?: string,
+    cardPaymentName?: string,
   ): Promise<Ticket[]> {
     try {
       console.log("========================================")
@@ -107,6 +110,9 @@ export class TicketService {
       console.log("📋 Buyer Names:", buyerNames)
       console.log("📋 Buyer Emails:", buyerEmails)
       console.log("📋 Is Table Entry:", isTableEntry, "Table Size:", tableSize, "Quantity:", quantity)
+      console.log("📋 Shared Payment ID:", sharedPaymentId || "none")
+      console.log("📋 Buyer Phone:", buyerPhone || "none")
+      console.log("📋 Card Payment Name:", cardPaymentName || "none")
 
       const createdTickets: Ticket[] = []
       const ticketsPerPurchase = totalTickets
@@ -136,6 +142,10 @@ export class TicketService {
           deliveryEmail,
           seatNumbers?.[i] ?? undefined,
           tableNumbers?.[i] ?? undefined,
+          tableSize,
+          buyerPhone || "",
+          sharedPaymentId,
+          cardPaymentName,
         )
         createdTickets.push(ticket)
       }
@@ -207,7 +217,7 @@ export class TicketService {
     }
   }
 
-private static async createSingleTicket(
+  private static async createSingleTicket(
     event: Event,
     buyerName: string,
     buyerEmail: string,
@@ -236,6 +246,10 @@ private static async createSingleTicket(
     deliveryEmail?: string,
     seatNumber?: number,
     tableNumber?: number,
+    tableSize?: number,
+    buyerPhone?: string,
+    sharedPaymentId?: string,
+    cardPaymentName?: string,
   ): Promise<Ticket> {
     console.log("--- Step 1: Calculating ticket price ---")
     const basePrice = event.entryFees && event.entryFees.length > 0
@@ -317,11 +331,29 @@ private static async createSingleTicket(
     console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
     console.log("🔒 Expires at:", qrCodeResult.expiresAt)
 
-    console.log("--- Step 6: Creating ticket object ---")
+      console.log("--- Step 6: Creating ticket object ---")
     const photoUploadToken = uuidv4()
     const ticketId = uuidv4()
     const isTableEntry = !!tableGroupId
     const ticketRef = deriveTicketRef(ticketId, isTableEntry)
+    
+    // Calculate gateway fee per payment method
+    // Card: 3.4% of total, Mobile money: 3% of total
+    const gatewayFee = paymentDetails?.method === "credit_card"
+      ? Math.round(total * 0.034 * 100) / 100
+      : paymentDetails?.method === "mobile_money"
+        ? Math.round(total * 0.03 * 100) / 100
+        : 0
+
+    // Use shared payment ID for the purchase, or fall back to the payment intent ID
+    const paymentId = sharedPaymentId || paymentIntent?.id || `pi_${Date.now()}`
+
+    // Build payment name: for card use the billing form name, for mobile money use provider name
+    const paymentName = paymentDetails?.method === "credit_card"
+      ? (cardPaymentName || paymentDetails?.name || "")
+      : paymentDetails?.method === "mobile_money"
+        ? (paymentDetails?.name || "")
+        : ""
     
     const ticket: Ticket = {
       id: ticketId,
@@ -331,18 +363,21 @@ private static async createSingleTicket(
       buyerId: buyerId ?? undefined,
       buyerName,
       buyerEmail,
+      buyerPhone: buyerPhone || undefined,
       deliveryEmail: deliveryEmail ?? buyerEmail,
       ticketRef,
       quantity: 1,
       totalAmount: total,
       tableTotalAmount: tableTotalAmount,
       tableGroupId: tableGroupId,
+      tableSize: isTableEntry ? tableSize : undefined,
       seatNumber: tableNumber != null ? undefined : seatNumber,
       tableNumber: tableNumber ?? undefined,
       basePrice: subtotal,
       lateFee: lateFee,
       venueRevenue,
       appCommission,
+      gatewayFee,
       purchaseDate: new Date(),
       eventStartTime,
       purchaseDeadline,
@@ -360,13 +395,13 @@ private static async createSingleTicket(
       isScanned: false,
       payoutEligible: false,
       payoutStatus: "pending",
-      paymentId: paymentIntent?.id,
+      paymentId,
       paymentStatus: paymentDetails?.method === "mobile_money" ? "pending" : "completed",
       paymentReference: paymentIntent?.paymentReference || paymentDetails?.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       paymentMethod: paymentDetails?.method,
       paymentProvider: paymentDetails?.provider,
       paymentNumber: paymentDetails?.number,
-      paymentName: paymentDetails?.name,
+      paymentName,
       pesapalTransactionId: paymentDetails?.method !== "mobile_money" ? paymentIntent?.paymentId || paymentDetails?.pesapalTransactionId || `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` : undefined,
       pesapalConfirmationCode: paymentDetails?.pesapalConfirmationCode,
     }
@@ -403,6 +438,10 @@ private static async createSingleTicket(
         const result = await supabase.from("tickets_api").insert({ 
           ...ticket, 
           event_slug: event.slug || event.id,
+          buyer_phone: buyerPhone || ticket.buyerPhone || null,
+          table_size: tableSize ?? ticket.tableSize ?? null,
+          table_number: tableNumber ?? ticket.tableNumber ?? null,
+          gateway_fee: gatewayFee ?? ticket.gatewayFee ?? 0,
         }).select("id").single()
         if (result.error) throw result.error
         return result.data
@@ -922,8 +961,10 @@ console.error("❌ Error details:", updateError.details)
       refundStatus: row.refund_status || row.refundStatus || "none",
       tableTotalAmount: row.table_total_amount || row.tableTotalAmount,
       tableGroupId: row.table_group_id || row.tableGroupId,
+      tableSize: row.table_size ?? row.tableSize ?? undefined,
       seatNumber: row.seat_number ?? row.seatNumber,
       tableNumber: row.table_number ?? row.tableNumber,
+      gatewayFee: row.gateway_fee ?? row.gatewayFee ?? 0,
       reentryPass: row.reentry_pass ?? row.reentryPass ?? undefined,
       photoUploadToken: row.photo_upload_token || row.photoUploadToken,
       photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,

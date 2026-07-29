@@ -181,6 +181,12 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToAdminPayouts = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminPayouts");
+    }
+  };
+
   const navigateToSettings = () => {
     navigation.navigate("Settings");
   };
@@ -415,6 +421,12 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminWithdrawals}>
               <Ionicons name="cash-outline" size={24} color="#00D4FF" />
               <Text style={styles.menuText}>Revenue Withdrawals</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminPayouts}>
+              <Ionicons name="send-outline" size={24} color="#F59E0B" />
+              <Text style={styles.menuText}>Payout Requests</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
 

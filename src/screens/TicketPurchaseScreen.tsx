@@ -392,7 +392,7 @@ const TicketPurchaseScreen: React.FC = () => {
         {
           method: paymentMethod || "mobile_money",
           provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
-          number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
+          number: paymentMethod === "mobile_money" ? mobileMoneyNumber : (paymentMethod === "credit_card" ? cardPhone : undefined),
           name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
           expiry: paymentMethod === "credit_card" ? cardExpiry : undefined,
           cardNumber: paymentMethod === "credit_card" ? cardNumber.slice(-4) : undefined,
@@ -413,6 +413,10 @@ const TicketPurchaseScreen: React.FC = () => {
         isTableEntry
           ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
           : undefined,
+        isTableEntry ? tableSize : undefined,
+        buyerPhone || (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
+        paymentId,
+        paymentMethod === "credit_card" ? `${cardFirstName} ${cardLastName}`.trim() : undefined,
       )
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
