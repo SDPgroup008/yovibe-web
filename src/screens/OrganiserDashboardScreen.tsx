@@ -886,53 +886,82 @@ const OrganiserDashboardScreen: React.FC = () => {
   };
 
   const handlePayoutSubmit = async () => {
-    if (!user) { Alert.alert("Error", "Sign in required"); return }
+    console.log("[PayoutSubmit] 🚀 handlePayoutSubmit called")
+    console.log("[PayoutSubmit]    payoutTab:", payoutTab)
+    console.log("[PayoutSubmit]    user:", user?.id || "none")
+
+    if (!user) { console.log("[PayoutSubmit] ❌ No user — aborting"); Alert.alert("Error", "Sign in required"); return }
 
     // Validate based on tab
     if (payoutTab === "mobile_money") {
+      console.log("[PayoutSubmit] 📱 Mobile money validation — phone:", payoutPhone)
       if (!payoutPhone || payoutPhone.length < 10) { Alert.alert("Error", "Enter a valid mobile money number"); return }
     } else {
-      if (!bankName.trim()) { Alert.alert("Error", "Enter bank name"); return }
-      if (!bankAccountNumber.trim()) { Alert.alert("Error", "Enter account number"); return }
-      if (!bankAccountName.trim()) { Alert.alert("Error", "Enter account name"); return }
+      console.log("[PayoutSubmit] 💳 Card validation — bankName:", bankName.trim(), "acct:", bankAccountNumber.trim(), "holder:", bankAccountName.trim())
+      if (!bankName.trim()) { console.log("[PayoutSubmit] ❌ Missing bank name"); Alert.alert("Error", "Enter bank name"); return }
+      if (!bankAccountNumber.trim()) { console.log("[PayoutSubmit] ❌ Missing account number"); Alert.alert("Error", "Enter account number"); return }
+      if (!bankAccountName.trim()) { console.log("[PayoutSubmit] ❌ Missing account name"); Alert.alert("Error", "Enter account name"); return }
     }
+
+    console.log("[PayoutSubmit] ✅ Validation passed")
+    console.log("[PayoutSubmit]    payoutSelections:", JSON.stringify(payoutSelections))
+    console.log("[PayoutSubmit]    payoutTicketTypes keys:", Object.keys(payoutTicketTypes))
+    console.log("[PayoutSubmit]    scannedPaymentMethods keys:", Object.keys(scannedPaymentMethods).length)
+    console.log("[PayoutSubmit]    eligiblePayoutTotal:", eligiblePayoutTotal)
 
     // Collect selected tickets filtered by payment method
     const selectedTicketIds: string[] = []
     let totalAmount = 0
     const targetMethod = payoutTab === "mobile_money" ? "mobile_money" : "credit_card"
+    console.log("[PayoutSubmit] 🎯 Target payment method:", targetMethod)
 
     for (const [type, count] of Object.entries(payoutSelections)) {
+      console.log(`[PayoutSubmit]    Processing type: ${type}, count: ${count}`)
       if (count > 0 && payoutTicketTypes[type]) {
         const data = payoutTicketTypes[type]
         const isTableType = data.isTable || false
         const tableSize = data.tableSize || 1
         const actualTicketCount = isTableType ? count * tableSize : count
-        // Filter by payment method
         const allIds = data.scannedIds.slice(0, actualTicketCount)
-        const filteredIds = allIds.filter(id => (scannedPaymentMethods[id] || "mobile_money") === targetMethod)
-        if (filteredIds.length === 0) continue
+        console.log(`[PayoutSubmit]    → Type ${type}: allIds[0..${actualTicketCount}] = ${allIds.length} IDs`)
+        
+        // Filter by payment method
+        const filteredIds = allIds.filter(id => {
+          const pm = scannedPaymentMethods[id] || "mobile_money"
+          const match = pm === targetMethod
+          if (!match) console.log(`[PayoutSubmit]    → Filtering OUT ticket ${id.slice(0,12)}... (pm=${pm}, target=${targetMethod})`)
+          return match
+        })
+        console.log(`[PayoutSubmit]    → After filter: ${filteredIds.length} IDs match ${targetMethod}`)
+        if (filteredIds.length === 0) {
+          console.log(`[PayoutSubmit]    → ⚠️ No ${targetMethod} tickets for type ${type}, skipping`)
+          continue
+        }
         selectedTicketIds.push(...filteredIds)
-        totalAmount += count * (isTableType ? (data.price * tableSize) : (data.price || 0))
+        const addedAmount = Math.round(count * (isTableType ? (data.price * tableSize) : (data.price || 0)) * 100) / 100
+        totalAmount += addedAmount
+        console.log(`[PayoutSubmit]    → Added ${filteredIds.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`)
+      } else {
+        console.log(`[PayoutSubmit]    → Skipping type ${type} (count=${count}, exists=${!!payoutTicketTypes[type]})`)
       }
     }
+    console.log("[PayoutSubmit] 📊 Final selected tickets:", selectedTicketIds.length, "totalAmount:", totalAmount)
+
     if (selectedTicketIds.length === 0) {
+      console.log(`[PayoutSubmit] ❌ No tickets matched ${targetMethod} — showing alert`)
       Alert.alert("Notice", `No ${payoutTab === "mobile_money" ? "mobile money" : "card"} tickets selected in your current selections. Try a different ticket type.`)
       return
     }
     totalAmount = Math.min(totalAmount, eligiblePayoutTotal)
-    if (totalAmount <= 0) { Alert.alert("Error", "Payout amount cannot be zero"); return }
+    console.log("[PayoutSubmit] 💰 Amount after cap:", totalAmount, "(eligibleTotal:", eligiblePayoutTotal, ")")
+    if (totalAmount <= 0) { console.log("[PayoutSubmit] ❌ Amount is zero after cap"); Alert.alert("Error", "Payout amount cannot be zero"); return }
 
+    console.log("[PayoutSubmit] ✅ All checks passed, setting withdrawLoading = true")
     setWithdrawLoading(true)
     try {
       if (payoutTab === "mobile_money") {
         // ── Mobile Money: existing PawaPay flow ──
-        const internationalPhone = toInternationalPhone(payoutPhone)
-        const payoutFee = calculatePayoutFee(totalAmount, payoutProvider)
-        const netPayoutAmount = Math.round((totalAmount - payoutFee) * 100) / 100
-        const provider = payoutProvider
-
-        console.log("📋 Processing PawaPay payout of UGX", totalAmount, "to", internationalPhone)
+        console.log("[PayoutSubmit] 📱 Starting Mobile Money payout flow...")
         const payoutResult = await PawaPayService.initiatePayout(netPayoutAmount, "UGX", internationalPhone, provider)
 
         if (!payoutResult.success) {
@@ -970,6 +999,12 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       } else {
         // ── Card: save payout request for admin processing with bank details ──
+        console.log("[PayoutSubmit] 💳 Starting Card payout flow...")
+        console.log("[PayoutSubmit]    Saving payout to DB with status: pending_admin_review")
+        console.log("[PayoutSubmit]    Bank:", bankName.trim(), "Acct:", bankAccountNumber.trim(), "Name:", bankAccountName.trim())
+        console.log("[PayoutSubmit]    Ticket IDs:", selectedTicketIds)
+        console.log("[PayoutSubmit]    Amount:", totalAmount)
+
         const payoutId = await SupabaseService.savePayout({
           organizer_id: user.id,
           ticket_ids: selectedTicketIds,
@@ -981,41 +1016,60 @@ const OrganiserDashboardScreen: React.FC = () => {
           recipient_phone_number: "",
           metadata: { bank_name: bankName.trim(), account_number: bankAccountNumber.trim() },
         })
+        console.log("[PayoutSubmit] ✅ Payout saved with ID:", payoutId)
 
-        // Mark tickets as pending review (admin will mark them paid after approval)
+        // Mark tickets as pending review
+        console.log("[PayoutSubmit]    Marking", selectedTicketIds.length, "tickets as pending_review...")
         for (const tid of selectedTicketIds) {
-          try { await SupabaseService.updateTicket(tid, { payoutStatus: "pending_review", payoutEligible: false }) } catch {}
+          try {
+            await SupabaseService.updateTicket(tid, { payoutStatus: "pending_review", payoutEligible: false })
+            console.log(`[PayoutSubmit]    ✅ Ticket ${tid.slice(0,12)}... marked pending_review`)
+          } catch (err) {
+            console.error(`[PayoutSubmit]    ❌ Failed to update ticket ${tid.slice(0,12)}:`, err)
+          }
         }
 
-        // Create notification for admin and organizer
+        // Create notification
         try {
+          console.log("[PayoutSubmit]    Creating notification for organizer...")
           const { supabase } = await import("../config/supabase")
-          await supabase.from("notifications").insert([
-            {
-              user_id: user.id,
-              title: "🔄 Card Payout Requested",
-              body: `UGX ${totalAmount.toLocaleString()} card payout for ${selectedTicketIds.length} ticket(s) pending admin review. Bank: ${bankName.trim()}`,
-              type: "payout_request",
-              data: { payoutId, amount: totalAmount, status: "pending_admin_review" },
-              is_read: false,
-              created_at: new Date().toISOString(),
-            },
-          ])
-        } catch (err) { console.error("Failed to send notification:", err) }
+          const notifResult = await supabase.from("notifications").insert([{
+            user_id: user.id,
+            title: "🔄 Card Payout Requested",
+            body: `UGX ${totalAmount.toLocaleString()} card payout for ${selectedTicketIds.length} ticket(s) pending admin review. Bank: ${bankName.trim()}`,
+            type: "payout_request",
+            data: { payoutId, amount: totalAmount, status: "pending_admin_review" },
+            is_read: false,
+            created_at: new Date().toISOString(),
+          }])
+          if (notifResult.error) throw notifResult.error
+          console.log("[PayoutSubmit] ✅ Notification created successfully")
+        } catch (err) {
+          console.error("[PayoutSubmit] ❌ Failed to send notification:", err)
+        }
 
-        Alert.alert(
-          "✅ Request Submitted!",
-          `Card payout of UGX ${totalAmount.toLocaleString()} for ${selectedTicketIds.length} ticket(s) sent to admin for review.\nBank: ${bankName.trim()}\nAccount: ${bankAccountNumber.trim()}\nName: ${bankAccountName.trim()}`
-        )
+        console.log("[PayoutSubmit] ✅ Card payout flow complete — showing success alert")
       }
 
       setShowWithdrawModal(false)
       resetPayoutState()
       const reset: Record<string, number> = {}; Object.keys(payoutTicketTypes).forEach(k => { reset[k] = 0 }); setPayoutSelections(reset)
+      // Reload ticket data so payoutTicketTypes reflects the updated payout_eligible/payout_status
+      console.log("[PayoutSubmit] 🔄 Reloading ticket data to sync payout eligibility...")
+      try {
+        const { data: updatedTickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId || "")
+        if (updatedTickets) processTicketData(updatedTickets)
+      } catch (err) { console.error("[PayoutSubmit] ⚠️ Failed to reload tickets:", err) }
     } catch (error: any) {
-      console.error("Payout error:", error)
+      console.error("[PayoutSubmit] ❌ FATAL ERROR:", error)
+      console.error("[PayoutSubmit]    Error name:", error?.name)
+      console.error("[PayoutSubmit]    Error message:", error?.message)
+      console.error("[PayoutSubmit]    Error stack:", error?.stack?.substring(0, 300))
       Alert.alert("Error", error?.message || "Failed")
-    } finally { setWithdrawLoading(false) }
+    } finally {
+      console.log("[PayoutSubmit] ✅ Done (withdrawLoading = false)")
+      setWithdrawLoading(false)
+    }
   }
 
   // Helper to update wallet after payout
@@ -1050,7 +1104,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     const tableSize = data.tableSize || 1
     // For table types: slider count is in tables, price per ticket * tableSize = price per table
     const effectivePrice = isTableType ? (data.price * tableSize) : (data.price || 0)
-    return sum + (count * effectivePrice)
+    return sum + (count * Math.round(effectivePrice * 100) / 100)
   }, 0)
   // Ensure payout amount never exceeds eligible total
   const cappedPayoutAmount = Math.min(totalPayoutAmount, eligiblePayoutTotal)
@@ -1076,17 +1130,17 @@ const OrganiserDashboardScreen: React.FC = () => {
           <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
             {/* Payment method tabs */}
             <View style={styles.payoutTabRow}>
-              <TouchableOpacity
-                style={[styles.payoutTab, payoutTab === "mobile_money" && styles.payoutTabActive]}
-                onPress={() => setPayoutTab("mobile_money")}
-              >
-                <Ionicons name="phone-portrait" size={20} color={payoutTab === "mobile_money" ? "#00D4FF" : "#666"} />
-                <Text style={[styles.payoutTabText, payoutTab === "mobile_money" && styles.payoutTabTextActive]}>Mobile Money</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.payoutTab, payoutTab === "card" && styles.payoutTabActive]}
-                onPress={() => setPayoutTab("card")}
-              >
+                <TouchableOpacity
+                  style={[styles.payoutTab, payoutTab === "mobile_money" && styles.payoutTabActive]}
+                  onPress={() => { console.log("[PayoutTab] 🔄 Switching to Mobile Money tab"); setPayoutTab("mobile_money"); setPayoutSelections({}); }}
+                >
+                  <Ionicons name="phone-portrait" size={20} color={payoutTab === "mobile_money" ? "#00D4FF" : "#666"} />
+                  <Text style={[styles.payoutTabText, payoutTab === "mobile_money" && styles.payoutTabTextActive]}>Mobile Money</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.payoutTab, payoutTab === "card" && styles.payoutTabActive]}
+                  onPress={() => { console.log("[PayoutTab] 🔄 Switching to Card tab"); setPayoutTab("card"); setPayoutSelections({}); }}
+                >
                 <Ionicons name="card" size={20} color={payoutTab === "card" ? "#00D4FF" : "#666"} />
                 <Text style={[styles.payoutTabText, payoutTab === "card" && styles.payoutTabTextActive]}>Card</Text>
               </TouchableOpacity>
