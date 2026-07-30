@@ -986,7 +986,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.name && styles.errorInput]}
           value={name}
-          onChangeText={setName}
+          onChangeText={(t) => { setName(t); setErrors(prev => { const n = {...prev}; delete n.name; return n }) }}
           placeholder="Enter event name"
           placeholderTextColor="#999"
         />
@@ -999,7 +999,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, styles.textArea, errors.description && styles.errorInput]}
           value={description}
-          onChangeText={setDescription}
+          onChangeText={(t) => { setDescription(t); if (errors.description) setErrors(prev => { const n = {...prev}; delete n.description; return n }) }}
           placeholder="Enter event description"
           placeholderTextColor="#999"
           multiline
@@ -1093,7 +1093,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.artists && styles.errorInput]}
           value={artists}
-          onChangeText={setArtists}
+          onChangeText={(t) => { setArtists(t); if (errors.artists) setErrors(prev => { const n = {...prev}; delete n.artists; return n }) }}
           placeholder="Enter artists (comma separated)"
           placeholderTextColor="#999"
         />
@@ -1179,7 +1179,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                 <TextInput
                   style={[styles.input, errors.customVenueName && styles.errorInput]}
                   value={customVenueName}
-                  onChangeText={setCustomVenueName}
+                  onChangeText={(t) => { setCustomVenueName(t); if (errors.customVenueName) setErrors(prev => { const n = {...prev}; delete n.customVenueName; return n }) }}
                   placeholder="Enter venue name"
                   placeholderTextColor="#999"
                 />
@@ -1192,7 +1192,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                 <TextInput
                   style={[styles.input, errors.customVenueAddress && styles.errorInput]}
                   value={customVenueAddress}
-                  onChangeText={setCustomVenueAddress}
+                  onChangeText={(t) => { setCustomVenueAddress(t); if (errors.customVenueAddress) setErrors(prev => { const n = {...prev}; delete n.customVenueAddress; return n }) }}
                   placeholder="Enter venue address"
                   placeholderTextColor="#999"
                 />
@@ -1256,7 +1256,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.location && styles.errorInput]}
           value={location}
-          onChangeText={setLocation}
+          onChangeText={(t) => { setLocation(t); if (errors.location) setErrors(prev => { const n = {...prev}; delete n.location; return n }) }}
           placeholder="Enter event location (e.g. KAMPALA)"
           placeholderTextColor="#999"
         />

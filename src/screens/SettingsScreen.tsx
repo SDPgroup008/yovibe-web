@@ -20,11 +20,12 @@ export default function SettingsScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false)
   const [deleteConfirmText, setDeleteConfirmText] = useState("")
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const handleChangePassword = async () => {
-    if (!currentPassword) { Alert.alert("Error", "Enter your current password"); return }
-    if (!newPassword || newPassword.length < 6) { Alert.alert("Error", "New password must be at least 6 characters"); return }
-    if (newPassword !== confirmPassword) { Alert.alert("Error", "New passwords don't match"); return }
+    if (!currentPassword) { setFieldErrors(p => ({ ...p, currentPassword: "Enter your current password" })); Alert.alert("Error", "Enter your current password"); return }
+    if (!newPassword || newPassword.length < 6) { setFieldErrors(p => ({ ...p, newPassword: "New password must be at least 6 characters" })); Alert.alert("Error", "New password must be at least 6 characters"); return }
+    if (newPassword !== confirmPassword) { setFieldErrors(p => ({ ...p, confirmPassword: "New passwords don't match" })); Alert.alert("Error", "New passwords don't match"); return }
 
     setPasswordLoading(true)
     try {
@@ -54,7 +55,7 @@ export default function SettingsScreen() {
   }
 
   const handleDeleteAccount = async () => {
-    if (deleteConfirmText !== "DELETE") { Alert.alert("Error", 'Type "DELETE" to confirm'); return }
+    if (deleteConfirmText !== "DELETE") { setFieldErrors(p => ({ ...p, deleteConfirm: 'Type "DELETE" to confirm' })); Alert.alert("Error", 'Type "DELETE" to confirm'); return }
 
     setDeleteLoading(true)
     try {
@@ -100,9 +101,12 @@ export default function SettingsScreen() {
                 <Ionicons name="close" size={28} color="#888" />
               </TouchableOpacity>
             </View>
-            <TextInput style={styles.input} value={currentPassword} onChangeText={setCurrentPassword} placeholder="Current password" placeholderTextColor="#666" secureTextEntry />
-            <TextInput style={styles.input} value={newPassword} onChangeText={setNewPassword} placeholder="New password (6+ characters)" placeholderTextColor="#666" secureTextEntry />
-            <TextInput style={styles.input} value={confirmPassword} onChangeText={setConfirmPassword} placeholder="Confirm new password" placeholderTextColor="#666" secureTextEntry />
+            <TextInput style={[styles.input, fieldErrors.currentPassword && styles.inputError]} value={currentPassword} onChangeText={(t) => { setCurrentPassword(t); setFieldErrors(prev => { const n = { ...prev }; delete n.currentPassword; return n }) }} placeholder="Current password" placeholderTextColor="#666" secureTextEntry />
+            {fieldErrors.currentPassword && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.currentPassword}</Text>}
+            <TextInput style={[styles.input, fieldErrors.newPassword && styles.inputError]} value={newPassword} onChangeText={(t) => { setNewPassword(t); setFieldErrors(prev => { const n = { ...prev }; delete n.newPassword; return n }) }} placeholder="New password (6+ characters)" placeholderTextColor="#666" secureTextEntry />
+            {fieldErrors.newPassword && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.newPassword}</Text>}
+            <TextInput style={[styles.input, fieldErrors.confirmPassword && styles.inputError]} value={confirmPassword} onChangeText={(t) => { setConfirmPassword(t); setFieldErrors(prev => { const n = { ...prev }; delete n.confirmPassword; return n }) }} placeholder="Confirm new password" placeholderTextColor="#666" secureTextEntry />
+            {fieldErrors.confirmPassword && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.confirmPassword}</Text>}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={[styles.btn, styles.btnCancel]} onPress={() => setShowPasswordModal(false)} disabled={passwordLoading}>
                 <Text style={styles.btnCancelText}>Cancel</Text>
@@ -131,7 +135,8 @@ export default function SettingsScreen() {
               </Text>
             </View>
             <Text style={{ color: "#FFF", fontSize: 14, marginBottom: 8, fontWeight: "600" }}>Type DELETE to confirm</Text>
-            <TextInput style={styles.input} value={deleteConfirmText} onChangeText={setDeleteConfirmText} placeholder="DELETE" placeholderTextColor="#666" autoCapitalize="characters" />
+            <TextInput style={[styles.input, fieldErrors.deleteConfirm && styles.inputError]} value={deleteConfirmText} onChangeText={(t) => { setDeleteConfirmText(t); setFieldErrors(prev => { const n = { ...prev }; delete n.deleteConfirm; return n }) }} placeholder="DELETE" placeholderTextColor="#666" autoCapitalize="characters" />
+            {fieldErrors.deleteConfirm && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.deleteConfirm}</Text>}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={[styles.btn, styles.btnCancel]} onPress={() => setShowDeleteModal(false)} disabled={deleteLoading}>
                 <Text style={styles.btnCancelText}>Cancel</Text>
@@ -158,6 +163,7 @@ const styles = StyleSheet.create({
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: "800", color: "#FFF" },
   input: { backgroundColor: "#0a0a0f", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 14, marginBottom: 12, borderWidth: 1, borderColor: "rgba(255,255,255,0.06)" },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
   modalButtons: { flexDirection: "row", gap: 12, marginTop: 8 },
   btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   btnCancel: { backgroundColor: "#222" },

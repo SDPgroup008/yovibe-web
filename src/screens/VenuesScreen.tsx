@@ -291,7 +291,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
     }
 
     // Authenticated and allowed (club_owner or admin) -> open AddVenue
-    navigation.navigate('/profile/add-venue');
+    navigation.navigate('AddVenue');
   };
 
   return (

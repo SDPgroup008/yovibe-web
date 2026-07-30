@@ -249,6 +249,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [bankName, setBankName] = useState("")
   const [bankAccountNumber, setBankAccountNumber] = useState("")
   const [bankAccountName, setBankAccountName] = useState("")
+  const [payoutFieldErrors, setPayoutFieldErrors] = useState<Record<string, string>>({})
   // Maps ticketId → payment_method for filtering payouts by tab
   const [scannedPaymentMethods, setScannedPaymentMethods] = useState<Record<string, string>>({})
 
@@ -264,8 +265,9 @@ const OrganiserDashboardScreen: React.FC = () => {
     mobileName: "",
     bankName: "",
     bankNumber: "",
-    bankNameAccount: ""
+    bankNameAccount: "",
   })
+  const [paymentFormErrors, setPaymentFormErrors] = useState<Record<string, string>>({})
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scannerInput, setScannerInput] = useState("")
@@ -739,6 +741,15 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const handleSavePaymentDetails = async () => {
     if (!event) return
+    setPaymentFormErrors({})
+    const errs: Record<string, string> = {}
+    if (editForm.mobileNumber && !editForm.mobileName) errs.mobileName = "Enter account holder name for mobile money"
+    if (editForm.mobileName && !editForm.mobileNumber) errs.mobileNumber = "Enter mobile money number"
+    if (editForm.bankName && !editForm.bankNumber) errs.bankNumber = "Enter account number for bank"
+    if (editForm.bankName && !editForm.bankNameAccount) errs.bankNameAccount = "Enter account holder name for bank"
+    if (editForm.bankNumber && !editForm.bankName) errs.bankName = "Enter bank name"
+    if (editForm.bankNameAccount && !editForm.bankName) errs.bankName = "Enter bank name"
+    if (Object.keys(errs).length > 0) { setPaymentFormErrors(errs); Alert.alert("Missing Fields", Object.values(errs).join("\n")); return }
     try {
       const mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }> = []
       if (editForm.mobileNumber && editForm.mobileName) mobileMoney.push({ provider: editForm.mobileProvider, number: editForm.mobileNumber, name: editForm.mobileName })
@@ -777,6 +788,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     setBankAccountNumber("")
     setBankAccountName("")
     setPayoutTab("mobile_money")
+    setPayoutFieldErrors({})
   }, [])
 
   // --- Payout handler ---
@@ -886,6 +898,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   };
 
   const handlePayoutSubmit = async () => {
+    setPayoutFieldErrors({})
     console.log("[PayoutSubmit] 🚀 handlePayoutSubmit called")
     console.log("[PayoutSubmit]    payoutTab:", payoutTab)
     console.log("[PayoutSubmit]    user:", user?.id || "none")
@@ -895,12 +908,12 @@ const OrganiserDashboardScreen: React.FC = () => {
     // Validate based on tab
     if (payoutTab === "mobile_money") {
       console.log("[PayoutSubmit] 📱 Mobile money validation — phone:", payoutPhone)
-      if (!payoutPhone || payoutPhone.length < 10) { Alert.alert("Error", "Enter a valid mobile money number"); return }
+      if (!payoutPhone || payoutPhone.length < 10) { setPayoutFieldErrors({payoutPhone:"Enter a valid mobile money number"}); Alert.alert("Error", "Enter a valid mobile money number"); return }
     } else {
       console.log("[PayoutSubmit] 💳 Card validation — bankName:", bankName.trim(), "acct:", bankAccountNumber.trim(), "holder:", bankAccountName.trim())
-      if (!bankName.trim()) { console.log("[PayoutSubmit] ❌ Missing bank name"); Alert.alert("Error", "Enter bank name"); return }
-      if (!bankAccountNumber.trim()) { console.log("[PayoutSubmit] ❌ Missing account number"); Alert.alert("Error", "Enter account number"); return }
-      if (!bankAccountName.trim()) { console.log("[PayoutSubmit] ❌ Missing account name"); Alert.alert("Error", "Enter account name"); return }
+      if (!bankName.trim()) { setPayoutFieldErrors({bankName:"Enter bank name"}); console.log("[PayoutSubmit] ❌ Missing bank name"); Alert.alert("Error", "Enter bank name"); return }
+      if (!bankAccountNumber.trim()) { setPayoutFieldErrors({bankAccountNumber:"Enter account number"}); console.log("[PayoutSubmit] ❌ Missing account number"); Alert.alert("Error", "Enter account number"); return }
+      if (!bankAccountName.trim()) { setPayoutFieldErrors({bankAccountName:"Enter account name"}); console.log("[PayoutSubmit] ❌ Missing account name"); Alert.alert("Error", "Enter account name"); return }
     }
 
     console.log("[PayoutSubmit] ✅ Validation passed")
@@ -1212,8 +1225,9 @@ const OrganiserDashboardScreen: React.FC = () => {
                     }}
                     keyboardType="phone-pad"
                   />
-                </View>
-                <Text style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Confirm Number</Text>
+              </View>
+              {payoutFieldErrors.payoutPhone && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{payoutFieldErrors.payoutPhone}</Text>}
+              <Text style={{ color: "#888", fontSize: 12, marginBottom: 8 }}>Confirm Number</Text>
                 <View style={styles.phoneRow}>
                   <TextInput
                     style={styles.phoneInput}
@@ -1260,29 +1274,32 @@ const OrganiserDashboardScreen: React.FC = () => {
             <View style={styles.phoneSection}>
               <Text style={styles.phoneLabel}>🏦 Bank Details</Text>
               <TextInput
-                style={styles.phoneInput}
+                style={[styles.phoneInput, payoutFieldErrors.bankName && styles.inputError]}
                 placeholder="Bank name (e.g. Stanbic Uganda)"
                 placeholderTextColor="#555"
                 value={bankName}
-                onChangeText={setBankName}
+                onChangeText={(t) => { setBankName(t); setPayoutFieldErrors(prev => { const n = {...prev}; delete n.bankName; return n }) }}
               />
+              {payoutFieldErrors.bankName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{payoutFieldErrors.bankName}</Text>}
               <View style={{ height: 10 }} />
               <TextInput
-                style={styles.phoneInput}
+                style={[styles.phoneInput, payoutFieldErrors.bankAccountNumber && styles.inputError]}
                 placeholder="Account number"
                 placeholderTextColor="#555"
                 value={bankAccountNumber}
-                onChangeText={setBankAccountNumber}
+                onChangeText={(t) => { setBankAccountNumber(t); setPayoutFieldErrors(prev => { const n = {...prev}; delete n.bankAccountNumber; return n }) }}
                 keyboardType="numeric"
               />
+              {payoutFieldErrors.bankAccountNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{payoutFieldErrors.bankAccountNumber}</Text>}
               <View style={{ height: 10 }} />
               <TextInput
-                style={styles.phoneInput}
+                style={[styles.phoneInput, payoutFieldErrors.bankAccountName && styles.inputError]}
                 placeholder="Account holder name"
                 placeholderTextColor="#555"
                 value={bankAccountName}
-                onChangeText={setBankAccountName}
+                onChangeText={(t) => { setBankAccountName(t); setPayoutFieldErrors(prev => { const n = {...prev}; delete n.bankAccountName; return n }) }}
               />
+              {payoutFieldErrors.bankAccountName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{payoutFieldErrors.bankAccountName}</Text>}
               <View style={{ height: 20 }} />
             </View>
           )}
@@ -1683,12 +1700,17 @@ const OrganiserDashboardScreen: React.FC = () => {
                       <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'mtn' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'mtn' })}><Text style={styles.providerButtonText}>MTN</Text></TouchableOpacity>
                       <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'airtel' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'airtel' })}><Text style={styles.providerButtonText}>Airtel</Text></TouchableOpacity>
                     </View>
-                    <TextInput style={styles.input} placeholder="Phone Number" value={editForm.mobileNumber} onChangeText={(t) => setEditForm({ ...editForm, mobileNumber: t })} placeholderTextColor="#888" keyboardType="phone-pad" />
-                    <TextInput style={styles.input} placeholder="Account Name" value={editForm.mobileName} onChangeText={(t) => setEditForm({ ...editForm, mobileName: t })} placeholderTextColor="#888" />
+                    <TextInput style={[styles.input, paymentFormErrors.mobileNumber && styles.inputError]} placeholder="Phone Number" value={editForm.mobileNumber} onChangeText={(t) => { setEditForm({ ...editForm, mobileNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileNumber; return n }) }} placeholderTextColor="#888" keyboardType="phone-pad" />
+                    {paymentFormErrors.mobileNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileNumber}</Text>}
+                    <TextInput style={[styles.input, paymentFormErrors.mobileName && styles.inputError]} placeholder="Account Name" value={editForm.mobileName} onChangeText={(t) => { setEditForm({ ...editForm, mobileName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileName; return n }) }} placeholderTextColor="#888" />
+                    {paymentFormErrors.mobileName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileName}</Text>}
                     <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
-                    <TextInput style={styles.input} placeholder="Bank Name" value={editForm.bankName} onChangeText={(t) => setEditForm({ ...editForm, bankName: t })} placeholderTextColor="#888" />
-                    <TextInput style={styles.input} placeholder="Account Number" value={editForm.bankNumber} onChangeText={(t) => setEditForm({ ...editForm, bankNumber: t })} placeholderTextColor="#888" keyboardType="numeric" />
-                    <TextInput style={styles.input} placeholder="Account Name" value={editForm.bankNameAccount} onChangeText={(t) => setEditForm({ ...editForm, bankNameAccount: t })} placeholderTextColor="#888" />
+                    <TextInput style={[styles.input, paymentFormErrors.bankName && styles.inputError]} placeholder="Bank Name" value={editForm.bankName} onChangeText={(t) => { setEditForm({ ...editForm, bankName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankName; return n }) }} placeholderTextColor="#888" />
+                    {paymentFormErrors.bankName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankName}</Text>}
+                    <TextInput style={[styles.input, paymentFormErrors.bankNumber && styles.inputError]} placeholder="Account Number" value={editForm.bankNumber} onChangeText={(t) => { setEditForm({ ...editForm, bankNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNumber; return n }) }} placeholderTextColor="#888" keyboardType="numeric" />
+                    {paymentFormErrors.bankNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNumber}</Text>}
+                    <TextInput style={[styles.input, paymentFormErrors.bankNameAccount && styles.inputError]} placeholder="Account Name" value={editForm.bankNameAccount} onChangeText={(t) => { setEditForm({ ...editForm, bankNameAccount: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNameAccount; return n }) }} placeholderTextColor="#888" />
+                    {paymentFormErrors.bankNameAccount && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNameAccount}</Text>}
                     <View style={styles.buttonRow}>
                       <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: '#666' }]} onPress={() => setIsEditingPayment(false)}><Text style={styles.actionButtonSmallText}>Cancel</Text></TouchableOpacity>
                       <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: '#00D4FF' }]} onPress={handleSavePaymentDetails}><Text style={styles.actionButtonSmallText}>Save</Text></TouchableOpacity>
@@ -2025,6 +2047,7 @@ const styles = StyleSheet.create({
   phoneLabel: { color: "#FFF", fontSize: 15, fontWeight: "600", marginBottom: 8 },
   phoneRow: { marginBottom: 8 },
   phoneInput: { backgroundColor: "#1a1a1a", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: "#333" },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
   providerRow: { flexDirection: "row", gap: 12 },
   providerChip: { flex: 1, padding: 12, alignItems: "center", backgroundColor: "#1a1a1a", borderRadius: 10, borderWidth: 1, borderColor: "#333" },
   providerChipActive: { borderColor: "#00D4FF", backgroundColor: "rgba(0,212,255,0.1)" },

@@ -48,23 +48,31 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
   const [googleLoading, setGoogleLoading] = useState(false)
   const [adminDotsPressed, setAdminDotsPressed] = useState(0)
   const [termsAgreed, setTermsAgreed] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   // visibility toggles for password fields
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
   const handleSignUp = async () => {
+    setFieldErrors({})
+
     if (!email || !password || !confirmPassword) {
+      if (!email) setFieldErrors(prev => ({...prev, email: "Please enter your email"}))
+      if (!password) setFieldErrors(prev => ({...prev, password: "Please enter your password"}))
+      if (!confirmPassword) setFieldErrors(prev => ({...prev, confirmPassword: "Please confirm your password"}))
       Alert.alert("Error", "Please enter email, password and confirm password")
       return
     }
 
     if (password.length < 6) {
+      setFieldErrors(prev => ({...prev, password: "Password must be at least 6 characters"}))
       Alert.alert("Error", "Password must be at least 6 characters")
       return
     }
 
     if (password !== confirmPassword) {
+      setFieldErrors(prev => ({...prev, confirmPassword: "Passwords do not match"}))
       Alert.alert("Error", "Passwords do not match")
       return
     }
@@ -147,27 +155,29 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
             <View style={styles.inputContainer}>
               <Ionicons name="mail-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.email && styles.inputError]}
                 placeholder="Email"
                 placeholderTextColor="#999"
                 value={email}
-                onChangeText={setEmail}
+                onChangeText={(t) => { setEmail(t); setFieldErrors(prev => { const n = {...prev}; delete n.email; return n }) }}
                 autoCapitalize="none"
                 keyboardType="email-address"
               />
+              {fieldErrors.email && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 8 }}>{fieldErrors.email}</Text>}
             </View>
 
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.password && styles.inputError]}
                 placeholder="Password"
                 placeholderTextColor="#999"
                 value={password}
-                onChangeText={setPassword}
+                onChangeText={(t) => { setPassword(t); setFieldErrors(prev => { const n = {...prev}; delete n.password; return n }) }}
                 secureTextEntry={!showPassword}
                 autoCapitalize="none"
               />
+              {fieldErrors.password && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 8 }}>{fieldErrors.password}</Text>}
               <TouchableOpacity
                 onPress={() => setShowPassword((s) => !s)}
                 accessibilityLabel={showPassword ? "Hide password" : "Show password"}
@@ -180,14 +190,15 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
             <View style={styles.inputContainer}>
               <Ionicons name="lock-closed-outline" size={22} color="#FFFFFF" style={styles.inputIcon} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, fieldErrors.confirmPassword && styles.inputError]}
                 placeholder="Confirm Password"
                 placeholderTextColor="#999"
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(t) => { setConfirmPassword(t); setFieldErrors(prev => { const n = {...prev}; delete n.confirmPassword; return n }) }}
                 secureTextEntry={!showConfirmPassword}
                 autoCapitalize="none"
               />
+              {fieldErrors.confirmPassword && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 8 }}>{fieldErrors.confirmPassword}</Text>}
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword((s) => !s)}
                 accessibilityLabel={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
@@ -364,6 +375,10 @@ const styles = StyleSheet.create({
     height: responsiveSize(48, 52, 56),
     color: "#FFFFFF",
     fontSize: responsiveSize(14, 15, 16),
+  },
+  inputError: {
+    borderColor: "#FF4444",
+    borderWidth: 1.5,
   },
   visibilityToggle: {
     paddingHorizontal: responsiveSize(10, 12, 14),

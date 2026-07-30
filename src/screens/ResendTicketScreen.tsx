@@ -22,15 +22,18 @@ const ResendTicketScreen: React.FC = () => {
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const handleResendTickets = async () => {
+    setFieldErrors({})
     if (!email.trim()) {
+      setFieldErrors({ email: "Please enter your email address" })
       Alert.alert("Error", "Please enter your email address")
       return
     }
-
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
+      setFieldErrors({ email: "Please enter a valid email address" })
       Alert.alert("Error", "Please enter a valid email address")
       return
     }
@@ -118,15 +121,16 @@ const ResendTicketScreen: React.FC = () => {
           <View style={styles.inputContainer}>
             <Text style={styles.label}>Email Address</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.email && { borderColor: "#FF4444", borderWidth: 1.5 }]}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(t) => { setEmail(t); setFieldErrors({}) }}
               placeholder="Enter your email"
               placeholderTextColor="#666"
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
             />
+            {fieldErrors.email && <Text style={{ color: "#FF4444", fontSize: 12, marginTop: -16, marginBottom: 8 }}>{fieldErrors.email}</Text>}
           </View>
 
           <TouchableOpacity

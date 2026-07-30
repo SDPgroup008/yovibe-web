@@ -220,7 +220,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.name && styles.errorInput]}
           value={name}
-          onChangeText={setName}
+          onChangeText={(t) => { setName(t); setErrors(prev => { const n = {...prev}; delete n.name; return n }) }}
           placeholder="Enter venue name"
           placeholderTextColor="#999"
         />
@@ -233,7 +233,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.location && styles.errorInput]}
           value={location}
-          onChangeText={setLocation}
+          onChangeText={(t) => { setLocation(t); setErrors(prev => { const n = {...prev}; delete n.location; return n }) }}
           placeholder="Enter venue address"
           placeholderTextColor="#999"
         />
@@ -246,7 +246,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, styles.textArea, errors.description && styles.errorInput]}
           value={description}
-          onChangeText={setDescription}
+          onChangeText={(t) => { setDescription(t); setErrors(prev => { const n = {...prev}; delete n.description; return n }) }}
           placeholder="Enter venue description"
           placeholderTextColor="#999"
           multiline
@@ -284,7 +284,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
         <TextInput
           style={[styles.input, errors.categories && styles.errorInput]}
           value={categories}
-          onChangeText={setCategories}
+          onChangeText={(t) => { setCategories(t); setErrors(prev => { const n = {...prev}; delete n.categories; return n }) }}
           placeholder={
             venueType === "nightlife" ? "e.g., Nightclub, Bar, Lounge" : "e.g., Sports Center, Gym, Entertainment"
           }

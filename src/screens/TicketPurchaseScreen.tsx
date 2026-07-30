@@ -114,10 +114,10 @@ const TicketPurchaseScreen: React.FC = () => {
   }
   
   // Get the selected ticket type name
-  const selectedTicketTypeName = selectedTicketType?.name || (ticketTypes.length > 0 ? ticketTypes[0].name : "Standard")
+  const selectedTicketTypeName = selectedTicketType?.name || "Click here to select"
 
   // Calculate table entry details
-  const selectedEntryFee = ticketTypes.length > 0 ? ticketTypes.find((t: any) => t.name === selectedTicketTypeName) : null
+  const selectedEntryFee = selectedTicketType ? ticketTypes.find((t: any) => t.name === selectedTicketType.name) : null
   const isTableEntry = selectedEntryFee?.isTable ?? false
   const tableSize = selectedEntryFee?.tableSize ?? 1
   const actualTicketCount = isTableEntry ? quantity * tableSize : quantity
@@ -211,6 +211,80 @@ const TicketPurchaseScreen: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState("")
   const [checkingPayment, setCheckingPayment] = useState(false)
   const bannerOpacity = useRef(new Animated.Value(0)).current
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const scrollRef = useRef<ScrollView>(null)
+  const fieldYPositions = useRef<Record<string, number>>({})
+
+  // ─── Consolidated field validation ─────────────────────────────────────
+  const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const PHONE_REGEX = /^(0\d{9}|\+256\d{9}|256\d{9})$/
+  const CARD_EXPIRY_REGEX = /^(0[1-9]|1[0-2])\/\d{2}$/
+
+  function registerFieldPos(key: string, y: number) { fieldYPositions.current[key] = y }
+
+  function validatePurchaseForm(): Record<string, string> {
+    const errs: Record<string, string> = {}
+    const names = getBuyerNames()
+    for (let i = 0; i < actualTicketCount; i++) {
+      if (!names[i]?.trim()) errs[`name_${i}`] = `Please enter name for person ${i + 1}`
+    }
+    if (selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none") {
+      if (isTableEntry) {
+        const unassigned = tableSeats.slice(0, quantity).filter(s => s == null)
+        if (unassigned.length > 0) errs.seat_selection = "Please select a table for each group"
+      } else {
+        const unassigned = perPersonSeats.slice(0, actualTicketCount).filter(s => s == null)
+        if (unassigned.length > 0) errs.seat_selection = "Please select a seat for each person"
+      }
+    }
+    if (!selectedTicketType && ticketTypes.length > 0) errs.ticketType = "Please select a ticket type"
+    if (!user && !buyerContactEmail.trim()) errs.buyerContactEmail = "Please enter your email address"
+    else if (!user && !EMAIL_REGEX.test(buyerContactEmail.trim())) errs.buyerContactEmail = "Enter a valid email address"
+    if (!paymentMethod) errs.paymentMethod = "Please select a payment method"
+    // Email distribution validation
+    if (emailDistribution === "single" && !visitorEmail.trim()) {
+      errs.visitorEmail = "Please enter a delivery email address for this ticket"
+    } else if (emailDistribution === "single" && !EMAIL_REGEX.test(visitorEmail.trim())) {
+      errs.visitorEmail = "Enter a valid email address for delivery"
+    }
+    if (emailDistribution === "multiple") {
+      const hasEmpty = buyerEmails.slice(0, actualTicketCount).some(e => !e.trim())
+      if (hasEmpty) errs.buyerEmailDist = "Please enter a delivery email for each attendee"
+    }
+    // Seat/table per-person inline errors
+    if (selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none" && !isTableEntry) {
+      for (let i = 0; i < actualTicketCount; i++) {
+        if (perPersonSeats[i] == null && !errs.seat_selection) errs.seat_selection = "Please select a seat for each person"
+        if (perPersonSeats[i] == null) errs[`seat_${i}`] = "Seat required"
+      }
+    }
+    if (isTableEntry && selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none") {
+      for (let i = 0; i < quantity; i++) {
+        if (tableSeats[i] == null) errs[`table_${i}`] = "Table required"
+      }
+    }
+    if (paymentMethod === "mobile_money") {
+      if (!mobileMoneyNumber.trim()) errs.mobileMoneyNumber = "Please enter your mobile money number"
+      else if (!PHONE_REGEX.test(mobileMoneyNumber.trim())) errs.mobileMoneyNumber = "Enter a valid Ugandan phone (e.g. 0772123456)"
+    }
+    if (paymentMethod === "credit_card") {
+      if (!cardFirstName.trim()) errs.cardFirstName = "Please enter your first name for billing"
+      if (!cardLastName.trim()) errs.cardLastName = "Please enter your last name for billing"
+      if (!cardPhone.trim()) errs.cardPhone = "Please enter your phone number for billing"
+      else if (!PHONE_REGEX.test(cardPhone.trim())) errs.cardPhone = "Enter a valid Ugandan phone (e.g. 0772123456)"
+    }
+    return errs
+  }
+
+  function handleFieldErrors(errs: Record<string, string>): boolean {
+    setFieldErrors(errs)
+    if (Object.keys(errs).length === 0) return false
+    const firstKey = Object.keys(errs)[0]
+    const y = fieldYPositions.current[firstKey]
+    if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true })
+    Alert.alert("Missing Information", `${Object.keys(errs).length} field(s) need attention.\n\n${errs[firstKey]}`)
+    return true
+  }
 
   // Installment state
   const [useInstallments, setUseInstallments] = useState(false)
@@ -533,6 +607,9 @@ const updateBuyerName = (index: number, name: string) => {
       newNames[index] = name
       return newNames
     })
+    if (fieldErrors[`name_${index}`]) {
+      setFieldErrors(prev => { const n = { ...prev }; delete n[`name_${index}`]; return n })
+    }
   }
   
   const updateBuyerEmail = (index: number, email: string) => {
@@ -541,6 +618,7 @@ const updateBuyerName = (index: number, name: string) => {
       newEmails[index] = email
       return newEmails
     })
+    if (fieldErrors.buyerEmailDist) setFieldErrors(prev => { const n = { ...prev }; delete n.buyerEmailDist; return n })
   }
   
   const getBuyerNames = (): string[] => {
@@ -589,30 +667,12 @@ const updateBuyerName = (index: number, name: string) => {
   }
 
 const handleInstallmentPurchase = async () => {
+    setFieldErrors({})
+    const errs = validatePurchaseForm()
+    delete errs.paymentMethod; delete errs.mobileMoneyNumber; delete errs.cardFirstName; delete errs.cardLastName; delete errs.cardPhone
+    if (Object.keys(errs).length > 0) { handleFieldErrors(errs); return }
+
     const buyerNamesList = getBuyerNames()
-    for (let i = 0; i < actualTicketCount; i++) {
-      if (!buyerNamesList[i]?.trim()) {
-        Alert.alert("Name Required", `Please enter name for person ${i + 1}`)
-        return
-      }
-    }
-
-    if (!paymentMethod) {
-      Alert.alert("Payment Required", "Please select a payment method")
-      return
-    }
-
-    if (paymentMethod === "mobile_money" && !mobileMoneyNumber.trim()) {
-      Alert.alert("Number Required", "Please enter your mobile money number")
-      return
-    }
-
-    if (paymentMethod === "credit_card") {
-      if (!cardFirstName.trim()) { Alert.alert("Name Required", "Please enter your first name for card billing"); return }
-      if (!cardLastName.trim()) { Alert.alert("Name Required", "Please enter your last name for card billing"); return }
-      if (!cardPhone.trim()) { Alert.alert("Phone Required", "Please enter your phone number for card billing"); return }
-    }
-
     const buyerEmailFinal = user?.email || buyerContactEmail.trim() || ""
     const buyerNameFinal = visitorName.trim() || buyerEmailFinal.split("@")[0] || "Guest"
     const buyerEmailsList = getBuyerEmails()
@@ -743,35 +803,10 @@ const handleInstallmentPurchase = async () => {
   const handlePurchase = async () => {
     console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod)
     
-    // Validate names for each ticket
-    const buyerNamesList = getBuyerNames()
-    const ticketCount = actualTicketCount
-    
-    for (let i = 0; i < ticketCount; i++) {
-      if (!buyerNamesList[i]?.trim()) {
-        Alert.alert("Name Required", `Please enter name for person ${i + 1}`)
-        return
-      }
-    }
-
-    // Validate seat assignment for seat-mapped ticket types
-    const hasSeatMap = selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none"
-    if (hasSeatMap) {
-      if (isTableEntry) {
-        const unassignedTables = tableSeats.slice(0, quantity).filter(s => s == null)
-        if (unassignedTables.length > 0) {
-          Alert.alert("Table Required", `Please select a table for Table ${unassignedTables.length === quantity ? "1" : quantity - unassignedTables.length + 1}`)
-          return
-        }
-      } else {
-        const unassignedSeats = perPersonSeats.slice(0, ticketCount).filter(s => s == null)
-        if (unassignedSeats.length > 0) {
-          const firstMissing = perPersonSeats.findIndex(s => s == null) + 1
-          Alert.alert("Seat Required", `Please select a seat for Person ${firstMissing}`)
-          return
-        }
-      }
-    }
+    // Consolidated validation
+    setFieldErrors({})
+    const errs = validatePurchaseForm()
+    if (Object.keys(errs).length > 0) { handleFieldErrors(errs); return }
 
     // Determine buyer ID, email, and phone based on auth status
     let buyerId: string
@@ -780,31 +815,15 @@ const handleInstallmentPurchase = async () => {
     let buyerPhone: string
     
     if (user) {
-      // Authenticated user - use their registered details
       buyerId = user.id
       buyerName = user.displayName || user.email || "Unknown"
       buyerEmail = user.email || ""
-      // Try to get phone from payment details or leave empty
       buyerPhone = user?.paymentDetails?.mobileMoney?.phoneNumber || ""
     } else {
-      // Unauthenticated user - require buyer contact email
-      console.log("[handlePurchase] Unauthenticated user - buyerContactEmail:", buyerContactEmail)
-      if (!buyerContactEmail.trim()) {
-        Alert.alert("Email Required", "Please enter your email address")
-        return
-      }
-      
-      // Generate unique visitor ID
       buyerId = `visitor_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
       buyerName = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
       buyerEmail = buyerContactEmail.trim()
       buyerPhone = visitorPhone.trim() || ""
-    }
-
-    // Validate ticket type selection
-    if (!selectedTicketType && ticketTypes.length > 0) {
-      Alert.alert("Ticket Type Required", "Please select a ticket type")
-      return
     }
 
     const isBuyingForSelfValidation = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
@@ -910,7 +929,7 @@ const handleInstallmentPurchase = async () => {
   if (!event) {
     return (
       <View style={styles.container}>
-        <ScrollView>
+      <ScrollView ref={scrollRef}>
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Purchase Tickets</Text>
           </View>
@@ -1001,25 +1020,28 @@ const handleInstallmentPurchase = async () => {
         {/* Ticket Type Selector */}
         {ticketTypes.length > 0 ? (
           <TouchableOpacity 
-            style={styles.ticketTypeSelector}
+            style={[styles.ticketTypeSelector, fieldErrors.ticketType && { borderColor: "#FF4444", borderWidth: 1.5 }]}
             onPress={() => setShowTicketTypeModal(true)}
           >
             <View style={styles.ticketTypeSelectorContent}>
               <Ionicons name="ticket" size={24} color="#00D4FF" />
-              <View style={styles.ticketTypeSelectorText}>
-                <Text style={styles.ticketTypeSelectorLabel}>
-                  {selectedTicketTypeName}
-                </Text>
-                <Text style={styles.ticketTypeSelectorPrice}>
-                  UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
-                </Text>
-              </View>
+                <View style={styles.ticketTypeSelectorText}>
+                  <Text style={[styles.ticketTypeSelectorLabel, !selectedTicketType && { color: "#666", fontStyle: "italic" }]}>
+                    {selectedTicketTypeName}
+                  </Text>
+                  {selectedTicketType && (
+                    <Text style={styles.ticketTypeSelectorPrice}>
+                      UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
+                    </Text>
+                  )}
+                </View>
             </View>
             <Ionicons name="chevron-down" size={24} color="#888888" />
           </TouchableOpacity>
         ) : (
           <Text style={styles.noTicketsText}>No ticket types available</Text>
         )}
+        {fieldErrors.ticketType && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.ticketType}</Text>}
 
         {!isTableEntry && (
           <View style={styles.priceRow}>
@@ -1058,14 +1080,15 @@ const handleInstallmentPurchase = async () => {
         <View style={styles.visitorInfoSection}>
           <Text style={styles.sectionTitle}>Buyer Contact Info</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, fieldErrors.buyerContactEmail && styles.inputError]}
             value={buyerContactEmail}
-            onChangeText={setBuyerContactEmail}
+            onChangeText={(t) => { setBuyerContactEmail(t); setFieldErrors(prev => { const n = { ...prev }; delete n.buyerContactEmail; return n }) }}
             placeholder="Enter buyer's email address"
             placeholderTextColor="#999"
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {fieldErrors.buyerContactEmail && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.buyerContactEmail}</Text>}
         </View>
       )}
 
@@ -1090,7 +1113,7 @@ const handleInstallmentPurchase = async () => {
                 <View style={styles.tableGroupHeader}>
                   <Text style={styles.tableGroupTitle}>Table {tableIdx + 1}</Text>
                   <TouchableOpacity
-                    style={[styles.seatSelectBtn, tableSeats[tableIdx] != null && styles.seatSelectBtnActive]}
+                    style={[styles.seatSelectBtn, tableSeats[tableIdx] != null && styles.seatSelectBtnActive, fieldErrors[`table_${tableIdx}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
                     onPress={() => {
                       const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
                       if (fee) openSeatMap(fee, tableIdx, "table")
@@ -1106,7 +1129,7 @@ const handleInstallmentPurchase = async () => {
                   return (
                     <View key={seatIdx} style={styles.tablePersonRow}>
                       <TextInput
-                        style={[styles.input, { flex: 1 }]}
+                        style={[styles.input, { flex: 1 }, fieldErrors[`name_${personIdx}`] && styles.inputError]}
                         value={buyerNames[personIdx] || ""}
                         onChangeText={(text) => updateBuyerName(personIdx, text)}
                         placeholder={`Person ${personIdx + 1} Name`}
@@ -1125,7 +1148,7 @@ const handleInstallmentPurchase = async () => {
             return (
               <View key={index} style={styles.nameRow}>
                 <TextInput
-                  style={[styles.input, { flex: 1, marginRight: hasSeatMap ? 8 : 0 }]}
+                  style={[styles.input, { flex: 1, marginRight: hasSeatMap ? 8 : 0 }, fieldErrors[`name_${index}`] && styles.inputError]}
                   value={buyerNames[index] || ""}
                   onChangeText={(text) => updateBuyerName(index, text)}
                   placeholder={`Person ${index + 1} Name`}
@@ -1133,7 +1156,7 @@ const handleInstallmentPurchase = async () => {
                 />
                 {hasSeatMap && (
                   <TouchableOpacity
-                    style={[styles.seatSelectBtn, perPersonSeats[index] != null && styles.seatSelectBtnActive]}
+                    style={[styles.seatSelectBtn, perPersonSeats[index] != null && styles.seatSelectBtnActive, fieldErrors[`seat_${index}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
                     onPress={() => {
                       const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
                       if (fee) openSeatMap(fee, index, "seat")
@@ -1176,20 +1199,24 @@ const handleInstallmentPurchase = async () => {
         </View>
 
         {emailDistribution === "single" ? (
-          <TextInput
-            style={styles.input}
+          <View>
+            <TextInput
+            style={[styles.input, fieldErrors.visitorEmail && styles.inputError]}
             value={visitorEmail}
-            onChangeText={setVisitorEmail}
+            onChangeText={(t) => { setVisitorEmail(t); setFieldErrors(prev => { const n = { ...prev }; delete n.visitorEmail; return n }) }}
             placeholder="Enter email address"
             placeholderTextColor="#999"
             keyboardType="email-address"
             autoCapitalize="none"
           />
+          {fieldErrors.visitorEmail && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.visitorEmail}</Text>}
+          </View>
         ) : (
-          Array.from({ length: actualTicketCount }).map((_, index) => (
+          <View>
+          {Array.from({ length: actualTicketCount }).map((_, index) => (
             <TextInput
               key={index}
-              style={styles.input}
+              style={[styles.input, fieldErrors.buyerEmailDist && styles.inputError]}
               value={buyerEmails[index] || ""}
               onChangeText={(text) => updateBuyerEmail(index, text)}
               placeholder={`Person ${index + 1} Email`}
@@ -1197,7 +1224,9 @@ const handleInstallmentPurchase = async () => {
               keyboardType="email-address"
               autoCapitalize="none"
             />
-          ))
+          ))}
+          {fieldErrors.buyerEmailDist && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.buyerEmailDist}</Text>}
+          </View>
         )}
 
         {actualTicketCount === 1 && !isTableEntry && emailDistribution === "single" && (
@@ -1319,13 +1348,14 @@ const handleInstallmentPurchase = async () => {
               </TouchableOpacity>
             </View>
             <TextInput
-              style={styles.input}
+              style={[styles.input, fieldErrors.mobileMoneyNumber && styles.inputError]}
               value={mobileMoneyNumber}
-              onChangeText={setMobileMoneyNumber}
+              onChangeText={(t) => { setMobileMoneyNumber(t); setFieldErrors(prev => { const n = { ...prev }; delete n.mobileMoneyNumber; return n }) }}
               placeholder="Mobile money number"
               placeholderTextColor="#999"
               keyboardType="phone-pad"
             />
+            {fieldErrors.mobileMoneyNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.mobileMoneyNumber}</Text>}
             <TextInput
               style={styles.input}
               value={mobileMoneyName}
@@ -1339,9 +1369,14 @@ const handleInstallmentPurchase = async () => {
           {paymentMethod === "credit_card" && (
             <View style={styles.paymentForm}>
               <Text style={styles.paymentFormTitle}>Billing Details</Text>
-              <TextInput style={styles.input} value={cardFirstName} onChangeText={setCardFirstName} placeholder="First name" placeholderTextColor="#999" />
-              <TextInput style={styles.input} value={cardLastName} onChangeText={setCardLastName} placeholder="Last name" placeholderTextColor="#999" />
-              <TextInput style={styles.input} value={cardPhone} onChangeText={setCardPhone} placeholder="Phone number" placeholderTextColor="#999" keyboardType="phone-pad" />
+              <TextInput style={[styles.input, fieldErrors.cardFirstName && styles.inputError]}                   value={cardFirstName}
+                  onChangeText={(t) => { setCardFirstName(t); setFieldErrors(prev => { const n = { ...prev }; delete n.cardFirstName; return n }) }}
+                  placeholder="First name" placeholderTextColor="#999" />
+              <TextInput style={[styles.input, fieldErrors.cardLastName && styles.inputError]} value={cardLastName} onChangeText={(t) => { setCardLastName(t); setFieldErrors(prev => { const n = { ...prev }; delete n.cardLastName; return n }) }} placeholder="Last name" placeholderTextColor="#999" />
+              <TextInput style={[styles.input, fieldErrors.cardPhone && styles.inputError]} value={cardPhone} onChangeText={(t) => { setCardPhone(t); setFieldErrors(prev => { const n = { ...prev }; delete n.cardPhone; return n }) }} placeholder="Phone number" placeholderTextColor="#999" keyboardType="phone-pad" />
+              {fieldErrors.cardFirstName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.cardFirstName}</Text>}
+              {fieldErrors.cardLastName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.cardLastName}</Text>}
+              {fieldErrors.cardPhone && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.cardPhone}</Text>}
             </View>
           )}
         </View>
@@ -1511,6 +1546,7 @@ const handleInstallmentPurchase = async () => {
                     onPress={() => {
                       if (soldOut) return
                       setSelectedTicketType(item)
+                      setFieldErrors(prev => { const n = { ...prev }; delete n.ticketType; return n })
                       setShowTicketTypeModal(false)
                     }}
                     disabled={soldOut}
@@ -2198,7 +2234,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
     fontSize: 14,
+    borderWidth: 1,
+    borderColor: "transparent",
   },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
   cardRow: {
     flexDirection: "row",
     gap: 10,

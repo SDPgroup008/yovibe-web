@@ -42,7 +42,8 @@ const ProfileScreen: React.FC = () => {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
-  const [editProfileLoading, setEditProfileLoading] = useState(false);
+  const [editProfileLoading, setEditProfileLoading] = useState(false)
+  const [profileFieldErrors, setProfileFieldErrors] = useState<Record<string, string>>({});
 
   // Banner state
   const [bannerStatus, setBannerStatus] = useState<"success" | "error" | null>(null);
@@ -259,6 +260,12 @@ const ProfileScreen: React.FC = () => {
 
   const handleUpdateProfile = async () => {
     if (!user) return;
+    setProfileFieldErrors({})
+    if (!displayName.trim()) {
+      setProfileFieldErrors({ displayName: "Please enter your display name" })
+      Alert.alert("Error", "Please enter your display name")
+      return
+    }
 
     setEditProfileLoading(true);
     try {
@@ -500,12 +507,13 @@ const ProfileScreen: React.FC = () => {
 
             <Text style={styles.inputLabel}>Display Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, profileFieldErrors.displayName && styles.inputError]}
               value={displayName}
-              onChangeText={setDisplayName}
+              onChangeText={(t) => { setDisplayName(t); setProfileFieldErrors(prev => { const n = {...prev}; delete n.displayName; return n }) }}
               placeholder="Enter your name"
               placeholderTextColor="#999"
             />
+            {profileFieldErrors.displayName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 8 }}>{profileFieldErrors.displayName}</Text>}
 
             <View style={styles.modalButtons}>
               <TouchableOpacity
@@ -739,6 +747,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#333",
   },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
   modalButtons: {
     flexDirection: "row",
     justifyContent: "space-between",

@@ -21,6 +21,7 @@ const ManageProgramsScreen: React.FC = () => {
   const weeklyPrograms = {} // We'll need to fetch this from the venue data
   const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms)
   const [loading, setLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const handleProgramChange = (day: string, program: string) => {
     setPrograms((prev) => ({
@@ -30,6 +31,15 @@ const ManageProgramsScreen: React.FC = () => {
   }
 
   const handleSave = async () => {
+    setFieldErrors({})
+    const emptyDays = DAYS_OF_WEEK.filter(day => !programs[day]?.trim())
+    if (emptyDays.length > 0) {
+      const errs: Record<string, string> = {}
+      emptyDays.forEach(day => { errs[day] = "Please enter a program for this day" })
+      setFieldErrors(errs)
+      Alert.alert("Missing Programs", `Please fill in programs for ${emptyDays.length} day(s): ${emptyDays.join(", ")}`)
+      return
+    }
     setLoading(true)
     try {
       await SupabaseService.updateVenuePrograms(venueId, programs)
@@ -56,13 +66,14 @@ const ManageProgramsScreen: React.FC = () => {
         <View key={day} style={styles.dayContainer}>
           <Text style={styles.dayLabel}>{day}</Text>
           <TextInput
-            style={styles.programInput}
+            style={[styles.programInput, fieldErrors[day] && styles.inputError]}
             value={programs[day] || ""}
-            onChangeText={(text) => handleProgramChange(day, text)}
+            onChangeText={(text) => { handleProgramChange(day, text); if (fieldErrors[day]) setFieldErrors(prev => { const n = {...prev}; delete n[day]; return n }) }}
             placeholder={`What's happening on ${day}?`}
             placeholderTextColor="#999"
             multiline
           />
+          {fieldErrors[day] && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors[day]}</Text>}
         </View>
       ))}
 
@@ -133,11 +144,13 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     color: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#333",
+    fontSize: 14,
     minHeight: 80,
     textAlignVertical: "top",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.1)",
   },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
   saveButton: {
     flexDirection: "row",
     alignItems: "center",

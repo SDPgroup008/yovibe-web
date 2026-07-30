@@ -19,6 +19,7 @@ export default function HelpSupportScreen() {
   const [reportType, setReportType] = useState("")
   const [reportDescription, setReportDescription] = useState("")
   const [reportLoading, setReportLoading] = useState(false)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const faqItems = [
     { question: "How do I create an event?", answer: "Go to your Profile, tap 'Add Event', fill in the details (name, date, venue, ticket types), and publish." },
@@ -53,7 +54,11 @@ export default function HelpSupportScreen() {
   }
 
   const sendContactMessage = async () => {
-    if (!contactSubject.trim() || !contactMessage.trim()) { Alert.alert("Error", "Please fill in all fields"); return }
+    const errors: Record<string, string> = {}
+    if (!contactSubject.trim()) errors.contactSubject = "Subject is required"
+    if (!contactMessage.trim()) errors.contactMessage = "Message is required"
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); Alert.alert("Error", "Please fill in all fields"); return }
+    setFieldErrors({})
     setContactLoading(true)
     try {
       const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Support Request: ${contactSubject}`)}&body=${encodeURIComponent(`From: ${user?.email}\n\nSubject: ${contactSubject}\n\nMessage:\n${contactMessage}`)}`
@@ -65,7 +70,11 @@ export default function HelpSupportScreen() {
   }
 
   const submitIssueReport = async () => {
-    if (!reportType || !reportDescription.trim()) { Alert.alert("Error", "Please fill in all fields"); return }
+    const errors: Record<string, string> = {}
+    if (!reportType) errors.reportType = "Issue type is required"
+    if (!reportDescription.trim()) errors.reportDescription = "Description is required"
+    if (Object.keys(errors).length > 0) { setFieldErrors(errors); Alert.alert("Error", "Please fill in all fields"); return }
+    setFieldErrors({})
     setReportLoading(true)
     try {
       const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Bug Report: ${reportType}`)}&body=${encodeURIComponent(`Bug Report\n\nType: ${reportType}\nUser Email: ${user?.email}\n\nDescription:\n${reportDescription}`)}`
@@ -145,8 +154,10 @@ export default function HelpSupportScreen() {
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}><Text style={styles.modalTitle}>Send Message</Text><TouchableOpacity onPress={() => setShowContactForm(false)}><Ionicons name="close" size={28} color="#FFFFFF" /></TouchableOpacity></View>
-            <TextInput style={styles.input} placeholder="Subject" placeholderTextColor="#666666" value={contactSubject} onChangeText={setContactSubject} />
-            <TextInput style={[styles.input, styles.messageInput]} placeholder="Message" placeholderTextColor="#666666" value={contactMessage} onChangeText={setContactMessage} multiline numberOfLines={6} />
+            <TextInput style={[styles.input, fieldErrors.contactSubject && styles.inputError]} placeholder="Subject" placeholderTextColor="#666666" value={contactSubject} onChangeText={(t) => { setContactSubject(t); setFieldErrors((prev) => { const next = { ...prev }; delete next.contactSubject; return next }) }} />
+            {fieldErrors.contactSubject && <Text style={styles.inputErrorText}>{fieldErrors.contactSubject}</Text>}
+            <TextInput style={[styles.input, styles.messageInput, fieldErrors.contactMessage && styles.inputError]} placeholder="Message" placeholderTextColor="#666666" value={contactMessage} onChangeText={(t) => { setContactMessage(t); setFieldErrors((prev) => { const next = { ...prev }; delete next.contactMessage; return next }) }} multiline numberOfLines={6} />
+            {fieldErrors.contactMessage && <Text style={styles.inputErrorText}>{fieldErrors.contactMessage}</Text>}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setShowContactForm(false)} disabled={contactLoading}><Text style={styles.cancelButtonText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.modalButton, styles.sendButton, contactLoading && { opacity: 0.6 }]} onPress={sendContactMessage} disabled={contactLoading}>
@@ -164,13 +175,15 @@ export default function HelpSupportScreen() {
             <Text style={styles.inputLabel}>Issue Type</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
               {reportReasons.map((reason) => (
-                <TouchableOpacity key={reason} style={[styles.reasonButton, reportType === reason && styles.reasonButtonActive]} onPress={() => setReportType(reason)}>
+                <TouchableOpacity key={reason} style={[styles.reasonButton, reportType === reason && styles.reasonButtonActive]} onPress={() => { setReportType(reason); setFieldErrors((prev) => { const next = { ...prev }; delete next.reportType; return next }) }}>
                   <Text style={[styles.reasonButtonText, reportType === reason && styles.reasonButtonTextActive]}>{reason}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
+            {fieldErrors.reportType && <Text style={styles.inputErrorText}>{fieldErrors.reportType}</Text>}
             <Text style={styles.inputLabel}>Description</Text>
-            <TextInput style={[styles.input, styles.messageInput]} placeholder="Describe the issue in detail" placeholderTextColor="#666666" value={reportDescription} onChangeText={setReportDescription} multiline numberOfLines={6} />
+            <TextInput style={[styles.input, styles.messageInput, fieldErrors.reportDescription && styles.inputError]} placeholder="Describe the issue in detail" placeholderTextColor="#666666" value={reportDescription} onChangeText={(t) => { setReportDescription(t); setFieldErrors((prev) => { const next = { ...prev }; delete next.reportDescription; return next }) }} multiline numberOfLines={6} />
+            {fieldErrors.reportDescription && <Text style={styles.inputErrorText}>{fieldErrors.reportDescription}</Text>}
             <View style={styles.modalButtons}>
               <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setReportIssueModal(false)} disabled={reportLoading}><Text style={styles.cancelButtonText}>Cancel</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.modalButton, styles.sendButton, reportLoading && { opacity: 0.6 }]} onPress={submitIssueReport} disabled={reportLoading}>
@@ -247,6 +260,8 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontWeight: "bold", color: "#FFFFFF" },
   inputLabel: { fontSize: 14, fontWeight: "600", color: "#FFFFFF", marginBottom: 8, marginTop: 12 },
   input: { backgroundColor: "#121212", borderWidth: 1, borderColor: "#333", borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, color: "#FFFFFF", marginBottom: 12 },
+  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
+  inputErrorText: { color: "#FF4444", fontSize: 12, marginTop: -8, marginBottom: 12, marginLeft: 4 },
   messageInput: { textAlignVertical: "top", paddingTop: 12, minHeight: 120 },
   reasonButton: { backgroundColor: "#121212", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: "#333", marginRight: 8 },
   reasonButtonActive: { borderColor: "#2196F3", backgroundColor: "#2196F3" },
