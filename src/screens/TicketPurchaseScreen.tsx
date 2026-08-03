@@ -1319,16 +1319,7 @@ const handleInstallmentPurchase = async () => {
           <Ionicons name="card" size={24} color={paymentMethod === "credit_card" ? "#00D4FF" : "#888888"} />
           <Text style={[styles.paymentOptionText, paymentMethod === "credit_card" && styles.paymentOptionTextSelected]}>Credit Card</Text>
         </TouchableOpacity>
-        
-        {/* Bank Transfer */}
-        <TouchableOpacity
-          style={[styles.paymentOption, paymentMethod === "bank_transfer" && styles.paymentOptionSelected]}
-          onPress={() => setPaymentMethod("bank_transfer")}
-        >
-          <Ionicons name="business" size={24} color={paymentMethod === "bank_transfer" ? "#00D4FF" : "#888888"} />
-          <Text style={[styles.paymentOptionText, paymentMethod === "bank_transfer" && styles.paymentOptionTextSelected]}>Bank Transfer</Text>
-        </TouchableOpacity>
-        
+
         {/* Payment Details Form */}
         {paymentMethod === "mobile_money" && (
           <View style={styles.paymentForm}>

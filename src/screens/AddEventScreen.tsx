@@ -836,9 +836,6 @@ const AddEventScreen: React.FC<any> = (props) => {
     if (!description.trim()) {
       newErrors.description = "Description is required"
     }
-    if (!artists.trim()) {
-      newErrors.artists = "Artists is required"
-    }
     if (!image) {
       newErrors.image = "Event Poster image is required"
     }
@@ -857,9 +854,6 @@ const AddEventScreen: React.FC<any> = (props) => {
     }
     if (!location.trim()) {
       newErrors.location = "Location (City) is required"
-    }
-    if (ticketContacts.length === 0) {
-      newErrors.ticketContacts = "At least one ticket contact number is required"
     }
     if (!isFreeEntry && entryFees.length === 0) {
       newErrors.entryFees = "At least one entry fee is required or select Free Entry"
@@ -1087,7 +1081,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         </View>
 
         <View style={styles.labelContainer}>
-          <Text style={styles.label}>Artists *</Text>
+          <Text style={styles.label}>Artists (optional)</Text>
           {errors.artists && <Text style={styles.errorStar}>*</Text>}
         </View>
         <TextInput
@@ -1600,7 +1594,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         )}
 
         <View style={styles.labelContainer}>
-          <Text style={styles.label}>Ticket Contact Numbers *</Text>
+          <Text style={styles.label}>Ticket Contact Numbers (optional)</Text>
           {errors.ticketContacts && <Text style={styles.errorStar}>*</Text>}
         </View>
         <TouchableOpacity
@@ -1706,45 +1700,6 @@ const AddEventScreen: React.FC<any> = (props) => {
                   {mm.provider.toUpperCase()}: {mm.number} ({mm.name})
                 </Text>
                 <TouchableOpacity onPress={() => removeMobileMoney(index)}>
-                  <Ionicons name="trash-outline" size={20} color="#FF3B30" />
-                </TouchableOpacity>
-              </View>
-            ))}
-
-            {/* Bank Account Section */}
-            <Text style={styles.paymentSectionTitle}>Bank Account</Text>
-            <TextInput
-              style={styles.input}
-              value={newBankName}
-              onChangeText={setNewBankName}
-              placeholder="Bank name (e.g. Stanbic)"
-              placeholderTextColor="#999"
-            />
-            <TextInput
-              style={styles.input}
-              value={newAccountNumber}
-              onChangeText={setNewAccountNumber}
-              placeholder="Account number"
-              placeholderTextColor="#999"
-              keyboardType="numeric"
-            />
-            <TextInput
-              style={styles.input}
-              value={newAccountName}
-              onChangeText={setNewAccountName}
-              placeholder="Account name"
-              placeholderTextColor="#999"
-            />
-            <TouchableOpacity style={styles.addButton} onPress={addBankAccount}>
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Add Bank Account</Text>
-            </TouchableOpacity>
-            {paymentMethods.bankAccounts.map((bank, index) => (
-              <View key={index} style={styles.paymentItem}>
-                <Text style={styles.paymentText}>
-                  {bank.bankName}: {bank.accountNumber} ({bank.accountName})
-                </Text>
-                <TouchableOpacity onPress={() => removeBankAccount(index)}>
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />
                 </TouchableOpacity>
               </View>

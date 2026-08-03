@@ -129,10 +129,9 @@ const EventDetailScreen: React.FC = () => {
     navigation.navigate("TicketPurchase", { eventId: event.slug || event.id })
   }
 
-  const handleViewTicketContacts = () => {
+  const handleTicketContacts = () => {
     if (!event) return
-
-    navigation.navigate("TicketContactScreen", { ticketContacts: event.ticketContacts })
+    navigation.navigate("TicketContactScreen", { ticketContacts: event.ticketContacts || [] })
   }
 
   const handleShare = async () => {
@@ -490,17 +489,19 @@ const EventDetailScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Ticket Contact Button */}
-        <TouchableOpacity style={styles.button} onPress={handleViewTicketContacts}>
-          <Ionicons name="call-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Ticket Contact</Text>
-        </TouchableOpacity>
-
         {/* Buy Tickets Button - For featured events with ticket contacts (all users) */}
         {event.isFeatured && event.ticketContacts && event.ticketContacts.length > 0 && (
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
           <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
           <Text style={styles.buttonText}>Buy Tickets</Text>
+        </TouchableOpacity>
+        )}
+
+        {/* Ticket Contacts Button - Only for unfeatured events (always visible) */}
+        {!event.isFeatured && (
+        <TouchableOpacity style={styles.button} onPress={handleTicketContacts}>
+          <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+          <Text style={styles.buttonText}>Ticket Contacts</Text>
         </TouchableOpacity>
         )}
 

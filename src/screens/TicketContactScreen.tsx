@@ -75,7 +75,7 @@ const TicketContactScreen: React.FC<TicketContactScreenProps> = ({ navigation, r
       {ticketContacts.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>No contact information available</Text>
-          <Text style={styles.emptySubtext}>Please contact the event organizer directly.</Text>
+          <Text style={styles.emptySubtext}>Please check the poster for contacts.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.contactsList}>
