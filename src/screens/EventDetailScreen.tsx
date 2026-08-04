@@ -489,8 +489,8 @@ const EventDetailScreen: React.FC = () => {
           ))}
         </View>
 
-        {/* Buy Tickets Button - For featured events with ticket contacts (all users) */}
-        {event.isFeatured && event.ticketContacts && event.ticketContacts.length > 0 && (
+        {/* Buy Tickets Button - For all featured events */}
+        {event.isFeatured && (
         <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
           <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
           <Text style={styles.buttonText}>Buy Tickets</Text>

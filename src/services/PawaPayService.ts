@@ -10,6 +10,21 @@ const PAWAPAY_PROVIDERS: Record<string, string[]> = {
   TZ: ["MTN_MOMO_TZ", "AIRTEL_TZ"],
 }
 
+// Safely parse a fetch response that may not be JSON (e.g. an HTML 404 page).
+async function safeJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type") || ""
+  if (!contentType.includes("application/json")) {
+    const text = await response.text().catch(() => "")
+    const preview = text.replace(/\s+/g, " ").slice(0, 120)
+    throw new Error(`Server returned ${response.status} (${contentType || "no content-type"}). Expected JSON but got: ${preview || "empty response"}`)
+  }
+  try {
+    return await response.json() as T
+  } catch (e) {
+    throw new Error(`Server returned invalid JSON (HTTP ${response.status})`)
+  }
+}
+
 export class PawaPayService {
   private static APP_COMMISSION_RATE = 0.15
 
@@ -58,7 +73,7 @@ export class PawaPayService {
         }),
       })
 
-      const data = await response.json()
+      const data = await safeJson<any>(response)
       console.log("PawaPay deposit response:", data)
 
       if (!data.success && data.error) {
@@ -94,7 +109,7 @@ export class PawaPayService {
       const response = await fetch(`/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`)
       
       // Netlify function always returns 200 even on 404/error
-      const data = await response.json()
+      const data = await safeJson<any>(response)
 
       if (!response.ok) {
         console.error("verify-pawapay-payment returned non-200:", response.status, data)
@@ -139,7 +154,7 @@ export class PawaPayService {
         body: JSON.stringify({ phoneNumber }),
       })
 
-      const data = await response.json()
+      const data = await safeJson<any>(response)
 
       if (!response.ok) {
         return {
@@ -179,7 +194,7 @@ export class PawaPayService {
         }
       }
 
-      const data = await response.json()
+      const data = await safeJson<any>(response)
 
       return {
         success: true,
@@ -223,7 +238,7 @@ export class PawaPayService {
         }),
       })
 
-      const data = await response.json()
+      const data = await safeJson<any>(response)
       console.log("📥 Netlify function response:", data)
 
       if (!data.success) {
@@ -255,7 +270,7 @@ export class PawaPayService {
   }> {
     try {
       const response = await fetch(`/.netlify/functions/verify-pawapay-payout?payoutId=${encodeURIComponent(payoutId)}`)
-      const data = await response.json()
+      const data = await safeJson<any>(response)
 
       const rawStatus = (data.status || "").toUpperCase()
       let mappedStatus: "COMPLETED" | "FAILED" | "PENDING" | "ENQUEUED" | "NOT_FOUND" = "PENDING"
