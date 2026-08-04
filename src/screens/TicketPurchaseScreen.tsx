@@ -206,6 +206,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const [paymentUrl, setPaymentUrl] = useState<string | null>(null)
   const [paymentOrderId, setPaymentOrderId] = useState<string | null>(null)
   const [pawaPayDepositId, setPawaPayDepositId] = useState<string | null>(null)
+  const [pesapalOrderRef, setPesapalOrderRef] = useState<string | null>(null)
+  const [pesapalTrackingId, setPesapalTrackingId] = useState<string | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
@@ -383,6 +385,8 @@ const TicketPurchaseScreen: React.FC = () => {
   // Ticket creation is deliberately gated on that verified result.
   const pollPesapalStatus = async (merchantReference: string, trackingId?: string) => {
     const maxAttempts = 60
+    setPesapalOrderRef(merchantReference)
+    setPesapalTrackingId(trackingId || null)
     setCheckingPayment(true)
     setStatusMessage("Complete payment in the PesaPal window. We are verifying it automatically.")
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -390,25 +394,24 @@ const TicketPurchaseScreen: React.FC = () => {
         const verification = await PesaPalService.verifyPayment(merchantReference, trackingId)
         if (verification.status === "completed") {
           setCheckingPayment(false)
+          setPesapalOrderRef(null)
+          setPesapalTrackingId(null)
           setPurchaseStatus("success")
           setStatusMessage("Payment verified! Creating your ticket...")
           await createTicketAndNavigate(false, verification)
           return
         }
         if (verification.status === "failed") {
-          setCheckingPayment(false)
-          setPurchaseStatus("error")
-          setStatusMessage("PesaPal reported that the payment failed or was cancelled.")
+          setStatusMessage("PesaPal reported that the payment failed or was cancelled. You can retry verification or cancel.")
           return
         }
       } catch (error) {
         console.warn("PesaPal verification attempt failed; retaining pending state", error)
       }
+      setStatusMessage(`Still verifying payment... Attempt ${attempt + 1}/${maxAttempts}.`)
       await new Promise((resolve) => setTimeout(resolve, 3000))
     }
-    setCheckingPayment(false)
-    setPurchaseStatus("error")
-    setStatusMessage("Payment is still being verified. Please check My Tickets shortly; do not pay again unless the payment is confirmed failed.")
+    setStatusMessage("Payment is still being verified. You can retry verification or cancel. Do not pay again unless the payment is confirmed failed.")
   }
 
   const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
@@ -487,7 +490,6 @@ const TicketPurchaseScreen: React.FC = () => {
         isTableEntry
           ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
           : undefined,
-        isTableEntry ? tableSize : undefined,
         (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
         paymentId,
         paymentMethod === "credit_card" ? `${cardFirstName} ${cardLastName}`.trim() : undefined,
@@ -967,12 +969,29 @@ const handleInstallmentPurchase = async () => {
                 <Text style={styles.recheckButtonText}>Recheck Payment</Text>
               </TouchableOpacity>
             )}
-            
+
+            {/* If we have a PesaPal order and payment is still pending/failed, show retry button */}
+            {pesapalOrderRef && (
+              <TouchableOpacity
+                style={styles.recheckButton}
+                onPress={async () => {
+                  setCheckingPayment(true)
+                  setStatusMessage("Retrying PesaPal payment verification...")
+                  await pollPesapalStatus(pesapalOrderRef, pesapalTrackingId || undefined)
+                }}
+              >
+                <Ionicons name="refresh" size={20} color="#FFF" />
+                <Text style={styles.recheckButtonText}>Retry Verification</Text>
+              </TouchableOpacity>
+            )}
+
             <TouchableOpacity
               style={styles.cancelPaymentButton}
               onPress={() => {
                 setCheckingPayment(false)
                 setPawaPayDepositId(null)
+                setPesapalOrderRef(null)
+                setPesapalTrackingId(null)
               }}
             >
               <Text style={styles.cancelPaymentText}>Cancel</Text>
