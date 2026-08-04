@@ -10,18 +10,20 @@ const PAWAPAY_PROVIDERS: Record<string, string[]> = {
   TZ: ["MTN_MOMO_TZ", "AIRTEL_TZ"],
 }
 
-// Safely parse a fetch response that may not be JSON (e.g. an HTML 404 page).
+// Safely parse a fetch response. Netlify functions often serve JSON with a
+// `text/plain` content-type, so try JSON first and only fall back to an error
+// when the body is genuinely not JSON (e.g. an HTML 404/redirect page).
 async function safeJson<T>(response: Response): Promise<T> {
-  const contentType = response.headers.get("content-type") || ""
-  if (!contentType.includes("application/json")) {
-    const text = await response.text().catch(() => "")
-    const preview = text.replace(/\s+/g, " ").slice(0, 120)
-    throw new Error(`Server returned ${response.status} (${contentType || "no content-type"}). Expected JSON but got: ${preview || "empty response"}`)
+  const text = await response.text().catch(() => "")
+  if (!text) {
+    throw new Error(`Server returned empty response (HTTP ${response.status})`)
   }
   try {
-    return await response.json() as T
-  } catch (e) {
-    throw new Error(`Server returned invalid JSON (HTTP ${response.status})`)
+    return JSON.parse(text) as T
+  } catch {
+    const contentType = response.headers.get("content-type") || ""
+    const preview = text.replace(/\s+/g, " ").slice(0, 120)
+    throw new Error(`Server returned ${response.status} (${contentType || "no content-type"}). Expected JSON but got: ${preview}`)
   }
 }
 
