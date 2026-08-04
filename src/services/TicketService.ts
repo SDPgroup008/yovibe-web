@@ -438,10 +438,10 @@ export class TicketService {
         const result = await supabase.from("tickets_api").insert({ 
           ...ticket, 
           event_slug: event.slug || event.id,
-          buyer_phone: buyerPhone || ticket.buyerPhone || null,
-          table_size: tableSize ?? ticket.tableSize ?? null,
-          table_number: tableNumber ?? ticket.tableNumber ?? null,
-          gateway_fee: gatewayFee ?? ticket.gatewayFee ?? 0,
+          buyerPhone: buyerPhone || ticket.buyerPhone || null,
+          tableSize: tableSize ?? ticket.tableSize ?? null,
+          tableNumber: tableNumber ?? ticket.tableNumber ?? null,
+          gatewayFee: gatewayFee ?? ticket.gatewayFee ?? 0,
         }).select("id").single()
         if (result.error) throw result.error
         return result.data
