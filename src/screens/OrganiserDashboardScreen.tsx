@@ -1645,10 +1645,12 @@ const OrganiserDashboardScreen: React.FC = () => {
                 {scanLogs.length > 0 ? scanLogs.map((log, i) => (
                   <View key={i} style={styles.scanLogItem}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
+                        {log.status === "Invalid" && log.reason ? <Text style={styles.scanLogInvalidReason}>{log.reason}</Text> : null}
+                      </View>
                       <Text style={styles.scanLogName}>{log.name}</Text>
                       <Text style={styles.scanLogDetail}>{log.feeType}{log.tableNumber !== "—" ? ` · Table ${log.tableNumber}` : log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
-                      {log.status === "Invalid" && log.reason ? <Text style={styles.scanLogInvalidReason}>{log.reason}</Text> : null}
                     </View>
                     <View style={{ alignItems: "flex-end" }}>
                       <Text style={styles.scanLogTime}>{log.time}</Text>

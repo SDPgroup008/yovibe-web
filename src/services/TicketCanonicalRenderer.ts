@@ -99,6 +99,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const colors = colorsFor(design)
   const W = computed.pageWidth
   const H = computed.pageHeight
+  const isLandscape = computed.isLandscape
   const poster = block(computed, "poster")
   const title = block(computed, "title")
   const info = block(computed, "info")
@@ -114,60 +115,101 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   }
   const bg = computed.bgTransform || { x: 0, y: 0, scale: 1 }
   const gradientId = `ticket-bg-${Math.abs(W * 31 + H * 17)}`
+  const grainId = `ticket-grain-${Math.abs(W * 31 + H * 17)}`
   const bgPaint = design.source === "template" ? `url(#${gradientId})` : "#111827"
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36))
   const infoRows = [
-    ["Date", data.date], ["Time", data.time], ["Venue", data.venue], ["Attendee", data.attendee],
+    ["Date", data.date], ["Time", data.time], ["Venue", data.venue],
   ]
   const infoRowHeight = Math.max(24, (info.height - 28) / infoRows.length)
   const blockScale = (b: any) => ` transform="translate(${b.x} ${b.y}) scale(${b.scale || 1})"`
   const bgImage = computed.isUploadBg
     ? `<image href="${xmlUrl(computed.bgImage)}" x="${bg.x}" y="${bg.y}" width="${W * (bg.scale || 1)}" height="${H * (bg.scale || 1)}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`
     : ""
-  const posterSvg = data.poster
-    ? `<image href="${xmlUrl(data.poster)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>`
-    : ""
+
+  // Artwork-first: poster becomes a full-bleed hero with bottom gradient overlay
+  const heroClip = `ticket-hero-${Math.abs(W * 31 + H * 17)}`
+  const posterHero = data.poster ? `
+    <image href="${xmlUrl(data.poster)}" x="0" y="0" width="${W}" height="${isLandscape ? Math.round(H * 0.7) : Math.round(H * 0.55)}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
+    <rect x="0" y="${isLandscape ? Math.round(H * 0.7) - Math.round(H * 0.25) : Math.round(H * 0.55) - Math.round(H * 0.25)}" width="${W}" height="${Math.round(H * 0.25)}" fill="url(#${gradientId})" opacity="0.9"/>
+  ` : ""
+
+  // QR credential panel with eyebrow + VALID chip + ref
+  const qrEyebrow = `<text x="${qr.width / 2}" y="18" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>`
   const qrSvg = data.qr
-    ? `<image href="${xmlUrl(data.qr)}" x="${(qr.width - qrSize) / 2}" y="10" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>`
+    ? `<image href="${xmlUrl(data.qr)}" x="${(qr.width - qrSize) / 2}" y="${30}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>`
     : text(qr.width / 2, qr.height / 2, "QR unavailable", 14, colors.secondary, 600, "middle")
 
-  // Enterprise-grade info card: label/value pairs with dividers
+  // Info card: label/value pairs, accent bar, with attendee emphasized
   const infoCard = infoRows.map(([label, value], i) => `
-    <g transform="translate(16 ${22 + i * infoRowHeight})">
-      <text x="0" y="0" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="700" fill="${esc(colors.secondary)}" text-anchor="start" letter-spacing="0.5">${esc(label)}</text>
-      <text x="0" y="16" font-family="Arial, Helvetica, sans-serif" font-size="13px" font-weight="600" fill="${esc(colors.text)}">${esc(value)}</text>
+    <g transform="translate(16 ${18 + i * infoRowHeight})">
+      <text x="0" y="0" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="700" fill="${esc(colors.secondary)}" text-anchor="start" letter-spacing="1">${esc(label.toUpperCase())}</text>
+      <text x="0" y="16" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="13px" font-weight="600" fill="${esc(colors.text)}">${esc(value)}</text>
     </g>`).join('')
+  // Attendee emphasized block below the generic info rows
+  const attendeeY = 18 + infoRows.length * infoRowHeight + 6
+  const attendeeBlock = `
+    <text x="16" y="${attendeeY}" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="start" letter-spacing="1">ADMITS</text>
+    <text x="16" y="${attendeeY + 22}" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
+
+  const FONT_STACK = "'Inter', 'Segoe UI', -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif"
+  const MONO = "'SF Mono', 'JetBrains Mono', 'Courier New', monospace"
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs>
-      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${esc(colors.background)}"/><stop offset="100%" stop-color="${esc(colors.accent)}" stop-opacity="0.72"/></linearGradient>
+      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${esc(colors.background)}"/><stop offset="65%" stop-color="${esc(colors.background)}"/><stop offset="100%" stop-color="${esc(colors.accent)}" stop-opacity="0.55"/></linearGradient>
+      <radialGradient id="${grainId}" cx="0.5" cy="0.5" r="0.7"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.04"/><stop offset="100%" stop-color="#000000" stop-opacity="0.12"/></radialGradient>
+      <clipPath id="${heroClip}"><rect width="${W}" height="${isLandscape ? Math.round(H * 0.7) : Math.round(H * 0.55)}" rx="0"/></clipPath>
       <clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath>
       <filter id="titleShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.75"/></filter>
       <filter id="qrShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/></filter>
     </defs>
+
+    <!-- Layered background: base + radial glow + grain -->
     <rect width="${W}" height="${H}" fill="${bgPaint}"/>
-    ${bgImage}
-    <rect width="${W}" height="${H}" fill="#000000" opacity="${computed.isUploadBg ? 0 : 0.16}"/>
-    <g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/>${posterSvg}` : ""}</g>
+    <rect width="${W}" height="${H}" fill="url(#${grainId})"/>
+
+    <!-- Artwork hero (full-bleed when poster exists) -->
+    ${computed.isUploadBg ? bgImage : (data.poster ? posterHero : "")}
+    ${!computed.isUploadBg && !data.poster ? `<rect width="${W}" height="${H}" fill="#000000" opacity="0.16"/>` : ""}
+
+    <!-- Poster block (if not used as hero, keep the small card for custom layouts) -->
+    ${!data.poster || (design as any).layout ? `<g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/><image href="${xmlUrl(data.poster)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>` : ""}</g>` : ""}
+
+    <!-- Title -->
     <g${blockScale(title)}>
-      <text x="16" y="36" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(18, Math.min(32, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)" letter-spacing="-0.3">${esc(data.eventName)}</text>
+      <text x="16" y="36" font-family="${FONT_STACK}" font-size="${Math.max(20, Math.min(34, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)" letter-spacing="-0.5">${esc(data.eventName)}</text>
       <rect x="16" y="${title.height - 30}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="22" rx="11" fill="${esc(colors.accent)}"/>
-      <text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 15}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="0.5">${esc(data.ticketType.toUpperCase())}</text>
+      <text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>
     </g>
+
+    <!-- VALID status chip (top-right) -->
+    <g>
+      <circle cx="${W - 52}" cy="24" r="4" fill="#4CAF50"/>
+      <text x="${W - 44}" y="27" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.text)}" text-anchor="start" letter-spacing="0.5">VALID ENTRY</text>
+    </g>
+
+    <!-- Info card with attendee emphasis -->
     <g${blockScale(info)}>
-      <rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity="0.5" stroke="${esc(colors.border)}" stroke-width="1"/>
-      <rect x="0" y="0" width="4" height="${info.height}" rx="2" fill="${esc(colors.accent)}" opacity="0.6"/>
+      <rect width="${info.width}" height="${info.height}" rx="12" fill="#000" opacity="0.55" stroke="${esc(colors.border)}" stroke-width="1"/>
+      <rect x="0" y="0" width="4" height="${info.height}" rx="2" fill="${esc(colors.accent)}" opacity="0.7"/>
       ${infoCard}
+      ${attendeeBlock}
     </g>
+
+    <!-- QR credential panel -->
     <g${blockScale(qr)}>
-      <rect width="${qr.width}" height="${qr.height}" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5" filter="url(#qrShadow)"/>
+      <rect width="${qr.width}" height="${qr.height}" rx="14" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5" filter="url(#qrShadow)"/>
+      ${qrEyebrow}
       ${qrSvg}
-      <rect x="0" y="${qr.height - 30}" width="${qr.width}" height="30" rx="0 0 12 12" fill="${esc(colors.accent)}" opacity="0.12"/>
-      <text x="${qr.width / 2}" y="${qr.height - 14}" font-family="Courier New, monospace" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle">${esc(data.ticketRef)}</text>
+      <rect x="0" y="${qr.height - 30}" width="${qr.width}" height="30" rx="0 0 14 14" fill="${esc(colors.accent)}" opacity="0.1"/>
+      <text x="${qr.width / 2}" y="${qr.height - 13}" font-family="${MONO}" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="0.5">${esc(data.ticketRef)}</text>
     </g>
+
+    <!-- Footer -->
     <rect x="0" y="${H - 36}" width="${W}" height="36" fill="#000" opacity="0.55"/>
-    <text x="18" y="${H - 14}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="700" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>
-    <text x="${W - 18}" y="${H - 14}" font-family="Courier New, monospace" font-size="9px" fill="${esc(colors.secondary)}" text-anchor="end">${esc(data.ticketRef)}</text>
+    <text x="18" y="${H - 14}" font-family="${FONT_STACK}" font-size="10px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="2">YOVIBE</text>
+    <text x="${W - 18}" y="${H - 14}" font-family="${MONO}" font-size="9px" fill="${esc(colors.secondary)}" text-anchor="end">${esc(data.ticketRef)}</text>
   </svg>`
 }
 

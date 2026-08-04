@@ -15,7 +15,6 @@ const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
 
 const {
   computeTicketLayout,
-  computeEmailSections,
   computePdfPositions,
 } = require("./ticketLayoutEngine");
 const { renderTicketPdf } = require("../shared/ticketPdfArtwork");
@@ -56,7 +55,6 @@ function buildTicketEmailHtml({
   
   // Compute layout using the shared engine
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
-  const emailSections = computeEmailSections(computed);
   
   // Get email width from computed layout (proportionally scaled)
   const ticketWidth = computed.emailWidth;
@@ -170,29 +168,6 @@ function buildTicketEmailHtml({
     footer: "#101010",
   };
   
-  const photoLinkSection = photoUploadLink
-    ? `
-      <div style="margin-top:20px; padding:16px; background:#1a1a1a; border-radius:10px; border:1px solid #2a2a2a; text-align:center;">
-        <p style="margin:0 0 12px; font-size:13px; color:#cfcfcf;">
-          Add a quick photo to this ticket for extra security at the gate.
-        </p>
-        <a href="${escapeHtml(photoUploadLink)}" style="display:inline-block; background:#ff3b3b; color:#ffffff; text-decoration:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600;">
-          Add Security Photo
-        </a>
-      </div>
-      `
-    : "";
-
-  // View in App deep link button
-  const viewInAppLink = `https://yovibe.net/t/${escapeHtml(ticketRef)}`;
-  const viewInAppButton = `
-    <div style="text-align:center; margin:20px 0;">
-      <a href="${viewInAppLink}" style="display:inline-block; padding:14px 32px; background:${colors.accent}; color:#000; text-decoration:none; border-radius:10px; font-size:15px; font-weight:700;">
-        🎟 View Your Ticket
-      </a>
-    </div>
-  `;
-
   // Dark mode <style> block
   const darkModeStyles = `
     @media (prefers-color-scheme: dark) {
@@ -200,127 +175,194 @@ function buildTicketEmailHtml({
       .yovibe-text { color: #e0e0e0 !important; }
       .yovibe-text-muted { color: #888 !important; }
       .yovibe-bg-dark { background-color: #1e1e1e !important; }
+      .yovibe-cta { background-color: ${colors.accent} !important; }
+      .yovibe-hero-overlay { background: rgba(0,0,0,0.55) !important; }
     }
   `;
-  
-  // Build section HTML for each block based on its computed position
-  function blockToHtml(block) {
-    const align = block.align || "center";
-    const marginDir = align === "center" ? "0 auto" : (align === "right" ? "0 0 0 auto" : "0 auto 0 0");
-    
-    if (block.id === "qr") {
-      return `
-        <div style="background:${colors.qr}; border-radius:10px; padding:16px; text-align:${align}; margin-bottom:20px; max-width:${block.width}px; margin-left:${align === "right" ? "auto" : "0"}; margin-right:${align === "left" ? "auto" : "0"}; border:1px solid #2a2a2a;">
-          <img src="${qrCodeDataUrl}" alt="Ticket QR Code" style="width:${Math.min(block.width, 200)}px; height:${Math.min(block.height, 200)}px; display:block; margin:0 auto;" />
-        </div>
-        <p style="text-align:${align}; font-size:13px; color:#9a9a9a; margin:0 0 24px;">
-          Present this QR code at the event entrance
-        </p>
-      `;
-    }
-    
-    if (block.id === "title") {
-      return `
-        <div style="display:inline-block; background:rgba(0,0,0,0.5); padding:10px 16px; border-radius:8px; text-align:${align}; margin-bottom:16px; max-width:${block.width}px;">
-          <p style="margin:0 0 4px; font-size:26px; font-weight:800; color:${colors.text}; text-shadow:0 2px 8px rgba(0,0,0,0.6);">${escapeHtml(eventName)}</p>
-          <span style="display:inline-block; background:${colors.accent}; color:#ffffff; font-size:11px; font-weight:700; padding:4px 14px; border-radius:20px; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(ticketType)}</span>
-        </div>
-      `;
-    }
-    
-    if (block.id === "info") {
-      return `
-        <div style="display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.45); border-radius:10px; padding:14px 16px; border:1px solid rgba(167,139,250,0.25); max-width:${block.width}px; margin-bottom:20px; margin-left:${align === "right" ? "auto" : "0"}; margin-right:${align === "left" ? "auto" : "0"}; text-align:${align};">
-          ${row("Event", escapeHtml(eventName))}
-          ${row("Ticket Type", escapeHtml(ticketType))}
-          ${venue ? row("Venue", escapeHtml(venue)) : ""}
-          ${row("Date", escapeHtml(date))}
-          ${row("Time", escapeHtml(time))}
-          ${row("Ticket Ref", escapeHtml(ticketRef))}
-          ${seatNumber != null ? row("Seat", String(seatNumber)) : ""}
-          ${tableNumber != null ? row("Table", String(tableNumber)) : ""}
-          ${tableGroupId && tableNumber == null ? row("Table", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : ""}
-        </div>
-      `;
-    }
-    
-    if (block.id === "poster") {
-      if (posterUrl) {
-        return `
-          <div style="text-align:${align}; margin-bottom:16px;">
-            <img src="${posterUrl}" alt="Event Poster" style="width:${Math.min(block.width, 200)}px; height:auto; border-radius:8px; border:2px solid ${colors.accent}; box-shadow:0 4px 20px rgba(0,0,0,0.5);" />
-          </div>
-        `;
-      }
-      return ``;
-    }
-    
-    return "";
+
+  // ─── Table-based, Outlook-safe building blocks ──────────────────────
+  // Each block uses <table> + <td> with inline styles for maximum
+  // compatibility across Outlook (Word engine), Gmail, and Apple Mail.
+  // No display:flex anywhere — flex is unsupported in Outlook Desktop.
+
+  function tableRow(label, value, valueColor) {
+    // A single label/value row rendered as a table for Outlook safety.
+    return `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin:0; padding:0;">
+        <tr>
+          <td width="38%" valign="top" style="padding:4px 0; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:12px; color:#9a9a9a;">${label}</td>
+          <td valign="top" align="right" style="padding:4px 0; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:13px; font-weight:600; color:${valueColor || "#f5f5f5"}; word-break:break-word;">${value}</td>
+        </tr>
+      </table>`;
   }
-  
-  const sectionsHtml = emailSections.map(function(block) {
-    return blockToHtml(block);
-  }).filter(function(s) { return s; }).join("\n");
-  
-  // Build the full ticket HTML
-  const ticketContent = `
-    <div style="padding:20px 24px; border-bottom:1px solid #2a2a2a;" class="yovibe-card">
-      <span style="color:${colors.accent}; font-weight:700; font-size:18px;">YoVibe</span>
-    </div>
-    <div style="padding:24px;">
-      <p style="margin:0 0 16px; font-size:15px; color:#cfcfcf;" class="yovibe-text">Hi ${greetingName}, here's your ticket.</p>
-      ${sectionsHtml}
-      ${viewInAppButton}
-    </div>
-    <div style="padding:16px 24px; background:${colors.footer}; text-align:center;" class="yovibe-bg-dark">
-      <p style="margin:0; font-size:11px; color:#6b6b6b;" class="yovibe-text-muted">
-        This ticket is verified and secured by YoVibe
-      </p>
-    </div>
-    ${photoLinkSection}
-  `;
-  
-  // Apply background image transform to the ticket card
+
+  // Build ticket details rows (all wrapped in a table-based card)
+  const detailRows = [
+    tableRow("EVENT", escapeHtml(eventName)),
+    tableRow("TICKET TYPE", escapeHtml(ticketType)),
+    venue ? tableRow("VENUE", escapeHtml(venue)) : "",
+    tableRow("DATE", escapeHtml(date)),
+    tableRow("TIME", escapeHtml(time)),
+    tableRow("TICKET REF", escapeHtml(ticketRef)),
+    seatNumber != null ? tableRow("SEAT", String(seatNumber)) : "",
+    tableNumber != null ? tableRow("TABLE", String(tableNumber)) : "",
+    tableGroupId && tableNumber == null ? tableRow("TABLE", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : "",
+  ].filter(Boolean).join("\n");
+
+  // Details card (table-based, Outlook-safe)
+  const detailsCard = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr>
+        <td style="background:rgba(0,0,0,0.45); border-radius:10px; border-left:4px solid ${colors.accent}; padding:16px 18px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+          ${detailRows}
+        </td>
+      </tr>
+    </table>`;
+
+  // Attendee card (emphasized)
+  const attendeeCard = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:16px;">
+      <tr>
+        <td style="background:rgba(0,0,0,0.45); border-radius:10px; padding:14px 18px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+          <p style="margin:0 0 4px; font-size:11px; font-weight:700; letter-spacing:1px; color:${colors.accent}; text-transform:uppercase;">Admits</p>
+          <p style="margin:0; font-size:20px; font-weight:800; color:${colors.text};">${escapeHtml(buyerName || "Guest")}</p>
+        </td>
+      </tr>
+    </table>`;
+
+  // QR credential panel (table-based)
+  const qrPanel = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:20px; border:1px solid #2a2a2a; border-radius:12px;">
+      <tr>
+        <td align="center" style="background:${colors.qr}; border-top-left-radius:12px; border-top-right-radius:12px; padding:16px 16px 4px;">
+          <p style="margin:0 0 12px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:11px; font-weight:800; letter-spacing:2px; color:${colors.accent};">SCAN AT ENTRANCE</p>
+          <img src="${qrCodeDataUrl}" alt="Ticket QR Code" width="180" height="180" style="display:block; width:180px; height:180px; max-width:100%; margin:0 auto;" />
+        </td>
+      </tr>
+      <tr>
+        <td align="center" style="background:${colors.qr}; border-bottom-left-radius:12px; border-bottom-right-radius:12px; padding:10px 16px 16px;">
+          <p style="margin:0; font-family:'Courier New', monospace; font-size:12px; font-weight:700; letter-spacing:1px; color:${colors.accent};">${escapeHtml(ticketRef)}</p>
+        </td>
+      </tr>
+    </table>`;
+
+  // Primary CTA (table-based, Outlook-safe)
+  const viewInAppButton = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:24px;">
+      <tr>
+        <td align="center" style="font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+          <a href="https://yovibe.net/t/${escapeHtml(ticketRef)}" class="yovibe-cta" style="display:inline-block; background:${colors.accent}; color:#000; text-decoration:none; padding:14px 32px; border-radius:10px; font-size:15px; font-weight:700;">&#127932;&nbsp; View Your Ticket</a>
+        </td>
+      </tr>
+    </table>`;
+
+  // Photo link (table-based)
+  const photoLinkSection = photoUploadLink
+    ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:16px;">
+        <tr>
+          <td align="center" style="background:#1a1a1a; border:1px solid #2a2a2a; border-radius:10px; padding:14px 16px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+            <p style="margin:0 0 10px; font-size:13px; color:#cfcfcf;">Add a quick photo to this ticket for extra security at the gate.</p>
+            <a href="${escapeHtml(photoUploadLink)}" style="display:inline-block; background:#ff3b3b; color:#ffffff; text-decoration:none; padding:10px 20px; border-radius:8px; font-size:13px; font-weight:600;">Add Security Photo</a>
+          </td>
+        </tr>
+      </table>`
+    : "";
+
+  // Hero banner (poster image if present, else accent gradient)
+  const heroBanner = posterUrl
+    ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; border-top-left-radius:12px; border-top-right-radius:12px; overflow:hidden;">
+        <tr>
+          <td style="padding:0; background:${colors.bg};">
+            <img src="${posterUrl}" alt="" width="600" style="display:block; width:100%; max-width:600px; height:220px; object-fit:cover;" />
+          </td>
+        </tr>
+      </table>`
+    : "";
+
+  // Header brand bar
+  const brandBar = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:${colors.footer}; border-bottom:1px solid #2a2a2a;">
+      <tr>
+        <td style="padding:18px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:18px; font-weight:800; color:${colors.accent};">YoVibe</td>
+      </tr>
+    </table>`;
+
+  // Greeting + headline
+  const greetingBlock = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+      <tr>
+        <td style="padding:24px 24px 8px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;" class="yovibe-text">
+          <p style="margin:0 0 6px; font-size:15px; color:#cfcfcf;">Hi ${greetingName},</p>
+          <h1 style="margin:0 0 4px; font-size:26px; font-weight:800; color:${colors.text};">You're going to ${escapeHtml(eventName)}</h1>
+          <p style="margin:0; font-size:13px; color:#9a9a9a;">Present the QR code below at the entrance.</p>
+        </td>
+      </tr>
+    </table>`;
+
+  // Trust footer (table-based)
+  const trustFooter = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:${colors.footer}; border-top:1px solid #2a2a2a;">
+      <tr>
+        <td align="center" style="padding:16px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;" class="yovibe-bg-dark">
+          <p style="margin:0 0 6px; font-size:11px; color:#6b6b6b;">This ticket is verified and secured by YoVibe</p>
+          <p style="margin:0; font-size:11px; color:#6b6b6b;">Questions? Contact <a href="mailto:support@yovibe.net" style="color:${colors.accent}; text-decoration:none;">support@yovibe.net</a></p>
+        </td>
+      </tr>
+    </table>`;
+
+  // ─── Assemble full ticket card (single Outlook-safe table) ─────────
+  const ticketCard = `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:#161616; border:1px solid #2a2a2a; border-radius:12px; overflow:hidden;" class="yovibe-card">
+      ${heroBanner || brandBar}
+      ${greetingBlock}
+      <tr>
+        <td style="padding:0 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
+          ${attendeeCard}
+          ${detailsCard}
+          ${qrPanel}
+          ${viewInAppButton}
+          ${photoLinkSection}
+        </td>
+      </tr>
+      ${heroBanner ? brandBar : ""}
+      ${trustFooter}
+    </table>`;
+
+  // Apply background image transform for uploaded backgrounds
   function bgStyleFromTransform(bg) {
     return `background-image:url('${computed.bgImage}'); background-size:${bg.scale * 100}%; background-position:calc(50% + ${bg.x}px) calc(50% + ${bg.y}px); background-repeat:no-repeat;`;
   }
-  
-  if (computed.isUploadBg) {
-    return `
-    <style>${darkModeStyles}</style>
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${colors.bg}; padding:24px; border-collapse:collapse;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="${ticketWidth}" cellpadding="0" cellspacing="0" style="${bgStyleFromTransform(computed.bgTransform)} border-radius:12px; overflow:hidden; border:1px solid #2a2a2a; border-collapse:collapse;">
-            <tr>
-              <td style="padding:0; color:${colors.text}; font-family:-apple-system, Segoe UI, Roboto, Arial, sans-serif; background:transparent;">
-                ${ticketContent}
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-    `
-  }
-  
-  // Default gradient background
-  return `
-  <style>${darkModeStyles}</style>
-  <div style="font-family: -apple-system, Segoe UI, Roboto, Arial, sans-serif; background:${colors.bg}; padding:24px; color:${colors.text};">
-    <div style="max-width:${ticketWidth}px; margin:0 auto; background:#161616; border-radius:12px; overflow:hidden; border:1px solid #2a2a2a;">
-      ${ticketContent}
-    </div>
-  </div>
-  `;
-}
 
-function row(label, value, valueColor) {
+  const outerBgStyle = computed.isUploadBg ? bgStyleFromTransform(computed.bgTransform) : `background:${colors.bg}`;
+
   return `
-    <div style="display:flex; justify-content:space-between; padding:6px 0; font-size:13px;">
-      <span style="color:#9a9a9a;">${label}</span>
-      <span style="color:${valueColor || "#f5f5f5"}; font-weight:600;">${value}</span>
-    </div>
+  <!doctype html>
+  <html>
+    <head>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <style>${darkModeStyles}</style>
+      <!--[if mso]><style type="text/css">table, td { border-collapse: collapse !important; }</style><![endif]-->
+    </head>
+    <body style="margin:0; padding:0;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; padding:24px 16px; ${outerBgStyle};">
+        <tr>
+          <td align="center" valign="top">
+            <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="border-collapse:collapse; width:100%; max-width:600px;">
+              <tr>
+                <td style="padding:0;">
+                  ${ticketCard}
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+  </html>
   `;
 }
 
