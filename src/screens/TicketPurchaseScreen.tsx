@@ -488,7 +488,7 @@ const TicketPurchaseScreen: React.FC = () => {
           ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
           : undefined,
         isTableEntry ? tableSize : undefined,
-        buyerPhone || (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
+        (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
         paymentId,
         paymentMethod === "credit_card" ? `${cardFirstName} ${cardLastName}`.trim() : undefined,
       )
