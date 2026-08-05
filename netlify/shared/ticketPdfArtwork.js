@@ -20,12 +20,137 @@ function colorsFor(design) {
   return { background, accent, text, secondary, qr, border };
 }
 
+// Email-style stacked layout for DEFAULT tickets (no custom uploaded background).
+// Mirrors the client renderEmailStyleSvg so in-app and PDF tickets look identical:
+// brand bar → full-bleed hero poster → title → attendee → details → QR → footer.
+function renderDefaultSvg(data, options = {}) {
+  const design = data.ticketDesign || {};
+  const layout = computeTicketLayout(design, { hasPoster: !!data.posterUrl });
+  const colors = colorsFor(design);
+  const { background: base, accent, text: primary, secondary, qr: qrBg, border } = colors;
+  const W = layout.pageWidth, H = layout.pageHeight;
+  const isLandscape = layout.isLandscape;
+  const hasPoster = !!data.posterUrl;
+
+  const gradientId = 'email-bg-' + Math.abs(W * 31 + H * 17);
+  const heroClip = 'email-hero-' + Math.abs(W * 31 + H * 17);
+
+  const FOOTER_H = 36, BRAND_H = 48;
+  const pad = isLandscape ? 24 : 32;
+  const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2;
+  const rowH = isLandscape ? 24 : 28;
+  const gap = isLandscape ? 4 : 6;
+  const qrSize = isLandscape ? 120 : 140;
+
+  const rows = [
+    ['EVENT', data.eventName || 'Event'],
+    ['TICKET', data.ticketType || 'Standard'],
+    ['VENUE', data.venue || 'Venue TBA'],
+    ['DATE', data.date || ''],
+    ['TIME', data.time || ''],
+    ['REF', data.ticketRef || 'XXXXXXXX'],
+  ];
+  if (data.seatNumber != null && data.seatNumber !== '') rows.push(['SEAT', String(data.seatNumber)]);
+  if (data.tableNumber != null && data.tableNumber !== '') rows.push(['TABLE', String(data.tableNumber)]);
+  const detailsCardH = rows.length * rowH + (isLandscape ? 12 : 18);
+
+  const titleH = isLandscape ? 54 : 66;
+  const attendeeH = isLandscape ? 50 : 58;
+  const qrH = isLandscape ? 172 : 206;
+  const qrPad = isLandscape ? 8 : 16;
+
+  // Hero flexes to fill the space between brand bar and fixed content + footer,
+  // so the QR panel and footer are never pushed off the page.
+  const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH;
+  const availY = H - FOOTER_H - BRAND_H;
+  const heroH = hasPoster ? Math.max(0, availY - fixedH - 8) : 0;
+
+  let y = 0;
+
+  const brandBar = `
+    <rect x="0" y="0" width="${W}" height="${BRAND_H}" fill="${base}"/>
+    <text x="24" y="30" font-family="Arial, Helvetica, sans-serif" font-size="16px" font-weight="800" fill="${accent}" letter-spacing="1">YOVIBE</text>
+    <circle cx="${W - 60}" cy="24" r="4" fill="#4CAF50"/>
+    <text x="${W - 52}" y="27" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="700" fill="${primary}">VALID ENTRY</text>`;
+  y += BRAND_H;
+
+  const hero = hasPoster ? `
+    <image href="${href(data.posterUrl)}" x="0" y="${y}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
+    <rect x="0" y="${y + heroH - 80}" width="${W}" height="80" fill="url(#${gradientId})" opacity="0.85"/>` : '';
+  y += heroH;
+
+  const titleY = y + pad;
+  const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
+  const titleBlock = `
+    <text x="${pad}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="24px" font-weight="800" fill="${primary}" letter-spacing="-0.5">${esc(data.eventName || 'Event')}</text>
+    <rect x="${pad}" y="${titleY + 34}" width="${badgeW}" height="22" rx="11" fill="${accent}"/>
+    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(String(data.ticketType || 'Standard').toUpperCase())}</text>`;
+  y = titleY + titleH;
+
+  const attendeeY = y + gap;
+  const attendeeBlock = `
+    <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="${attendeeH}" rx="10" fill="#000" opacity="0.45" stroke="${border}"/>
+    <text x="${pad + 14}" y="${attendeeY + 20}" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="700" fill="${accent}" letter-spacing="1">ADMITS</text>
+    <text x="${pad + 14}" y="${attendeeY + 42}" font-family="Arial, Helvetica, sans-serif" font-size="19px" font-weight="800" fill="${primary}">${esc(data.buyerName || 'Guest')}</text>`;
+  y = attendeeY + attendeeH;
+
+  const detailCardY = y + gap;
+  const detailRows = rows.map(([label, value], i) => `
+    <text x="0" y="${detailCardY + 24 + i * rowH}" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="700" fill="${secondary}" letter-spacing="1">${esc(label)}</text>
+    <text x="${contentW - 30}" y="${detailCardY + 24 + i * rowH}" font-family="Arial, Helvetica, sans-serif" font-size="13px" font-weight="600" fill="${primary}" text-anchor="end">${esc(value)}</text>
+    <line x1="0" y1="${detailCardY + 24 + i * rowH + 10}" x2="${contentW - 30}" y2="${detailCardY + 24 + i * rowH + 10}" stroke="${border}" stroke-width="0.5" opacity="0.5"/>`).join('');
+  const detailCard = `
+    <rect x="${pad}" y="${detailCardY}" width="${contentW}" height="${detailsCardH}" rx="12" fill="#000" opacity="0.45" stroke="${border}"/>
+    <rect x="${pad}" y="${detailCardY}" width="4" height="${detailsCardH}" rx="2" fill="${accent}" opacity="0.7"/>
+    <g transform="translate(${pad + 16} 0)">${detailRows}</g>`;
+  y = detailCardY + detailsCardH;
+
+  const qrY = y + qrPad;
+  const remainingH = H - FOOTER_H - qrY - 8;
+  const panelH = Math.max(100, Math.min(qrH, remainingH));
+  const qrFit = Math.max(64, Math.min(qrSize, panelH - 64));
+  const qrImage = data.qrCodeDataUrl
+    ? `<image href="${href(data.qrCodeDataUrl)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + 30}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>`
+    : `<text x="${pad + contentW / 2}" y="${qrY + 120}" font-family="Arial, Helvetica, sans-serif" font-size="14px" font-weight="600" fill="${secondary}" text-anchor="middle">QR unavailable</text>`;
+  const qrPanel = `
+    <rect x="${pad}" y="${qrY}" width="${contentW}" height="${panelH}" rx="12" fill="${qrBg}" stroke="${accent}" stroke-width="1.5"/>
+    <text x="${pad + contentW / 2}" y="${qrY + 20}" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="800" fill="${accent}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>
+    ${qrImage}
+    <text x="${pad + contentW / 2}" y="${qrY + panelH - 12}" font-family="'Courier New',monospace" font-size="11px" font-weight="700" fill="${accent}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef || 'XXXXXXXX')}</text>`;
+
+  const footer = `
+    <rect x="0" y="${H - FOOTER_H}" width="${W}" height="${FOOTER_H}" fill="#000" opacity="0.55"/>
+    <text x="18" y="${H - 13}" font-family="Arial, Helvetica, sans-serif" font-size="10px" font-weight="800" fill="${accent}" letter-spacing="2">YOVIBE</text>
+    <text x="${W - 18}" y="${H - 13}" font-family="'Courier New',monospace" font-size="9px" fill="${secondary}" text-anchor="end">${esc(data.ticketRef || 'XXXXXXXX')}</text>`;
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${base}"/><stop offset="100%" stop-color="${accent}" stop-opacity="0.72"/></linearGradient>
+      <clipPath id="${heroClip}"><rect width="${W}" height="${heroH}" rx="0"/></clipPath>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#${gradientId})"/>
+    ${hero}
+    ${brandBar}
+    ${titleBlock}
+    ${attendeeBlock}
+    ${detailCard}
+    ${qrPanel}
+    ${footer}
+  </svg>`;
+}
+
 function renderSvg(data, options = {}) {
   const design = data.ticketDesign || { source: 'template', template_id: 'midnight-portrait', orientation: 'portrait', dimensions: { width: 600, height: 900 } };
   const layout = computeTicketLayout(design, { hasPoster: !!data.posterUrl });
   const colors = colorsFor(design);
   const { background: base, accent, text: primary, secondary, qr: qrBg, border } = colors;
   const W = layout.pageWidth, H = layout.pageHeight;
+
+  // Default tickets (no custom uploaded background) use the same email-style
+  // stacked layout as the in-app ticket so the PDF matches the app.
+  if (!(design.source === 'upload' && design.background_url)) {
+    return renderDefaultSvg(data, options);
+  }
   const get = (id, fallback) => layout.blocks.find((b) => b.id === id) || fallback;
   const poster = get('poster', { x: 330, y: 20, width: 200, height: 200, scale: 1 });
   const title = get('title', { x: 24, y: 24, width: 280, height: 80, scale: 1 });
@@ -109,13 +234,25 @@ function drawPdfText(page, text, x, topBaseline, size, color, options = {}) {
 }
 
 async function renderTicketPdf(data) {
+  const design = data.ticketDesign || {};
+
+  // DEFAULT tickets (no custom uploaded background): render the full email-style
+  // SVG with text baked in and draw it as a single image — no vector overlay.
+  if (!(design.source === 'upload' && design.background_url)) {
+    const artwork = await renderTicketPng(data);
+    const pdf = await PDFDocument.create();
+    const page = pdf.addPage([artwork.width, artwork.height]);
+    const image = await pdf.embedPng(artwork.bytes);
+    page.drawImage(image, { x: 0, y: 0, width: artwork.width, height: artwork.height });
+    return pdf.save();
+  }
+
   const artwork = await renderTicketPng(data, { includeText: false });
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([artwork.width, artwork.height]);
   const image = await pdf.embedPng(artwork.bytes);
   page.drawImage(image, { x: 0, y: 0, width: artwork.width, height: artwork.height });
 
-  const design = data.ticketDesign || {};
   const layout = computeTicketLayout(design, { hasPoster: !!data.posterUrl });
   const get = (id, fallback) => layout.blocks.find((b) => b.id === id) || fallback;
   const title = get('title', { x: 24, y: 24, width: 280, height: 80, scale: 1 });

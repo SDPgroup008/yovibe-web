@@ -14,6 +14,8 @@ export interface CanonicalTicketData {
   ticketRef: string
   qr: string
   poster?: string | null
+  seatNumber?: number | null
+  tableNumber?: number | null
 }
 
 const esc = (value: unknown) => String(value ?? "")
@@ -61,6 +63,8 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
     ticketRef: ticket.ticketRef || (ticket as any).ticket_ref || ticket.tableGroupId || ticket.id?.slice(0, 8).toUpperCase() || "XXXXXXXX",
     qr: ticket.qrCodeDataUrl || "",
     poster: event?.posterImageUrl || null,
+    seatNumber: ticket.seatNumber ?? null,
+    tableNumber: ticket.tableNumber ?? null,
   }
 }
 
@@ -118,15 +122,19 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
 
   const gradientId = `email-bg-${Math.abs(W * 31 + H * 17)}`
   const heroClip = `email-hero-${Math.abs(W * 31 + H * 17)}`
-  const qrSize = 140
 
-  // Helper: label/value row (rendered inside a translate group, so coords are relative to the card)
-  const detailRow = (label: string, value: string, y: number) => `
-    <text x="0" y="${y}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.secondary)}" letter-spacing="1">${esc(label.toUpperCase())}</text>
-    <text x="${contentW - 30}" y="${y}" font-family="${FONT_STACK}" font-size="13px" font-weight="600" fill="${esc(colors.text)}" text-anchor="end">${esc(value)}</text>
-    <line x1="0" y1="${y + 10}" x2="${contentW - 30}" y2="${y + 10}" stroke="${esc(colors.border)}" stroke-width="0.5" opacity="0.5"/>`
+  // ── Sizing ──────────────────────────────────────────────────────────────
+  // Fixed stacked content between the brand bar and footer so the hero flexes
+  // to fill the leftover space and the QR panel + footer never overflow.
+  const FOOTER_H = 36
+  const BRAND_H = 48
+  const pad = isLandscape ? 24 : 32
+  const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
+  const rowH = isLandscape ? 24 : 28
+  const gap = isLandscape ? 4 : 6
+  const qrSize = isLandscape ? 120 : 140
 
-  const details = [
+  const details: Array<[string, string]> = [
     ["Event", data.eventName],
     ["Ticket Type", data.ticketType],
     ["Venue", data.venue],
@@ -134,66 +142,80 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
     ["Time", data.time],
     ["Ticket Ref", data.ticketRef],
   ]
+  if (data.seatNumber != null) details.push(["Seat", String(data.seatNumber)])
+  if (data.tableNumber != null) details.push(["Table", String(data.tableNumber)])
+  const detailsCardH = details.length * rowH + (isLandscape ? 12 : 18)
+
+  const titleH = isLandscape ? 54 : 66
+  const attendeeH = isLandscape ? 50 : 58
+  const qrH = isLandscape ? 172 : 206
+  const qrPad = isLandscape ? 8 : 16
+
+  const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH
+  const availY = H - FOOTER_H - BRAND_H
+  const heroH = hasPoster ? Math.max(0, availY - fixedH - 8) : 0
+
+  // Helper: label/value row (rendered inside a translate group, so coords are relative to the card)
+  const detailRow = (label: string, value: string, y: number) => `
+    <text x="0" y="${y}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.secondary)}" letter-spacing="1">${esc(label.toUpperCase())}</text>
+    <text x="${contentW - 30}" y="${y}" font-family="${FONT_STACK}" font-size="13px" font-weight="600" fill="${esc(colors.text)}" text-anchor="end">${esc(value)}</text>
+    <line x1="0" y1="${y + 10}" x2="${contentW - 30}" y2="${y + 10}" stroke="${esc(colors.border)}" stroke-width="0.5" opacity="0.5"/>`
 
   let y = 0
 
   // Brand bar
   const brandBar = `
-    <rect x="0" y="0" width="${W}" height="48" fill="${esc(colors.background)}"/>
+    <rect x="0" y="0" width="${W}" height="${BRAND_H}" fill="${esc(colors.background)}"/>
     <text x="24" y="30" font-family="${FONT_STACK}" font-size="16px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>
     <circle cx="${W - 60}" cy="24" r="4" fill="#4CAF50"/>
     <text x="${W - 52}" y="27" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.text)}">VALID ENTRY</text>`
-  y += 48
+  y += BRAND_H
 
-  // Hero poster
-  const heroH = hasPoster ? (isLandscape ? Math.round(H * 0.55) : 300) : 0
+  // Hero poster — covers the whole hero band via slice + clip, with a bottom fade
   const hero = hasPoster ? `
     <image href="${xmlUrl(data.poster!)}" x="0" y="${y}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
     <rect x="0" y="${y + heroH - 80}" width="${W}" height="80" fill="url(#${gradientId})" opacity="0.85"/>` : ""
   y += heroH
 
-  // Content column
-  const pad = isLandscape ? 24 : 32
-  const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
-
   // Title
   const titleY = y + pad
+  const badgeW = Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30))
   const titleBlock = `
-    <text x="${pad}" y="${titleY + 26}" font-family="${FONT_STACK}" font-size="26px" font-weight="800" fill="${esc(colors.text)}" letter-spacing="-0.5">${esc(data.eventName)}</text>
-    <rect x="${pad}" y="${titleY + 36}" width="${Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30))}" height="24" rx="12" fill="${esc(colors.accent)}"/>
-    <text x="${pad + Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30)) / 2}" y="${titleY + 52}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>`
-  y = titleY + 68
+    <text x="${pad}" y="${titleY + 24}" font-family="${FONT_STACK}" font-size="24px" font-weight="800" fill="${esc(colors.text)}" letter-spacing="-0.5">${esc(data.eventName)}</text>
+    <rect x="${pad}" y="${titleY + 34}" width="${badgeW}" height="22" rx="11" fill="${esc(colors.accent)}"/>
+    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>`
+  y = titleY + titleH
 
   // Attendee card
-  const attendeeY = y + 6
+  const attendeeY = y + gap
   const attendeeBlock = `
-    <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="64" rx="10" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
-    <text x="${pad + 14}" y="${attendeeY + 22}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" letter-spacing="1">ADMITS</text>
-    <text x="${pad + 14}" y="${attendeeY + 46}" font-family="${FONT_STACK}" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
-  y = attendeeY + 64
+    <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="${attendeeH}" rx="10" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
+    <text x="${pad + 14}" y="${attendeeY + 20}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" letter-spacing="1">ADMITS</text>
+    <text x="${pad + 14}" y="${attendeeY + 42}" font-family="${FONT_STACK}" font-size="19px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
+  y = attendeeY + attendeeH
 
   // Details card
-  const detailCardY = y + 10
-  const rowH = 34
-  const cardH = details.length * rowH + 24
+  const detailCardY = y + gap
   const detailCard = `
-    <rect x="${pad}" y="${detailCardY}" width="${contentW}" height="${cardH}" rx="12" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
-    <rect x="${pad}" y="${detailCardY}" width="4" height="${cardH}" rx="2" fill="${esc(colors.accent)}" opacity="0.7"/>
-    <g transform="translate(${pad + 16} 0)">${details.map(([l, v], i) => detailRow(l, v, detailCardY + 26 + i * rowH)).join("")}</g>`
-  y = detailCardY + cardH
+    <rect x="${pad}" y="${detailCardY}" width="${contentW}" height="${detailsCardH}" rx="12" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
+    <rect x="${pad}" y="${detailCardY}" width="4" height="${detailsCardH}" rx="2" fill="${esc(colors.accent)}" opacity="0.7"/>
+    <g transform="translate(${pad + 16} 0)">${details.map(([l, v], i) => detailRow(l, v, detailCardY + 24 + i * rowH)).join("")}</g>`
+  y = detailCardY + detailsCardH
 
-  // QR credential panel
-  const qrY = y + 16
+  // QR credential panel — fills the remaining space before the footer, QR sized to fit
+  const qrY = y + qrPad
+  const remainingH = H - FOOTER_H - qrY - 8
+  const panelH = Math.max(100, Math.min(qrH, remainingH))
+  const qrFit = Math.max(64, Math.min(qrSize, panelH - 64))
   const qrPanel = `
-    <rect x="${pad}" y="${qrY}" width="${contentW}" height="220" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5"/>
-    <text x="${pad + contentW / 2}" y="${qrY + 22}" font-family="${FONT_STACK}" font-size="9px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>
-    ${data.qr ? `<image href="${xmlUrl(data.qr)}" x="${pad + (contentW - qrSize) / 2}" y="${qrY + 34}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>` : text(pad + contentW / 2, qrY + 120, "QR unavailable", 14, colors.secondary, 600, "middle")}
-    <text x="${pad + contentW / 2}" y="${qrY + 200}" font-family="${MONO}" font-size="11px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef)}</text>`
-  y = qrY + 220
+    <rect x="${pad}" y="${qrY}" width="${contentW}" height="${panelH}" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5"/>
+    <text x="${pad + contentW / 2}" y="${qrY + 20}" font-family="${FONT_STACK}" font-size="9px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>
+    ${data.qr ? `<image href="${xmlUrl(data.qr)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + 30}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>` : text(pad + contentW / 2, qrY + 120, "QR unavailable", 14, colors.secondary, 600, "middle")}
+    <text x="${pad + contentW / 2}" y="${qrY + panelH - 12}" font-family="${MONO}" font-size="11px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef)}</text>`
 
   // Footer
   const footer = `
-    <rect x="0" y="${H - 36}" width="${W}" height="36" fill="#000" opacity="0.55"/>
+    <rect x="0" y="${H - FOOTER_H}" width="${W}" height="${FOOTER_H}" fill="#000" opacity="0.55"/>
     <text x="18" y="${H - 13}" font-family="${FONT_STACK}" font-size="10px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="2">YOVIBE</text>
     <text x="${W - 18}" y="${H - 13}" font-family="${MONO}" font-size="9px" fill="${esc(colors.secondary)}" text-anchor="end">${esc(data.ticketRef)}</text>`
 
@@ -296,8 +318,9 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     <rect width="${W}" height="${H}" fill="${bgPaint}"/>
     <rect width="${W}" height="${H}" fill="url(#${grainId})"/>
 
-    <!-- Artwork hero (full-bleed when poster exists) -->
-    ${computed.isUploadBg ? bgImage : (data.poster ? posterHero : "")}
+    <!-- Artwork hero (full-bleed only when there's NO custom block layout; otherwise the
+         draggable poster block is used so it stays behind overlapping blocks) -->
+    ${computed.isUploadBg ? bgImage : (data.poster && !(design as any).layout ? posterHero : "")}
     ${!computed.isUploadBg && !data.poster ? `<rect width="${W}" height="${H}" fill="#000000" opacity="0.16"/>` : ""}
 
     <!-- Poster block (if not used as hero, keep the small card for custom layouts) -->
