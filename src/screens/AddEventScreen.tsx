@@ -21,8 +21,7 @@ import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { uploadToR2 } from "../services/R2Service"
 import { useAuth } from "../contexts/AuthContext"
-import { getTemplatesByOrientation, type TicketTemplateConfig } from "../constants/ticketTemplates"
-import { generateEditorHTML, generatePreviewHTML, defaultLayout } from "../services/TicketPDFService"
+import { generateEditorHTML, defaultLayout } from "../services/TicketPDFService"
 import type { TicketLayout } from "../services/TicketLayoutEngine"
 
 // Responsive breakpoints for add event screen
@@ -208,8 +207,6 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [showFeeForm, setShowFeeForm] = useState(false)
   const [newFeeCustomDesign, setNewFeeCustomDesign] = useState(false)
   const [newFeeDesignOrientation, setNewFeeDesignOrientation] = useState<"portrait" | "landscape">("portrait")
-  const [newFeeSelectedTemplate, setNewFeeSelectedTemplate] = useState<string | null>(null)
-  const [newFeeDesignSource, setNewFeeDesignSource] = useState<"template" | "upload">("template")
   const [newFeeUploadedBackgroundUrl, setNewFeeUploadedBackgroundUrl] = useState<string | null>(null)
   const [newFeeWidthCm, setNewFeeWidthCm] = useState("21")
   const [newFeeHeightCm, setNewFeeHeightCm] = useState("29.7")
@@ -475,11 +472,7 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Error", "Please enter both a fee name and amount")
       return
     }
-    if (newFeeCustomDesign && newFeeDesignSource === "template" && !newFeeSelectedTemplate) {
-      Alert.alert("Error", "Please select a ticket design template")
-      return
-    }
-    if (newFeeCustomDesign && newFeeDesignSource === "upload" && !newFeeUploadedBackgroundUrl) {
+    if (newFeeCustomDesign && !newFeeUploadedBackgroundUrl) {
       Alert.alert("Error", "Please upload a background image for the ticket design")
       return
     }
@@ -514,33 +507,17 @@ const AddEventScreen: React.FC<any> = (props) => {
       const CM_TO_PX = 96 / 2.54
       const uploadW = Math.round((parseFloat(newFeeWidthCm) || 21) * CM_TO_PX)
       const uploadH = Math.round((parseFloat(newFeeHeightCm) || 29.7) * CM_TO_PX)
-      const tplW = newFeeDesignOrientation === "landscape" ? 900 : 600
-      const tplH = newFeeDesignOrientation === "landscape" ? 500 : 900
       const savedLayout = {
         ...newFeeLayout,
         blocks: newFeeLayout.blocks.map((block) => ({ ...block })),
       }
-      // QR position is a template preset. The saved block layout remains the
-      // source of truth after the organiser has positioned/resized blocks.
-      if (newFeeDesignSource === "template") {
-        const qr = savedLayout.blocks.find((block) => block.id === "qr")
-        if (qr) {
-          if (newFeeQrPosition === "top") { qr.x = Math.round((tplW - 160) / 2); qr.y = 110 }
-          if (newFeeQrPosition === "center") { qr.x = Math.round((tplW - 160) / 2); qr.y = Math.round((tplH - 200) / 2) }
-          if (newFeeQrPosition === "bottom") { qr.x = Math.round((tplW - 160) / 2); qr.y = tplH - 250 }
-          if (newFeeQrPosition === "left") { qr.x = 24; qr.y = Math.round((tplH - 200) / 2) }
-          if (newFeeQrPosition === "right") { qr.x = tplW - 184; qr.y = Math.round((tplH - 200) / 2) }
-        }
-      }
       fee.ticketDesign = {
         enabled: true,
         orientation: newFeeDesignOrientation,
-        source: newFeeDesignSource,
-        template_id: newFeeDesignSource === "template" ? newFeeSelectedTemplate : null,
-        background_url: newFeeDesignSource === "upload" ? newFeeUploadedBackgroundUrl : null,
-        dimensions: newFeeDesignSource === "upload"
-          ? { width: uploadW, height: uploadH }
-          : { width: tplW, height: tplH },
+        source: "upload",
+        template_id: null,
+        background_url: newFeeUploadedBackgroundUrl,
+        dimensions: { width: uploadW, height: uploadH },
         qr_position: newFeeQrPosition,
         layout: savedLayout,
       } as any
@@ -551,9 +528,7 @@ const AddEventScreen: React.FC<any> = (props) => {
     setNewFeeIsTable(false)
     setNewTableSize("")
     setNewFeeCustomDesign(false)
-    setNewFeeDesignSource("template")
     setNewFeeDesignOrientation("portrait")
-    setNewFeeSelectedTemplate(null)
     setNewFeeUploadedBackgroundUrl(null)
     setNewFeeWidthCm("21")
     setNewFeeHeightCm("29.7")
@@ -1338,171 +1313,70 @@ const AddEventScreen: React.FC<any> = (props) => {
                         <Text style={[styles.orientationButtonText, newFeeDesignOrientation === "landscape" && styles.orientationButtonTextActive]}>Landscape</Text>
                       </TouchableOpacity>
                     </View>
-                    <Text style={styles.designLabel}>Design Source</Text>
-                    <View style={styles.orientationToggle}>
-                      <TouchableOpacity
-                        style={[styles.orientationButton, newFeeDesignSource === "template" && styles.orientationButtonActive]}
-                        onPress={() => {
-                          setNewFeeDesignSource("template")
-                          setNewFeeUploadedBackgroundUrl(null)
-                          setNewFeeBackgroundFile(null)
-                        }}
-                      >
-                        <Text style={[styles.orientationButtonText, newFeeDesignSource === "template" && styles.orientationButtonTextActive]}>Template</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.orientationButton, newFeeDesignSource === "upload" && styles.orientationButtonActive]}
-                        onPress={() => {
-                          setNewFeeDesignSource("upload")
-                          setNewFeeSelectedTemplate(null)
-                        }}
-                      >
-                        <Text style={[styles.orientationButtonText, newFeeDesignSource === "upload" && styles.orientationButtonTextActive]}>Upload Custom</Text>
-                      </TouchableOpacity>
-                    </View>
-                    {newFeeDesignSource === "template" ? (
-                      <>
-                        <Text style={styles.designLabel}>Select Template</Text>
-                        <ScrollView horizontal style={styles.templateGallery} showsHorizontalScrollIndicator={false}>
-                          {getTemplatesByOrientation(newFeeDesignOrientation).map((template) => (
-                            <TouchableOpacity
-                              key={template.id}
-                              style={[styles.templateCard, newFeeSelectedTemplate === template.id && styles.templateCardSelected]}
-                              onPress={() => { setNewFeeSelectedTemplate(template.id); setNewFeeLayout(defaultLayout(newFeeDesignOrientation, !!image, template.id)) }}
-                            >
-                              <Image source={{ uri: template.thumbnailSvg }} style={styles.templateThumbnail} />
-                              <Text style={styles.templateLabel}>{template.label}</Text>
-                              {newFeeSelectedTemplate === template.id && (
-                                <View style={styles.selectedOverlay}>
-                                  <Ionicons name="checkmark-circle" size={24} color="#2196F3" />
-                                </View>
-                              )}
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-
-                        {/* Live preview of selected template */}
-                        {newFeeSelectedTemplate && (() => {
-                          const tpl = getTemplatesByOrientation(newFeeDesignOrientation).find(t => t.id === newFeeSelectedTemplate);
-                          return tpl ? (
-                            <View style={{ alignItems: "center", marginTop: 12, marginBottom: 4 }}>
-                              <Image source={{ uri: tpl.thumbnailSvg }} style={styles.livePreviewImage} />
-                              <Text style={{ color: "#888", fontSize: 11, marginTop: 4 }}>{tpl.label} · {tpl.orientation}</Text>
-                            </View>
-                          ) : null;
-                        })()}
-
-                        {newFeeSelectedTemplate && (
-                          <>
-                            {/* QR position selector */}
-                            <Text style={[styles.designLabel, { marginTop: 10 }]}>QR Code Position</Text>
-                            <View style={styles.orientationToggle}>
-                              {(newFeeDesignOrientation === "portrait"
-                                ? (["top", "center", "bottom"] as const)
-                                : (["left", "right"] as const)
-                              ).map(pos => (
-                                <TouchableOpacity
-                                  key={pos}
-                                  style={[styles.orientationButton, newFeeQrPosition === pos && styles.orientationButtonActive]}
-                                  onPress={() => setNewFeeQrPosition(pos)}
-                                >
-                                  <Text style={[styles.orientationButtonText, newFeeQrPosition === pos && styles.orientationButtonTextActive]}>
-                                    {pos.charAt(0).toUpperCase() + pos.slice(1)}
-                                  </Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                            {/* Static preview */}
-                            {Platform.OS === "web" && (() => {
-                              const srcW = newFeeDesignOrientation === "landscape" ? 900 : 600
-                              const srcH = newFeeDesignOrientation === "landscape" ? 500 : 900
-                              const zoom = 360 / srcW
-                              const html = generatePreviewHTML(newFeeSelectedTemplate, newFeeDesignOrientation, null, { eventName: name || undefined, venueName: selectedVenueName || undefined, qrPosition: newFeeQrPosition })
-                              return (
-                                <View style={{ marginTop: 10, alignItems: "center" }}>
-                                  <Text style={{ color: "#888", fontSize: 11, marginBottom: 6 }}>Preview</Text>
-                                  <View style={{ width: 360, height: Math.round(srcH * zoom), borderRadius: 8, overflow: "hidden", borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" }}>
-                                    {/* @ts-ignore */}
-                                    <iframe srcDoc={html} style={{ width: srcW, height: srcH, border: "none", zoom, display: "block", pointerEvents: "none" }} sandbox="allow-scripts allow-same-origin" />
-                                  </View>
-                                </View>
-                              )
-                            })()}
-                          </>
-                        )}
-
-                        {!newFeeSelectedTemplate && (
-                          <Text style={styles.designError}>Please select a ticket design template.</Text>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.designLabel}>Upload Background Image</Text>
+                    <Text style={styles.designLabel}>Upload Background Image</Text>
+                    <TouchableOpacity
+                      style={styles.uploadButton}
+                      onPress={() => pickFeeBackgroundImage()}
+                    >
+                      <Ionicons name="image-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.uploadButtonText}>Choose Image</Text>
+                    </TouchableOpacity>
+                    {newFeeUploadedBackgroundUrl && (
+                      <View style={styles.uploadedImagePreview}>
+                        <Image source={{ uri: newFeeUploadedBackgroundUrl }} style={styles.uploadedImageThumb} />
                         <TouchableOpacity
-                          style={styles.uploadButton}
-                          onPress={() => pickFeeBackgroundImage()}
+                          style={styles.removeUploadButton}
+                          onPress={() => {
+                            setNewFeeUploadedBackgroundUrl(null)
+                            setNewFeeBackgroundFile(null)
+                          }}
                         >
-                          <Ionicons name="image-outline" size={20} color="#FFFFFF" />
-                          <Text style={styles.uploadButtonText}>Choose Image</Text>
+                          <Ionicons name="close-circle" size={20} color="#FF3B30" />
                         </TouchableOpacity>
-                        {newFeeUploadedBackgroundUrl && (
-                          <View style={styles.uploadedImagePreview}>
-                            <Image source={{ uri: newFeeUploadedBackgroundUrl }} style={styles.uploadedImageThumb} />
-                            <TouchableOpacity
-                              style={styles.removeUploadButton}
-                              onPress={() => {
-                                setNewFeeUploadedBackgroundUrl(null)
-                                setNewFeeBackgroundFile(null)
-                              }}
-                            >
-                              <Ionicons name="close-circle" size={20} color="#FF3B30" />
-                            </TouchableOpacity>
-                          </View>
-                        )}
-                        <View style={styles.dimensionRow}>
-                          <View style={styles.dimensionField}>
-                            <Text style={styles.dimensionLabel}>Width (cm)</Text>
-                            <TextInput
-                              style={styles.dimensionInput}
-                              value={newFeeWidthCm}
-                              onChangeText={setNewFeeWidthCm}
-                              placeholder="21"
-                              placeholderTextColor="#666"
-                              keyboardType="decimal-pad"
-                            />
-                          </View>
-                          <View style={styles.dimensionField}>
-                            <Text style={styles.dimensionLabel}>Height (cm)</Text>
-                            <TextInput
-                              style={styles.dimensionInput}
-                              value={newFeeHeightCm}
-                              onChangeText={setNewFeeHeightCm}
-                              placeholder="29.7"
-                              placeholderTextColor="#666"
-                              keyboardType="decimal-pad"
-                            />
-                          </View>
-                        </View>
-                        <Text style={styles.dimensionHint}>
-                          {newFeeWidthCm && newFeeHeightCm
-                            ? `${newFeeWidthCm} × ${newFeeHeightCm} cm → ${Math.round((parseFloat(newFeeWidthCm)||21)*(96/2.54))} × ${Math.round((parseFloat(newFeeHeightCm)||29.7)*(96/2.54))} px`
-                            : "Enter dimensions in centimetres"}
-                        </Text>
-                        {newFeeUploadedBackgroundUrl && (
-                          <TicketEditor
-                            templateId={null}
-                            orientation={newFeeDesignOrientation}
-                            uploadedBgUrl={newFeeUploadedBackgroundUrl}
-                            widthCm={parseFloat(newFeeWidthCm) || 21}
-                            heightCm={parseFloat(newFeeHeightCm) || 29.7}
-                            posterUrl={image || null}
-                            eventName={name || undefined}
-                            venueName={selectedVenueName || undefined}
-                            layout={newFeeLayout}
-                            onLayoutChange={setNewFeeLayout}
-                          />
-                        )}
-                      </>
+                      </View>
+                    )}
+                    <View style={styles.dimensionRow}>
+                      <View style={styles.dimensionField}>
+                        <Text style={styles.dimensionLabel}>Width (cm)</Text>
+                        <TextInput
+                          style={styles.dimensionInput}
+                          value={newFeeWidthCm}
+                          onChangeText={setNewFeeWidthCm}
+                          placeholder="21"
+                          placeholderTextColor="#666"
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                      <View style={styles.dimensionField}>
+                        <Text style={styles.dimensionLabel}>Height (cm)</Text>
+                        <TextInput
+                          style={styles.dimensionInput}
+                          value={newFeeHeightCm}
+                          onChangeText={setNewFeeHeightCm}
+                          placeholder="29.7"
+                          placeholderTextColor="#666"
+                          keyboardType="decimal-pad"
+                        />
+                      </View>
+                    </View>
+                    <Text style={styles.dimensionHint}>
+                      {newFeeWidthCm && newFeeHeightCm
+                        ? `${newFeeWidthCm} × ${newFeeHeightCm} cm → ${Math.round((parseFloat(newFeeWidthCm)||21)*(96/2.54))} × ${Math.round((parseFloat(newFeeHeightCm)||29.7)*(96/2.54))} px`
+                        : "Enter dimensions in centimetres"}
+                    </Text>
+                    {newFeeUploadedBackgroundUrl && (
+                      <TicketEditor
+                        templateId={null}
+                        orientation={newFeeDesignOrientation}
+                        uploadedBgUrl={newFeeUploadedBackgroundUrl}
+                        widthCm={parseFloat(newFeeWidthCm) || 21}
+                        heightCm={parseFloat(newFeeHeightCm) || 29.7}
+                        posterUrl={image || null}
+                        eventName={name || undefined}
+                        venueName={selectedVenueName || undefined}
+                        layout={newFeeLayout}
+                        onLayoutChange={setNewFeeLayout}
+                      />
                     )}
                   </View>
                 )}
@@ -2187,43 +2061,6 @@ const styles = StyleSheet.create({
   },
   orientationButtonTextActive: {
     color: "#FFFFFF",
-  },
-  templateGallery: {
-    marginBottom: 8,
-  },
-  templateCard: {
-    alignItems: "center",
-    marginRight: 12,
-  },
-  templateCardSelected: {
-    borderWidth: 2,
-    borderColor: "#2196F3",
-    borderRadius: 6,
-  },
-  templateThumbnail: {
-    width: 120,
-    height: 200,
-    borderRadius: 6,
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  livePreviewImage: {
-    width: 180,
-    height: 300,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: "#2196F3",
-  },
-  templateLabel: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    textAlign: "center",
-  },
-  selectedOverlay: {
-    position: "absolute",
-    top: -8,
-    right: -8,
   },
   designError: {
     color: "#FF3B30",

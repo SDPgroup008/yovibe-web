@@ -1,7 +1,7 @@
 import type { Event } from "../models/Event"
 import type { Ticket } from "../models/Ticket"
 import { getTemplateById } from "../constants/ticketTemplates"
-import { computeTicketLayout, getDefaultLayout, type TicketDesignInput, type TicketLayout } from "./TicketLayoutEngine"
+import { computeTicketLayout, type TicketDesignInput } from "./TicketLayoutEngine"
 
 export interface CanonicalTicketData {
   eventName: string
@@ -42,15 +42,10 @@ export function resolveTicketDesign(event?: Event, ticket?: Ticket): TicketDesig
     enabled: true,
     orientation: "portrait",
     source: "template",
-    template_id: "midnight-portrait",
+    template_id: null,
     background_url: null,
-    dimensions: { width: 600, height: 900 },
   }) as TicketDesignInput
-  // Attach the template-specific layout if no custom layout is stored
-  if (!design.layout) {
-    const orientation = design.orientation || "portrait"
-    design.layout = getDefaultLayout(orientation, !!event?.posterImageUrl, design)
-  }
+  console.log("[TicketDesign] resolveTicketDesign → source:", design.source, "background_url:", design.background_url ? "set" : "null")
   return design
 }
 
@@ -69,18 +64,34 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
   }
 }
 
+// Extract hex color stops from a template's CSS background value.
+// e.g. "linear-gradient(160deg, #0d47a1 0%, #1976d2 50%, #2196F3 100%)" → ["#0d47a1","#1976d2","#2196F3"]
+//      "#eeeeee" → ["#eeeeee"]
+function extractBackgroundColors(bg: string): string[] {
+  const hexes = String(bg || "").match(/#[0-9a-fA-F]{3,8}/g) || []
+  return hexes
+}
+
+// Build SVG <stop> elements from a template's background stops + accent.
+function gradientStops(bgStops: string[], accent: string): string {
+  const stops = bgStops.length > 1 ? bgStops : [bgStops[0] || "#111827", accent]
+  if (stops.length === 1) {
+    return `<stop offset="0%" stop-color="${esc(stops[0])}"/><stop offset="100%" stop-color="${esc(stops[0])}"/>`
+  }
+  return stops.map((c, i) => `<stop offset="${Math.round((i / (stops.length - 1)) * 100)}%" stop-color="${esc(c)}"/>`).join("")
+}
+
 function colorsFor(design: TicketDesignInput) {
   const template = design.source === "template" && design.template_id ? getTemplateById(design.template_id) : undefined
+  const bgStops = template ? extractBackgroundColors(template.background) : ["#111827"]
   return {
-    // Ticket templates store CSS gradients. SVG stop-color only accepts a
-    // color, so use a valid base color here and apply the accent as the second
-    // gradient stop below.
-    background: "#111827",
+    background: bgStops[0] || "#111827",
     accent: template?.accentColor || "#7c3aed",
     text: template?.textPrimary || "#ffffff",
     secondary: template?.textSecondary || "#c4b5fd",
     qr: template?.qrBg || "#ffffff",
     border: template?.dividerColor || "rgba(255,255,255,0.22)",
+    bgStops,
   }
 }
 
@@ -92,31 +103,141 @@ function block(layout: any, id: string) {
   return layout.blocks.find((item: any) => item.id === id) || { id, x: 24, y: 24, width: 200, height: 120, scale: 1 }
 }
 
+const FONT_STACK = "'Inter', 'Segoe UI', -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif"
+const MONO = "'SF Mono', 'JetBrains Mono', 'Courier New', monospace"
+
+// Renders the DEFAULT ticket as a vertical stacked layout that mirrors the
+// email design: brand bar → hero poster → title → attendee → details → QR panel → footer.
+function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: TicketDesignInput): string {
+  const data = canonicalTicketData(ticket, event)
+  const colors = colorsFor(design)
+  const W = design.dimensions?.width || 600
+  const H = design.dimensions?.height || 900
+  const isLandscape = design.orientation === "landscape"
+  const hasPoster = !!data.poster
+
+  const gradientId = `email-bg-${Math.abs(W * 31 + H * 17)}`
+  const heroClip = `email-hero-${Math.abs(W * 31 + H * 17)}`
+  const qrSize = 140
+
+  // Helper: label/value row (rendered inside a translate group, so coords are relative to the card)
+  const detailRow = (label: string, value: string, y: number) => `
+    <text x="0" y="${y}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.secondary)}" letter-spacing="1">${esc(label.toUpperCase())}</text>
+    <text x="${contentW - 30}" y="${y}" font-family="${FONT_STACK}" font-size="13px" font-weight="600" fill="${esc(colors.text)}" text-anchor="end">${esc(value)}</text>
+    <line x1="0" y1="${y + 10}" x2="${contentW - 30}" y2="${y + 10}" stroke="${esc(colors.border)}" stroke-width="0.5" opacity="0.5"/>`
+
+  const details = [
+    ["Event", data.eventName],
+    ["Ticket Type", data.ticketType],
+    ["Venue", data.venue],
+    ["Date", data.date],
+    ["Time", data.time],
+    ["Ticket Ref", data.ticketRef],
+  ]
+
+  let y = 0
+
+  // Brand bar
+  const brandBar = `
+    <rect x="0" y="0" width="${W}" height="48" fill="${esc(colors.background)}"/>
+    <text x="24" y="30" font-family="${FONT_STACK}" font-size="16px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>
+    <circle cx="${W - 60}" cy="24" r="4" fill="#4CAF50"/>
+    <text x="${W - 52}" y="27" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.text)}">VALID ENTRY</text>`
+  y += 48
+
+  // Hero poster
+  const heroH = hasPoster ? (isLandscape ? Math.round(H * 0.55) : 300) : 0
+  const hero = hasPoster ? `
+    <image href="${xmlUrl(data.poster!)}" x="0" y="${y}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
+    <rect x="0" y="${y + heroH - 80}" width="${W}" height="80" fill="url(#${gradientId})" opacity="0.85"/>` : ""
+  y += heroH
+
+  // Content column
+  const pad = isLandscape ? 24 : 32
+  const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
+
+  // Title
+  const titleY = y + pad
+  const titleBlock = `
+    <text x="${pad}" y="${titleY + 26}" font-family="${FONT_STACK}" font-size="26px" font-weight="800" fill="${esc(colors.text)}" letter-spacing="-0.5">${esc(data.eventName)}</text>
+    <rect x="${pad}" y="${titleY + 36}" width="${Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30))}" height="24" rx="12" fill="${esc(colors.accent)}"/>
+    <text x="${pad + Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30)) / 2}" y="${titleY + 52}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>`
+  y = titleY + 68
+
+  // Attendee card
+  const attendeeY = y + 6
+  const attendeeBlock = `
+    <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="64" rx="10" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
+    <text x="${pad + 14}" y="${attendeeY + 22}" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" letter-spacing="1">ADMITS</text>
+    <text x="${pad + 14}" y="${attendeeY + 46}" font-family="${FONT_STACK}" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
+  y = attendeeY + 64
+
+  // Details card
+  const detailCardY = y + 10
+  const rowH = 34
+  const cardH = details.length * rowH + 24
+  const detailCard = `
+    <rect x="${pad}" y="${detailCardY}" width="${contentW}" height="${cardH}" rx="12" fill="#000" opacity="0.45" stroke="${esc(colors.border)}"/>
+    <rect x="${pad}" y="${detailCardY}" width="4" height="${cardH}" rx="2" fill="${esc(colors.accent)}" opacity="0.7"/>
+    <g transform="translate(${pad + 16} 0)">${details.map(([l, v], i) => detailRow(l, v, detailCardY + 26 + i * rowH)).join("")}</g>`
+  y = detailCardY + cardH
+
+  // QR credential panel
+  const qrY = y + 16
+  const qrPanel = `
+    <rect x="${pad}" y="${qrY}" width="${contentW}" height="220" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5"/>
+    <text x="${pad + contentW / 2}" y="${qrY + 22}" font-family="${FONT_STACK}" font-size="9px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>
+    ${data.qr ? `<image href="${xmlUrl(data.qr)}" x="${pad + (contentW - qrSize) / 2}" y="${qrY + 34}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>` : text(pad + contentW / 2, qrY + 120, "QR unavailable", 14, colors.secondary, 600, "middle")}
+    <text x="${pad + contentW / 2}" y="${qrY + 200}" font-family="${MONO}" font-size="11px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef)}</text>`
+  y = qrY + 220
+
+  // Footer
+  const footer = `
+    <rect x="0" y="${H - 36}" width="${W}" height="36" fill="#000" opacity="0.55"/>
+    <text x="18" y="${H - 13}" font-family="${FONT_STACK}" font-size="10px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="2">YOVIBE</text>
+    <text x="${W - 18}" y="${H - 13}" font-family="${MONO}" font-size="9px" fill="${esc(colors.secondary)}" text-anchor="end">${esc(data.ticketRef)}</text>`
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <defs>
+      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">${gradientStops(colors.bgStops, colors.accent)}</linearGradient>
+      <clipPath id="${heroClip}"><rect width="${W}" height="${heroH}" rx="0"/></clipPath>
+      <filter id="qrShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/></filter>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#${gradientId})"/>
+    ${hero}
+    ${brandBar}
+    ${titleBlock}
+    ${attendeeBlock}
+    ${detailCard}
+    <g filter="url(#qrShadow)">${qrPanel}</g>
+    ${footer}
+  </svg>`
+}
+
 export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput): string {
   const design = designOverride || resolveTicketDesign(event, ticket)
+
+  // No uploaded custom background → default ticket that mirrors the email design
+  if (design.source !== "upload" || !design.background_url) {
+    return renderEmailStyleSvg(ticket, event, design)
+  }
+
   const computed = computeTicketLayout(design, { hasPoster: !!event?.posterImageUrl })
   const data = canonicalTicketData(ticket, event)
   const colors = colorsFor(design)
   const W = computed.pageWidth
   const H = computed.pageHeight
+  console.log("[TicketRender] computed page:", W, "x", H, "| blocks:", computed.blocks.map((b: any) => `${b.id}@${b.x},${b.y}`).join(" | "))
   const isLandscape = computed.isLandscape
   const poster = block(computed, "poster")
   const title = block(computed, "title")
   const info = block(computed, "info")
   const qrBase = block(computed, "qr")
   const qr = { ...qrBase }
-  if (!(design as any).layout && (design as any).source === "template" && (design as any).qr_position) {
-    const position = (design as any).qr_position
-    if (position === "top") { qr.x = Math.round((W - qr.width) / 2); qr.y = 110 }
-    if (position === "center") { qr.x = Math.round((W - qr.width) / 2); qr.y = Math.round((H - qr.height) / 2) }
-    if (position === "bottom") { qr.x = Math.round((W - qr.width) / 2); qr.y = H - qr.height - 50 }
-    if (position === "left") { qr.x = 24; qr.y = Math.round((H - qr.height) / 2) }
-    if (position === "right") { qr.x = W - qr.width - 24; qr.y = Math.round((H - qr.height) / 2) }
-  }
   const bg = computed.bgTransform || { x: 0, y: 0, scale: 1 }
   const gradientId = `ticket-bg-${Math.abs(W * 31 + H * 17)}`
   const grainId = `ticket-grain-${Math.abs(W * 31 + H * 17)}`
-  const bgPaint = design.source === "template" ? `url(#${gradientId})` : "#111827"
+  const bgPaint = "#111827"
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36))
   const infoRows = [
     ["Date", data.date], ["Time", data.time], ["Venue", data.venue],
@@ -135,7 +256,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   ` : ""
 
   // QR credential panel with eyebrow + VALID chip + ref
-  const qrEyebrow = `<text x="${qr.width / 2}" y="18" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>`
+  const qrEyebrow = `<text x="${qr.width / 2}" y="18" font-family="${FONT_STACK}" font-size="8px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>`
   const qrSvg = data.qr
     ? `<image href="${xmlUrl(data.qr)}" x="${(qr.width - qrSize) / 2}" y="${30}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>`
     : text(qr.width / 2, qr.height / 2, "QR unavailable", 14, colors.secondary, 600, "middle")
@@ -143,21 +264,18 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   // Info card: label/value pairs, accent bar, with attendee emphasized
   const infoCard = infoRows.map(([label, value], i) => `
     <g transform="translate(16 ${18 + i * infoRowHeight})">
-      <text x="0" y="0" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="700" fill="${esc(colors.secondary)}" text-anchor="start" letter-spacing="1">${esc(label.toUpperCase())}</text>
-      <text x="0" y="16" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="13px" font-weight="600" fill="${esc(colors.text)}">${esc(value)}</text>
+      <text x="0" y="0" font-family="${FONT_STACK}" font-size="8px" font-weight="700" fill="${esc(colors.secondary)}" text-anchor="start" letter-spacing="1">${esc(label.toUpperCase())}</text>
+      <text x="0" y="16" font-family="${FONT_STACK}" font-size="13px" font-weight="600" fill="${esc(colors.text)}">${esc(value)}</text>
     </g>`).join('')
   // Attendee emphasized block below the generic info rows
   const attendeeY = 18 + infoRows.length * infoRowHeight + 6
   const attendeeBlock = `
-    <text x="16" y="${attendeeY}" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="8px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="start" letter-spacing="1">ADMITS</text>
-    <text x="16" y="${attendeeY + 22}" font-family="'Inter', 'Segoe UI', Arial, sans-serif" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
-
-  const FONT_STACK = "'Inter', 'Segoe UI', -apple-system, Roboto, 'Helvetica Neue', Arial, sans-serif"
-  const MONO = "'SF Mono', 'JetBrains Mono', 'Courier New', monospace"
+    <text x="16" y="${attendeeY}" font-family="${FONT_STACK}" font-size="8px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="start" letter-spacing="1">ADMITS</text>
+    <text x="16" y="${attendeeY + 22}" font-family="${FONT_STACK}" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs>
-      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${esc(colors.background)}"/><stop offset="65%" stop-color="${esc(colors.background)}"/><stop offset="100%" stop-color="${esc(colors.accent)}" stop-opacity="0.55"/></linearGradient>
+      <linearGradient id="${gradientId}" x1="0" y1="0" x2="1" y2="1">${gradientStops(colors.bgStops, colors.accent)}</linearGradient>
       <radialGradient id="${grainId}" cx="0.5" cy="0.5" r="0.7"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.04"/><stop offset="100%" stop-color="#000000" stop-opacity="0.12"/></radialGradient>
       <clipPath id="${heroClip}"><rect width="${W}" height="${isLandscape ? Math.round(H * 0.7) : Math.round(H * 0.55)}" rx="0"/></clipPath>
       <clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath>
@@ -183,12 +301,6 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
       <text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>
     </g>
 
-    <!-- VALID status chip (top-right) -->
-    <g>
-      <circle cx="${W - 52}" cy="24" r="4" fill="#4CAF50"/>
-      <text x="${W - 44}" y="27" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.text)}" text-anchor="start" letter-spacing="0.5">VALID ENTRY</text>
-    </g>
-
     <!-- Info card with attendee emphasis -->
     <g${blockScale(info)}>
       <rect width="${info.width}" height="${info.height}" rx="12" fill="#000" opacity="0.55" stroke="${esc(colors.border)}" stroke-width="1"/>
@@ -202,7 +314,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
       <rect width="${qr.width}" height="${qr.height}" rx="14" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5" filter="url(#qrShadow)"/>
       ${qrEyebrow}
       ${qrSvg}
-      <rect x="0" y="${qr.height - 30}" width="${qr.width}" height="30" rx="0 0 14 14" fill="${esc(colors.accent)}" opacity="0.1"/>
+      <rect x="0" y="${qr.height - 30}" width="${qr.width}" height="30" rx="14" fill="${esc(colors.accent)}" opacity="0.1"/>
       <text x="${qr.width / 2}" y="${qr.height - 13}" font-family="${MONO}" font-size="9px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="0.5">${esc(data.ticketRef)}</text>
     </g>
 
@@ -249,7 +361,18 @@ export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket,
 
 export function canonicalTicketHtml(ticket: Ticket, event?: Event) {
   const design = resolveTicketDesign(event, ticket)
-  const computed = computeTicketLayout(design, { hasPoster: !!event?.posterImageUrl })
   const svg = renderCanonicalTicketSvg(ticket, event, design)
-  return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${computed.pageWidth}px ${computed.pageHeight}px;margin:0}html,body{margin:0;padding:0;background:#111;overflow:hidden}svg{display:block;width:${computed.pageWidth}px;height:${computed.pageHeight}px}</style></head><body>${svg}</body></html>`
+  let pageW: number
+  let pageH: number
+  if (design.source === "upload" && design.background_url) {
+    const computed = computeTicketLayout(design, { hasPoster: !!event?.posterImageUrl })
+    pageW = computed.pageWidth
+    pageH = computed.pageHeight
+  } else {
+    pageW = design.dimensions?.width || 600
+    pageH = design.dimensions?.height || 900
+  }
+  console.log("[TicketRender] canonicalTicketHtml → page:", pageW, "x", pageH,
+    "source:", design.source, "dimensions:", JSON.stringify(design.dimensions))
+  return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${pageW}px ${pageH}px;margin:0}html,body{margin:0;padding:0;background:#111;overflow:hidden}svg{display:block;width:${pageW}px;height:${pageH}px}</style></head><body>${svg}</body></html>`
 }

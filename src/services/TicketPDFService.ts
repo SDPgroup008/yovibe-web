@@ -60,7 +60,7 @@ export function defaultLayout(orientation: "portrait" | "landscape", hasPoster: 
     enabled: true,
     orientation,
     source: "template",
-    template_id: templateId || "midnight-portrait",
+    template_id: templateId || "classic-blue-portrait",
     dimensions: { width: orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W, height: orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H },
   }
   return getDefaultLayout(orientation, hasPoster, design)
@@ -76,6 +76,9 @@ function resolveTemplate(event?: Event, feeDesign?: any): { t: TicketTemplateCon
   const fallback: TicketTemplateConfig = {
     id: "fallback", label: "Default",
     orientation: design?.orientation || "portrait",
+    width: design?.orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W,
+    height: design?.orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H,
+    layout: defaultLayout(design?.orientation === "landscape" ? "landscape" : "portrait", false),
     background: "linear-gradient(160deg,#0f0c29 0%,#302b63 50%,#24243e 100%)",
     headerBg: "linear-gradient(90deg,#302b63,#24243e)",
     accentColor: "#7c3aed", textPrimary: "#ffffff", textSecondary: "#a78bfa",
@@ -449,6 +452,7 @@ export function generatePreviewHTML(
     background_url: uploadedBgUrl || null,
     dimensions: { width: orientation === "landscape" ? LANDSCAPE_W : PORTRAIT_W, height: orientation === "landscape" ? LANDSCAPE_H : PORTRAIT_H },
     layout: uploadedBgUrl ? (sampleData?.layout || undefined) : undefined,
+    qr_position: uploadedBgUrl ? undefined : (sampleData?.qrPosition || undefined),
   }
   const previewEvent: any = {
     name: sampleData?.eventName || "Sample Event Night",
@@ -468,6 +472,7 @@ export function generatePreviewHTML(
     eventStartTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     qrCodeDataUrl: FAKE_QR,
   }
+  console.log("[Preview] generatePreviewHTML → templateId:", templateId, "orientation:", orientation, "qrPosition:", sampleData?.qrPosition)
   return canonicalTicketHtml(previewTicket, previewEvent)
 
   /* Legacy preview retained below for editor compatibility history. */
