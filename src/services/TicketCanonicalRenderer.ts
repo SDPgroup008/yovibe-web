@@ -235,6 +235,15 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const qrBase = block(computed, "qr")
   const qr = { ...qrBase }
   const bg = computed.bgTransform || { x: 0, y: 0, scale: 1 }
+  const bgScale = bg.scale || 1
+  // Replicate the editor's CSS background model (TicketPDFService buildHTML):
+  //   background-size: scale*100%              → background box = scale·W × scale·H
+  //   background-position: calc(50% + x) calc(50% + y)
+  // Centered by default, then offset by (x, y) in ticket-space pixels. The SVG
+  // <image> top-left must equal that centered top-left, otherwise the final
+  // ticket crops the wrong region (e.g. the top-left corner) of the upload.
+  const bgLeft = (W - W * bgScale) / 2 + (bg.x || 0)
+  const bgTop = (H - H * bgScale) / 2 + (bg.y || 0)
   const gradientId = `ticket-bg-${Math.abs(W * 31 + H * 17)}`
   const grainId = `ticket-grain-${Math.abs(W * 31 + H * 17)}`
   const bgPaint = "#111827"
@@ -245,7 +254,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const infoRowHeight = Math.max(24, (info.height - 28) / infoRows.length)
   const blockScale = (b: any) => ` transform="translate(${b.x} ${b.y}) scale(${b.scale || 1})"`
   const bgImage = computed.isUploadBg
-    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bg.x}" y="${bg.y}" width="${W * (bg.scale || 1)}" height="${H * (bg.scale || 1)}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`
+    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bgLeft}" y="${bgTop}" width="${W * bgScale}" height="${H * bgScale}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`
     : ""
 
   // Artwork-first: poster becomes a full-bleed hero with bottom gradient overlay
