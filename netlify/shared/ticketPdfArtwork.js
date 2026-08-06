@@ -28,19 +28,31 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
   const FOOTER_H = 36, BRAND_H = 48;
   const pad = isLandscape ? 24 : 32;
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2;
-  const rowH = isLandscape ? 24 : 28;
+  // Compacted middle content so the hero can grow 1/3 without crushing the QR.
+  const rowH = 24;
   const gap = isLandscape ? 4 : 6;
   const detailsCardH = rowCount * rowH + (isLandscape ? 12 : 18);
-  const titleH = isLandscape ? 54 : 66;
-  const attendeeH = isLandscape ? 50 : 58;
-  const qrH = isLandscape ? 244 : 274;       // roomy enough for the bigger QR
+  const titleH = isLandscape ? 48 : 56;
+  const attendeeH = isLandscape ? 46 : 50;
   const qrPad = isLandscape ? 8 : 16;
-  const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH;
+  // Gap between the hero and the title equals the height of the "YOVIBE" brand text.
+  const titleGap = 16;
+
   const availY = H - FOOTER_H - BRAND_H;
-  const heroH = hasPoster ? Math.max(0, availY - fixedH - 8) : 0;
+
+  // Hero height the user sees today (with the prior spacing), so "1/3 more" is
+  // relative to that value.
+  const prevFixed = pad + (isLandscape ? 54 : 66) + gap + (isLandscape ? 50 : 58) + gap
+    + (rowCount * (isLandscape ? 24 : 28) + (isLandscape ? 12 : 18)) + qrPad + (isLandscape ? 244 : 274);
+  const heroBase = hasPoster ? Math.max(0, availY - 8 - prevFixed) : 0;
+  const heroH = hasPoster ? Math.round(heroBase * (4 / 3)) : 0;
+
+  // QR panel takes whatever vertical space remains, keeping the QR large.
+  const nonQrFixed = heroH + titleGap + titleH + gap + attendeeH + gap + detailsCardH + qrPad;
+  const qrH = Math.max(64, availY - 8 - nonQrFixed);
 
   let y = BRAND_H + heroH;
-  const titleY = y + pad;
+  const titleY = y + titleGap;
   y = titleY + titleH;
   const attendeeY = y + gap;
   y = attendeeY + attendeeH;
@@ -48,7 +60,7 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
   y = detailCardY + detailsCardH;
   const qrY = y + qrPad;
   const remainingH = H - FOOTER_H - qrY - 8;
-  const panelH = Math.max(100, Math.min(qrH, remainingH));
+  const panelH = Math.min(qrH, remainingH);
   // QR fills the panel (no label / ref text), using the freed space to enlarge it.
   const qrFit = Math.max(64, Math.min(contentW, panelH) - 44);
 
