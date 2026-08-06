@@ -82,7 +82,7 @@ export function computeEmailHeroRect(ticket: Ticket, event?: Event, design?: Tic
   const hasPoster = !!data.poster
 
   const FOOTER_H = 36
-  const BRAND_H = 48
+  const BRAND_H = 0   // header removed; hero fills from the top
   const pad = isLandscape ? 24 : 32
   const rowH = isLandscape ? 24 : 28
   const gap = isLandscape ? 4 : 6
@@ -153,10 +153,9 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const heroClip = `email-hero-${Math.abs(W * 31 + H * 17)}`
 
   // ── Sizing ──────────────────────────────────────────────────────────────
-  // Fixed stacked content between the brand bar and footer so the hero flexes
-  // to fill the leftover space and the QR panel + footer never overflow.
+  // Fixed stacked content below the hero so the hero flexes to fill the leftover
+  // space and the QR panel + footer never overflow.
   const FOOTER_H = 36
-  const BRAND_H = 48
   const pad = isLandscape ? 24 : 32
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
   const rowH = isLandscape ? 24 : 28
@@ -190,12 +189,6 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
     <line x1="0" y1="${y + 10}" x2="${contentW - 30}" y2="${y + 10}" stroke="${esc(colors.border)}" stroke-width="0.5" opacity="0.5"/>`
 
   let y = 0
-
-  // Brand bar
-  const brandBar = `
-    <rect x="0" y="0" width="${W}" height="${BRAND_H}" fill="${esc(colors.background)}"/>
-    <text x="24" y="30" font-family="${FONT_STACK}" font-size="16px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>`
-  y += BRAND_H
 
   // Hero band — the poster image is NOT drawn here. MyTicketsScreen overlays the
   // actual poster (loaded directly) to cover this band as a rectangle, which
@@ -252,7 +245,6 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
       <filter id="qrShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/></filter>
     </defs>
     <rect width="${W}" height="${H}" fill="url(#${gradientId})"/>
-    ${brandBar}
     ${titleBlock}
     ${attendeeBlock}
     ${detailCard}

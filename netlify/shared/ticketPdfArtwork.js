@@ -25,7 +25,7 @@ function colorsFor(design) {
 // vertical positions used by both the SVG renderer and the pdf-lib vector-text
 // overlay in renderTicketPdf.
 function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
-  const FOOTER_H = 36, BRAND_H = 48;
+  const FOOTER_H = 36, BRAND_H = 0;   // header removed; hero starts at y=0
   const pad = isLandscape ? 24 : 32;
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2;
   // Compacted middle content so the hero can grow 1/3 without crushing the QR.
@@ -102,18 +102,14 @@ function renderDefaultSvg(data, options = {}) {
   const gradientId = 'email-bg-' + Math.abs(W * 31 + H * 17);
   const heroClip = 'email-hero-' + Math.abs(W * 31 + H * 17);
 
-  const brandBar = `
-    <rect x="0" y="0" width="${W}" height="${L.BRAND_H}" fill="${base}"/>
-    ${showText ? `<text x="24" y="30" font-family="Arial, Helvetica, sans-serif" font-size="16px" font-weight="800" fill="${accent}" letter-spacing="1">YOVIBE</text>` : ''}`;
-
   const hero = hasPoster ? `
-    <image href="${href(data.posterUrl)}" x="0" y="${L.BRAND_H}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>` : '';
+    <image href="${href(data.posterUrl)}" x="0" y="0" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>` : '';
 
   const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
   const titleBlock = `
-    ${showText ? `<text x="${pad}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="24px" font-weight="800" fill="${primary}" letter-spacing="-0.5">${esc(data.eventName || 'Event')}</text>` : ''}
-    <rect x="${pad}" y="${titleY + 34}" width="${badgeW}" height="22" rx="11" fill="${accent}"/>
-    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(String(data.ticketType || 'Standard').toUpperCase())}</text>` : ''}`;
+    ${showText ? `<text x="${pad}" y="${titleY}" font-family="Arial, Helvetica, sans-serif" font-size="24px" font-weight="800" fill="${primary}" letter-spacing="-0.5">${esc(data.eventName || 'Event')}</text>` : ''}
+    <rect x="${pad}" y="${titleY + 10}" width="${badgeW}" height="22" rx="11" fill="${accent}"/>
+    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(String(data.ticketType || 'Standard').toUpperCase())}</text>` : ''}`;
 
   const attendeeBlock = `
     <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="${L.attendeeH}" rx="10" fill="#000" opacity="0.45" stroke="${border}"/>
@@ -148,7 +144,6 @@ function renderDefaultSvg(data, options = {}) {
     </defs>
     <rect width="${W}" height="${H}" fill="url(#${gradientId})"/>
     ${hero}
-    ${brandBar}
     ${titleBlock}
     ${attendeeBlock}
     ${detailCard}
@@ -280,12 +275,9 @@ async function renderTicketPdf(data) {
     const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
     const ph = { pageHeight: H };
 
-    // Brand bar
-    drawPdfText(page, 'YOVIBE', 24, 30, 16, colors.accent, { ...ph, font: bold });
-
     // Title
-    drawPdfText(page, data.eventName || 'Event', pad, titleY + 24, 24, colors.text, { ...ph, font: bold });
-    drawPdfText(page, String(data.ticketType || 'Standard').toUpperCase(), pad + badgeW / 2, titleY + 48, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
+    drawPdfText(page, data.eventName || 'Event', pad, titleY, 24, colors.text, { ...ph, font: bold });
+    drawPdfText(page, String(data.ticketType || 'Standard').toUpperCase(), pad + badgeW / 2, titleY + 24, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
 
     // Attendee
     drawPdfText(page, 'ADMITS', pad + 14, attendeeY + 20, 9, colors.accent, { ...ph, font: bold });
