@@ -132,7 +132,7 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
   const rowH = isLandscape ? 24 : 28
   const gap = isLandscape ? 4 : 6
-  const qrSize = isLandscape ? 120 : 140
+  const qrSize = isLandscape ? 180 : 210
 
   const details: Array<[string, string]> = [
     ["Event", data.eventName],
@@ -148,7 +148,7 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
 
   const titleH = isLandscape ? 54 : 66
   const attendeeH = isLandscape ? 50 : 58
-  const qrH = isLandscape ? 172 : 206
+  const qrH = isLandscape ? 244 : 274
   const qrPad = isLandscape ? 8 : 16
 
   const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH
