@@ -95,8 +95,7 @@ function renderDefaultSvg(data, options = {}) {
     ${showText ? `<text x="24" y="30" font-family="Arial, Helvetica, sans-serif" font-size="16px" font-weight="800" fill="${accent}" letter-spacing="1">YOVIBE</text>` : ''}`;
 
   const hero = hasPoster ? `
-    <image href="${href(data.posterUrl)}" x="0" y="${L.BRAND_H}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
-    <rect x="0" y="${L.BRAND_H + heroH - 80}" width="${W}" height="80" fill="url(#${gradientId})" opacity="0.85"/>` : '';
+    <image href="${href(data.posterUrl)}" x="0" y="${L.BRAND_H}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>` : '';
 
   const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
   const titleBlock = `
