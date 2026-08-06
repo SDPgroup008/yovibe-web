@@ -68,6 +68,36 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
   }
 }
 
+/**
+ * Compute the hero poster rectangle for the DEFAULT (email-style) in-app ticket.
+ * The SVG no longer renders the poster hero; MyTicketsScreen overlays the actual
+ * poster image here (it loads directly, avoiding the CORS-limited embed fetch).
+ */
+export function computeEmailHeroRect(ticket: Ticket, event?: Event, design?: TicketDesignInput): { x: number; y: number; width: number; height: number } {
+  const d = design || resolveTicketDesign(event, ticket)
+  const W = d.dimensions?.width || 600
+  const H = d.dimensions?.height || 900
+  const isLandscape = d.orientation === "landscape"
+  const data = canonicalTicketData(ticket, event)
+  const hasPoster = !!data.poster
+
+  const FOOTER_H = 36
+  const BRAND_H = 48
+  const pad = isLandscape ? 24 : 32
+  const rowH = isLandscape ? 24 : 28
+  const gap = isLandscape ? 4 : 6
+  const rowCount = 6 + (data.seatNumber != null ? 1 : 0) + (data.tableNumber != null ? 1 : 0)
+  const detailsCardH = rowCount * rowH + (isLandscape ? 12 : 18)
+  const titleH = isLandscape ? 54 : 66
+  const attendeeH = isLandscape ? 50 : 58
+  const qrH = isLandscape ? 244 : 274
+  const qrPad = isLandscape ? 8 : 16
+  const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH
+  const availY = H - FOOTER_H - BRAND_H
+  const heroH = hasPoster ? Math.max(0, availY - fixedH - 8) : 0
+  return { x: 0, y: BRAND_H, width: W, height: heroH }
+}
+
 // Extract hex color stops from a template's CSS background value.
 // e.g. "linear-gradient(160deg, #0d47a1 0%, #1976d2 50%, #2196F3 100%)" → ["#0d47a1","#1976d2","#2196F3"]
 //      "#eeeeee" → ["#eeeeee"]
@@ -118,7 +148,6 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const W = design.dimensions?.width || 600
   const H = design.dimensions?.height || 900
   const isLandscape = design.orientation === "landscape"
-  const hasPoster = !!data.poster
 
   const gradientId = `email-bg-${Math.abs(W * 31 + H * 17)}`
   const heroClip = `email-hero-${Math.abs(W * 31 + H * 17)}`
@@ -132,7 +161,6 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2
   const rowH = isLandscape ? 24 : 28
   const gap = isLandscape ? 4 : 6
-  const qrSize = isLandscape ? 180 : 210
 
   const details: Array<[string, string]> = [
     ["Event", data.eventName],
@@ -151,9 +179,9 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const qrH = isLandscape ? 244 : 274
   const qrPad = isLandscape ? 8 : 16
 
-  const fixedH = pad + titleH + gap + attendeeH + gap + detailsCardH + qrPad + qrH
-  const availY = H - FOOTER_H - BRAND_H
-  const heroH = hasPoster ? Math.max(0, availY - fixedH - 8) : 0
+  // Hero height comes from the shared helper so MyTicketsScreen's poster overlay
+  // (computedEmailHeroRect) always lines up with this layout.
+  const heroH = computeEmailHeroRect(ticket, event, design).height
 
   // Helper: label/value row (rendered inside a translate group, so coords are relative to the card)
   const detailRow = (label: string, value: string, y: number) => `
@@ -166,15 +194,13 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   // Brand bar
   const brandBar = `
     <rect x="0" y="0" width="${W}" height="${BRAND_H}" fill="${esc(colors.background)}"/>
-    <text x="24" y="30" font-family="${FONT_STACK}" font-size="16px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>
-    <circle cx="${W - 60}" cy="24" r="4" fill="#4CAF50"/>
-    <text x="${W - 52}" y="27" font-family="${FONT_STACK}" font-size="9px" font-weight="700" fill="${esc(colors.text)}">VALID ENTRY</text>`
+    <text x="24" y="30" font-family="${FONT_STACK}" font-size="16px" font-weight="800" fill="${esc(colors.accent)}" letter-spacing="1">YOVIBE</text>`
   y += BRAND_H
 
-  // Hero poster — covers the whole hero band via slice + clip, with a bottom fade
-  const hero = hasPoster ? `
-    <image href="${xmlUrl(data.poster!)}" x="0" y="${y}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
-    <rect x="0" y="${y + heroH - 80}" width="${W}" height="80" fill="url(#${gradientId})" opacity="0.85"/>` : ""
+  // Hero band — the poster image is NOT drawn here. MyTicketsScreen overlays the
+  // actual poster (loaded directly) to cover this band as a rectangle, which
+  // avoids the CORS-limited embed fetch. The band still occupies heroH so the
+  // rest of the layout lines up.
   y += heroH
 
   // Title
@@ -202,16 +228,16 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
     <g transform="translate(${pad + 16} 0)">${details.map(([l, v], i) => detailRow(l, v, detailCardY + 24 + i * rowH)).join("")}</g>`
   y = detailCardY + detailsCardH
 
-  // QR credential panel — fills the remaining space before the footer, QR sized to fit
+  // QR credential panel — fills the remaining space before the footer. The QR
+  // fills the panel (no SCAN AT ENTRANCE label / ticket ref; ref already shown
+  // in the details card), using the freed space to make it larger.
   const qrY = y + qrPad
   const remainingH = H - FOOTER_H - qrY - 8
   const panelH = Math.max(100, Math.min(qrH, remainingH))
-  const qrFit = Math.max(64, Math.min(qrSize, panelH - 64))
+  const qrFit = Math.max(64, Math.min(contentW, panelH) - 44)
   const qrPanel = `
     <rect x="${pad}" y="${qrY}" width="${contentW}" height="${panelH}" rx="12" fill="${esc(colors.qr)}" stroke="${esc(colors.accent)}" stroke-width="1.5"/>
-    <text x="${pad + contentW / 2}" y="${qrY + 20}" font-family="${FONT_STACK}" font-size="9px" font-weight="800" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>
-    ${data.qr ? `<image href="${xmlUrl(data.qr)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + 30}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>` : text(pad + contentW / 2, qrY + 120, "QR unavailable", 14, colors.secondary, 600, "middle")}
-    <text x="${pad + contentW / 2}" y="${qrY + panelH - 12}" font-family="${MONO}" font-size="11px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef)}</text>`
+    ${data.qr ? `<image href="${xmlUrl(data.qr)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + (panelH - qrFit) / 2}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>` : text(pad + contentW / 2, qrY + panelH / 2, "QR unavailable", 14, colors.secondary, 600, "middle")}`
 
   // Footer
   const footer = `
@@ -226,7 +252,6 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
       <filter id="qrShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/></filter>
     </defs>
     <rect width="${W}" height="${H}" fill="url(#${gradientId})"/>
-    ${hero}
     ${brandBar}
     ${titleBlock}
     ${attendeeBlock}

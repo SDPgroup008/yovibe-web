@@ -30,7 +30,6 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
   const contentW = isLandscape ? Math.round(W * 0.52) : W - pad * 2;
   const rowH = isLandscape ? 24 : 28;
   const gap = isLandscape ? 4 : 6;
-  const qrSize = isLandscape ? 180 : 210;   // 1.5x previous size
   const detailsCardH = rowCount * rowH + (isLandscape ? 12 : 18);
   const titleH = isLandscape ? 54 : 66;
   const attendeeH = isLandscape ? 50 : 58;
@@ -50,9 +49,10 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
   const qrY = y + qrPad;
   const remainingH = H - FOOTER_H - qrY - 8;
   const panelH = Math.max(100, Math.min(qrH, remainingH));
-  const qrFit = Math.max(64, Math.min(qrSize, panelH - 64));
+  // QR fills the panel (no label / ref text), using the freed space to enlarge it.
+  const qrFit = Math.max(64, Math.min(contentW, panelH) - 44);
 
-  return { FOOTER_H, BRAND_H, pad, contentW, rowH, gap, qrSize, detailsCardH,
+  return { FOOTER_H, BRAND_H, pad, contentW, rowH, gap, detailsCardH,
     titleH, attendeeH, qrH, qrPad, heroH, titleY, attendeeY, detailCardY, qrY, panelH, qrFit };
 }
 
@@ -92,9 +92,7 @@ function renderDefaultSvg(data, options = {}) {
 
   const brandBar = `
     <rect x="0" y="0" width="${W}" height="${L.BRAND_H}" fill="${base}"/>
-    ${showText ? `<text x="24" y="30" font-family="Arial, Helvetica, sans-serif" font-size="16px" font-weight="800" fill="${accent}" letter-spacing="1">YOVIBE</text>
-    <circle cx="${W - 60}" cy="24" r="4" fill="#4CAF50"/>
-    <text x="${W - 52}" y="27" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="700" fill="${primary}">VALID ENTRY</text>` : ''}`;
+    ${showText ? `<text x="24" y="30" font-family="Arial, Helvetica, sans-serif" font-size="16px" font-weight="800" fill="${accent}" letter-spacing="1">YOVIBE</text>` : ''}`;
 
   const hero = hasPoster ? `
     <image href="${href(data.posterUrl)}" x="0" y="${L.BRAND_H}" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>
@@ -121,13 +119,11 @@ function renderDefaultSvg(data, options = {}) {
     ${showText ? `<g transform="translate(${pad + 16} 0)">${detailRows}</g>` : ''}`;
 
   const qrImage = data.qrCodeDataUrl
-    ? `<image href="${href(data.qrCodeDataUrl)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + 30}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>`
-    : (showText ? `<text x="${pad + contentW / 2}" y="${qrY + 120}" font-family="Arial, Helvetica, sans-serif" font-size="14px" font-weight="600" fill="${secondary}" text-anchor="middle">QR unavailable</text>` : '');
+    ? `<image href="${href(data.qrCodeDataUrl)}" x="${pad + (contentW - qrFit) / 2}" y="${qrY + (panelH - qrFit) / 2}" width="${qrFit}" height="${qrFit}" preserveAspectRatio="xMidYMid meet"/>`
+    : (showText ? `<text x="${pad + contentW / 2}" y="${qrY + panelH / 2}" font-family="Arial, Helvetica, sans-serif" font-size="14px" font-weight="600" fill="${secondary}" text-anchor="middle">QR unavailable</text>` : '');
   const qrPanel = `
     <rect x="${pad}" y="${qrY}" width="${contentW}" height="${panelH}" rx="12" fill="${qrBg}" stroke="${accent}" stroke-width="1.5"/>
-    ${showText ? `<text x="${pad + contentW / 2}" y="${qrY + 20}" font-family="Arial, Helvetica, sans-serif" font-size="9px" font-weight="800" fill="${accent}" text-anchor="middle" letter-spacing="2">SCAN AT ENTRANCE</text>` : ''}
-    ${qrImage}
-    ${showText ? `<text x="${pad + contentW / 2}" y="${qrY + panelH - 12}" font-family="'Courier New',monospace" font-size="11px" font-weight="700" fill="${accent}" text-anchor="middle" letter-spacing="1">${esc(data.ticketRef || 'XXXXXXXX')}</text>` : ''}`;
+    ${qrImage}`;
 
   const footer = `
     <rect x="0" y="${H - L.FOOTER_H}" width="${W}" height="${L.FOOTER_H}" fill="#000" opacity="0.55"/>
@@ -269,13 +265,12 @@ async function renderTicketPdf(data) {
 
     const rows = emailDetailRows(data, {});
     const L = computeEmailLayout(W, H, isLandscape, rows.length, !!data.posterUrl);
-    const { pad, contentW, rowH, titleY, attendeeY, detailCardY, qrY, panelH } = L;
+    const { pad, contentW, rowH, titleY, attendeeY, detailCardY } = L;
     const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
     const ph = { pageHeight: H };
 
     // Brand bar
     drawPdfText(page, 'YOVIBE', 24, 30, 16, colors.accent, { ...ph, font: bold });
-    drawPdfText(page, 'VALID ENTRY', W - 52, 27, 9, colors.text, { ...ph, font: bold });
 
     // Title
     drawPdfText(page, data.eventName || 'Event', pad, titleY + 24, 24, colors.text, { ...ph, font: bold });
@@ -291,10 +286,6 @@ async function renderTicketPdf(data) {
       drawPdfText(page, label, pad + 16, yy, 9, colors.secondary, { ...ph, font: bold });
       drawPdfText(page, value, pad + 16 + contentW - 30, yy, 13, colors.text, { ...ph, font: bold, align: 'right' });
     });
-
-    // QR panel
-    drawPdfText(page, 'SCAN AT ENTRANCE', pad + contentW / 2, qrY + 20, 9, colors.accent, { ...ph, font: bold, align: 'center' });
-    drawPdfText(page, ref, pad + contentW / 2, qrY + panelH - 12, 11, colors.accent, { ...ph, font: bold, align: 'center' });
 
     // Footer
     drawPdfText(page, 'YOVIBE', 18, H - 13, 10, colors.accent, { ...ph, font: bold });

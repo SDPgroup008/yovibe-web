@@ -17,7 +17,7 @@ import RefundService, { type RefundReason } from "../services/RefundService"
 import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
-import { renderCanonicalTicketSvgWithEmbeddedAssets, svgDataUri } from "../services/TicketCanonicalRenderer"
+import { renderCanonicalTicketSvgWithEmbeddedAssets, svgDataUri, computeEmailHeroRect } from "../services/TicketCanonicalRenderer"
 import { computeTicketLayout } from "../services/TicketLayoutEngine"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
@@ -64,6 +64,7 @@ const MyTicketsScreen: React.FC = () => {
     || { orientation: "portrait", dimensions: { width: 600, height: 900 } }
   const selectedTicketLayout = computeTicketLayout(selectedFeeDesign, { hasPoster: !!selectedEvent?.posterImageUrl })
   const selectedPosterBlock = selectedTicketLayout.blocks.find((block) => block.id === "poster")
+  const selectedIsCustomUpload = selectedFeeDesign?.source === "upload" && !!selectedFeeDesign?.background_url
   const [installmentsExpanded, setInstallmentsExpanded] = useState(false)
 
   // Load tickets on mount and when user changes
@@ -607,7 +608,7 @@ const MyTicketsScreen: React.FC = () => {
                 resizeMode="contain"
                 accessibilityLabel="Organizer-designed ticket"
               />
-              {selectedEvent?.posterImageUrl && selectedPosterBlock && (
+              {selectedEvent?.posterImageUrl && selectedPosterBlock && selectedIsCustomUpload && (
                 <Image
                   source={{ uri: selectedEvent.posterImageUrl }}
                   style={{
@@ -622,6 +623,23 @@ const MyTicketsScreen: React.FC = () => {
                   accessibilityLabel="Event poster"
                 />
               )}
+              {selectedEvent?.posterImageUrl && !selectedIsCustomUpload && (() => {
+                const heroRect = computeEmailHeroRect(selectedTicket, selectedEvent, selectedFeeDesign)
+                return (
+                  <Image
+                    source={{ uri: selectedEvent.posterImageUrl }}
+                    style={{
+                      position: "absolute",
+                      left: `${(heroRect.x / selectedTicketLayout.pageWidth) * 100}%`,
+                      top: `${(heroRect.y / selectedTicketLayout.pageHeight) * 100}%`,
+                      width: `${(heroRect.width / selectedTicketLayout.pageWidth) * 100}%`,
+                      height: `${(heroRect.height / selectedTicketLayout.pageHeight) * 100}%`,
+                    }}
+                    resizeMode="cover"
+                    accessibilityLabel="Event poster"
+                  />
+                )
+              })()}
             </View>
 
             <Text style={{ color: "#9CA3AF", textAlign: "center", marginBottom: 18 }}>
