@@ -254,11 +254,20 @@ const TermsAndConditionsScreen: React.FC = () => {
             and is calculated on the base ticket price before commission;
           </Text>
           <Text style={styles.paragraph}>
-            (d) All prices displayed are inclusive of applicable taxes unless otherwise stated. The Company
-            does not collect or remit value-added tax (VAT) or similar taxes on behalf of Organizers;
+            (d) All prices displayed are inclusive of applicable taxes unless otherwise stated;
           </Text>
           <Text style={styles.paragraph}>
-            (e) The Company reserves the right to change pricing structures, commission rates, and fee
+            (e) Value-Added Tax (VAT) and Taxes: The Platform is not responsible for, and does not collect,
+            charge, remit, or otherwise handle value-added tax (VAT) or any similar indirect tax on behalf
+            of Organizers, Users, or any tax authority. Where VAT or any similar tax is applicable to the
+            sale of a Ticket, the supply of an Event, or any transaction facilitated through the Platform,
+            the sole responsibility for determining, charging, collecting, remitting, and filing such tax
+            lies with the Organizer. The Company accepts no liability for any VAT, indirect tax, or related
+            tax obligations arising from sales or Events facilitated through the Platform. Users and
+            Organizers are advised to seek independent tax advice regarding their applicable tax obligations;
+          </Text>
+          <Text style={styles.paragraph}>
+            (f) The Company reserves the right to change pricing structures, commission rates, and fee
             schedules upon 30 days' notice to Users.
           </Text>
           <Text style={styles.paragraph}>
