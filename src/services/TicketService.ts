@@ -19,6 +19,38 @@ const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
   ""
 
+/**
+ * Parse the start time out of the event's human-readable `time` text (e.g.
+ * "08:00 PM - 11:00 PM", "8:00 pm - 11:00 pm", "20:00 - 23:00", "20:00").
+ * Returns null when the text cannot be parsed, in which case the caller
+ * falls back to the date-only value.
+ */
+function parseStartTime(text?: string): { hour: number; minute: number } | null {
+  if (!text) return null
+  const first = String(text).split("-")[0].trim()
+  const match = first.match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/)
+  if (!match) return null
+  let hour = parseInt(match[1], 10)
+  const minute = parseInt(match[2], 10)
+  const meridiem = (match[3] || "").toUpperCase()
+  if (meridiem === "PM" && hour < 12) hour += 12
+  if (meridiem === "AM" && hour === 12) hour = 0
+  if (hour > 23 || minute > 59) return null
+  return { hour, minute }
+}
+
+// Build the ticket's event start time by combining the event date with the
+// start time parsed from the DB `events.time` text (which is the source of
+// truth for the time of day).
+function resolveEventStartTime(event: Event): Date {
+  const base = new Date(event.date || Date.now())
+  const parsed = parseStartTime(event.time)
+  if (parsed) {
+    base.setHours(parsed.hour, parsed.minute, 0, 0)
+  }
+  return base
+}
+
 async function withRetry<T>(
   fn: () => Promise<T>,
   options: { maxAttempts?: number; baseDelayMs?: number } = {}
@@ -257,7 +289,7 @@ export class TicketService {
       : 0
     console.log("💰 Base price:", basePrice)
 
-    const eventStartTime = event.date || new Date()
+    const eventStartTime = resolveEventStartTime(event)
     console.log("📅 Event start time:", eventStartTime)
     
     let pricing

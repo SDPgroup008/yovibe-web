@@ -11,6 +11,7 @@ import {
   Alert,
   ActivityIndicator,
   ImageBackground,
+  ScrollView,
   Platform,
   Dimensions,
 } from "react-native"
@@ -154,12 +155,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
   }
 
   return (
-    <ImageBackground
-      source={{
-        uri: "https://images.unsplash.com/photo-1571204829887-3b8d69e23af5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
-      }}
-      style={styles.container}
-    >
+    <ScrollView contentContainerStyle={styles.scrollView}>
+      <ImageBackground
+        source={{
+          uri: "https://images.unsplash.com/photo-1571204829887-3b8d69e23af5?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80",
+        }}
+        style={styles.container}
+      >
       <View style={styles.overlay}>
         <View style={styles.logoContainer}>
           <Text style={styles.title}>
@@ -246,11 +248,15 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
           </TouchableOpacity>
         </View>
       </View>
-    </ImageBackground>
+      </ImageBackground>
+    </ScrollView>
   )
 }
 
 const styles = StyleSheet.create({
+  scrollView: {
+    flexGrow: 1,
+  },
   container: {
     flex: 1,
     backgroundColor: "#121212",
@@ -399,8 +405,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#4285F4",
     height: responsiveSize(48, 52, 56),
     borderRadius: responsiveSize(8, 10, 12),
-    justifyContent: "center",
-    alignItems: "center",
     marginTop: responsiveSize(8, 10, 14),
     marginBottom: responsiveSize(16, 20, 24),
     shadowColor: "#4285F4",

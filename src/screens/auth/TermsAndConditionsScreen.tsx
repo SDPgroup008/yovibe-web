@@ -24,7 +24,7 @@ const TermsAndConditionsScreen: React.FC = () => {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.card}>
           <Text style={styles.title}>YoVibe Terms and Conditions</Text>
-          <Text style={styles.lastUpdated}>Last Updated: July 6, 2026</Text>
+          <Text style={styles.lastUpdated}>Last Updated: August 10, 2026</Text>
 
           <Text style={styles.sectionTitle}>1. INTRODUCTION AND ACCEPTANCE OF TERMS</Text>
           <Text style={styles.paragraph}>
@@ -49,6 +49,14 @@ const TermsAndConditionsScreen: React.FC = () => {
             jurisdictions where its contents or functionality are illegal is prohibited. Users who access
             the Platform from outside Uganda do so on their own initiative and are responsible for compliance
             with local laws.
+          </Text>
+          <Text style={styles.paragraph}>
+            1.5 These Terms are intended to be consistent with the consumer-protection and data-protection
+            framework applicable in the Republic of Uganda, including the Consumer Protection Act, 2020,
+            the Electronic Transactions Act, 2011, and the Data Protection and Privacy Act, 2019. Where any
+            provision of these Terms conflicts with a mandatory requirement of applicable law that cannot be
+            excluded or varied by contract, the mandatory requirement shall prevail to the extent of the
+            conflict.
           </Text>
 
           <Text style={styles.sectionTitle}>2. DEFINITIONS AND INTERPRETATION</Text>
@@ -205,6 +213,12 @@ const TermsAndConditionsScreen: React.FC = () => {
             Venue owners are responsible for maintaining the safety, security, and legality of their
             premises.
           </Text>
+          <Text style={styles.paragraph}>
+            5.5 Accessibility: The Company aims to make the Platform usable by as wide an audience as
+            possible and will use reasonable efforts to support accessible ticketing and web accessibility
+            best practices. Responsibility for the physical accessibility of an Event or Venue rests with
+            the Organizer and Venue, and the Platform does not guarantee accessibility at any Event.
+          </Text>
 
           <Text style={styles.sectionTitle}>6. TICKET PURCHASE TERMS</Text>
           <Text style={styles.paragraph}>
@@ -269,6 +283,12 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (f) The Company reserves the right to change pricing structures, commission rates, and fee
             schedules upon 30 days' notice to Users.
+          </Text>
+          <Text style={styles.paragraph}>
+            (g) All charges are quoted and payable in Ugandan Shillings (UGX). Unless required by
+            applicable law, no statutory right to withdraw from or cancel a Ticket purchase after payment
+            ("cooling-off" right) applies to purchases made through the Platform, and any such statutory
+            right, where it applies, will be honored to the extent required by law.
           </Text>
           <Text style={styles.paragraph}>
             6.3 Ticket Delivery:
@@ -337,6 +357,25 @@ const TermsAndConditionsScreen: React.FC = () => {
             <Text style={styles.paragraph}>
               (e) Cancellation and refund terms for table bookings follow the general refund policies in
               Section 11, unless otherwise stated at the time of purchase.
+          </Text>
+
+          <Text style={styles.paragraph}>
+            6.6 Ticket Transfer and Resale:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) Tickets are personal, revocable licenses and are not freely transferable. A Ticket may be
+            transferred to another attendee only in accordance with any transfer facility offered by the
+            Platform or as otherwise permitted by the Organizer and these Terms.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Resale of Tickets outside the Platform, including through unauthorized third-party
+            resellers or marketplaces, is strictly prohibited and may result in the cancellation or
+            invalidation of the Ticket without refund.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) The Company does not operate a resale marketplace. Tickets purchased from unauthorized or
+            unaffiliated resellers may be invalid for entry, and the Company and the Organizer are not
+            responsible for any loss arising from the purchase of such Tickets.
           </Text>
 
           <Text style={styles.sectionTitle}>7. SECURITY PHOTO AND IDENTITY VERIFICATION</Text>
@@ -490,6 +529,24 @@ const TermsAndConditionsScreen: React.FC = () => {
             (i) The installment plan option may not be available for all Events, Ticket types, or payment
             methods. The Company reserves the right to limit or withdraw the installment plan option at
             its sole discretion.
+          </Text>
+          <Text style={styles.paragraph}>
+            8.5 Money Handling and Intermediary Status:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) The Company is a technology intermediary and is not a bank, deposit-taking institution,
+            e-money issuer, or payment service provider. The Company does not hold, custody, or act as an
+            agent for User funds.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) All payments are collected and settled through licensed third-party payment processors
+            (including PawaPay and PesaPal), which are responsible for the holding, processing, and
+            settlement of funds in accordance with their own terms and applicable law.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) The Company's obligations are limited to facilitating the payment flow and recording
+            transactions. Any claim relating to the holding or settlement of funds shall be directed to
+            the relevant payment processor, subject to these Terms.
           </Text>
 
           <Text style={styles.sectionTitle}>9. COMMISSION, REVENUE SPLIT, AND PAYOUTS</Text>
@@ -906,6 +963,36 @@ const TermsAndConditionsScreen: React.FC = () => {
             (e) The Company is not responsible for discrepancies between cached data and live data that
             result from caching delays.
           </Text>
+          <Text style={styles.paragraph}>
+            12.9 Breach Notification:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) In the event of a data breach or unauthorized access to personal data that creates a risk
+            to Users, the Company will notify affected Users and, where required, the relevant supervisory
+            authority, without undue delay, in accordance with the Data Protection and Privacy Act, 2019.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Notifications will be sent via the contact details on file and will describe the nature of
+            the breach and recommended mitigation measures where reasonably available.
+          </Text>
+          <Text style={styles.paragraph}>
+            12.10 Cookies and Analytics:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) The Platform and its third-party analytics providers (including Google Analytics) may use
+            cookies and similar technologies to collect technical and usage data as described in Section
+            12.1(d) and 12.1(f).
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) By using the Platform, you consent to the use of cookies and similar technologies for
+            functionality, analytics, and fraud prevention. You may disable cookies through your browser
+            settings, although this may affect Platform functionality.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) Section 12, together with our Privacy Policy, sets out how we collect, use, and protect your
+            personal data. A copy of our Privacy Policy is available on our website and may be requested
+            from support.
+          </Text>
 
           <Text style={styles.sectionTitle}>13. INTELLECTUAL PROPERTY RIGHTS</Text>
           <Text style={styles.paragraph}>
@@ -942,6 +1029,22 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (c) The Company reserves the right to remove any user-generated content that violates these
             Terms or applicable law.
+          </Text>
+          <Text style={styles.paragraph}>
+            13.3 Notice-and-Takedown:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) If you believe that content on the Platform infringes your copyright or other intellectual
+            property rights, you may submit a takedown notice to support@yovibe.net identifying the
+            allegedly infringing content and your rights in respect of it.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) The Company will review takedown notices in a reasonable timeframe and may remove or
+            disable access to the identified content where a legitimate claim is established.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) Users who repeatedly submit infringing content may have their Account suspended or
+            terminated in accordance with Section 18.
           </Text>
 
           <Text style={styles.sectionTitle}>14. PROHIBITED CONDUCT AND CONTENT STANDARDS</Text>
@@ -992,6 +1095,18 @@ const TermsAndConditionsScreen: React.FC = () => {
             third-party rights; (c) comply with all applicable laws; (d) not contain unauthorized
             advertising or promotional material; (e) not contain hate speech, harassment, or discriminatory
             language.
+          </Text>
+          <Text style={styles.paragraph}>
+            14.3 Purchase Limits and Anti-Bot Controls:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) The Company or an Organizer may impose limits on the number of Tickets an individual or
+            Account may purchase for a particular Event.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) The use of automated bots, scripts, or bulk-purchase tools to circumvent purchase limits or
+            to acquire Tickets for unauthorized resale is prohibited and may result in the cancellation or
+            invalidation of affected Tickets without refund, in addition to Account action under Section 18.
           </Text>
 
           <Text style={styles.sectionTitle}>15. LIMITATION OF LIABILITY AND DISCLAIMERS</Text>
@@ -1055,6 +1170,11 @@ const TermsAndConditionsScreen: React.FC = () => {
             15.6 The Company acts solely as an intermediary platform connecting Organizers and attendees.
             The Company is not a party to, and disclaims all liability arising from, any transaction or
             relationship between Organizers and Ticket purchasers.
+          </Text>
+          <Text style={styles.paragraph}>
+            15.7 Nothing in these Terms excludes or limits any rights or remedies you have under applicable
+            law that cannot lawfully be excluded or limited, including mandatory consumer-protection rights.
+            Where such rights apply, they prevail over the exclusions and limitations in this Section.
           </Text>
 
           <Text style={styles.sectionTitle}>16. INDEMNIFICATION</Text>
@@ -1148,6 +1268,19 @@ const TermsAndConditionsScreen: React.FC = () => {
             Any claim or cause of action arising out of or related to these Terms must be filed within
             one (1) year after such claim or cause of action arose, or be forever barred.
           </Text>
+          <Text style={styles.paragraph}>
+            17.7 Small Claims and Arbitration Fairness:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) Nothing in this Section prevents you from bringing a claim in a small claims court of
+            competent jurisdiction, if such a claim is eligible to be heard there, instead of arbitration.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) In arbitration, the Company will pay the arbitrator's fees and forum costs associated with
+            the first hearing where doing so would otherwise make the arbitration process impractical for a
+            consumer, and will not seek reimbursement unless the claim is found to be frivolous or advanced
+            in bad faith.
+          </Text>
 
           <Text style={styles.sectionTitle}>18. TERMINATION AND ACCOUNT SUSPENSION</Text>
           <Text style={styles.paragraph}>
@@ -1223,6 +1356,13 @@ const TermsAndConditionsScreen: React.FC = () => {
             20.2 The Company will use reasonable efforts to mitigate the effects of any force majeure event
             and to resume performance as soon as practicable.
           </Text>
+          <Text style={styles.paragraph}>
+            20.3 Where an Event is cancelled or cannot proceed because of a force majeure event, the
+            entitlement to a refund or credit, if any, is determined by the Organizer in accordance with
+            Section 11. The Company will use reasonable efforts to facilitate any such refund or credit
+            but shall not be liable for the Organizer's decision or any amount beyond the Company's fee cap
+            set out in Section 15.
+          </Text>
 
           <Text style={styles.sectionTitle}>21. SEVERABILITY</Text>
           <Text style={styles.paragraph}>
@@ -1245,6 +1385,12 @@ const TermsAndConditionsScreen: React.FC = () => {
             reference, constitute the entire agreement between you and the Company regarding your use of
             the Platform and supersede all prior or contemporaneous agreements, communications, and
             proposals, whether oral or written.
+          </Text>
+          <Text style={styles.paragraph}>
+            23.2 Our Privacy Policy (summarized in Section 12), together with our Cookie Policy and any
+            Organizer or promotional terms applicable to a specific Event, are incorporated into these
+            Terms by reference. Copies of the Privacy Policy and Cookie Policy are available on our website
+            and may be requested from support at support@yovibe.net.
           </Text>
 
           <Text style={styles.sectionTitle}>24. ASSIGNMENT</Text>
