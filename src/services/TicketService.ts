@@ -388,7 +388,9 @@ export class TicketService {
       buyerPhotoUrl,
       photoUploadToken,
       photoUploadTokenExpiresAt: eventStartTime,
-      status: paymentDetails?.method === "mobile_money" ? "pending" : "active",
+      // Tickets are only created in the database after payment verification has
+      // reported COMPLETED, so they are always active rather than pending.
+      status: "active",
       validationHistory: [],
       entryFeeType: paymentDetails?.ticketType || (event.entryFees && event.entryFees.length > 0 ? event.entryFees[0].name : "Standard"),
       isLatePurchase,
@@ -396,7 +398,7 @@ export class TicketService {
       payoutEligible: false,
       payoutStatus: "pending",
       paymentId,
-      paymentStatus: paymentDetails?.method === "mobile_money" ? "pending" : "completed",
+      paymentStatus: "completed",
       paymentReference: paymentIntent?.paymentReference || paymentDetails?.paymentReference || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       paymentMethod: paymentDetails?.method,
       paymentProvider: paymentDetails?.provider,
@@ -964,7 +966,6 @@ console.error("❌ Error details:", updateError.details)
       tableSize: row.table_size ?? row.tableSize ?? undefined,
       seatNumber: row.seat_number ?? row.seatNumber,
       tableNumber: row.table_number ?? row.tableNumber,
-      gatewayFee: row.gateway_fee ?? row.gatewayFee ?? 0,
       reentryPass: row.reentry_pass ?? row.reentryPass ?? undefined,
       photoUploadToken: row.photo_upload_token || row.photoUploadToken,
       photoUploadTokenExpiresAt: row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt ? new Date(row.photo_upload_token_expires_at || row.photoUploadTokenExpiresAt) : undefined,
