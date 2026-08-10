@@ -13,6 +13,7 @@ import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { SEOMetadata } from "../components/SEOMetadata"
 
 import VibeAnalysisService from "../services/VibeAnalysisService"
 const VenueDetailScreen: React.FC = () => {
@@ -403,6 +404,21 @@ const VenueDetailScreen: React.FC = () => {
   }
 
   return (
+    <>
+    <SEOMetadata
+      title={`${venue.name} | Nightlife Venue in ${venue.location || "Uganda"}`}
+      description={venue.description || `Discover ${venue.name} in ${venue.location || "Uganda"} — events, hours and more on YoVibe.`}
+      image={venue.backgroundImageUrl || undefined}
+      type="venue"
+      venueData={{
+        name: venue.name,
+        description: venue.description,
+        address: venue.location,
+        latitude: venue.latitude != null ? String(venue.latitude) : undefined,
+        longitude: venue.longitude != null ? String(venue.longitude) : undefined,
+        image: venue.backgroundImageUrl,
+      }}
+    />
     <ScrollView
       ref={scrollViewRef}
       style={styles.container}
@@ -424,7 +440,7 @@ const VenueDetailScreen: React.FC = () => {
       <View style={styles.contentContainer}>
         <View style={styles.headerRow}>
           <View style={styles.titleContainer}>
-            <Text style={styles.venueName}>{venue.name}</Text>
+            <Text style={styles.venueName} accessibilityRole="header">{venue.name}</Text>
             <Text style={styles.venueLocation}>{venue.location}</Text>
           </View>
           {showOwnButton && (
@@ -706,6 +722,7 @@ const VenueDetailScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
     </ScrollView>
+    </>
   )
 }
 

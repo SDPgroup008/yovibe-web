@@ -253,7 +253,14 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   </svg>`
 }
 
-export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput): string {
+export interface RenderTicketOptions {
+  /** When true, the poster block image is omitted from the SVG and a transparent
+   *  hole is punched where the poster sits, so a real poster image rendered
+   *  behind the SVG shows through while title/info/QR stay in front. */
+  posterOverlay?: boolean
+}
+
+export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput, opts: RenderTicketOptions = {}): string {
   const design = designOverride || resolveTicketDesign(event, ticket)
 
   // No uploaded custom background → default ticket that mirrors the email design
@@ -286,14 +293,41 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const gradientId = `ticket-bg-${Math.abs(W * 31 + H * 17)}`
   const grainId = `ticket-grain-${Math.abs(W * 31 + H * 17)}`
   const bgPaint = "#111827"
+  // When the real poster is overlaid behind the SVG, punch a transparent hole at
+  // the poster block's on-screen rectangle so the poster shows through while the
+  // title/info/QR blocks render in front of it.
+  const posterOverlay = !!opts?.posterOverlay
+  const posterMaskId = `poster-hole-${Math.abs(W * 31 + H * 17)}`
+  const posterScale = poster.scale || 1
+  const posterRect = {
+    x: poster.x,
+    y: poster.y,
+    width: poster.width * posterScale,
+    height: poster.height * posterScale,
+  }
+  const backgroundMask = posterOverlay ? ` mask="url(#${posterMaskId})"` : ""
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36))
   const infoRows = [
     ["Date", data.date], ["Time", data.time], ["Venue", data.venue],
   ]
-  const infoRowHeight = Math.max(24, (info.height - 28) / infoRows.length)
+  // Info card layout: the 3 label/value rows + attendee fill the card height
+  // with balanced, even spacing (no redundant empty space). Leftover height is
+  // distributed as equal gaps between items.
+  const INFO_PAD_TOP = 16
+  const INFO_PAD_BOTTOM = 14
+  const infoItemHeights = [26, 26, 26, 36] // Date, Time, Venue, Attendee
+  const infoAvailH = Math.max(1, info.height - INFO_PAD_TOP - INFO_PAD_BOTTOM)
+  const infoNaturalTotal = infoItemHeights.reduce((a, b) => a + b, 0)
+  const infoItemGap = Math.max(8, (infoAvailH - infoNaturalTotal) / (infoItemHeights.length - 1))
+  let infoCursor = INFO_PAD_TOP
+  const infoItemY: number[] = []
+  for (let i = 0; i < infoItemHeights.length; i++) {
+    infoItemY.push(infoCursor)
+    infoCursor += infoItemHeights[i] + infoItemGap
+  }
   const blockScale = (b: any) => ` transform="translate(${b.x} ${b.y}) scale(${b.scale || 1})"`
   const bgImage = computed.isUploadBg
-    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bgLeft}" y="${bgTop}" width="${W * bgScale}" height="${H * bgScale}" preserveAspectRatio="xMidYMid slice" opacity="0.85"/>`
+    ? `<image href="${xmlUrl(computed.bgImage)}" x="${bgLeft}" y="${bgTop}" width="${W * bgScale}" height="${H * bgScale}" preserveAspectRatio="xMidYMid slice" opacity="0.85"${backgroundMask}/>`
     : ""
 
   // Artwork-first: poster becomes a full-bleed hero with bottom gradient overlay
@@ -309,17 +343,18 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     ? `<image href="${xmlUrl(data.qr)}" x="${(qr.width - qrSize) / 2}" y="${30}" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>`
     : text(qr.width / 2, qr.height / 2, "QR unavailable", 14, colors.secondary, 600, "middle")
 
-  // Info card: label/value pairs, accent bar, with attendee emphasized
+  // Info card: label/value pairs, accent bar, with attendee emphasized — each
+  // item sits at its computed infoItemY so the card is filled evenly.
   const infoCard = infoRows.map(([label, value], i) => `
-    <g transform="translate(16 ${18 + i * infoRowHeight})">
+    <g transform="translate(16 ${infoItemY[i]})">
       <text x="0" y="0" font-family="${FONT_STACK}" font-size="8px" font-weight="700" fill="${esc(colors.secondary)}" text-anchor="start" letter-spacing="1">${esc(label.toUpperCase())}</text>
       <text x="0" y="16" font-family="${FONT_STACK}" font-size="13px" font-weight="600" fill="${esc(colors.text)}">${esc(value)}</text>
     </g>`).join('')
-  // Attendee emphasized block below the generic info rows
-  const attendeeY = 18 + infoRows.length * infoRowHeight + 6
+  // Attendee emphasized block as the last item
+  const attendeeY = infoItemY[3]
   const attendeeBlock = `
     <text x="16" y="${attendeeY}" font-family="${FONT_STACK}" font-size="8px" font-weight="700" fill="${esc(colors.accent)}" text-anchor="start" letter-spacing="1">ADMITS</text>
-    <text x="16" y="${attendeeY + 22}" font-family="${FONT_STACK}" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
+    <text x="16" y="${attendeeY + 18}" font-family="${FONT_STACK}" font-size="20px" font-weight="800" fill="${esc(colors.text)}">${esc(data.attendee)}</text>`
 
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs>
@@ -327,21 +362,24 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
       <radialGradient id="${grainId}" cx="0.5" cy="0.5" r="0.7"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.04"/><stop offset="100%" stop-color="#000000" stop-opacity="0.12"/></radialGradient>
       <clipPath id="${heroClip}"><rect width="${W}" height="${isLandscape ? Math.round(H * 0.7) : Math.round(H * 0.55)}" rx="0"/></clipPath>
       <clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath>
+      ${posterOverlay ? `<mask id="${posterMaskId}"><rect width="${W}" height="${H}" fill="#ffffff"/><rect x="${posterRect.x}" y="${posterRect.y}" width="${posterRect.width}" height="${posterRect.height}" rx="10" fill="#000000"/></mask>` : ""}
       <filter id="titleShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="0.75"/></filter>
       <filter id="qrShadow" x="-10%" y="-10%" width="120%" height="120%"><feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.3"/></filter>
     </defs>
 
     <!-- Layered background: base + radial glow + grain -->
-    <rect width="${W}" height="${H}" fill="${bgPaint}"/>
-    <rect width="${W}" height="${H}" fill="url(#${grainId})"/>
+    <rect width="${W}" height="${H}" fill="${bgPaint}"${backgroundMask}/>
+    <rect width="${W}" height="${H}" fill="url(#${grainId})"${backgroundMask}/>
 
     <!-- Artwork hero (full-bleed only when there's NO custom block layout; otherwise the
          draggable poster block is used so it stays behind overlapping blocks) -->
     ${computed.isUploadBg ? bgImage : (data.poster && !(design as any).layout ? posterHero : "")}
     ${!computed.isUploadBg && !data.poster ? `<rect width="${W}" height="${H}" fill="#000000" opacity="0.16"/>` : ""}
 
-    <!-- Poster block (if not used as hero, keep the small card for custom layouts) -->
-    ${!data.poster || (design as any).layout ? `<g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/><image href="${xmlUrl(data.poster)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>` : ""}</g>` : ""}
+    <!-- Poster block (if not used as hero, keep the small card for custom layouts).
+         With posterOverlay the SVG omits the poster image so the real poster
+         overlaid behind the SVG shows through the hole punched in the background. -->
+    ${!data.poster || (design as any).layout ? (posterOverlay ? "" : `<g${blockScale(poster)}>${data.poster ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity="0.35"/><image href="${xmlUrl(data.poster)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>` : ""}</g>`) : ""}
 
     <!-- Title -->
     <g${blockScale(title)}>
@@ -383,9 +421,12 @@ export function svgDataUri(svg: string) {
  * inside an SVG data URI. Inline the ticket assets first so the in-app ticket
  * and browser export receive a self-contained artifact.
  */
-export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput) {
-  let svg = renderCanonicalTicketSvg(ticket, event, designOverride)
-  const assets = [ticket.qrCodeDataUrl, event?.posterImageUrl, designOverride?.background_url || resolveTicketDesign(event, ticket).background_url]
+export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput, opts: RenderTicketOptions = {}) {
+  let svg = renderCanonicalTicketSvg(ticket, event, designOverride, opts)
+  // When the poster is rendered as a real overlay (not embedded in the SVG), skip
+  // fetching it so a CORS-limited poster URL doesn't break the embed loop.
+  const posterUrl = opts?.posterOverlay ? undefined : event?.posterImageUrl
+  const assets = [ticket.qrCodeDataUrl, posterUrl, designOverride?.background_url || resolveTicketDesign(event, ticket).background_url]
     .filter((value): value is string => !!value && !value.startsWith("data:"))
 
   for (const asset of Array.from(new Set(assets))) {

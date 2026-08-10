@@ -14,9 +14,9 @@ export const SEO_KEYWORDS = {
 
 // Default SEO configuration for YoVibe
 export const DEFAULT_SEO = {
-  title: "YoVibe | Best Nightlife Events, Parties & Venues in Uganda",
+  title: "YoVibe | Buy Tickets, Discover Events & Venues in Uganda",
   description:
-    "YoVibe is your ultimate guide to nightlife, events, entertainment, and vibes in Uganda. Discover the best venues, clubs, bars, parties, concerts, and experiences. Find events, see who's going, buy tickets, and share the happiness.",
+    "Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.",
   keywords: SEO_KEYWORDS,
   url: "https://yovibe.net",
   siteName: "YoVibe",
@@ -49,12 +49,14 @@ export interface SEOMetadataProps {
     name: string
     description: string
     startDate: string
-    endDate: string
+    endDate?: string
     venueName: string
     venueAddress?: string
     image?: string
     price?: string
     currency?: string
+    url?: string
+    performers?: string[]
   }
   venueData?: {
     name: string
@@ -271,15 +273,22 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
     let structuredData: Record<string, unknown> = {}
 
     if (type === "event" && eventData) {
+      // Normalize price to a clean numeric string for schema.org Offer.price
+      const rawPrice = eventData.price || "0"
+      const priceMatch = String(rawPrice).replace(/,/g, "").trim().match(/-?\d+(\.\d+)?/)
+      const price = priceMatch ? priceMatch[0] : "0"
+      const offerUrl = eventData.url || finalUrl
+
       structuredData = {
         "@context": "https://schema.org",
         "@type": "Event",
         "name": eventData.name,
         "description": eventData.description,
         "startDate": eventData.startDate,
-        "endDate": eventData.endDate,
+        "endDate": eventData.endDate || eventData.startDate,
         "eventStatus": "https://schema.org/EventScheduled",
         "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
+        "eventUrl": offerUrl,
         "location": {
           "@type": "Place",
           "name": eventData.venueName,
@@ -290,14 +299,17 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
           },
         },
         "image": eventData.image || finalImage,
-        "offers": eventData.price
-          ? {
-              "@type": "Offer",
-              "price": eventData.price,
-              priceCurrency: eventData.currency || "UGX",
-              availability: "https://schema.org/InStock",
-            }
-          : undefined,
+        "offers": {
+          "@type": "Offer",
+          "price": price,
+          priceCurrency: eventData.currency || "UGX",
+          "availability": "https://schema.org/InStock",
+          "validFrom": new Date().toISOString(),
+          "url": offerUrl,
+        },
+        "performer": eventData.performers && eventData.performers.length > 0
+          ? eventData.performers.map((performerName) => ({ "@type": "MusicGroup", name: performerName }))
+          : [{ "@type": "Organization", "name": eventData.venueName || "YoVibe" }],
         "organizer": {
           "@type": "Organization",
           "name": "YoVibe",
@@ -352,7 +364,7 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
           "@type": "SearchAction",
           target: {
             "@type": "EntryPoint",
-            urlTemplate: `${DEFAULT_SEO.url}/search?q={search_term_string}`,
+            urlTemplate: `${DEFAULT_SEO.url}/events?q={search_term_string}`,
           },
           "query-input": "required name=search_term_string",
         },
@@ -363,15 +375,39 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
       }
     }
 
+    // Breadcrumb navigation for event/venue pages
+    const breadcrumb =
+      (type === "event" || type === "venue") && (eventData || venueData)
+        ? {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            itemListElement: [
+              { "@type": "ListItem", position: 1, name: "Home", item: DEFAULT_SEO.url },
+              {
+                "@type": "ListItem",
+                position: 2,
+                name: type === "event" ? "Events" : "Venues",
+                item: `${DEFAULT_SEO.url}/${type === "event" ? "events" : "venues"}`,
+              },
+              {
+                "@type": "ListItem",
+                position: 3,
+                name: (type === "event" ? eventData?.name : venueData?.name) || DEFAULT_SEO.siteName,
+                item: finalUrl,
+              },
+            ],
+          }
+        : null
+
     // Create and append JSON-LD script
     if (Object.keys(structuredData).length > 0) {
       const script = document.createElement("script")
       script.type = "application/ld+json"
       script.id = "yovibe-seo-jsonld"
-      script.textContent = JSON.stringify(structuredData)
+      script.textContent = JSON.stringify(breadcrumb ? [structuredData, breadcrumb] : structuredData)
       document.head.appendChild(script)
     }
-  }, [type, eventData, venueData, finalImage])
+  }, [type, eventData, venueData, finalImage, finalUrl])
 
   // This component doesn't render anything visually
   return null
@@ -380,10 +416,10 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
 // Screen-specific SEO configurations for YoVibe
 export const SCREEN_SEO = {
   events: {
-    title: "Events in Kampala - Parties, Concerts & Nightlife | YoVibe",
+    title: "Events & Tickets in Uganda - Discover Parties, Concerts & More | YoVibe",
     description:
-      "Browse all upcoming events, parties, concerts, DJ nights, and live music in Kampala and Uganda. Find the best events, see who's going, and buy tickets on YoVibe.",
-    keywords: ["events", "parties", "concerts", "DJ nights", "live music", "Kampala events", "Uganda events"],
+      "Browse and buy tickets for upcoming events, parties, concerts, and live music across Kampala, Entebbe, Jinja and many other parts of Uganda. Find the best events and buy tickets on YoVibe.",
+    keywords: ["events", "tickets", "buy tickets", "parties", "concerts", "live music", "Kampala events", "Uganda events"],
     type: "website" as const,
   },
   venues: {
@@ -445,32 +481,56 @@ export const SEOUtils = {
     name: string
     description: string
     date: Date
+    time?: string
     venueName: string
     posterImageUrl?: string
-  }) => ({
-    title: `${event.name} - YoVibe`,
-    description: event.description,
-    keywords: [
-      event.name,
-      event.venueName,
-      "event",
-      "party",
-      "concert",
-      "DJ",
-      "nightlife",
-      "Kampala",
-      "Uganda",
-    ],
-    type: "event" as const,
-    eventData: {
-      name: event.name,
+    price?: string
+    currency?: string
+    performers?: string[]
+  }) => {
+    // Compute an end date from the event time range (e.g. "08:00 PM - 11:00 PM")
+    const endDate = (() => {
+      const d = new Date(event.date)
+      const parts = String(event.time || "").split("-")
+      const token = (parts.length > 1 ? parts[1] : parts[0]).trim()
+      const m = token.match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/)
+      if (!m) return event.date
+      let hour = parseInt(m[1], 10)
+      const meridiem = (m[3] || "").toUpperCase()
+      if (meridiem === "PM" && hour < 12) hour += 12
+      if (meridiem === "AM" && hour === 12) hour = 0
+      if (hour < 0 || hour > 23) return event.date
+      d.setHours(hour, parseInt(m[2], 10), 0, 0)
+      return d
+    })()
+
+    return {
+      title: `${event.name} - YoVibe`,
       description: event.description,
-      startDate: event.date.toISOString(),
-      endDate: event.date.toISOString(),
-      venueName: event.venueName,
-      image: event.posterImageUrl,
-    },
-  }),
+      keywords: [
+        event.name,
+        event.venueName,
+        "event",
+        "party",
+        "concert",
+        "tickets",
+        "Uganda",
+        "Kampala",
+      ],
+      type: "event" as const,
+      eventData: {
+        name: event.name,
+        description: event.description,
+        startDate: event.date.toISOString(),
+        endDate: endDate.toISOString(),
+        venueName: event.venueName,
+        image: event.posterImageUrl,
+        price: event.price,
+        currency: event.currency || "UGX",
+        performers: event.performers,
+      },
+    }
+  },
 
   // Generate venue page SEO
   generateVenueSEO: (venue: {

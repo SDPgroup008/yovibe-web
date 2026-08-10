@@ -3,9 +3,9 @@ const path = require("path");
 
 const indexPath = path.join(__dirname, "..", "dist", "index.html");
 
-const title = "YoVibe | Best Nightlife Events, Parties & Venues in Uganda";
+const title = "YoVibe | Buy Tickets, Discover Events & Venues in Uganda";
 const description =
-  "YoVibe helps you discover nightlife events, concerts, parties, artists, and venues across Uganda, including Kampala, Entebbe, Mukono, and Jinja.";
+  "Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.";
 const keywords =
   "yovibe, yo vibe, uganda events, kampala nightlife, entebbe venues, mukono events, jinja events, ugandan artists, concerts, parties";
 const canonicalUrl = "https://yovibe.net/";

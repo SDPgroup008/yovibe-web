@@ -232,14 +232,37 @@ const EventDetailScreen: React.FC = () => {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net'
     const eventUrl = `${baseUrl}/events/${event.id}`
 
+    // Normalize the price to a clean numeric string for schema.org Offer.price
+    const rawPrice = event.isFreeEntry ? "0" : (event.entryFees?.[0]?.amount || "0")
+    const priceMatch = String(rawPrice).replace(/,/g, "").trim().match(/-?\d+(\.\d+)?/)
+    const price = priceMatch ? priceMatch[0] : "0"
+
+    // Compute an end date from the event time range (e.g. "08:00 PM - 11:00 PM")
+    const endFromTime = () => {
+      const d = new Date(event.date)
+      const parts = String(event.time || "").split("-")
+      const token = (parts.length > 1 ? parts[1] : parts[0]).trim()
+      const m = token.match(/(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)?/)
+      if (!m) return event.date
+      let hour = parseInt(m[1], 10)
+      const meridiem = (m[3] || "").toUpperCase()
+      if (meridiem === "PM" && hour < 12) hour += 12
+      if (meridiem === "AM" && hour === 12) hour = 0
+      if (hour < 0 || hour > 23) return event.date
+      d.setHours(hour, parseInt(m[2], 10), 0, 0)
+      return d
+    }
+
     const eventJsonLd = {
       "@context": "https://schema.org",
       "@type": "Event",
       "name": event.name,
       "description": event.description || `Join us at ${event.venueName} for an amazing event`,
       "startDate": event.date.toISOString(),
+      "endDate": endFromTime().toISOString(),
       "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
-      "eventStatus": "https://schema.org/EventScheduled",
+      "eventStatus": event.eventStatus === "cancelled" ? "https://schema.org/EventCancelled" : "https://schema.org/EventScheduled",
+      "eventUrl": eventUrl,
       "location": {
         "@type": "Place",
         "name": event.venueName,
@@ -250,17 +273,17 @@ const EventDetailScreen: React.FC = () => {
         }
       },
       "image": event.posterImageUrl,
-      "offers": event.isFreeEntry ? {
+      "offers": {
         "@type": "Offer",
-        "price": "0",
+        "price": price,
         "priceCurrency": "UGX",
-        "availability": "https://schema.org/InStock"
-      } : {
-        "@type": "Offer",
-        "price": event.entryFees[0]?.amount || "0",
-        "priceCurrency": "UGX",
-        "availability": "https://schema.org/InStock"
+        "availability": "https://schema.org/InStock",
+        "validFrom": new Date().toISOString(),
+        "url": eventUrl
       },
+      "performer": Array.isArray(event.artists) && event.artists.length > 0
+        ? event.artists.map((artist) => ({ "@type": "MusicGroup", name: artist }))
+        : [{ "@type": "Organization", "name": event.venueName || "YoVibe" }],
       "organizer": {
         "@type": "Organization",
         "name": "YoVibe",
@@ -385,7 +408,7 @@ const EventDetailScreen: React.FC = () => {
           <View style={styles.headerOverlay}>
 
             <View style={styles.eventHeaderInfo}>
-              <Text style={styles.eventName}>{event.name}</Text>
+              <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
               <Text style={styles.eventLocation}>
                 {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
               </Text>

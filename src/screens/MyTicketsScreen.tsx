@@ -164,10 +164,13 @@ const MyTicketsScreen: React.FC = () => {
     try {
       const event = await SupabaseService.getEventById(ticket.eventId)
       setSelectedEvent(event)
-      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket, event || undefined))
+      const fee = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)
+      const design = fee?.ticketDesign || event?.ticket_design
+      const isCustomUpload = design?.source === "upload" && !!design?.background_url
+      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket, event || undefined, undefined, { posterOverlay: isCustomUpload }))
     } catch {
       setSelectedEvent(null)
-      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket))
+      setSelectedTicketSvg(await renderCanonicalTicketSvgWithEmbeddedAssets(ticket, undefined, undefined, { posterOverlay: false }))
     }
   }
 
@@ -602,12 +605,9 @@ const MyTicketsScreen: React.FC = () => {
             {/* Canonical organizer-designed ticket. This same SVG is used by
                 the browser PDF path and the email visual renderer. */}
             <View style={{ width: "100%", aspectRatio: selectedTicketLayout.pageWidth / selectedTicketLayout.pageHeight, marginBottom: 18, borderRadius: 12, overflow: "hidden", backgroundColor: "#111827" }}>
-              <Image
-                source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
-                style={{ ...StyleSheet.absoluteFillObject }}
-                resizeMode="contain"
-                accessibilityLabel="Organizer-designed ticket"
-              />
+              {/* Custom-upload: render the real poster BEHIND the SVG. The SVG has a
+                  transparent hole at the poster block, so the poster shows through
+                  while title/info/QR blocks stay in front. */}
               {selectedEvent?.posterImageUrl && selectedPosterBlock && selectedIsCustomUpload && (
                 <Image
                   source={{ uri: selectedEvent.posterImageUrl }}
@@ -623,6 +623,12 @@ const MyTicketsScreen: React.FC = () => {
                   accessibilityLabel="Event poster"
                 />
               )}
+              <Image
+                source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
+                style={{ ...StyleSheet.absoluteFillObject }}
+                resizeMode="contain"
+                accessibilityLabel="Organizer-designed ticket"
+              />
               {selectedEvent?.posterImageUrl && !selectedIsCustomUpload && (() => {
                 const heroRect = computeEmailHeroRect(selectedTicket, selectedEvent, selectedFeeDesign)
                 return (

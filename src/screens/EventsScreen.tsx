@@ -329,12 +329,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         type={eventSeo.type}
         url={seoUrl}
       />
-      {/* Screen reader only heading for SEO */}
-      <Text style={styles.srOnly} accessibilityRole="header">
-        {eventSeo.title}
-      </Text>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Upcoming Events</Text>
+        <Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text>
         <View style={styles.headerActions}>
           <TouchableOpacity 
             style={styles.notificationButton} 

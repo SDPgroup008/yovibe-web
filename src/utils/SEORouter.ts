@@ -40,9 +40,9 @@ export const ROUTE_SEO_CONFIG: Record<string, RouteSEOConfig> = {
   
   '/': {
     path: '/',
-    title: 'YoVibe | Best Nightlife Events, Parties & Venues in Uganda',
-    description: 'YoVibe is your ultimate guide to nightlife, events, entertainment, and vibes in Uganda. Discover the best venues, clubs, bars, parties, concerts, and experiences.',
-    keywords: ['yovibe', 'nightlife', 'events', 'venues', 'parties', 'uganda', 'kampala'],
+    title: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda',
+    description: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.',
+    keywords: ['yovibe', 'buy tickets', 'events', 'venues', 'parties', 'uganda', 'kampala'],
     priority: 'high',
     changefreq: 'daily',
     type: 'website',
@@ -50,9 +50,9 @@ export const ROUTE_SEO_CONFIG: Record<string, RouteSEOConfig> = {
 
   '/events': {
     path: '/events',
-    title: 'Events in Kampala - Parties, Concerts & Nightlife | YoVibe',
-    description: 'Browse all upcoming events, parties, concerts, DJ nights, and live music in Kampala and Uganda. Find the best events, see who\'s going, and buy tickets on YoVibe.',
-    keywords: ['events', 'parties', 'concerts', 'DJ nights', 'live music', 'kampala events', 'uganda events'],
+    title: 'Events & Tickets in Uganda - Discover Parties, Concerts & More | YoVibe',
+    description: 'Browse and buy tickets for upcoming events, parties, concerts, and live music across Kampala, Entebbe, Jinja and many other parts of Uganda. Find the best events and buy tickets on YoVibe.',
+    keywords: ['events', 'tickets', 'buy tickets', 'parties', 'concerts', 'live music', 'kampala events', 'uganda events'],
     priority: 'high',
     changefreq: 'daily',
     type: 'website',

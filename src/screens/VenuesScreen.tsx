@@ -307,9 +307,9 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         type={venueSeo.type}
         url={seoUrl}
       />
-      {/* Screen reader only heading for SEO */}
-      <Text style={styles.srOnly} accessibilityRole="header">
-        {venueSeo.title}
+      {/* Visible H1 for SEO */}
+      <Text style={styles.pageTitle} accessibilityRole="header">
+        Discover Nightlife Venues &amp; Clubs
       </Text>
       <View style={styles.header}>
         <View style={styles.tabContainer}>
@@ -464,10 +464,17 @@ const styles = StyleSheet.create({
     opacity: 0.001,
     zIndex: -1,
   },
+  pageTitle: {
+    fontSize: responsiveSize(22, 26, 30),
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    paddingHorizontal: responsiveSize(16, 24, 32),
+    paddingTop: responsiveSize(12, 16, 20),
+    paddingBottom: 4,
+  },
   recreationContainer: {
     backgroundColor: "#F5F5F5",
-  },
-  header: {
+  },  header: {
     padding: responsiveSize(12, 20, 8),
     paddingBottom: 0,
   },

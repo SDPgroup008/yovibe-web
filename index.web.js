@@ -12,13 +12,13 @@
     { charset: 'utf-8' },
     { name: 'viewport', content: 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover' },
     { name: 'theme-color', content: '#121212' },
-    { name: 'title', content: 'YoVibe | Best Nightlife Events, Parties & Venues in Uganda' },
-    { name: 'description', content: 'YoVibe is your ultimate guide to nightlife, events, entertainment, and vibes in Uganda. Discover the best venues, clubs, bars, parties, concerts, and experiences.' },
-    { name: 'keywords', content: 'yovibe, yo vibe, nightlife, events, venues, parties, entertainment, concerts, vibes, vybz, happiness, fun, clubs, bars, Uganda, Kampala' },
+    { name: 'title', content: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda' },
+    { name: 'description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
+    { name: 'keywords', content: 'yovibe, yo vibe, events, tickets, buy tickets, venues, parties, concerts, Uganda, Kampala, Entebbe, Jinja' },
     { property: 'og:type', content: 'website' },
     { property: 'og:url', content: 'https://yovibe.net/' },
-    { property: 'og:title', content: 'YoVibe | Best Nightlife Events, Parties & Venues in Uganda' },
-    { property: 'og:description', content: 'Discover the best nightlife, events, venues, parties, and entertainment in Uganda with YoVibe.' },
+    { property: 'og:title', content: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda' },
+    { property: 'og:description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
     { property: 'og:image', content: 'https://yovibe.net/assets/og-image.png' },
     { property: 'og:image:width', content: '1200' },
     { property: 'og:image:height', content: '630' },
@@ -26,8 +26,8 @@
     { property: 'og:locale', content: 'en_UG' },
     { name: 'twitter:card', content: 'summary_large_image' },
     { name: 'twitter:url', content: 'https://yovibe.net/' },
-    { name: 'twitter:title', content: 'YoVibe | Best Nightlife Events, Parties & Venues in Uganda' },
-    { name: 'twitter:description', content: 'Discover the best nightlife, events, venues, parties, and entertainment in Uganda with YoVibe.' },
+    { name: 'twitter:title', content: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda' },
+    { name: 'twitter:description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
     { name: 'twitter:image', content: 'https://yovibe.net/assets/og-image.png' },
     { name: 'twitter:site', content: '@yovibe' },
     { name: 'twitter:creator', content: '@yovibe' },
@@ -96,7 +96,7 @@
   });
   
   // Set title
-  document.title = 'YoVibe | Best Nightlife Events, Parties & Venues in Uganda';
+  document.title = 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda';
 })();
 
 // Import polyfills first - order matters!
