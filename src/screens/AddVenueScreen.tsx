@@ -18,6 +18,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
 import { useAuth } from "../contexts/AuthContext"
+import { ValidationDialog } from "../components/ValidationDialog"
 import ImagePickerService from "../services/ImagePickerService"
 import { Ionicons } from "@expo/vector-icons"
 
@@ -61,6 +62,8 @@ const AddVenueScreen: React.FC<any> = (props) => {
     categories?: string
     image?: string
   }>({})
+  const [validationVisible, setValidationVisible] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   useEffect(() => {
     ;(async () => {
@@ -137,8 +140,8 @@ const AddVenueScreen: React.FC<any> = (props) => {
     // If there are errors, display them and highlight fields
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      const errorMessages = Object.values(newErrors).join("\n")
-      Alert.alert("Form Errors", errorMessages)
+      setValidationErrors(Object.values(newErrors))
+      setValidationVisible(true)
       return
     }
 
@@ -352,6 +355,13 @@ const AddVenueScreen: React.FC<any> = (props) => {
           {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.submitButtonText}>Create Venue</Text>}
         </TouchableOpacity>
       </View>
+
+      <ValidationDialog
+        visible={validationVisible}
+        title="Missing Information"
+        missingFields={validationErrors}
+        onDismiss={() => setValidationVisible(false)}
+      />
     </ScrollView>
   )
 }

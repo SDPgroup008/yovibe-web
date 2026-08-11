@@ -23,6 +23,7 @@ import { uploadToR2 } from "../services/R2Service"
 import { useAuth } from "../contexts/AuthContext"
 import { generateEditorHTML, defaultLayout } from "../services/TicketPDFService"
 import type { TicketLayout } from "../services/TicketLayoutEngine"
+import { ValidationDialog } from "../components/ValidationDialog"
 
 // Responsive breakpoints for add event screen
 const { width } = Dimensions.get('window');
@@ -254,6 +255,8 @@ const AddEventScreen: React.FC<any> = (props) => {
     ticketContacts?: string
     entryFees?: string
   }>({})
+  const [validationVisible, setValidationVisible] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [newFeeBackgroundFile, setNewFeeBackgroundFile] = useState<any>(null)
   
   // Global event-level ticket design
@@ -844,8 +847,8 @@ const AddEventScreen: React.FC<any> = (props) => {
     // If there are errors, display them and highlight fields
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      const errorMessages = Object.values(newErrors).join("\n")
-      Alert.alert("Form Errors", errorMessages)
+      setValidationErrors(Object.values(newErrors))
+      setValidationVisible(true)
       return
     }
 
@@ -1634,6 +1637,13 @@ const AddEventScreen: React.FC<any> = (props) => {
           )}
         </TouchableOpacity>
       </View>
+
+      <ValidationDialog
+        visible={validationVisible}
+        title="Missing Information"
+        missingFields={validationErrors}
+        onDismiss={() => setValidationVisible(false)}
+      />
     </ScrollView>
   )
 }

@@ -19,6 +19,7 @@ import { useAuth } from "../../contexts/AuthContext"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../../utils/compatNavigation"
 import { supabase } from "../../config/supabase"
+import { ValidationDialog } from "../../components/ValidationDialog"
 
 // Responsive breakpoints for login screen
 const { width, height } = Dimensions.get('window');
@@ -50,6 +51,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
     email?: string
     password?: string
   }>({})
+  const [validationVisible, setValidationVisible] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
 
   // Toggle to show/hide password
   const [showPassword, setShowPassword] = useState(false)
@@ -72,12 +75,8 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
     // If there are errors, display them and highlight fields
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
-      const errorMessages = Object.values(newErrors).join("\n")
-      if (Platform.OS === "web") {
-        alert(`Form Errors\n${errorMessages}`)
-      } else {
-        Alert.alert("Form Errors", errorMessages)
-      }
+      setValidationErrors(Object.values(newErrors))
+      setValidationVisible(true)
       return
     }
 
@@ -249,6 +248,13 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
         </View>
       </View>
       </ImageBackground>
+
+      <ValidationDialog
+        visible={validationVisible}
+        title="Missing Information"
+        missingFields={validationErrors}
+        onDismiss={() => setValidationVisible(false)}
+      />
     </ScrollView>
   )
 }

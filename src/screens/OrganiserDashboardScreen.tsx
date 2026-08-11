@@ -21,6 +21,7 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { ValidationDialog } from "../components/ValidationDialog"
 
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { supabase } from "../config/supabase"
@@ -268,6 +269,8 @@ const OrganiserDashboardScreen: React.FC = () => {
     bankNameAccount: "",
   })
   const [paymentFormErrors, setPaymentFormErrors] = useState<Record<string, string>>({})
+  const [paymentValidationVisible, setPaymentValidationVisible] = useState(false)
+  const [paymentValidationErrors, setPaymentValidationErrors] = useState<string[]>([])
   const [scanning, setScanning] = useState(false)
   const [validating, setValidating] = useState(false)
   const [scannerInput, setScannerInput] = useState("")
@@ -752,7 +755,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (editForm.bankName && !editForm.bankNameAccount) errs.bankNameAccount = "Enter account holder name for bank"
     if (editForm.bankNumber && !editForm.bankName) errs.bankName = "Enter bank name"
     if (editForm.bankNameAccount && !editForm.bankName) errs.bankName = "Enter bank name"
-    if (Object.keys(errs).length > 0) { setPaymentFormErrors(errs); Alert.alert("Missing Fields", Object.values(errs).join("\n")); return }
+    if (Object.keys(errs).length > 0) { setPaymentFormErrors(errs); setPaymentValidationErrors(Object.values(errs)); setPaymentValidationVisible(true); return }
     try {
       const mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }> = []
       if (editForm.mobileNumber && editForm.mobileName) mobileMoney.push({ provider: editForm.mobileProvider, number: editForm.mobileNumber, name: editForm.mobileName })
@@ -1967,6 +1970,13 @@ const OrganiserDashboardScreen: React.FC = () => {
           </View>
         </View>
       </Modal>
+
+      <ValidationDialog
+        visible={paymentValidationVisible}
+        title="Missing Information"
+        missingFields={paymentValidationErrors}
+        onDismiss={() => setPaymentValidationVisible(false)}
+      />
     </View>
   )
 }

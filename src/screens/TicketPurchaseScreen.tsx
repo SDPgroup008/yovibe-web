@@ -19,6 +19,8 @@ import { INSTALLMENT_SERVICE_FEE_RATE } from "../models/InstallmentPlan"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
 import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
+import { ValidationDialog } from "../components/ValidationDialog"
+import { TicketCreationProgress } from "../components/TicketCreationProgress"
 
 const TicketPurchaseScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -214,6 +216,12 @@ const TicketPurchaseScreen: React.FC = () => {
   const [checkingPayment, setCheckingPayment] = useState(false)
   const bannerOpacity = useRef(new Animated.Value(0)).current
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [validationVisible, setValidationVisible] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [progressVisible, setProgressVisible] = useState(false)
+  const [progressStep, setProgressStep] = useState(0)
+  const [progressCompleted, setProgressCompleted] = useState(false)
+  const [deliveryEmail, setDeliveryEmail] = useState("")
   const scrollRef = useRef<ScrollView>(null)
   const fieldYPositions = useRef<Record<string, number>>({})
 
@@ -284,7 +292,8 @@ const TicketPurchaseScreen: React.FC = () => {
     const firstKey = Object.keys(errs)[0]
     const y = fieldYPositions.current[firstKey]
     if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true })
-    Alert.alert("Missing Information", `${Object.keys(errs).length} field(s) need attention.\n\n${errs[firstKey]}`)
+    setValidationErrors(Object.values(errs))
+    setValidationVisible(true)
     return true
   }
 
@@ -419,7 +428,10 @@ const TicketPurchaseScreen: React.FC = () => {
     
     try {
       setLoading(true)
-      
+      setProgressVisible(true)
+      setProgressCompleted(false)
+      setProgressStep(0)
+
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
       const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
@@ -452,10 +464,13 @@ const TicketPurchaseScreen: React.FC = () => {
         ? Array(actualTicketCount).fill(visitorEmail.trim() || buyerEmails[0]?.trim() || payerEmail)
         : buyerEmailsList
 
+      setDeliveryEmail(deliveryEmails[0]?.trim() || payerEmail)
+
       const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
       const showManualPhotoCapture = isBuyingForSelf
       const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
 
+      setProgressStep(1) // Saving ticket…
       const tickets = await TicketService.purchaseTicketsForTable(
         event!,
         buyerNamesList,
@@ -497,6 +512,7 @@ const TicketPurchaseScreen: React.FC = () => {
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
       
+      setProgressStep(2) // Generating ticket email…
       for (const ticket of tickets) {
         try {
           const payerEmailMatchesDelivery = ticket.deliveryEmail === payerEmail
@@ -507,7 +523,8 @@ const TicketPurchaseScreen: React.FC = () => {
           
           // Find the ticket design from the entry fee
           const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
-          
+
+          setProgressStep(3) // Sending email to {delivery email}…
           await fetch(`/.netlify/functions/send-ticket-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -541,15 +558,20 @@ const TicketPurchaseScreen: React.FC = () => {
       })
       console.log("? Fulfillment completed successfully")
 
+      setProgressStep(4) // Ticket successfully delivered
+      setProgressCompleted(true)
+
       setPurchaseStatus("success")
       setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
       
       setTimeout(() => {
+        setProgressVisible(false)
         navigation.navigate("MyTickets")
       }, 1000)
 
     } catch (error: any) {
       console.error("Ticket creation error:", error)
+      setProgressVisible(false)
       
       if (fulfillmentId) {
         await TicketService.updateFulfillmentStatus(fulfillmentId, "failed", {
@@ -1738,6 +1760,20 @@ const handleInstallmentPurchase = async () => {
       </Modal>
 
       </ScrollView>
+
+      <ValidationDialog
+        visible={validationVisible}
+        title="Missing Information"
+        missingFields={validationErrors}
+        onDismiss={() => setValidationVisible(false)}
+      />
+
+      <TicketCreationProgress
+        visible={progressVisible}
+        currentStep={progressStep}
+        completed={progressCompleted}
+        deliveryEmail={deliveryEmail}
+      />
     </View>
   )
 }
