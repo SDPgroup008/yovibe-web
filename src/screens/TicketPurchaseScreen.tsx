@@ -32,7 +32,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const { user } = useAuth()
 
   const [event, setEvent] = useState<Event | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
+  const [initialLoading, setInitialLoading] = useState(true)
   const [pageLoading, setPageLoading] = useState(false)
   const [quantity, setQuantity] = useState(1)
   const [photoCaptured, setPhotoCaptured] = useState(false)
@@ -59,7 +60,7 @@ const TicketPurchaseScreen: React.FC = () => {
   useEffect(() => {
     const loadEvent = async () => {
       if (!eventId) {
-        setLoading(false)
+        setInitialLoading(false)
         return
       }
 
@@ -80,7 +81,7 @@ const TicketPurchaseScreen: React.FC = () => {
       } catch (error) {
         console.error("Error loading event for ticket purchase:", error)
       } finally {
-        setLoading(false)
+        setInitialLoading(false)
       }
     }
 
@@ -941,10 +942,10 @@ const handleInstallmentPurchase = async () => {
     }
   }
 
-  if (loading) {
+  if (initialLoading) {
     return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <ActivityIndicator size="large" color="#2196F3" />
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#00D4FF" />
         <Text style={{ color: '#FFFFFF', marginTop: 12, fontSize: 16 }}>Loading event details...</Text>
       </View>
     )
