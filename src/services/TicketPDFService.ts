@@ -8,6 +8,7 @@ import {
   type BlockLayout,
   type BgTransform,
   type TicketLayout,
+  type TicketDesignInput,
   getDefaultLayout,
 } from "./TicketLayoutEngine"
 import { canonicalTicketHtml } from "./TicketCanonicalRenderer"

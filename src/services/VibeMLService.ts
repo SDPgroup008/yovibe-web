@@ -94,7 +94,7 @@ class VibeMLService {
           tensor.dispose()
           prediction.dispose()
 
-          const probs = Array.from(values)
+          const probs = Array.from(values) as number[]
           const predictedClass = probs.indexOf(Math.max(...probs))
           const confidence = Math.max(...probs)
           resolve({ predictedClass, confidence })

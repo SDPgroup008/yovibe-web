@@ -109,7 +109,7 @@ export function useScrollPersistence(options: UseScrollPersistenceOptions) {
     if (typeof document !== 'undefined') {
       const scrollViews = document.querySelectorAll('[class*="ScrollView"], [data-testid*="ScrollView"], [class*="css-view"]');
       // Try to find scrollable containers that have overflow:auto or overflow:scroll
-      for (const el of scrollViews) {
+      for (const el of Array.from(scrollViews)) {
         const style = window.getComputedStyle(el);
         if ((style.overflow === 'auto' || style.overflow === 'scroll' || 
              style.overflowY === 'auto' || style.overflowY === 'scroll') && 

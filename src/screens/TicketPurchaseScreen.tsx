@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
@@ -217,7 +217,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const scrollRef = useRef<ScrollView>(null)
   const fieldYPositions = useRef<Record<string, number>>({})
 
-  // ─── Consolidated field validation ─────────────────────────────────────
+  // --- Consolidated field validation -------------------------------------
   const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   const PHONE_REGEX = /^(0\d{9}|\+256\d{9}|256\d{9})$/
   const CARD_EXPIRY_REGEX = /^(0[1-9]|1[0-2])\/\d{2}$/
@@ -230,7 +230,7 @@ const TicketPurchaseScreen: React.FC = () => {
     for (let i = 0; i < actualTicketCount; i++) {
       if (!names[i]?.trim()) errs[`name_${i}`] = `Please enter name for person ${i + 1}`
     }
-    if (selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none") {
+    if (selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none") {
       if (isTableEntry) {
         const unassigned = tableSeats.slice(0, quantity).filter(s => s == null)
         if (unassigned.length > 0) errs.seat_selection = "Please select a table for each group"
@@ -254,13 +254,13 @@ const TicketPurchaseScreen: React.FC = () => {
       if (hasEmpty) errs.buyerEmailDist = "Please enter a delivery email for each attendee"
     }
     // Seat/table per-person inline errors
-    if (selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none" && !isTableEntry) {
+    if (selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none" && !isTableEntry) {
       for (let i = 0; i < actualTicketCount; i++) {
         if (perPersonSeats[i] == null && !errs.seat_selection) errs.seat_selection = "Please select a seat for each person"
         if (perPersonSeats[i] == null) errs[`seat_${i}`] = "Seat required"
       }
     }
-    if (isTableEntry && selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none") {
+    if (isTableEntry && selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none") {
       for (let i = 0; i < quantity; i++) {
         if (tableSeats[i] == null) errs[`table_${i}`] = "Table required"
       }
@@ -298,10 +298,10 @@ const TicketPurchaseScreen: React.FC = () => {
   // visible both to the JSX render below AND to handlePurchase/createTicketAndNavigate.
   // Previously this was declared separately inside handlePurchase AND inside
   // createTicketAndNavigate (in the latter case, even referencing deliveryEmails/
-  // payerEmail before those were defined) — neither of those inner copies was
+  // payerEmail before those were defined) � neither of those inner copies was
   // visible to the JSX, which is what caused:
   //   "ReferenceError: showManualPhotoCapture is not defined"
-  // Do not redeclare these inside handlePurchase or createTicketAndNavigate —
+  // Do not redeclare these inside handlePurchase or createTicketAndNavigate �
   // both functions now just reference these component-scope values directly.
   // ===========================================================================
   const payerEmailForPhotoCheck = buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || user?.email || ""
@@ -354,12 +354,12 @@ const TicketPurchaseScreen: React.FC = () => {
         console.log(`   Attempt ${attempts}: Status = ${status}`)
         networkError = false
       } catch (err) {
-        console.log(`⚠️ Network error attempt ${attempts}:`, err)
+        console.log(`?? Network error attempt ${attempts}:`, err)
         networkError = true
       }
     }
     
-    console.log("✅ Final status:", status)
+    console.log("? Final status:", status)
     const resultStatus = verificationResult ? (verificationResult.status || "").toUpperCase() : "PENDING"
     
     if (resultStatus === "COMPLETED") {
@@ -439,7 +439,7 @@ const TicketPurchaseScreen: React.FC = () => {
         amount: total,
         attendeeNames: buyerNamesList,
       })
-      console.log("✅ Created pending fulfillment:", fulfillmentId)
+      console.log("? Created pending fulfillment:", fulfillmentId)
       
       await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
 
@@ -532,14 +532,14 @@ const TicketPurchaseScreen: React.FC = () => {
           console.log(`Email sent for ticket ${ticket.id}`)
         } catch (err) {
           console.error(`Failed to send email for ticket ${ticket.id}:`, err)
-          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy — you can always find it under My Tickets.")
+          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy � you can always find it under My Tickets.")
         }
       }
 
       await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
         ticketIds: tickets.map(t => t.id),
       })
-      console.log("✅ Fulfillment completed successfully")
+      console.log("? Fulfillment completed successfully")
 
       setPurchaseStatus("success")
       setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
@@ -569,7 +569,7 @@ const TicketPurchaseScreen: React.FC = () => {
       )
       
       setPurchaseStatus("success")
-      setStatusMessage("Payment received — finalizing ticket...")
+      setStatusMessage("Payment received � finalizing ticket...")
     } finally {
       setLoading(false)
     }
@@ -597,7 +597,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const { subtotal, lateFee, total, isLatePurchase } = pricing
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
 
-  // Installment preview — recalculated whenever plan type or total changes
+  // Installment preview � recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
     if (!useInstallments || !event?.date) return []
     return InstallmentService.previewPlan(total, installmentPlanType, event.date)
@@ -703,7 +703,7 @@ const handleInstallmentPurchase = async () => {
           seatNumber: isTableEntry ? (tableSeats[0] ?? undefined) : (perPersonSeats.filter(s => s != null)[0] ?? undefined),
         },
         {
-          method: paymentMethod,
+          method: (paymentMethod || "credit_card") as "mobile_money" | "credit_card" | "bank_transfer",
           provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
           number: paymentMethod === "mobile_money" ? mobileMoneyNumber : undefined,
           name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
@@ -754,7 +754,7 @@ const handleInstallmentPurchase = async () => {
         const result = await PawaPayService.checkDepositStatus(depositId)
         status = (result.status || "").toUpperCase()
       } catch {
-        // network hiccup — keep polling
+        // network hiccup � keep polling
       }
     }
 
@@ -843,7 +843,7 @@ const handleInstallmentPurchase = async () => {
         // Handle mobile money payment via PawaPay
         const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
         
-        console.log("💳 Initiating mobile money payment via PawaPay...")
+        console.log("?? Initiating mobile money payment via PawaPay...")
         const depositResult = await PawaPayService.initiateDeposit(
           total,
           "UGX",
@@ -855,7 +855,7 @@ const handleInstallmentPurchase = async () => {
           throw new Error(depositResult.error || "Failed to initiate mobile money payment")
         }
 
-        console.log("✅ PawaPay deposit initiated:", depositResult.depositId)
+        console.log("? PawaPay deposit initiated:", depositResult.depositId)
         
         const depositId = depositResult.depositId!
         setPaymentOrderId(depositId)
@@ -871,7 +871,7 @@ const handleInstallmentPurchase = async () => {
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
         const callbackUrl = typeof window !== "undefined" ? `${window.location.origin}/events/payment-callback` : ""
 
-        console.log("💳 Submitting order to PesaPal...")
+        console.log("?? Submitting order to PesaPal...")
         const orderResult = await PesaPalService.submitOrder(
           total,
           description,
@@ -887,8 +887,8 @@ const handleInstallmentPurchase = async () => {
           throw new Error(orderResult.error || "Failed to initialize payment")
         }
 
-        console.log("✅ PesaPal order created:", orderResult.orderId)
-        console.log("💳 Payment URL:", orderResult.paymentUrl)
+        console.log("? PesaPal order created:", orderResult.orderId)
+        console.log("?? Payment URL:", orderResult.paymentUrl)
 
         const paymentUrl = orderResult.paymentUrl
         const orderId = orderResult.orderId!
@@ -949,7 +949,7 @@ const handleInstallmentPurchase = async () => {
           <View style={styles.loaderContainer}>
             <ActivityIndicator color="#00D4FF" size="large" />
             <Text style={styles.loaderTitle}>
-              ⏳ Payment Pending
+              ? Payment Pending
             </Text>
             <Text style={styles.loaderSubtitle}>
               {statusMessage || "Please check your phone and enter your mobile money PIN to complete the payment."}
@@ -1123,7 +1123,7 @@ const handleInstallmentPurchase = async () => {
         )}
 
         {isTableEntry ? (
-          /* ── Table mode: group names by table ── */
+          /* -- Table mode: group names by table -- */
           Array.from({ length: quantity }).map((_, tableIdx) => {
             const start = tableIdx * tableSize
             const end = start + tableSize
@@ -1161,9 +1161,9 @@ const handleInstallmentPurchase = async () => {
             )
           })
         ) : (
-          /* ── Normal mode: one name per ticket with seat picker ── */
+          /* -- Normal mode: one name per ticket with seat picker -- */
           Array.from({ length: actualTicketCount }).map((_, index) => {
-            const hasSeatMap = selectedTicketType?.seatMap && selectedTicketType.seatMap.type !== "none"
+            const hasSeatMap = selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none"
             return (
               <View key={index} style={styles.nameRow}>
                 <TextInput
@@ -1182,7 +1182,7 @@ const handleInstallmentPurchase = async () => {
                     }}
                   >
                     <Text style={[styles.seatSelectBtnText, perPersonSeats[index] != null && styles.seatSelectBtnTextActive]}>
-                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat —"}
+                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat �"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1426,7 +1426,7 @@ const handleInstallmentPurchase = async () => {
             </View>
 
             {installmentPreview.map((inst, i) => {
-              const label = i === 0 ? "Pay now" : `Installment ${i + 1} — due ${inst.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+              const label = i === 0 ? "Pay now" : `Installment ${i + 1} � due ${inst.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
               return (
                 <View key={i} style={styles.installmentRow}>
                   <View style={{ flex: 1 }}>
@@ -1608,7 +1608,7 @@ const handleInstallmentPurchase = async () => {
             </View>
             <ScrollView showsVerticalScrollIndicator={false}>
             {pickerMode === "table" ? (
-              /* ── Table selection grid (same color logic as seats) ── */
+              /* -- Table selection grid (same color logic as seats) -- */
               <View style={seatMapStyles.numberedGrid}>
                 {Array.from({ length: (seatMapFee as any)?.maxTickets || quantity }).map((_, idx) => {
                   const tableNum = idx + 1
@@ -1642,7 +1642,7 @@ const handleInstallmentPurchase = async () => {
                 })}
               </View>
               ) : seatMapFee && (seatMapFee as any).seatMap?.type === "cinema" ? (
-                /* ── Cinema seat layout ── */
+                /* -- Cinema seat layout -- */
                 Array.from({ length: (seatMapFee as any).seatMap.rows || 5 }).map((_, rowIdx) => {
                   const rowLabel = String.fromCharCode(65 + rowIdx)
                   const cols = (seatMapFee as any).seatMap.cols || 10
@@ -1685,7 +1685,7 @@ const handleInstallmentPurchase = async () => {
                   )
                 })
               ) : (
-                /* ── Numbered seat grid ── */
+                /* -- Numbered seat grid -- */
                 <View style={seatMapStyles.numberedGrid}>
                   {Array.from({ length: (seatMapFee as any)?.maxTickets || 0 }).map((_, idx) => {
                     const seatNum = idx + 1

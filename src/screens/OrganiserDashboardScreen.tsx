@@ -609,9 +609,12 @@ const OrganiserDashboardScreen: React.FC = () => {
   useEffect(() => {
     if (!eventId) return
     setRefundsLoading(true)
-    supabase.from('refund_requests').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).limit(50).then(({ data }) => {
-      setEventRefunds(data || [])
-    }).catch(() => {}).finally(() => setRefundsLoading(false))
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('refund_requests').select('*').eq('event_id', eventId).order('created_at', { ascending: false }).limit(50)
+        setEventRefunds(data || [])
+      } catch {} finally { setRefundsLoading(false) }
+    })()
   }, [eventId])
 
   // Admin withdraw via PawaPay
@@ -975,7 +978,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       if (payoutTab === "mobile_money") {
         // ── Mobile Money: existing PawaPay flow ──
         console.log("[PayoutSubmit] 📱 Starting Mobile Money payout flow...")
-        const payoutResult = await PawaPayService.initiatePayout(netPayoutAmount, "UGX", internationalPhone, provider)
+        const payoutResult = await PawaPayService.initiatePayout(totalAmount, "UGX", toInternationalPhone(payoutPhone), payoutProvider)
 
         if (!payoutResult.success) {
           Alert.alert("Payout Failed", payoutResult.error || "Unknown error"); setWithdrawLoading(false); return
@@ -1008,7 +1011,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
         setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
         setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
-        Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${internationalPhone}\nPayout ID: ${payoutResult.payoutId}`)
+        Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${toInternationalPhone(payoutPhone)}\nPayout ID: ${payoutResult.payoutId}`)
 
       } else {
         // ── Card: save payout request for admin processing with bank details ──

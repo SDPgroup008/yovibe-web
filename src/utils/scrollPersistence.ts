@@ -10,10 +10,10 @@ interface ScrollPosition {
 }
 
 class ScrollPersistence {
-  private storage: Storage;
+  private storage: Storage | null;
   private prefix = 'scroll_pos_';
 
-  constructor(storage: Storage = typeof window !== 'undefined' ? window.sessionStorage : null) {
+  constructor(storage: Storage | null = typeof window !== 'undefined' ? window.sessionStorage : null) {
     this.storage = storage;
   }
 
@@ -86,13 +86,14 @@ class ScrollPersistence {
    * Clear all saved scroll positions
    */
   clearAll(): void {
-    if (!this.storage) return;
+    const storage = this.storage;
+    if (!storage) return;
 
     try {
-      const keys = Object.keys(this.storage);
+      const keys = Object.keys(storage);
       keys.forEach(key => {
         if (key.startsWith(this.prefix)) {
-          this.storage.removeItem(key);
+          storage.removeItem(key);
         }
       });
     } catch (error) {

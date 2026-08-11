@@ -25,9 +25,9 @@ const normalizeTicketContacts = (input: unknown): TicketContact[] => {
 
   return parsedInput
     .filter((item): item is Partial<TicketContact> => typeof item === "object" && item !== null)
-    .map((item) => ({
+    .map((item): TicketContact => ({
       number: String(item.number ?? "").trim(),
-      type: item.type === "call" ? "call" : "whatsapp",
+      type: (item.type === "call" ? "call" : "whatsapp") as TicketContact["type"],
     }))
     .filter((item) => item.number.length > 0)
 }

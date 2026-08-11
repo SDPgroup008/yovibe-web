@@ -277,7 +277,6 @@ const AddVibeScreen: React.FC = () => {
         setImage(null)
         setAnalysisResult(null)
         setAnalyzing(false)
-        clearPhoto()
         setTimeout(() => {
           setShowSuccessBanner(false)
           navigation.goBack()

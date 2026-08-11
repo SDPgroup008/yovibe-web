@@ -170,14 +170,14 @@ export default function AdminWithdrawalsScreen() {
         // Save payout record
         try {
           await SupabaseService.savePayout({
-            organizer_id: user.id,
+            organizer_id: user?.id || "",
             ticket_ids: allEligibleIds,
             amount: netRevenue,
             status: "Completed",
             processed_date: new Date().toISOString(),
             transaction_reference: payoutResult.payoutId,
             payout_method: "mobile_money",
-            recipient_name: user.displayName || user.email || "",
+            recipient_name: user?.displayName || user?.email || "",
             recipient_phone_number: intPhone,
           })
         } catch (err) { console.error("Failed to save payout:", err) }

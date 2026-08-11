@@ -137,9 +137,9 @@ class ServiceWorkerManager {
    * Queue a background sync request (retried when online)
    */
   async queueSync(tag: string, data: Record<string, any>) {
-    if ("syncManager" in self && this.registration?.sync) {
+    if ("syncManager" in self && (this.registration as any)?.sync) {
       try {
-        await this.registration.sync.register(tag)
+        await (this.registration as any).sync.register(tag)
       } catch {
         // Sync registration failed, not critical
         console.warn("[SW] Background sync not available")

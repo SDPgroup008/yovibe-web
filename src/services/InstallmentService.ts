@@ -75,7 +75,7 @@ export class InstallmentService {
       number?: string
       name?: string
     }
-  ): Promise<{ planId: string; depositId?: string; paymentUrl?: string; orderId?: string }> {
+  ): Promise<{ planId: string; depositId?: string; paymentUrl?: string; orderId?: string; trackingId?: string }> {
     const installments = this.previewPlan(totalAmount, planType, event.date)
 
     const plan: Omit<InstallmentPlan, "id"> = {
@@ -136,7 +136,7 @@ export class InstallmentService {
       number?: string
       name?: string
     }
-  ): Promise<{ depositId?: string; paymentUrl?: string; orderId?: string }> {
+  ): Promise<{ depositId?: string; paymentUrl?: string; orderId?: string; trackingId?: string }> {
     const plan = await this.getPlanById(planId)
     if (!plan) throw new Error("Installment plan not found")
     if (plan.status !== "active") throw new Error("This installment plan is no longer active")
@@ -353,7 +353,7 @@ export class InstallmentService {
       name?: string
     },
     event: Pick<Event, "id" | "name">
-  ): Promise<{ depositId?: string; paymentUrl?: string; orderId?: string }> {
+  ): Promise<{ depositId?: string; paymentUrl?: string; orderId?: string; trackingId?: string }> {
     if (paymentDetails.method === "mobile_money") {
       const provider =
         paymentDetails.provider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
@@ -377,7 +377,7 @@ export class InstallmentService {
       paymentDetails.name
     )
     if (!result.success) throw new Error(result.error || "Payment failed")
-    return { paymentUrl: result.paymentUrl, orderId: result.orderId }
+    return { paymentUrl: result.paymentUrl, orderId: result.orderId, trackingId: result.trackingId }
   }
 
   // ─── Row mappers ──────────────────────────────────────────────────────────

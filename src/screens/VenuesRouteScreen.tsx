@@ -98,7 +98,7 @@ const VenuesRouteScreen: React.FC<Props> = ({ venueId, navigation, route }) => {
   }
 
   if (shouldRenderDetail) {
-    return <VenueDetailScreen navigation={navigation} route={route} />;
+    return <VenueDetailScreen />;
   }
 
   return <VenuesScreen initialSearchQuery={forcedSearchQuery} />;

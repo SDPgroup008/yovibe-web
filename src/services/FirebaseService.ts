@@ -943,8 +943,9 @@ class FirebaseService {
         const eventDate = data.date.toDate()
         events.push({
           id: doc.id,
+          slug: doc.id,
           name: data.name,
-          venueId: data.venueId,
+          venueSlug: data.venueId || "",
           venueName: data.venueName,
           description: data.description,
           date: eventDate,
@@ -1017,8 +1018,9 @@ class FirebaseService {
         
         events.push({
           id: doc.id,
+          slug: doc.id,
           name: data.name,
-          venueId: data.venueId,
+          venueSlug: data.venueId || "",
           venueName: data.venueName,
           description: data.description,
           date: eventDate,
@@ -1069,8 +1071,9 @@ class FirebaseService {
         const eventDate = data.date.toDate()
         events.push({
           id: doc.id,
+          slug: doc.id,
           name: data.name,
-          venueId: data.venueId,
+          venueSlug: data.venueId || "",
           venueName: data.venueName,
           description: data.description,
           date: eventDate,
@@ -1120,8 +1123,9 @@ class FirebaseService {
         const eventDate = data.date.toDate()
         events.push({
           id: doc.id,
+          slug: doc.id,
           name: data.name,
-          venueId: data.venueId,
+          venueSlug: data.venueId || "",
           venueName: data.venueName,
           description: data.description,
           date: eventDate,
@@ -1169,8 +1173,9 @@ class FirebaseService {
 
       return {
         id: eventDoc.id,
+        slug: eventDoc.id,
         name: data.name,
-        venueId: data.venueId,
+        venueSlug: data.venueId || "",
         venueName: data.venueName,
         description: data.description,
         date: data.date.toDate(),
@@ -1203,7 +1208,7 @@ class FirebaseService {
 
       const firestoreEventData = {
         name: eventData.name,
-        venueId: eventData.venueId,
+        venueId: eventData.venueSlug,
         venueName: eventData.venueName,
         description: eventData.description,
         date: Timestamp.fromDate(eventData.date),

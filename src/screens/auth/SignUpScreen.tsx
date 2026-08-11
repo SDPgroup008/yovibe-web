@@ -80,7 +80,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
     setLoading(true)
     try {
       console.log("Sign up attempt with:", email, "as", userType)
-      await signUp(email, password, userType)
+      await signUp(email, password, userType as "regular_user" | "club_owner" | "admin")
 
       // Check if user was signed in immediately (confirmation disabled or already confirmed)
       const { data: { session } } = await supabase.auth.getSession()
@@ -486,8 +486,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#4285F4",
     height: responsiveSize(48, 52, 56),
     borderRadius: responsiveSize(8, 10, 12),
-    justifyContent: "center",
-    alignItems: "center",
     marginTop: responsiveSize(8, 10, 14),
     marginBottom: responsiveSize(16, 20, 24),
     shadowColor: "#4285F4",
