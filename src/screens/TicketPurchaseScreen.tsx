@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Animated, Platform, Linking } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Platform, Linking } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
@@ -21,6 +21,7 @@ import type { Event } from "../models/Event"
 import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
 import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
+import { StatusDialog } from "../components/StatusDialog"
 
 const TicketPurchaseScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -215,7 +216,6 @@ const TicketPurchaseScreen: React.FC = () => {
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
   const [checkingPayment, setCheckingPayment] = useState(false)
-  const bannerOpacity = useRef(new Animated.Value(0)).current
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [validationVisible, setValidationVisible] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
@@ -322,31 +322,6 @@ const TicketPurchaseScreen: React.FC = () => {
   const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse && deliveryEmailsForPhotoCheck[0] === payerEmailForPhotoCheck
   const showManualPhotoCapture = isBuyingForSelf
   const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
-
-  // Auto-hide banner after 3 seconds
-  useEffect(() => {
-    if (purchaseStatus !== null) {
-      console.log("[BANNER] purchaseStatus changed to:", purchaseStatus, "message:", statusMessage)
-      Animated.timing(bannerOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: false,
-      }).start()
-
-      const timeout = setTimeout(() => {
-        Animated.timing(bannerOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: false,
-        }).start(() => {
-          setPurchaseStatus(null)
-          setStatusMessage("")
-        })
-      }, 3000)
-
-      return () => clearTimeout(timeout)
-    }
-  }, [purchaseStatus])
 
   const pollPaymentStatus = async (depositId: string, startAttempts: number = 0) => {
     let attempts = startAttempts
@@ -1043,18 +1018,13 @@ const handleInstallmentPurchase = async () => {
         </View>
       </View>
 
-      {/* Purchase Status Banner */}
-{purchaseStatus !== null && (
-        <Animated.View 
-          style={[
-            styles.banner, 
-            purchaseStatus === "success" ? styles.bannerSuccess : styles.bannerError,
-            { opacity: bannerOpacity }
-          ]}
-        >
-          <Text style={styles.bannerText}>{statusMessage}</Text>
-        </Animated.View>
-      )}
+      {/* Purchase Status Dialog */}
+      <StatusDialog
+        visible={purchaseStatus !== null}
+        type={purchaseStatus === "success" ? "success" : "error"}
+        message={statusMessage || "Payment failed. Please try again."}
+        onDismiss={() => { setPurchaseStatus(null); setStatusMessage("") }}
+      />
 
       <View style={styles.ticketSection}>
         <Text style={styles.sectionTitle}>Select Ticket Type</Text>
