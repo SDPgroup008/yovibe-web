@@ -495,7 +495,7 @@ const MyTicketsScreen: React.FC = () => {
             <Text style={styles.emptyTitle}>No Tickets Found</Text>
             <Text style={styles.emptyText}>
               {filter === "all" 
-                ? "You haven't purchased any tickets yet."
+                ? "Check your email for tickets Or Login to see your tickets."
                 : `No ${filter} tickets found.`}
             </Text>
           </View>
