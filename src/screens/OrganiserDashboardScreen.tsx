@@ -996,17 +996,18 @@ const OrganiserDashboardScreen: React.FC = () => {
 
         // Save payout record
         try {
-          await SupabaseService.savePayout({
+          const savedPayoutId = await SupabaseService.savePayout({
             organizer_id: user.id,
             ticket_ids: selectedTicketIds,
             amount: totalAmount,
-            status: "Completed",
+            status: "completed",
             processed_date: new Date().toISOString(),
             transaction_reference: payoutResult.payoutId,
             payout_method: "mobile_money",
             recipient_name: user.displayName || user.email || "",
             recipient_phone_number: toInternationalPhone(payoutPhone),
           })
+          if (savedPayoutId) SupabaseService.sendPayoutReceipt(savedPayoutId, user.email || "")
         } catch (err) { console.error("Failed to save payout record:", err) }
 
         // Update organizer wallet

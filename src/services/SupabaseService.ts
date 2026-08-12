@@ -1898,6 +1898,21 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
     }
   }
 
+  // Fire-and-forget helper: emails a payout receipt (PDF) to the initiator with
+  // the company CC'd. Never throws — failures are logged and non-blocking.
+  async sendPayoutReceipt(payoutId: string, email: string): Promise<void> {
+    if (!payoutId) return;
+    try {
+      await fetch(`/.netlify/functions/send-payout-receipt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ payoutId, email }),
+      });
+    } catch (error) {
+      console.error("SupabaseService: sendPayoutReceipt error:", error);
+    }
+  }
+
   async getPayoutsByOrganizer(organizerId: string): Promise<any[]> {
     try {
       const { data, error } = await supabase

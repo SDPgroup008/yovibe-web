@@ -190,12 +190,13 @@ export default function AdminWithdrawalsScreen() {
         }
 
         // Save payout record
+        let savedPayoutId: string | null = null
         try {
-          await SupabaseService.savePayout({
+          savedPayoutId = await SupabaseService.savePayout({
             organizer_id: user?.id || "",
             ticket_ids: allEligibleIds,
             amount: withdrawAmount,
-            status: "Completed",
+            status: "completed",
             processed_date: new Date().toISOString(),
             transaction_reference: payoutResult.payoutId,
             payout_method: "mobile_money",
@@ -203,6 +204,7 @@ export default function AdminWithdrawalsScreen() {
             recipient_phone_number: intPhone,
           })
         } catch (err) { console.error("Failed to save payout:", err) }
+        if (savedPayoutId) SupabaseService.sendPayoutReceipt(savedPayoutId, user?.email || "")
 
         Alert.alert("✅ Withdrawal Submitted!", `UGX ${netAfterFee.toLocaleString()} sent to ${intPhone}`)
         setShowModal(false)
@@ -259,17 +261,18 @@ export default function AdminWithdrawalsScreen() {
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
 
         try {
-          await SupabaseService.savePayout({
+          const savedPayoutId = await SupabaseService.savePayout({
             organizer_id: user?.id || "",
             ticket_ids: [],
             amount: manualAmountNum,
-            status: "Completed",
+            status: "completed",
             processed_date: new Date().toISOString(),
             transaction_reference: payoutResult.payoutId,
             payout_method: "mobile_money",
             recipient_name: user?.displayName || user?.email || "",
             recipient_phone_number: intPhone,
           })
+          if (savedPayoutId) SupabaseService.sendPayoutReceipt(savedPayoutId, user?.email || "")
         } catch (err) { console.error("Failed to save manual payout:", err) }
 
         Alert.alert("✅ Manual Withdrawal Submitted!", `UGX ${manualNetAfterFee.toLocaleString()} sent to ${intPhone}`)
