@@ -118,9 +118,8 @@ exports.handler = async (event) => {
   try {
     const { data: venues, error } = await admin
       .from("venues")
-      .select("id,slug,name,location,latitude,longitude")
+      .select("slug,name,location,latitude,longitude")
       .eq("is_deleted", false)
-      .or("latitude.is.null,latitude.eq.0,longitude.is.null,longitude.eq.0")
       .order("name", { ascending: true });
 
     if (error) throw error;
@@ -142,7 +141,7 @@ exports.handler = async (event) => {
       await delay(THROTTLE_MS);
 
       if (!result) {
-        stats.failed.push(venue.slug || venue.id);
+        stats.failed.push(venue.slug);
         continue;
       }
 
@@ -151,10 +150,10 @@ exports.handler = async (event) => {
         const { error: updateError } = await admin
           .from("venues")
           .update({ latitude: result.lat, longitude: result.lon })
-          .eq(venue.id ? "id" : "slug", venue.id || venue.slug);
+          .eq("slug", venue.slug);
         if (updateError) {
           stats.geocoded--;
-          stats.failed.push(`${venue.slug || venue.id} (save: ${updateError.message})`);
+          stats.failed.push(`${venue.slug} (save: ${updateError.message})`);
         }
       }
     }

@@ -56,33 +56,33 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
     try {
       setLoadingStats(true)
       setError(null)
-      const [totalRes, missingRes] = await Promise.all([
-        supabase
-          .from("venues")
-          .select("id", { count: "exact", head: true })
-          .eq("is_deleted", false),
-        supabase
-          .from("venues")
-          .select("id", { count: "exact", head: true })
-          .eq("is_deleted", false)
-          .or("latitude.is.null,latitude.eq.0,longitude.is.null,longitude.eq.0"),
-      ])
-      if (totalRes.error) throw totalRes.error
-      if (missingRes.error) throw missingRes.error
-
-      const total = totalRes.count ?? 0
-      const missing = missingRes.count ?? 0
-      setStats({ total, missing, withCoords: total - missing })
-
-      const { data, error: venuesError } = await supabase
+      // GET with only columns known to exist on `venues`. Avoids HEAD/count
+      // and PostgREST `.or()` filters, which were returning 400s.
+      const { data, error } = await supabase
         .from("venues")
-        .select("id,name,location")
+        .select("slug,name,location,latitude,longitude")
         .eq("is_deleted", false)
-        .or("latitude.is.null,latitude.eq.0,longitude.is.null,longitude.eq.0")
         .order("name", { ascending: true })
-        .limit(100)
-      if (venuesError) throw venuesError
-      setMissingVenues((data || []) as MissingVenue[])
+        .limit(5000)
+      if (error) throw error
+
+      const list = (data || []) as Array<{
+        slug?: string | null
+        name?: string | null
+        location?: string | null
+        latitude?: number | null
+        longitude?: number | null
+      }>
+      const missing = list.filter(
+        (v) => !v.latitude || !v.longitude || Number(v.latitude) === 0 || Number(v.longitude) === 0,
+      )
+
+      setStats({ total: list.length, missing: missing.length, withCoords: list.length - missing.length })
+      setMissingVenues(
+        missing
+          .map((v) => ({ id: v.slug || "", name: v.name || "Unknown venue", location: v.location || "" }))
+          .slice(0, 100),
+      )
     } catch (e: any) {
       console.error("[AdminGeocode] loadStats failed:", e)
       setError(e?.message || "Failed to load stats")
@@ -311,8 +311,8 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
             </View>
           ) : (
             <>
-              {missingVenues.map((venue) => (
-                <View key={venue.id} style={st.venueRow}>
+              {missingVenues.map((venue, idx) => (
+                <View key={venue.id || idx} style={st.venueRow}>
                   <Ionicons name="location-outline" size={16} color="#FF6B6B" />
                   <View style={{ flex: 1 }}>
                     <Text style={st.venueName}>{venue.name}</Text>
