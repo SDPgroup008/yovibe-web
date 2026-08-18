@@ -47,6 +47,15 @@ function vibeColor(rating: number): string {
   return rating >= 4 ? "#4CAF50" : rating >= 3 ? "#FFC107" : "#F44336"
 }
 
+// Venues are identified by `slug` (the venues table PK). `id` is often
+// undefined, so never compare bare `id` fields.
+const venueKey = (v?: { id?: string; slug?: string } | null) => (v?.slug || v?.id || "")
+
+const sameVenue = (
+  a?: { id?: string; slug?: string } | null,
+  b?: { id?: string; slug?: string } | null,
+) => !!a && !!b && venueKey(a) === venueKey(b)
+
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   console.log('[MapScreen.web] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Map page
@@ -218,7 +227,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
     if (destinationVenueId && venues.length > 0) {
-      const venue = venues.find((v) => v.id === destinationVenueId)
+      const venue = venues.find((v) => v.id === destinationVenueId || v.slug === destinationVenueId)
       if (venue) {
         setSelectedVenue(venue)
       }
@@ -347,7 +356,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const mapVenuesPayload = () => ({
     type: "venues",
     venues: venues.map((v) => ({
-      id: v.id,
+      id: venueKey(v),
       name: v.name,
       lat: v.latitude ?? v.coordinates?.latitude,
       lng: v.longitude ?? v.coordinates?.longitude,
@@ -362,9 +371,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     postToMap(mapVenuesPayload())
   }, [venues])
 
-  // Highlight the selected venue on the map.
+  // Highlight the selected venue on the map (or clear it when null).
   useEffect(() => {
-    if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+    postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
   }, [selectedVenue])
 
   // Listen for messages from the map iframe: marker clicks and readiness.
@@ -372,13 +381,13 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     const handler = (e: MessageEvent) => {
       const d = e.data || {}
       if (d.type === "venue-select") {
-        const venue = venues.find((v) => v.id === d.id)
+        const venue = venues.find((v) => venueKey(v) === d.id)
         if (venue) setSelectedVenue(venue)
       } else if (d.type === "map-ready") {
         // The map just finished booting — push the current venues + selection
         // so markers render even if earlier posts were dropped by the iframe.
         postToMap(mapVenuesPayload())
-        if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+        postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
       }
     }
     window.addEventListener("message", handler)
@@ -387,7 +396,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   const handleMapLoad = () => {
     postToMap(mapVenuesPayload())
-    if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+    postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
   }
 
   // ─── Scroll → load more ────────────────────────────────────────
@@ -521,30 +530,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                       style={[
                         styles.venueCard, 
                         styles.venueCardDesktopFull,
-                        selectedVenue?.id === venue.id && styles.selectedVenueCard
+                        sameVenue(selectedVenue, venue) && styles.selectedVenueCard
                       ]}
                       onPress={() => handleVenueSelect(venue.slug || venue.id)}
                     >
-                      <View style={styles.venueInfo}>
-                        <Text style={styles.venueName}>{venue.name}</Text>
-                        <Text style={styles.venueAddress}>{venue.location}</Text>
-                        <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
-                        <View style={styles.vibeRatingContainer}>
-                          <Text style={styles.vibeRatingLabel}>Vibe: </Text>
-                          <Text style={[styles.vibeRatingValue, { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" }]}>
-                            {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
-                          </Text>
+                      <View style={styles.venueCardRow}>
+                        <View style={styles.venueInfo}>
+                          <Text style={styles.venueName}>{venue.name}</Text>
+                          <Text style={styles.venueAddress}>{venue.location}</Text>
+                          <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
+                          <View style={styles.vibeRatingContainer}>
+                            <Text style={styles.vibeRatingLabel}>Vibe: </Text>
+                            <Text style={[styles.vibeRatingValue, { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" }]}>
+                              {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                      <View style={styles.venueActions}>
-                        <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
-                          <Ionicons name="information-circle" size={16} color="#2196F3" />
-                          <Text style={styles.actionText}>Details</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
-                          <Ionicons name="navigate" size={16} color="#2196F3" />
-                          <Text style={styles.actionText}>Directions</Text>
-                        </TouchableOpacity>
+                        <View style={styles.venueActions}>
+                          <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
+                            <Ionicons name="information-circle" size={16} color="#2196F3" />
+                            <Text style={styles.actionText}>Details</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
+                            <Ionicons name="navigate" size={16} color="#2196F3" />
+                            <Text style={styles.actionText}>Directions</Text>
+                          </TouchableOpacity>
+                        </View>
                       </View>
                     </TouchableOpacity>
                   );
@@ -579,6 +590,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
               {selectedVenue ? (
                 <View style={styles.mapHudCard}>
                   <View pointerEvents="none" style={styles.hudGlow} />
+                  <TouchableOpacity
+                    style={styles.hudCloseBtn}
+                    onPress={() => setSelectedVenue(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close venue details"
+                  >
+                    <Ionicons name="close" size={18} color="#8b8b9e" />
+                  </TouchableOpacity>
                   <Text style={styles.hudEyebrow}>SELECTED VENUE</Text>
                   <Text style={styles.hudTitle}>{selectedVenue.name}</Text>
                   <Text style={styles.hudAddress}>{selectedVenue.location}</Text>
@@ -641,7 +660,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                       key={venueId}
                       style={[
                         styles.venueCard,
-                        selectedVenue?.id === venue.id && styles.selectedVenueCard,
+                        sameVenue(selectedVenue, venue) && styles.selectedVenueCard,
                       ]}
                       onPress={() => handleVenueSelect(venue.slug || venue.id)}
                     >
@@ -929,18 +948,32 @@ const styles = StyleSheet.create({
     shadowRadius: 90,
     elevation: 0,
   },
+  hudCloseBtn: {
+    position: "absolute",
+    top: 10,
+    right: 10,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    zIndex: 30,
+  },
   hudEyebrow: {
     fontSize: 10,
     letterSpacing: 1.5,
     color: "#22d3ee",
     fontWeight: "bold",
     marginBottom: 6,
+    paddingRight: 32,
   },
   hudTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#FFFFFF",
     marginBottom: 4,
+    paddingRight: 32,
   },
   hudAddress: {
     fontSize: 13,
@@ -1018,9 +1051,6 @@ const styles = StyleSheet.create({
   },
   venueCardDesktopFull: {
     width: "100%",
-    marginBottom: 0,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.05)",
   },
   listFooter: {
     flexDirection: "row",

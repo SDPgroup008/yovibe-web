@@ -136,6 +136,14 @@
   }
 
   function selectVenue(id) {
+    // Null/empty id clears the selection (e.g. the HUD close button).
+    if (!id) {
+      Object.keys(markers).forEach(function (key) {
+        markers[key].setIcon(pinIcon(false));
+      });
+      if (map) map.closePopup();
+      return;
+    }
     var m = markers[id];
     if (!m || !map) return;
     // Update visual selection state.
