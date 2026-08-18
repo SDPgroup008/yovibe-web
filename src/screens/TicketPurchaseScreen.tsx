@@ -22,8 +22,10 @@ import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
 import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
+import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 
 const TicketPurchaseScreen: React.FC = () => {
+  const { isLargeScreen } = useDeviceType()
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
 
@@ -308,10 +310,10 @@ const TicketPurchaseScreen: React.FC = () => {
   // visible both to the JSX render below AND to handlePurchase/createTicketAndNavigate.
   // Previously this was declared separately inside handlePurchase AND inside
   // createTicketAndNavigate (in the latter case, even referencing deliveryEmails/
-  // payerEmail before those were defined) — neither of those inner copies was
+  // payerEmail before those were defined) ï¿½ neither of those inner copies was
   // visible to the JSX, which is what caused:
   //   "ReferenceError: showManualPhotoCapture is not defined"
-  // Do not redeclare these inside handlePurchase or createTicketAndNavigate —
+  // Do not redeclare these inside handlePurchase or createTicketAndNavigate ï¿½
   // both functions now just reference these component-scope values directly.
   // ===========================================================================
   const payerEmailForPhotoCheck = buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || user?.email || ""
@@ -446,7 +448,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const showManualPhotoCapture = isBuyingForSelf
       const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
 
-      setProgressStep(1) // Saving ticket…
+      setProgressStep(1) // Saving ticketï¿½
       const tickets = await TicketService.purchaseTicketsForTable(
         event!,
         buyerNamesList,
@@ -488,7 +490,7 @@ const TicketPurchaseScreen: React.FC = () => {
 
       const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
       
-      setProgressStep(2) // Generating ticket email…
+      setProgressStep(2) // Generating ticket emailï¿½
       for (const ticket of tickets) {
         try {
           const payerEmailMatchesDelivery = ticket.deliveryEmail === payerEmail
@@ -500,7 +502,7 @@ const TicketPurchaseScreen: React.FC = () => {
           // Find the ticket design from the entry fee
           const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
 
-          setProgressStep(3) // Sending email to {delivery email}…
+          setProgressStep(3) // Sending email to {delivery email}ï¿½
           await fetch(`/.netlify/functions/send-ticket-email`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -525,7 +527,7 @@ const TicketPurchaseScreen: React.FC = () => {
           console.log(`Email sent for ticket ${ticket.id}`)
         } catch (err) {
           console.error(`Failed to send email for ticket ${ticket.id}:`, err)
-          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy — you can always find it under My Tickets.")
+          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy ï¿½ you can always find it under My Tickets.")
         }
       }
 
@@ -567,7 +569,7 @@ const TicketPurchaseScreen: React.FC = () => {
       )
       
       setPurchaseStatus("success")
-      setStatusMessage("Payment received — finalizing ticket...")
+      setStatusMessage("Payment received ï¿½ finalizing ticket...")
     } finally {
       setLoading(false)
     }
@@ -595,7 +597,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const { subtotal, lateFee, total, isLatePurchase } = pricing
   const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
 
-  // Installment preview — recalculated whenever plan type or total changes
+  // Installment preview ï¿½ recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
     if (!useInstallments || !event?.date) return []
     return InstallmentService.previewPlan(total, installmentPlanType, event.date)
@@ -752,7 +754,7 @@ const handleInstallmentPurchase = async () => {
         const result = await PawaPayService.checkDepositStatus(depositId)
         status = (result.status || "").toUpperCase()
       } catch {
-        // network hiccup — keep polling
+        // network hiccup ï¿½ keep polling
       }
     }
 
@@ -1006,7 +1008,7 @@ const handleInstallmentPurchase = async () => {
         {event.posterImageUrl ? (
           <Image
             source={{ uri: event.posterImageUrl }}
-            style={styles.eventPosterBg}
+            style={styles.eventPosterBg as any}
             resizeMode="cover"
           />
         ) : null}
@@ -1026,7 +1028,8 @@ const handleInstallmentPurchase = async () => {
         onDismiss={() => { setPurchaseStatus(null); setStatusMessage("") }}
       />
 
-      <View style={styles.ticketSection}>
+      <View style={isLargeScreen ? styles.desktopTicketLayout : undefined}>
+      <View style={[styles.ticketSection, isLargeScreen && styles.desktopTicketLeft]}>
         <Text style={styles.sectionTitle}>Select Ticket Type</Text>
 
         {/* Ticket Type Selector */}
@@ -1175,7 +1178,7 @@ const handleInstallmentPurchase = async () => {
                     }}
                   >
                     <Text style={[styles.seatSelectBtnText, perPersonSeats[index] != null && styles.seatSelectBtnTextActive]}>
-                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat —"}
+                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat ï¿½"}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -1419,7 +1422,7 @@ const handleInstallmentPurchase = async () => {
             </View>
 
             {installmentPreview.map((inst, i) => {
-              const label = i === 0 ? "Pay now" : `Installment ${i + 1} — due ${inst.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+              const label = i === 0 ? "Pay now" : `Installment ${i + 1} ï¿½ due ${inst.dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
               return (
                 <View key={i} style={styles.installmentRow}>
                   <View style={{ flex: 1 }}>
@@ -1443,6 +1446,7 @@ const handleInstallmentPurchase = async () => {
         )}
       </View>
 
+      <View style={isLargeScreen ? styles.desktopTicketRight : undefined}>
       <View style={styles.summarySection}>
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
@@ -1513,6 +1517,8 @@ const handleInstallmentPurchase = async () => {
           </>
         )}
       </TouchableOpacity>
+      </View>{/* desktopTicketRight */}
+      </View>{/* desktopTicketLayout */}
 
       {/* Ticket Type Selection Modal */}
       <Modal
@@ -2577,6 +2583,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "bold",
   },
+  desktopTicketLayout: {
+    flexDirection: "row",
+    gap: 24,
+    alignItems: "flex-start",
+    paddingHorizontal: 24,
+    paddingVertical: 8,
+  },
+  desktopTicketLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
+  desktopTicketRight: {
+    width: 360,
+    backgroundColor: "rgba(18, 18, 26, 0.7)",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    padding: 16,
+    alignSelf: "flex-start",
+  },
 })
 
 const seatMapStyles = StyleSheet.create({
@@ -2598,3 +2624,4 @@ const seatMapStyles = StyleSheet.create({
 })
 
 export default TicketPurchaseScreen
+

@@ -32,6 +32,7 @@ import PawaPayService from "../services/PawaPayService"
 import StaffTokenService from "../services/StaffTokenService"
 import RefundService from "../services/RefundService"
 import { useAuth } from "../contexts/AuthContext"
+import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import type { Event } from "../models/Event"
 import type {
   VenuesStackParamList,
@@ -216,6 +217,7 @@ type OrganiserDashboardScreenProps = NativeStackScreenProps<
 >
 
 const OrganiserDashboardScreen: React.FC = () => {
+  const { isLargeScreen, isTablet } = useDeviceType()
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
   const pathParts = currentPath.split('/').filter(Boolean)
@@ -1348,13 +1350,387 @@ const OrganiserDashboardScreen: React.FC = () => {
     </Modal>
   )
 
+  const renderOrganizerLeftColumn = () => (
+    <>
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>🎫 Ticket Sales</Text>
+        <View style={styles.statsRow}>
+          <View style={styles.statCard}><Ionicons name="time" size={24} color={COLORS.primary} /><Text style={styles.statValue}>{ticketSalesEarly}</Text><Text style={styles.statLabel}>Early</Text></View>
+          <View style={styles.statCard}><Ionicons name="alarm" size={24} color="#FF6B6B" /><Text style={styles.statValue}>{ticketSalesLate}</Text><Text style={styles.statLabel}>Late</Text></View>
+        </View>
+      </View>
+
+      {event && (
+        <View style={styles.dashboardSection}>
+          <TouchableOpacity onPress={() => setEventStatusExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: eventStatusExpanded ? 8 : 0 }}>
+            <Text style={styles.dashboardSectionTitle}>📋 Event Status</Text>
+            <Ionicons name={eventStatusExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+          </TouchableOpacity>
+          {eventStatusExpanded && <View style={styles.dashboardCard}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
+              <Text style={{ color: "#888", fontSize: 13 }}>Current:</Text>
+              <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: (event.eventStatus === "cancelled" ? "rgba(255,107,107,0.15)" : event.eventStatus === "postponed" ? "rgba(245,158,11,0.15)" : "rgba(76,175,80,0.15)") }}>
+                <Text style={{ fontSize: 12, fontWeight: "700", color: event.eventStatus === "cancelled" ? "#FF6B6B" : event.eventStatus === "postponed" ? "#F59E0B" : "#4CAF50" }}>
+                  {(event.eventStatus || "scheduled").toUpperCase()}
+                </Text>
+              </View>
+              {eventRefunds.length > 0 && (
+                <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(245,158,11,0.12)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
+                  <Ionicons name="receipt-outline" size={14} color="#F59E0B" />
+                  <Text style={{ color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>{eventRefunds.filter(r => r.status === "pending_admin_review").length} refund{(eventRefunds.filter(r => r.status === "pending_admin_review").length) !== 1 ? "s" : ""}</Text>
+                </View>
+              )}
+            </View>
+            {event.eventStatus !== "cancelled" && event.eventStatus !== "postponed" && (
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#DC2626", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("cancelled"); setPendingEventDate("") }}>
+                  <Ionicons name="close-circle-outline" size={18} color="#FFF" />
+                  <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Cancel Event</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#F59E0B", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("postponed"); setPendingEventDate("") }}>
+                  <Ionicons name="calendar-outline" size={18} color="#FFF" />
+                  <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Postpone Event</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>}
+        </View>
+      )}
+
+      {event && (
+        <View style={styles.dashboardSection}>
+          <TouchableOpacity onPress={() => setLateFeeExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: lateFeeExpanded ? 8 : 0 }}>
+            <Text style={styles.dashboardSectionTitle}>⚡ Late Fee</Text>
+            <Ionicons name={lateFeeExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
+          </TouchableOpacity>
+          {lateFeeExpanded && <View style={styles.dashboardCard}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+              <TextInput
+                style={[styles.input, { width: 80, marginBottom: 0, textAlign: "center", fontSize: 16, fontWeight: "700" }]}
+                value={String(event.lateFeePercent ?? 0)}
+                onChangeText={(t) => {
+                  const val = Math.max(0, Math.min(100, Number(t) || 0))
+                  setEvent(prev => prev ? { ...prev, lateFeePercent: val } : prev)
+                }}
+                keyboardType="numeric"
+                placeholderTextColor="#555"
+              />
+              <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700" }}>%</Text>
+              <Text style={{ color: "#888", fontSize: 12, flex: 1 }}>Applied to purchases made on the event date from 7am onwards</Text>
+              <TouchableOpacity
+                style={{ backgroundColor: COLORS.primary, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
+                onPress={async () => {
+                  try {
+                    await SupabaseService.updateEvent(event.slug || event.id, { lateFeePercent: event.lateFeePercent ?? 0 } as any)
+                    Alert.alert("Saved", `Late fee set to ${event.lateFeePercent ?? 0}%`)
+                  } catch (e: any) {
+                    Alert.alert("Error", e.message)
+                  }
+                }}
+              >
+                <Text style={{ color: "#000", fontWeight: "700", fontSize: 12 }}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>}
+        </View>
+      )}
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>📊 Sales by Type</Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+        <View style={[styles.salesTable, { minWidth: 520 }]}>
+          <View style={styles.salesTableHeader}>
+            <Text style={[styles.salesTableHeaderText, { width: 90 }]}>Type</Text>
+            <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Early</Text>
+            <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Late</Text>
+            <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Scanned</Text>
+            <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Cap</Text>
+            <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Left</Text>
+          </View>
+          {Object.keys(ticketSalesByType).length > 0 ? Object.entries(ticketSalesByType).map(([typeName, s]) => {
+            const feeInfo = getEntryFeeInfo(typeName) as any
+            const isTableTicket = feeInfo?.isTable === true
+            const tableSize = feeInfo?.tableSize || 1
+            const maxTickets: number | undefined = feeInfo?.maxTickets
+            const totalSold = s.early.count + s.late.count
+            const soldTables = isTableTicket ? Math.floor(totalSold / tableSize) : totalSold
+            const remaining = maxTickets ? Math.max(0, maxTickets - soldTables) : null
+            const pct = maxTickets && maxTickets > 0 ? soldTables / maxTickets : null
+            const remainColor = pct === null ? "#FFF" : pct >= 1 ? "#FF4444" : pct >= 0.5 ? "#F59E0B" : "#4CAF50"
+            const formatCount = (count: number) => {
+              if (isTableTicket && tableSize > 0) {
+                const tables = Math.floor(count / tableSize)
+                const rem = count % tableSize
+                let label = `${count}`
+                if (tables > 0) label += ` (${tables}t`
+                if (rem > 0) label += `+${rem}`
+                if (tables > 0) label += `)`
+                return label
+              }
+              return `${count}`
+            }
+            return (
+            <View key={typeName} style={styles.salesTableRow}>
+              <Text style={[styles.salesTableCellText, { width: 90 }]} numberOfLines={1}>{typeName}</Text>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{maxTickets ?? '--'}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}>
+                <Text style={[styles.salesTableCountText, { color: remainColor }]}>
+                  {remaining !== null ? (remaining === 0 ? 'SOLD OUT' : remaining) : '--'}
+                </Text>
+              </View>
+            </View>
+            )
+          }) : <Text style={styles.noDataText}>No sales yet</Text>}
+          {Object.keys(ticketSalesByType).length > 0 && (
+            <View style={styles.salesTableSummary}>
+              <Text style={[styles.salesTableSummaryText, { width: 90 }]}>TOTAL</Text>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.early.count, 0)}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.late.count, 0)}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + (t.scanned?.count || 0), 0)}</Text></View>
+              <View style={{ width: 70 }} />
+              <View style={{ width: 70 }} />
+            </View>
+          )}
+        </View>
+        </ScrollView>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>🔄 Grant Re-entry</Text>
+        <View style={styles.dashboardCard}>
+          <Text style={styles.dashboardLabel}>Search by ticket ref or attendee name</Text>
+          <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, marginBottom: 0 }]}
+              placeholder="e.g. YV-ABC123 or John"
+              placeholderTextColor="#555"
+              value={reentryQuery}
+              onChangeText={setReentryQuery}
+              onSubmitEditing={handleReentrySearch}
+              returnKeyType="search"
+            />
+            <TouchableOpacity
+              style={{ backgroundColor: COLORS.primary, paddingHorizontal: 16, borderRadius: 8, justifyContent: "center" }}
+              onPress={handleReentrySearch}
+              disabled={reentrySearching}
+            >
+              {reentrySearching
+                ? <ActivityIndicator color="#000" size="small" />
+                : <Ionicons name="search" size={20} color="#000" />}
+            </TouchableOpacity>
+          </View>
+
+          {reentryTicket && (
+            <View style={{ backgroundColor: "#111", borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? "#F59E0B" : "#333" }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Attendee</Text>
+                <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>{reentryTicket.buyerName}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Ticket type</Text>
+                <Text style={{ color: "#FFF", fontSize: 13 }}>{reentryTicket.entryFeeType}</Text>
+              </View>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
+                <Text style={{ color: "#888", fontSize: 13 }}>Status</Text>
+                <Text style={{
+                  fontSize: 13, fontWeight: "700",
+                  color: reentryTicket.status === "used" ? "#F59E0B" : reentryTicket.status === "active" ? "#4CAF50" : "#FF6B6B"
+                }}>
+                  {reentryTicket.status.toUpperCase()}
+                </Text>
+              </View>
+
+              {reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? (
+                <View style={{ backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 8, padding: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" }}>
+                  <Text style={{ color: "#F59E0B", fontSize: 13, textAlign: "center" }}>
+                    ✓ Re-entry pass active — attendee can scan back in
+                  </Text>
+                </View>
+              ) : reentryTicket.status !== "used" ? (
+                <View style={{ backgroundColor: "rgba(255,107,107,0.1)", borderRadius: 8, padding: 10 }}>
+                  <Text style={{ color: "#FF6B6B", fontSize: 13, textAlign: "center" }}>
+                    Ticket must be scanned (used) before granting re-entry
+                  </Text>
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={{ backgroundColor: "#F59E0B", paddingVertical: 12, borderRadius: 8, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
+                  onPress={handleGrantReentry}
+                  disabled={reentryGranting}
+                >
+                  {reentryGranting
+                    ? <ActivityIndicator color="#000" size="small" />
+                    : <Ionicons name="refresh-circle" size={20} color="#000" />}
+                  <Text style={{ color: "#000", fontWeight: "bold", fontSize: 15 }}>Grant Re-entry Pass</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {reentryMessage && (
+            <View style={{ backgroundColor: reentryMessage.ok ? "rgba(76,175,80,0.1)" : "rgba(255,107,107,0.1)", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: reentryMessage.ok ? "rgba(76,175,80,0.3)" : "rgba(255,107,107,0.3)" }}>
+              <Text style={{ color: reentryMessage.ok ? "#4CAF50" : "#FF6B6B", fontSize: 13, textAlign: "center" }}>
+                {reentryMessage.text}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>🔍 Scan Logs</Text>
+        <View style={styles.dashboardCard}>
+          {scanLogs.length > 0 ? scanLogs.map((log, i) => (
+            <View key={i} style={styles.scanLogItem}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                  <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
+                  {log.status === "Invalid" && log.reason ? <Text style={styles.scanLogInvalidReason}>{log.reason}</Text> : null}
+                </View>
+                <Text style={styles.scanLogName}>{log.name}</Text>
+                <Text style={styles.scanLogDetail}>{log.feeType}{log.tableNumber !== "—" ? ` · Table ${log.tableNumber}` : log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
+              </View>
+              <View style={{ alignItems: "flex-end" }}>
+                <Text style={styles.scanLogTime}>{log.time}</Text>
+                <Text style={[styles.scanLogStatus, log.status === 'Valid' ? styles.scanLogValid : styles.scanLogInvalid]}>{log.status}</Text>
+              </View>
+            </View>
+          )) : <Text style={styles.noDataText}>No scan logs</Text>}
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>📜 Payout History</Text>
+        <View style={styles.dashboardCard}>
+          {payoutHistory.length > 0 ? payoutHistory.map((p, i) => (
+            <View key={i} style={styles.payoutItem}>
+              <Text style={styles.payoutDate}>{p.date}</Text>
+              <Text style={styles.payoutAmount}>{p.amount}</Text>
+              <Text style={[styles.payoutStatus, p.status === 'Completed' ? styles.payoutCompleted : styles.payoutPending]}>{p.status}</Text>
+            </View>
+          )) : <Text style={styles.noDataText}>No payouts yet</Text>}
+        </View>
+      </View>
+    </>
+  )
+
+  const renderOrganizerRightColumn = () => (
+    <>
+      <View style={[styles.dashboardSection, { marginTop: 0 }]}>
+        <Text style={styles.dashboardSectionTitle}>💸 Withdraw</Text>
+        <View style={styles.eligibleCard}>
+          <View style={styles.eligibleRow}>
+            <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
+            <View>
+              <Text style={styles.eligibleLabel}>Eligible for Payout</Text>
+              <Text style={styles.eligibleAmount}>UGX {eligiblePayoutTotal.toLocaleString()}</Text>
+            </View>
+          </View>
+          <Text style={styles.eligibleDesc}>Select tickets by type to cash out</Text>
+          <TouchableOpacity style={[styles.withdrawBtn, eligiblePayoutTotal === 0 && { opacity: 0.4 }]} onPress={() => setShowWithdrawModal(true)} disabled={eligiblePayoutTotal === 0}>
+            <Ionicons name="cash-outline" size={20} color="#FFF" />
+            <Text style={styles.withdrawBtnText}>Withdraw Earnings</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>📷 Ticket Scanner</Text>
+        <TouchableOpacity style={styles.scannerButton} onPress={handleScanTicket} disabled={scanning || validating}>
+          <Ionicons name="qr-code-outline" size={48} color={COLORS.primary} />
+          <Text style={styles.scannerButtonTitle}>Scan Tickets</Text>
+          <Text style={styles.scannerButtonText}>Tap to scan and validate tickets at event entrances</Text>
+          <View style={styles.scannerButtonArrow}>
+            <Ionicons name="chevron-forward" size={24} color={COLORS.primary} />
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <View style={styles.dashboardRow}>
+          <Text style={styles.dashboardSectionTitle}>🔐 Staff Scanner Links</Text>
+          <TouchableOpacity onPress={() => setShowTokenModal(true)}>
+            <Ionicons name="add-circle-outline" size={28} color={COLORS.primary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.dashboardCard}>
+          {activeTokens.length > 0 ? (
+            activeTokens.map((token) => (
+              <View key={token.id} style={styles.tokenItem}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.tokenLabel}>{token.label || "Staff"}</Text>
+                  <Text style={styles.tokenExpiry}>Expires: {formatTimeRemaining(token.expires_at)}</Text>
+                </View>
+                <TouchableOpacity onPress={() => copyToClipboard(`https://yovibe.net/scan/${token.token}`)}>
+                  <Ionicons name="link-outline" size={20} color={COLORS.primary} />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => handleRevokeToken(token.id)}>
+                  <Ionicons name="close-circle" size={20} color="#FF6B6B" />
+                </TouchableOpacity>
+              </View>
+            ))
+          ) : (
+            <Text style={styles.noDataText}>No staff links generated yet</Text>
+          )}
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>⚙️ Payment Details</Text>
+        <View style={styles.dashboardCard}>
+          {isEditingPayment ? (
+            <View>
+              <Text style={styles.dashboardLabel}>Mobile Money</Text>
+              <View style={styles.inputContainer}>
+                <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'mtn' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'mtn' })}><Text style={styles.providerButtonText}>MTN</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'airtel' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'airtel' })}><Text style={styles.providerButtonText}>Airtel</Text></TouchableOpacity>
+              </View>
+              <TextInput style={[styles.input, paymentFormErrors.mobileNumber && styles.inputError]} placeholder="Phone Number" value={editForm.mobileNumber} onChangeText={(t) => { setEditForm({ ...editForm, mobileNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileNumber; return n }) }} placeholderTextColor="#888" keyboardType="phone-pad" />
+              {paymentFormErrors.mobileNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileNumber}</Text>}
+              <TextInput style={[styles.input, paymentFormErrors.mobileName && styles.inputError]} placeholder="Account Name" value={editForm.mobileName} onChangeText={(t) => { setEditForm({ ...editForm, mobileName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileName; return n }) }} placeholderTextColor="#888" />
+              {paymentFormErrors.mobileName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileName}</Text>}
+              <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
+              <TextInput style={[styles.input, paymentFormErrors.bankName && styles.inputError]} placeholder="Bank Name" value={editForm.bankName} onChangeText={(t) => { setEditForm({ ...editForm, bankName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankName; return n }) }} placeholderTextColor="#888" />
+              {paymentFormErrors.bankName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankName}</Text>}
+              <TextInput style={[styles.input, paymentFormErrors.bankNumber && styles.inputError]} placeholder="Account Number" value={editForm.bankNumber} onChangeText={(t) => { setEditForm({ ...editForm, bankNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNumber; return n }) }} placeholderTextColor="#888" keyboardType="numeric" />
+              {paymentFormErrors.bankNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNumber}</Text>}
+              <TextInput style={[styles.input, paymentFormErrors.bankNameAccount && styles.inputError]} placeholder="Account Name" value={editForm.bankNameAccount} onChangeText={(t) => { setEditForm({ ...editForm, bankNameAccount: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNameAccount; return n }) }} placeholderTextColor="#888" />
+              {paymentFormErrors.bankNameAccount && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNameAccount}</Text>}
+              <View style={styles.buttonRow}>
+                <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: '#666' }]} onPress={() => setIsEditingPayment(false)}><Text style={styles.actionButtonSmallText}>Cancel</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: COLORS.primary }]} onPress={handleSavePaymentDetails}><Text style={styles.actionButtonSmallText}>Save</Text></TouchableOpacity>
+              </View>
+            </View>
+          ) : (
+            <View>
+              {event?.paymentMethods ? (
+                <View>
+                  {event.paymentMethods.mobileMoney?.map((mm, i) => (
+                    <View key={i} style={styles.paymentDetailRow}><Text style={styles.paymentDetailText}>{mm.provider.toUpperCase()} - {mm.number}</Text><Text style={styles.paymentDetailSubtext}>{mm.name}</Text></View>
+                  ))}
+                  {event.paymentMethods.bankAccounts?.map((b, i) => (
+                    <View key={i} style={styles.paymentDetailRow}><Text style={styles.paymentDetailText}>{b.bankName} - {b.accountNumber}</Text><Text style={styles.paymentDetailSubtext}>{b.accountName}</Text></View>
+                  ))}
+                </View>
+              ) : <Text style={styles.noDataText}>No payment details</Text>}
+              <TouchableOpacity style={styles.editButton} onPress={handleEditPayment}><Text style={styles.editButtonText}>Edit</Text></TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </View>
+    </>
+  )
+
   return (
-    <View style={styles.dashboardContainer}>
+    <View style={[styles.dashboardContainer, { backgroundColor: COLORS.background }]}>
       <View style={styles.dashboardHeader}>
         <Text style={styles.dashboardTitle}>Organiser Dashboard</Text>
       </View>
       <ScrollView style={styles.dashboardContent}>
-        <View style={styles.dashboardTabs}>
+        <View style={[styles.dashboardTabs, isLargeScreen && { maxWidth: 600, alignSelf: "center", width: "100%" }]}>
           <TouchableOpacity style={[styles.dashboardTab, activeDashboardTab === 'organizer' && styles.dashboardTabActive]} onPress={() => setActiveDashboardTab('organizer')}>
             <Text style={[styles.dashboardTabText, activeDashboardTab === 'organizer' && styles.dashboardTabTextActive]}>Organizer</Text>
           </TouchableOpacity>
@@ -1366,383 +1742,21 @@ const OrganiserDashboardScreen: React.FC = () => {
         </View>
 
         {activeDashboardTab === 'organizer' ? (
-          <>
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>🎫 Ticket Sales</Text>
-              <View style={styles.statsRow}>
-                <View style={styles.statCard}><Ionicons name="time" size={24} color="#00D4FF" /><Text style={styles.statValue}>{ticketSalesEarly}</Text><Text style={styles.statLabel}>Early</Text></View>
-                <View style={styles.statCard}><Ionicons name="alarm" size={24} color="#FF6B6B" /><Text style={styles.statValue}>{ticketSalesLate}</Text><Text style={styles.statLabel}>Late</Text></View>
+          isLargeScreen ? (
+            <View style={styles.desktopDashboardLayout}>
+              <View style={styles.desktopLeftColumn}>
+                {renderOrganizerLeftColumn()}
+              </View>
+              <View style={styles.desktopRightColumn}>
+                {renderOrganizerRightColumn()}
               </View>
             </View>
-
-            {/* Event Status — Organizer can cancel or postpone */}
-            {event && (
-              <View style={styles.dashboardSection}>
-                <TouchableOpacity onPress={() => setEventStatusExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: eventStatusExpanded ? 8 : 0 }}>
-                  <Text style={styles.dashboardSectionTitle}>📋 Event Status</Text>
-                  <Ionicons name={eventStatusExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
-                </TouchableOpacity>
-                {eventStatusExpanded && <View style={styles.dashboardCard}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                    <Text style={{ color: "#888", fontSize: 13 }}>Current:</Text>
-                    <View style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, backgroundColor: (event.eventStatus === "cancelled" ? "rgba(255,107,107,0.15)" : event.eventStatus === "postponed" ? "rgba(245,158,11,0.15)" : "rgba(76,175,80,0.15)") }}>
-                      <Text style={{ fontSize: 12, fontWeight: "700", color: event.eventStatus === "cancelled" ? "#FF6B6B" : event.eventStatus === "postponed" ? "#F59E0B" : "#4CAF50" }}>
-                        {(event.eventStatus || "scheduled").toUpperCase()}
-                      </Text>
-                    </View>
-                    {eventRefunds.length > 0 && (
-                      <View style={{ marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4, backgroundColor: "rgba(245,158,11,0.12)", paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 }}>
-                        <Ionicons name="receipt-outline" size={14} color="#F59E0B" />
-                        <Text style={{ color: "#F59E0B", fontSize: 12, fontWeight: "700" }}>{eventRefunds.filter(r => r.status === "pending_admin_review").length} refund{(eventRefunds.filter(r => r.status === "pending_admin_review").length) !== 1 ? "s" : ""}</Text>
-                      </View>
-                    )}
-                  </View>
-                  {event.eventStatus !== "cancelled" && event.eventStatus !== "postponed" && (
-                    <View style={{ flexDirection: "row", gap: 8 }}>
-                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#DC2626", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("cancelled"); setPendingEventDate("") }}>
-                        <Ionicons name="close-circle-outline" size={18} color="#FFF" />
-                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Cancel Event</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center", justifyContent: "center", backgroundColor: "#F59E0B", paddingVertical: 10, borderRadius: 8, gap: 4 }} onPress={() => { setShowEventStatusModal(true); setPendingEventAction("postponed"); setPendingEventDate("") }}>
-                        <Ionicons name="calendar-outline" size={18} color="#FFF" />
-                        <Text style={{ color: "#FFF", fontWeight: "700", fontSize: 13 }}>Postpone Event</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>}
-              </View>
-            )}
-
-            {/* Late Fee Setting */}
-            {event && (
-              <View style={styles.dashboardSection}>
-                <TouchableOpacity onPress={() => setLateFeeExpanded(prev => !prev)} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: lateFeeExpanded ? 8 : 0 }}>
-                  <Text style={styles.dashboardSectionTitle}>⚡ Late Fee</Text>
-                  <Ionicons name={lateFeeExpanded ? "chevron-up" : "chevron-down"} size={18} color="#888" />
-                </TouchableOpacity>
-                {lateFeeExpanded && <View style={styles.dashboardCard}>
-                  <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-                    <TextInput
-                      style={[styles.input, { width: 80, marginBottom: 0, textAlign: "center", fontSize: 16, fontWeight: "700" }]}
-                      value={String(event.lateFeePercent ?? 0)}
-                      onChangeText={(t) => {
-                        const val = Math.max(0, Math.min(100, Number(t) || 0))
-                        setEvent(prev => prev ? { ...prev, lateFeePercent: val } : prev)
-                      }}
-                      keyboardType="numeric"
-                      placeholderTextColor="#555"
-                    />
-                    <Text style={{ color: "#FFF", fontSize: 18, fontWeight: "700" }}>%</Text>
-                    <Text style={{ color: "#888", fontSize: 12, flex: 1 }}>Applied to purchases made on the event date from 7am onwards</Text>
-                    <TouchableOpacity
-                      style={{ backgroundColor: "#00D4FF", paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }}
-                      onPress={async () => {
-                        console.log("[LateFee] 🚀 Save clicked")
-                        console.log("[LateFee]   Event ID:", event.slug || event.id)
-                        console.log("[LateFee]   Value to save:", event.lateFeePercent ?? 0)
-                        console.log("[LateFee]   User ID:", user?.uid)
-                        console.log("[LateFee]   User type:", user?.userType)
-                        try {
-                          await SupabaseService.updateEvent(event.slug || event.id, { lateFeePercent: event.lateFeePercent ?? 0 } as any)
-                          console.log("[LateFee] ✅ Saved successfully to Supabase")
-                          Alert.alert("Saved", `Late fee set to ${event.lateFeePercent ?? 0}%`)
-                        } catch (e: any) {
-                          console.log("[LateFee] ❌ ERROR:", e.message)
-                          Alert.alert("Error", e.message)
-                        }
-                      }}
-                    >
-                      <Text style={{ color: "#000", fontWeight: "700", fontSize: 12 }}>Save</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>}
-              </View>
-            )}
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>📊 Sales by Type</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={[styles.salesTable, { minWidth: 520 }]}>
-                <View style={styles.salesTableHeader}>
-                  <Text style={[styles.salesTableHeaderText, { width: 90 }]}>Type</Text>
-                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Early</Text>
-                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Late</Text>
-                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Scanned</Text>
-                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Cap</Text>
-                  <Text style={[styles.salesTableHeaderText, { width: 70, textAlign: "center" }]}>Left</Text>
-                </View>
-                {Object.keys(ticketSalesByType).length > 0 ? Object.entries(ticketSalesByType).map(([typeName, s]) => {
-                  const feeInfo = getEntryFeeInfo(typeName) as any
-                  const isTableTicket = feeInfo?.isTable === true
-                  const tableSize = feeInfo?.tableSize || 1
-                  const maxTickets: number | undefined = feeInfo?.maxTickets
-                  const totalSold = s.early.count + s.late.count
-                  const soldTables = isTableTicket ? Math.floor(totalSold / tableSize) : totalSold
-                  const remaining = maxTickets ? Math.max(0, maxTickets - soldTables) : null
-                  const pct = maxTickets && maxTickets > 0 ? soldTables / maxTickets : null
-                  const remainColor = pct === null ? "#FFF" : pct >= 1 ? "#FF4444" : pct >= 0.5 ? "#F59E0B" : "#4CAF50"
-                  const formatCount = (count: number) => {
-                    if (isTableTicket && tableSize > 0) {
-                      const tables = Math.floor(count / tableSize)
-                      const rem = count % tableSize
-                      let label = `${count}`
-                      if (tables > 0) label += ` (${tables}t`
-                      if (rem > 0) label += `+${rem}`
-                      if (tables > 0) label += `)`
-                      return label
-                    }
-                    return `${count}`
-                  }
-                  return (
-                  <View key={typeName} style={styles.salesTableRow}>
-                    <Text style={[styles.salesTableCellText, { width: 90 }]} numberOfLines={1}>{typeName}</Text>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{maxTickets ?? '--'}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}>
-                      <Text style={[styles.salesTableCountText, { color: remainColor }]}>
-                        {remaining !== null ? (remaining === 0 ? 'SOLD OUT' : remaining) : '--'}
-                      </Text>
-                    </View>
-                  </View>
-                  )
-                }) : <Text style={styles.noDataText}>No sales yet</Text>}
-                {Object.keys(ticketSalesByType).length > 0 && (
-                  <View style={styles.salesTableSummary}>
-                    <Text style={[styles.salesTableSummaryText, { width: 90 }]}>TOTAL</Text>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.early.count, 0)}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + t.late.count, 0)}</Text></View>
-                    <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableSummaryCount}>{Object.values(ticketSalesByType).reduce((s, t) => s + (t.scanned?.count || 0), 0)}</Text></View>
-                    <View style={{ width: 70 }} />
-                    <View style={{ width: 70 }} />
-                  </View>
-                )}
-              </View>
-              </ScrollView>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>📷 Ticket Scanner</Text>
-              <TouchableOpacity style={styles.scannerButton} onPress={handleScanTicket} disabled={scanning || validating}>
-                <Ionicons name="qr-code-outline" size={48} color="#00D4FF" />
-                <Text style={styles.scannerButtonTitle}>Scan Tickets</Text>
-                <Text style={styles.scannerButtonText}>Tap to scan and validate tickets at event entrances</Text>
-                <View style={styles.scannerButtonArrow}>
-                  <Ionicons name="chevron-forward" size={24} color="#00D4FF" />
-                </View>
-              </TouchableOpacity>
-            </View>
-
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>🔄 Grant Re-entry</Text>
-              <View style={styles.dashboardCard}>
-                <Text style={styles.dashboardLabel}>Search by ticket ref or attendee name</Text>
-                <View style={{ flexDirection: "row", gap: 8, marginBottom: 12 }}>
-                  <TextInput
-                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
-                    placeholder="e.g. YV-ABC123 or John"
-                    placeholderTextColor="#555"
-                    value={reentryQuery}
-                    onChangeText={setReentryQuery}
-                    onSubmitEditing={handleReentrySearch}
-                    returnKeyType="search"
-                  />
-                  <TouchableOpacity
-                    style={{ backgroundColor: "#00D4FF", paddingHorizontal: 16, borderRadius: 8, justifyContent: "center" }}
-                    onPress={handleReentrySearch}
-                    disabled={reentrySearching}
-                  >
-                    {reentrySearching
-                      ? <ActivityIndicator color="#000" size="small" />
-                      : <Ionicons name="search" size={20} color="#000" />}
-                  </TouchableOpacity>
-                </View>
-
-                {reentryTicket && (
-                  <View style={{ backgroundColor: "#111", borderRadius: 10, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? "#F59E0B" : "#333" }}>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                      <Text style={{ color: "#888", fontSize: 13 }}>Attendee</Text>
-                      <Text style={{ color: "#FFF", fontSize: 13, fontWeight: "700" }}>{reentryTicket.buyerName}</Text>
-                    </View>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 6 }}>
-                      <Text style={{ color: "#888", fontSize: 13 }}>Ticket type</Text>
-                      <Text style={{ color: "#FFF", fontSize: 13 }}>{reentryTicket.entryFeeType}</Text>
-                    </View>
-                    <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 12 }}>
-                      <Text style={{ color: "#888", fontSize: 13 }}>Status</Text>
-                      <Text style={{
-                        fontSize: 13, fontWeight: "700",
-                        color: reentryTicket.status === "used" ? "#F59E0B" : reentryTicket.status === "active" ? "#4CAF50" : "#FF6B6B"
-                      }}>
-                        {reentryTicket.status.toUpperCase()}
-                      </Text>
-                    </View>
-
-                    {reentryTicket.reentryPass && !reentryTicket.reentryPass.used ? (
-                      <View style={{ backgroundColor: "rgba(245,158,11,0.1)", borderRadius: 8, padding: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.3)" }}>
-                        <Text style={{ color: "#F59E0B", fontSize: 13, textAlign: "center" }}>
-                          ✓ Re-entry pass active — attendee can scan back in
-                        </Text>
-                      </View>
-                    ) : reentryTicket.status !== "used" ? (
-                      <View style={{ backgroundColor: "rgba(255,107,107,0.1)", borderRadius: 8, padding: 10 }}>
-                        <Text style={{ color: "#FF6B6B", fontSize: 13, textAlign: "center" }}>
-                          Ticket must be scanned (used) before granting re-entry
-                        </Text>
-                      </View>
-                    ) : (
-                      <TouchableOpacity
-                        style={{ backgroundColor: "#F59E0B", paddingVertical: 12, borderRadius: 8, alignItems: "center", flexDirection: "row", justifyContent: "center", gap: 8 }}
-                        onPress={handleGrantReentry}
-                        disabled={reentryGranting}
-                      >
-                        {reentryGranting
-                          ? <ActivityIndicator color="#000" size="small" />
-                          : <Ionicons name="refresh-circle" size={20} color="#000" />}
-                        <Text style={{ color: "#000", fontWeight: "bold", fontSize: 15 }}>Grant Re-entry Pass</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                )}
-
-                {reentryMessage && (
-                  <View style={{ backgroundColor: reentryMessage.ok ? "rgba(76,175,80,0.1)" : "rgba(255,107,107,0.1)", borderRadius: 8, padding: 12, borderWidth: 1, borderColor: reentryMessage.ok ? "rgba(76,175,80,0.3)" : "rgba(255,107,107,0.3)" }}>
-                    <Text style={{ color: reentryMessage.ok ? "#4CAF50" : "#FF6B6B", fontSize: 13, textAlign: "center" }}>
-                      {reentryMessage.text}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <View style={styles.dashboardRow}>
-                <Text style={styles.dashboardSectionTitle}>🔐 Staff Scanner Links</Text>
-                <TouchableOpacity onPress={() => setShowTokenModal(true)}>
-                  <Ionicons name="add-circle-outline" size={28} color="#00D4FF" />
-                </TouchableOpacity>
-              </View>
-              <View style={styles.dashboardCard}>
-                {activeTokens.length > 0 ? (
-                  activeTokens.map((token) => (
-                    <View key={token.id} style={styles.tokenItem}>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.tokenLabel}>{token.label || "Staff"}</Text>
-                        <Text style={styles.tokenExpiry}>Expires: {formatTimeRemaining(token.expires_at)}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => copyToClipboard(`https://yovibe.net/scan/${token.token}`)}>
-                        <Ionicons name="link-outline" size={20} color="#00D4FF" />
-                      </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleRevokeToken(token.id)}>
-                        <Ionicons name="close-circle" size={20} color="#FF6B6B" />
-                      </TouchableOpacity>
-                    </View>
-                  ))
-                ) : (
-                  <Text style={styles.noDataText}>No staff links generated yet</Text>
-                )}
-              </View>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>🔍 Scan Logs</Text>
-              <View style={styles.dashboardCard}>
-                {scanLogs.length > 0 ? scanLogs.map((log, i) => (
-                  <View key={i} style={styles.scanLogItem}>
-                    <View style={{ flex: 1 }}>
-                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-                        <Text style={styles.scanLogTicketRef}>{log.ticketRef}</Text>
-                        {log.status === "Invalid" && log.reason ? <Text style={styles.scanLogInvalidReason}>{log.reason}</Text> : null}
-                      </View>
-                      <Text style={styles.scanLogName}>{log.name}</Text>
-                      <Text style={styles.scanLogDetail}>{log.feeType}{log.tableNumber !== "—" ? ` · Table ${log.tableNumber}` : log.seatNumber !== "—" ? ` · Seat ${log.seatNumber}` : ""}</Text>
-                    </View>
-                    <View style={{ alignItems: "flex-end" }}>
-                      <Text style={styles.scanLogTime}>{log.time}</Text>
-                      <Text style={[styles.scanLogStatus, log.status === 'Valid' ? styles.scanLogValid : styles.scanLogInvalid]}>{log.status}</Text>
-                    </View>
-                  </View>
-                )) : <Text style={styles.noDataText}>No scan logs</Text>}
-              </View>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>💸 Withdraw</Text>
-              <View style={styles.eligibleCard}>
-                <View style={styles.eligibleRow}>
-                  <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
-                  <View>
-                    <Text style={styles.eligibleLabel}>Eligible for Payout</Text>
-                    <Text style={styles.eligibleAmount}>UGX {eligiblePayoutTotal.toLocaleString()}</Text>
-                  </View>
-                </View>
-                <Text style={styles.eligibleDesc}>Select tickets by type to cash out</Text>
-                <TouchableOpacity style={[styles.withdrawBtn, eligiblePayoutTotal === 0 && { opacity: 0.4 }]} onPress={() => setShowWithdrawModal(true)} disabled={eligiblePayoutTotal === 0}>
-                  <Ionicons name="cash-outline" size={20} color="#FFF" />
-                  <Text style={styles.withdrawBtnText}>Withdraw Earnings</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>📜 Payout History</Text>
-              <View style={styles.dashboardCard}>
-                {payoutHistory.length > 0 ? payoutHistory.map((p, i) => (
-                  <View key={i} style={styles.payoutItem}>
-                    <Text style={styles.payoutDate}>{p.date}</Text>
-                    <Text style={styles.payoutAmount}>{p.amount}</Text>
-                    <Text style={[styles.payoutStatus, p.status === 'Completed' ? styles.payoutCompleted : styles.payoutPending]}>{p.status}</Text>
-                  </View>
-                )) : <Text style={styles.noDataText}>No payouts yet</Text>}
-              </View>
-            </View>
-
-            <View style={styles.dashboardSection}>
-              <Text style={styles.dashboardSectionTitle}>⚙️ Payment Details</Text>
-              <View style={styles.dashboardCard}>
-                {isEditingPayment ? (
-                  <View>
-                    <Text style={styles.dashboardLabel}>Mobile Money</Text>
-                    <View style={styles.inputContainer}>
-                      <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'mtn' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'mtn' })}><Text style={styles.providerButtonText}>MTN</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'airtel' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'airtel' })}><Text style={styles.providerButtonText}>Airtel</Text></TouchableOpacity>
-                    </View>
-                    <TextInput style={[styles.input, paymentFormErrors.mobileNumber && styles.inputError]} placeholder="Phone Number" value={editForm.mobileNumber} onChangeText={(t) => { setEditForm({ ...editForm, mobileNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileNumber; return n }) }} placeholderTextColor="#888" keyboardType="phone-pad" />
-                    {paymentFormErrors.mobileNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileNumber}</Text>}
-                    <TextInput style={[styles.input, paymentFormErrors.mobileName && styles.inputError]} placeholder="Account Name" value={editForm.mobileName} onChangeText={(t) => { setEditForm({ ...editForm, mobileName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileName; return n }) }} placeholderTextColor="#888" />
-                    {paymentFormErrors.mobileName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileName}</Text>}
-                    <Text style={[styles.dashboardLabel, { marginTop: 16 }]}>Bank Account</Text>
-                    <TextInput style={[styles.input, paymentFormErrors.bankName && styles.inputError]} placeholder="Bank Name" value={editForm.bankName} onChangeText={(t) => { setEditForm({ ...editForm, bankName: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankName; return n }) }} placeholderTextColor="#888" />
-                    {paymentFormErrors.bankName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankName}</Text>}
-                    <TextInput style={[styles.input, paymentFormErrors.bankNumber && styles.inputError]} placeholder="Account Number" value={editForm.bankNumber} onChangeText={(t) => { setEditForm({ ...editForm, bankNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNumber; return n }) }} placeholderTextColor="#888" keyboardType="numeric" />
-                    {paymentFormErrors.bankNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNumber}</Text>}
-                    <TextInput style={[styles.input, paymentFormErrors.bankNameAccount && styles.inputError]} placeholder="Account Name" value={editForm.bankNameAccount} onChangeText={(t) => { setEditForm({ ...editForm, bankNameAccount: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.bankNameAccount; return n }) }} placeholderTextColor="#888" />
-                    {paymentFormErrors.bankNameAccount && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.bankNameAccount}</Text>}
-                    <View style={styles.buttonRow}>
-                      <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: '#666' }]} onPress={() => setIsEditingPayment(false)}><Text style={styles.actionButtonSmallText}>Cancel</Text></TouchableOpacity>
-                      <TouchableOpacity style={[styles.actionButtonSmall, { backgroundColor: '#00D4FF' }]} onPress={handleSavePaymentDetails}><Text style={styles.actionButtonSmallText}>Save</Text></TouchableOpacity>
-                    </View>
-                  </View>
-                ) : (
-                  <View>
-                    {event?.paymentMethods ? (
-                      <View>
-                        {event.paymentMethods.mobileMoney?.map((mm, i) => (
-                          <View key={i} style={styles.paymentDetailRow}><Text style={styles.paymentDetailText}>{mm.provider.toUpperCase()} - {mm.number}</Text><Text style={styles.paymentDetailSubtext}>{mm.name}</Text></View>
-                        ))}
-                        {event.paymentMethods.bankAccounts?.map((b, i) => (
-                          <View key={i} style={styles.paymentDetailRow}><Text style={styles.paymentDetailText}>{b.bankName} - {b.accountNumber}</Text><Text style={styles.paymentDetailSubtext}>{b.accountName}</Text></View>
-                        ))}
-                      </View>
-                    ) : <Text style={styles.noDataText}>No payment details</Text>}
-                    <TouchableOpacity style={styles.editButton} onPress={handleEditPayment}><Text style={styles.editButtonText}>Edit</Text></TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            </View>
-          </>
+          ) : (
+            <>
+              {renderOrganizerLeftColumn()}
+              {renderOrganizerRightColumn()}
+            </>
+          )
         ) : (
           <>
             {/* Event Status — Admin can cancel or postpone */}
@@ -2122,6 +2136,22 @@ const styles = StyleSheet.create({
   staffGenerateBtn: { backgroundColor: "#00D4FF", paddingVertical: 14, paddingHorizontal: 20, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   staffGenerateBtnDisabled: { backgroundColor: "#666" },
   staffGenerateBtnText: { color: "#000", fontWeight: "bold", fontSize: 16 },
+  desktopDashboardLayout: {
+    flexDirection: "row",
+    gap: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    alignItems: "flex-start",
+  },
+  desktopLeftColumn: {
+    flex: 2,
+    minWidth: 0,
+  },
+  desktopRightColumn: {
+    flex: 1,
+    minWidth: 280,
+    maxWidth: 380,
+  },
 })
 
 export default OrganiserDashboardScreen

@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>YoVibe Venue Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0a0a12; }
+  #map { height: 100%; width: 100%; }
+  .leaflet-container { background: #0a0a12; font-family: inherit; }
+
+  /* Custom dark-glass neon venue marker */
+  .yovibe-pin {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(13, 27, 42, 0.92);
+    border: 2px solid #22d3ee;
+    box-shadow: 0 0 12px rgba(34, 211, 238, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    line-height: 1;
+    color: #22d3ee;
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+  }
+  .yovibe-pin:hover { transform: scale(1.15); }
+  .yovibe-pin.selected {
+    border-color: #f472b6;
+    color: #f472b6;
+    box-shadow: 0 0 16px rgba(244, 114, 182, 1);
+  }
+
+  /* Marker popup styling to match the dark theme */
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: #10121c;
+    color: #ffffff;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    box-shadow: 0 0 18px rgba(34, 211, 238, 0.25);
+    border-radius: 10px;
+  }
+  .leaflet-popup-content { margin: 12px 14px; font-size: 13px; line-height: 1.4; }
+  .leaflet-popup-content b { display: block; margin-bottom: 2px; }
+  .leaflet-popup-close-button { color: #8b8b9e !important; }
+
+  /* Loading fallback while Leaflet boots */
+  #boot {
+    position: absolute; inset: 0; z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    color: #8b8b9e; font-size: 13px; background: #0a0a12;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+</style>
+</head>
+<body>
+<div id="boot">Loading map…</div>
+<div id="map"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  var map = null;
+  var markers = {};   // id -> Leaflet marker
+  var markerLayer = null;
+
+  // Fallback centre: Kampala, Uganda (most venues are here).
+  var DEFAULT_CENTER = [0.3476, 32.5825];
+  var DEFAULT_ZOOM = 12;
+
+  function boot() {
+    if (map) return;
+    map = L.map("map", { attributionControl: true }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      maxZoom: 19,
+    }).addTo(map);
+    markerLayer = L.layerGroup().addTo(map);
+    document.getElementById("boot").style.display = "none";
+
+    // Tell the host the map is ready so it can push venues.
+    parent.postMessage({ type: "map-ready" }, "*");
+  }
+
+  function pinIcon(selected) {
+    return L.divIcon({
+      className: "",
+      html: '<div class="yovibe-pin' + (selected ? " selected" : "") + '">&#9679;</div>',
+      iconSize: [30, 30],
+      iconAnchor: [15, 15],
+      popupAnchor: [0, -16],
+    });
+  }
+
+  function setVenues(venues) {
+    if (!map) boot();
+    markerLayer.clearLayers();
+    markers = {};
+
+    var placed = 0;
+    var skipped = 0;
+    var hasLatLng = false;
+    venues.forEach(function (v) {
+      var lat = Number(v && v.lat);
+      var lng = Number(v && v.lng);
+      // Skip venues without usable coordinates (incl. the 0,0 "not set" fallback).
+      if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) {
+        skipped++;
+        return;
+      }
+      hasLatLng = true;
+      placed++;
+      var m = L.marker([lat, lng], { icon: pinIcon(false), title: v.name || "" }).addTo(markerLayer);
+      m.bindPopup("<b>" + (v.name || "Venue") + "</b>Tap to view");
+      m.on("click", function () {
+        selectVenue(v.id);
+        parent.postMessage({ type: "venue-select", id: v.id }, "*");
+      });
+      markers[v.id] = m;
+    });
+
+    console.log("[VenueMap] received", venues.length, "venues → placed", placed, "markers, skipped", skipped);
+    if (placed === 0 && typeof map.fitBounds === "function" && hasLatLng === false) {
+      map.setView([0.3476, 32.5825], 12);
+    }
+
+    // If we have real coordinates, fit the map to them; otherwise centre on default.
+    if (hasLatLng && typeof map.getBounds === "function") {
+      var bounds = L.latLngBounds(Object.keys(markers).map(function (id) { return markers[id].getLatLng(); }));
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    }
+  }
+
+  function selectVenue(id) {
+    var m = markers[id];
+    if (!m || !map) return;
+    // Update visual selection state.
+    Object.keys(markers).forEach(function (key) {
+      markers[key].setIcon(pinIcon(key === id));
+    });
+    map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 14), { duration: 0.6 });
+    m.openPopup();
+  }
+
+  window.addEventListener("message", function (e) {
+    var d = e.data || {};
+    if (d.type === "venues") setVenues(d.venues);
+    else if (d.type === "select") selectVenue(d.id);
+  });
+
+  boot();
+})();
+</script>
+</body>
+</html>

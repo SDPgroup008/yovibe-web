@@ -22,6 +22,7 @@ import { useAuth } from "../contexts/AuthContext"
 import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
+import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 
 import TicketService from "../services/TicketService"
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
@@ -36,6 +37,7 @@ const isLargeScreen = screenWidth >= 1024;
 console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
 
 const EventDetailScreen: React.FC = () => {
+  const { isLargeScreen, isTablet } = useDeviceType()
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
 
@@ -396,140 +398,271 @@ const EventDetailScreen: React.FC = () => {
   const canManageEvent = isEventOwner || user?.userType === "admin"
 
   return (
-    <View style={styles.container}>
-      <ScrollView>
-      <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
-        <ImageBackground 
-          source={{ uri: event.posterImageUrl }} 
-          style={styles.headerImage}
-          aria-label={`Event poster for ${event.name}`}
-          accessibilityLabel={`Event poster for ${event.name}`}
-        >
-          <View style={styles.headerOverlay}>
-
-            <View style={styles.eventHeaderInfo}>
-              <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
-              <Text style={styles.eventLocation}>
-                {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
-              </Text>
-
-              <View style={styles.eventMeta}>
-                {attendeeCount > 0 && (
-                  <View style={styles.attendeeCount}>
-                    <Ionicons name="people" size={16} color="#FFFFFF" />
-                    <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
+    <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+      {isLargeScreen ? (
+        <View style={styles.desktopContainer}>
+          <ScrollView style={styles.desktopLeftColumn} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
+              <ImageBackground 
+                source={{ uri: event.posterImageUrl }} 
+                style={styles.desktopHeaderImage}
+                aria-label={`Event poster for ${event.name}`}
+                accessibilityLabel={`Event poster for ${event.name}`}
+              >
+                <View style={styles.headerOverlay}>
+                  <View style={styles.eventHeaderInfo}>
+                    <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
+                    <Text style={styles.eventLocation}>
+                      {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
+                    </Text>
+                    <View style={styles.eventMeta}>
+                      {attendeeCount > 0 && (
+                        <View style={styles.attendeeCount}>
+                          <Ionicons name="people" size={16} color="#FFFFFF" />
+                          <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
+                        </View>
+                      )}
+                      <Text style={styles.entryFee}>
+                        {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
+                      </Text>
+                    </View>
                   </View>
-                )}
-                <Text style={styles.entryFee}>
-                  {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
-                </Text>
+                </View>
+              </ImageBackground>
+            </TouchableOpacity>
+
+            {/* Full Image Modal */}
+            <Modal visible={showFullImage} transparent={true} animationType="fade">
+              <View style={styles.fullImageModal}>
+                <TouchableOpacity style={styles.fullImageCloseButton} onPress={() => setShowFullImage(false)}>
+                  <Ionicons name="close" size={30} color="#FFFFFF" />
+                </TouchableOpacity>
+                <Image source={{ uri: event.posterImageUrl }} style={styles.fullImage} resizeMode="contain" />
+              </View>
+            </Modal>
+
+            <View style={styles.desktopLeftContent}>
+              <Text style={styles.sectionTitle}>About this event</Text>
+              <Text style={styles.description}>{event.description}</Text>
+
+              <Text style={styles.sectionTitle}>Artists</Text>
+              <View style={styles.artistsContainer}>
+                {event.artists.map((artist, index) => (
+                  <View key={index} style={[styles.artistTag, { backgroundColor: COLORS.accent }]}>
+                    <Text style={styles.artistText}>{artist}</Text>
+                  </View>
+                ))}
               </View>
             </View>
-          </View>
-        </ImageBackground>
-      </TouchableOpacity>
+          </ScrollView>
 
-      {/* Full Image Modal */}
-      <Modal visible={showFullImage} transparent={true} animationType="fade">
-        <View style={styles.fullImageModal}>
-          <TouchableOpacity style={styles.fullImageCloseButton} onPress={() => setShowFullImage(false)}>
-            <Ionicons name="close" size={30} color="#FFFFFF" />
-          </TouchableOpacity>
-          <Image source={{ uri: event.posterImageUrl }} style={styles.fullImage} resizeMode="contain" />
-        </View>
-      </Modal>
+          <View style={styles.desktopRightColumn}>
+            <View style={styles.stickyCard}>
+              <TouchableOpacity
+                style={styles.desktopVenueContainer}
+                onPress={handleVenuePress}
+              >
+                <Ionicons name="location" size={20} color={COLORS.primary} />
+                <Text style={styles.desktopVenueName}>{event.venueName}</Text>
+              </TouchableOpacity>
 
-      <View style={styles.contentContainer}>
-        <View style={styles.actionButtons}>
-          <TouchableOpacity style={[styles.actionButton, isGoing && styles.goingButton]} onPress={handleToggleGoing}>
-            <Ionicons
-              name={isGoing ? "checkmark-circle" : "calendar-outline"}
-              size={20}
-              color={isGoing ? "#FFFFFF" : "#2196F3"}
-            />
-            <Text style={[styles.actionButtonText, isGoing && styles.goingButtonText]}>
-              {isGoing ? "I'm Going" : "I'm Going"}
-            </Text>
-          </TouchableOpacity>
+              <View style={styles.desktopDateContainer}>
+                <Ionicons name="calendar" size={20} color="#FFFFFF" />
+                <Text style={styles.desktopDateText}>{event.date.toDateString()}</Text>
+              </View>
 
-          <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-            <Ionicons name="share-social-outline" size={20} color="#2196F3" />
-            <Text style={styles.actionButtonText}>Share</Text>
-          </TouchableOpacity>
-        </View>
+              {/* Buy Tickets Button - For all featured events */}
+              {event.isFeatured && (
+                <TouchableOpacity style={styles.gradientButton} onPress={handleBuyTicket}>
+                  <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.buttonText}>Buy Tickets</Text>
+                </TouchableOpacity>
+              )}
 
-        {/* Organiser Dashboard - Show for event owners AND admins */}
-        {canManageEvent && (
-          <View style={styles.ownerControls}>
-            <TouchableOpacity style={styles.ownerButton} onPress={() => navigation.navigate("OrganiserDashboard", { eventId })}>
-              <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-        
-        {/* Delete Event - Admin only */}
-        {user?.userType === "admin" && (
-          <TouchableOpacity
-            style={styles.deleteButton}
-            onPress={() => {
-              // Use a simple confirm dialog instead of Alert.alert for web compatibility
-              const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
+              {/* Ticket Contacts Button - Only for unfeatured events */}
+              {!event.isFeatured && (
+                <TouchableOpacity style={styles.gradientButton} onPress={handleTicketContacts}>
+                  <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.buttonText}>Ticket Contacts</Text>
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.actionButtons}>
+                <TouchableOpacity style={[styles.actionButton, isGoing && styles.goingButton]} onPress={handleToggleGoing}>
+                  <Ionicons
+                    name={isGoing ? "checkmark-circle" : "calendar-outline"}
+                    size={20}
+                    color={isGoing ? "#FFFFFF" : COLORS.primary}
+                  />
+                  <Text style={[styles.actionButtonText, { color: isGoing ? "#FFFFFF" : COLORS.primary }]}>
+                    {isGoing ? "I'm Going" : "I'm Going"}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+                  <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+                  <Text style={[styles.actionButtonText, { color: COLORS.primary }]}>Share</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Organiser Dashboard - Show for event owners AND admins */}
+              {canManageEvent && (
+                <View style={styles.ownerControls}>
+                  <TouchableOpacity style={styles.ownerButton} onPress={() => navigation.navigate("OrganiserDashboard", { eventId })}>
+                    <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
               
-              if (confirmed) {
-                handleDeleteEvent()
-              }
-            }}
-          >
-            <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.deleteButtonText}>Delete Event</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={styles.venueContainer}
-          onPress={handleVenuePress}
-        >
-          <Ionicons name="location" size={20} color="#2196F3" />
-          <Text style={styles.venueName}>{event.venueName}</Text>
-        </TouchableOpacity>
-
-
-        <View style={styles.dateContainer}>
-          <Ionicons name="calendar" size={20} color="#FFFFFF" />
-          <Text style={styles.dateText}>{event.date.toDateString()}</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>About this event</Text>
-        <Text style={styles.description}>{event.description}</Text>
-
-        <Text style={styles.sectionTitle}>Artists</Text>
-        <View style={styles.artistsContainer}>
-          {event.artists.map((artist, index) => (
-            <View key={index} style={styles.artistTag}>
-              <Text style={styles.artistText}>{artist}</Text>
+              {/* Delete Event - Admin only */}
+              {user?.userType === "admin" && (
+                <TouchableOpacity
+                  style={styles.deleteButton}
+                  onPress={() => {
+                    const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
+                    if (confirmed) {
+                      handleDeleteEvent()
+                    }
+                  }}
+                >
+                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.deleteButtonText}>Delete Event</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          ))}
+          </View>
         </View>
+      ) : (
+        <ScrollView>
+          <TouchableOpacity onPress={handleImageDoubleTap} activeOpacity={0.9}>
+            <ImageBackground 
+              source={{ uri: event.posterImageUrl }} 
+              style={styles.headerImage}
+              aria-label={`Event poster for ${event.name}`}
+              accessibilityLabel={`Event poster for ${event.name}`}
+            >
+              <View style={styles.headerOverlay}>
+                <View style={styles.eventHeaderInfo}>
+                  <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
+                  <Text style={styles.eventLocation}>
+                    {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
+                  </Text>
 
-        {/* Buy Tickets Button - For all featured events */}
-        {event.isFeatured && (
-        <TouchableOpacity style={styles.button} onPress={handleBuyTicket}>
-          <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Buy Tickets</Text>
-        </TouchableOpacity>
-        )}
+                  <View style={styles.eventMeta}>
+                    {attendeeCount > 0 && (
+                      <View style={styles.attendeeCount}>
+                        <Ionicons name="people" size={16} color="#FFFFFF" />
+                        <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
+                      </View>
+                    )}
+                    <Text style={styles.entryFee}>
+                      {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </ImageBackground>
+          </TouchableOpacity>
 
-        {/* Ticket Contacts Button - Only for unfeatured events (always visible) */}
-        {!event.isFeatured && (
-        <TouchableOpacity style={styles.button} onPress={handleTicketContacts}>
-          <Ionicons name="call-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.buttonText}>Ticket Contacts</Text>
-        </TouchableOpacity>
-        )}
+          {/* Full Image Modal */}
+          <Modal visible={showFullImage} transparent={true} animationType="fade">
+            <View style={styles.fullImageModal}>
+              <TouchableOpacity style={styles.fullImageCloseButton} onPress={() => setShowFullImage(false)}>
+                <Ionicons name="close" size={30} color="#FFFFFF" />
+              </TouchableOpacity>
+              <Image source={{ uri: event.posterImageUrl }} style={styles.fullImage} resizeMode="contain" />
+            </View>
+          </Modal>
 
-      </View>
-    </ScrollView>
+          <View style={styles.contentContainer}>
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={[styles.actionButton, isGoing && styles.goingButton]} onPress={handleToggleGoing}>
+                <Ionicons
+                  name={isGoing ? "checkmark-circle" : "calendar-outline"}
+                  size={20}
+                  color={isGoing ? "#FFFFFF" : COLORS.primary}
+                />
+                <Text style={[styles.actionButtonText, { color: isGoing ? "#FFFFFF" : COLORS.primary }]}>
+                  {isGoing ? "I'm Going" : "I'm Going"}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
+                <Ionicons name="share-social-outline" size={20} color={COLORS.primary} />
+                <Text style={[styles.actionButtonText, { color: COLORS.primary }]}>Share</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Organiser Dashboard - Show for event owners AND admins */}
+            {canManageEvent && (
+              <View style={styles.ownerControls}>
+                <TouchableOpacity style={styles.ownerButton} onPress={() => navigation.navigate("OrganiserDashboard", { eventId })}>
+                  <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+            
+            {/* Delete Event - Admin only */}
+            {user?.userType === "admin" && (
+              <TouchableOpacity
+                style={styles.deleteButton}
+                onPress={() => {
+                  const confirmed = window.confirm("Are you sure you want to delete this event? This action cannot be undone.")
+                  if (confirmed) {
+                    handleDeleteEvent()
+                  }
+                }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.deleteButtonText}>Delete Event</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.venueContainer}
+              onPress={handleVenuePress}
+            >
+              <Ionicons name="location" size={20} color={COLORS.primary} />
+              <Text style={styles.venueName}>{event.venueName}</Text>
+            </TouchableOpacity>
+
+            <View style={styles.dateContainer}>
+              <Ionicons name="calendar" size={20} color="#FFFFFF" />
+              <Text style={styles.dateText}>{event.date.toDateString()}</Text>
+            </View>
+
+            <Text style={styles.sectionTitle}>About this event</Text>
+            <Text style={styles.description}>{event.description}</Text>
+
+            <Text style={styles.sectionTitle}>Artists</Text>
+            <View style={styles.artistsContainer}>
+              {event.artists.map((artist, index) => (
+                <View key={index} style={[styles.artistTag, { backgroundColor: COLORS.accent }]}>
+                  <Text style={styles.artistText}>{artist}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Buy Tickets Button - For all featured events */}
+            {event.isFeatured && (
+              <TouchableOpacity style={[styles.button, { backgroundColor: COLORS.primary }]} onPress={handleBuyTicket}>
+                <Ionicons name="ticket-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Buy Tickets</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Ticket Contacts Button - Only for unfeatured events */}
+            {!event.isFeatured && (
+              <TouchableOpacity style={[styles.button, { backgroundColor: COLORS.primary }]} onPress={handleTicketContacts}>
+                <Ionicons name="call-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.buttonText}>Ticket Contacts</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   )
 }
@@ -876,6 +1009,85 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: responsiveSize(6, 8, 10),
     fontSize: responsiveSize(13, 14, 15),
+  },
+  desktopContainer: {
+    flexDirection: "row",
+    flex: 1,
+    padding: 24,
+    gap: 24,
+    maxWidth: 1200,
+    width: "100%",
+    alignSelf: "center",
+  },
+  desktopLeftColumn: {
+    flex: 0.65,
+  },
+  desktopLeftContent: {
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+  },
+  desktopHeaderImage: {
+    width: "100%",
+    height: 380,
+    borderRadius: 16,
+    overflow: "hidden",
+  },
+  desktopRightColumn: {
+    width: "35%",
+    paddingTop: 0,
+  },
+  stickyCard: {
+    backgroundColor: "rgba(18, 18, 26, 0.85)",
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  desktopVenueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(0, 212, 255, 0.1)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  desktopVenueName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#00D4FF",
+    marginLeft: 10,
+  },
+  desktopDateContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: "rgba(255, 255, 255, 0.03)",
+    borderRadius: 12,
+  },
+  desktopDateText: {
+    fontSize: 16,
+    color: "#FFFFFF",
+    marginLeft: 10,
+  },
+  gradientButton: {
+    backgroundColor: "#00D4FF",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 52,
+    borderRadius: 12,
+    marginTop: 8,
+    marginBottom: 16,
   },
 })
 

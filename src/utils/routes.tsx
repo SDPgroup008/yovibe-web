@@ -38,6 +38,7 @@ import AdminStrandedPurchasesScreen from '../screens/admin/AdminStrandedPurchase
 import AdminRefundsScreen from '../screens/admin/AdminRefundsScreen';
 import AdminWithdrawalsScreen from '../screens/admin/AdminWithdrawalsScreen';
 import AdminPayoutsScreen from '../screens/admin/AdminPayoutsScreen';
+import AdminGeocodeScreen from '../screens/admin/AdminGeocodeScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
@@ -325,6 +326,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/profile/admin/payouts',
     component: withCompatNavigation(AdminPayoutsScreen),
+    exact: true
+  },
+  {
+    path: '/profile/admin/geocode',
+    component: withCompatNavigation(AdminGeocodeScreen),
     exact: true
   },
   {

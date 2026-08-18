@@ -208,6 +208,12 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToAdminGeocode = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminGeocode");
+    }
+  };
+
   const handleUpgradeToClubOwner = async () => {
     if (!user) return;
     
@@ -446,6 +452,12 @@ const ProfileScreen: React.FC = () => {
             <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminStrandedPurchases}>
               <Ionicons name="alert-circle-outline" size={24} color="#FF6B6B" />
               <Text style={styles.menuText}>Stranded Purchases</Text>
+              <Ionicons name="chevron-forward" size={24} color="#666666" />
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminGeocode}>
+              <Ionicons name="map-outline" size={24} color="#22d3ee" />
+              <Text style={styles.menuText}>Venue Geocoding</Text>
               <Ionicons name="chevron-forward" size={24} color="#666666" />
             </TouchableOpacity>
           </>

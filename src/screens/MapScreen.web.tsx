@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput, Dimensions } from "react-native"
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
@@ -14,6 +14,7 @@ import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { useMapScroll } from "../hooks/useScrollPersistence";
+import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 
 // ─── Module-level cache: survives component remounts ─────────────
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
@@ -41,6 +42,11 @@ let vibeUnsubscribers: (() => void)[] = [];
 
 // ─────────────────────────────────────────────────────────────────
 
+// Traffic-light vibe colouring shared across the map and lists.
+function vibeColor(rating: number): string {
+  return rating >= 4 ? "#4CAF50" : rating >= 3 ? "#FFC107" : "#F44336"
+}
+
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   console.log('[MapScreen.web] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Map page
@@ -50,8 +56,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useMapScroll();
 
   // Detect desktop viewport (>=1024px)
-  const screenWidth = Dimensions.get("window").width;
-  const isDesktop = screenWidth >= 1024;
+  const { isLargeScreen: isDesktop } = useDeviceType();
 
   // ─── Initialise state from cache if available ─────────────────
   const [venues, setVenues] = useState<Venue[]>(() => isCacheValid() ? mapCache!.venues : []);
@@ -62,6 +67,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [lastCreatedAt, setLastCreatedAt] = useState<string | undefined>(undefined)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const loadingMoreRef = useRef(false)
 
   // ─── Hydrate once from cache on first mount (if cached) ────────
   const initialisedRef = useRef(false);
@@ -70,6 +79,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       console.log('[MapScreen.web] 💾 Hydrating from module-level cache, venue count:', mapCache.venues.length);
       setVenues(mapCache.venues);
       setVenueVibeRatings(mapCache.vibeRatings);
+      setHasMore(false);
       setLoading(false);
       initialisedRef.current = true;
     }
@@ -118,7 +128,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
 
     // Cache invalid or empty — load fresh
-    loadVenues();
+    loadVenues({ reset: true });
 
     if (!listenersSetup) {
       listenersSetup = true;
@@ -205,13 +215,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
   }
 
-  // Pull-to-refresh handler
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await loadVenues()
-    setRefreshing(false)
-  }, [])
-
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
     if (destinationVenueId && venues.length > 0) {
@@ -222,31 +225,27 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
   }, [destinationVenueId, venues])
 
-  const loadVenues = async () => {
+  const loadVenues = useCallback(async (opts?: { reset?: boolean }) => {
+    const reset = opts?.reset ?? false
+    const BATCH_SIZE = 25
+    if (reset) {
+      setLoading(true)
+    } else {
+      if (loadingMoreRef.current || !hasMore) return
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    }
     try {
-      setLoading(true);
-      
-      let allVenues: any[] = [];
-      let currentLastCreatedAt: string | undefined = undefined;
-      let fetchCount = 0;
-      const BATCH_SIZE = 5;
-      const DELAY_MS = 3000;
-      
-      while (true) {
-        fetchCount++;
-        const { venues: paginatedVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, currentLastCreatedAt);
-        
-        if (paginatedVenues.length === 0) {
-          break;
-        }
-        
-        allVenues = [...allVenues, ...paginatedVenues];
-        currentLastCreatedAt = newLastCreatedAt ?? undefined;
-        
-        setVenues(allVenues);
-        
-        const today = new Date();
-        for (const venue of paginatedVenues) {
+      const cursor = reset ? undefined : lastCreatedAt
+      const { venues: batch, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, cursor);
+
+      setVenues((prev) => (reset ? batch : [...prev, ...batch]));
+      setLastCreatedAt(newLastCreatedAt ?? undefined);
+      setHasMore(!!newLastCreatedAt && batch.length > 0);
+
+      const today = new Date();
+      for (const venue of batch) {
+        try {
           const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venue.id, today);
           if (vibeImages.length > 0) {
             const latestVibe = vibeImages.reduce((latest, image) => {
@@ -256,31 +255,30 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           } else {
             setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
           }
+        } catch {
+          setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
         }
-        
-        if (fetchCount === 1) {
-          setLoading(false);
-        }
-        
-        if (!newLastCreatedAt) {
-          break;
-        }
-        
-        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
-      
-      setVenues(allVenues);
-      updateCache(allVenues, venueVibeRatings);
     } catch (error) {
-      const errorRatings: Record<string, number> = {};
-      venues.forEach((venue) => {
-        errorRatings[venue.id] = 0.0;
-      });
-      setVenueVibeRatings(errorRatings);
+      console.error("[MapScreen.web] Error loading venues:", error);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      loadingMoreRef.current = false;
     }
-  }
+  }, [lastCreatedAt, hasMore]);
+
+  // Load the next page when the user scrolls near the bottom of the list.
+  const loadMore = useCallback(() => {
+    loadVenues({ reset: false })
+  }, [loadVenues])
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true)
+    await loadVenues({ reset: true })
+    setRefreshing(false)
+  }, [loadVenues])
 
   const handleVenueSelect = (venueId: string) => {
     navigation.navigate("VenueDetail", { venueId })
@@ -338,8 +336,105 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // Get venue count for display
   const venueCount = filteredAndSortedVenues.length
 
+  // ─── Real map (Leaflet iframe) bridge ──────────────────────────
+  const mapIframeRef = useRef<HTMLIFrameElement | null>(null)
+
+  const postToMap = (msg: any) => {
+    const win = mapIframeRef.current?.contentWindow
+    if (win) win.postMessage(msg, "*")
+  }
+
+  const mapVenuesPayload = () => ({
+    type: "venues",
+    venues: venues.map((v) => ({
+      id: v.id,
+      name: v.name,
+      lat: v.latitude ?? v.coordinates?.latitude,
+      lng: v.longitude ?? v.coordinates?.longitude,
+    })),
+  })
+
+  // Push venue markers whenever the loaded list changes.
+  useEffect(() => {
+    const withCoords = venues.filter((v) =>
+      v.latitude != null || v.coordinates?.latitude != null).length
+    console.log(`[MapScreen.web] posting ${venues.length} venues to map (${withCoords} with coords)`)
+    postToMap(mapVenuesPayload())
+  }, [venues])
+
+  // Highlight the selected venue on the map.
+  useEffect(() => {
+    if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+  }, [selectedVenue])
+
+  // Listen for messages from the map iframe: marker clicks and readiness.
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const d = e.data || {}
+      if (d.type === "venue-select") {
+        const venue = venues.find((v) => v.id === d.id)
+        if (venue) setSelectedVenue(venue)
+      } else if (d.type === "map-ready") {
+        // The map just finished booting — push the current venues + selection
+        // so markers render even if earlier posts were dropped by the iframe.
+        postToMap(mapVenuesPayload())
+        if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+      }
+    }
+    window.addEventListener("message", handler)
+    return () => window.removeEventListener("message", handler)
+  }, [venues, selectedVenue])
+
+  const handleMapLoad = () => {
+    postToMap(mapVenuesPayload())
+    if (selectedVenue) postToMap({ type: "select", id: selectedVenue.id })
+  }
+
+  // ─── Scroll → load more ────────────────────────────────────────
+  // Resolve the underlying scrollable DOM element on web so we can read
+  // scrollTop/scrollHeight reliably (RNW scroll events often omit
+  // contentSize/layoutMeasurement, which breaks the usual threshold check).
+  const getScrollNode = () => {
+    const sc = scrollRef.current as any
+    if (!sc) return null
+    if (typeof sc.getScrollableNode === "function") return sc.getScrollableNode()
+    if (sc._listRef?._scrollRef && typeof sc._listRef._scrollRef.getScrollableNode === "function") {
+      return sc._listRef._scrollRef.getScrollableNode()
+    }
+    if (typeof sc.getScrollResponder === "function") {
+      const responder = sc.getScrollResponder()
+      if (responder && typeof responder.getScrollableNode === "function") return responder.getScrollableNode()
+    }
+    return sc._node || sc._scrollNodeRef || null
+  }
+
+  const maybeLoadMore = () => {
+    if (loadingMoreRef.current || !hasMore) return
+    const node = getScrollNode()
+    if (node && node.scrollHeight && node.clientHeight &&
+        node.scrollTop + node.clientHeight >= node.scrollHeight - 200) {
+      loadMore()
+    }
+  }
+
+  const handleListScroll = (event: any) => {
+    onScroll(event)
+    maybeLoadMore()
+  }
+
+  const handleListContentSize = (w?: number, h?: number) => {
+    onContentSizeChange(w, h)
+    // If the loaded items don't fill the viewport, keep fetching until they
+    // do (or until there are no more), so all venues load even without scrolling.
+    const node = getScrollNode()
+    if (node && node.scrollHeight && node.clientHeight &&
+        node.scrollHeight <= node.clientHeight + 5 && hasMore && !loadingMore) {
+      loadMore()
+    }
+  }
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: COLORS.background }]}>
       {/* SEO Metadata for Map page */}
       <SEOMetadata
         title={mapSeo.title}
@@ -351,122 +446,258 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       <Text style={styles.srOnly} accessibilityRole="header">
         {mapSeo.title}
       </Text>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Venue Locations</Text>
-            <Text style={styles.headerSubtitle}>
-              {searchQuery 
-                ? `${venueCount} venue${venueCount !== 1 ? 's' : ''} found`
-                : `Here's a list of all our venues, sorted by vibe:`
-              }
-            </Text>
-          </View>
-          <TouchableOpacity 
-            style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
-            onPress={toggleSearch}
-            accessibilityRole="button"
-            accessibilityLabel={showSearch ? "Close search" : "Search venues"}
-            accessibilityHint="Double tap to search for venues by name or location"
-          >
-            <Ionicons name={showSearch ? "close" : "search"} size={22} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
-          </TouchableOpacity>
-        </View>
-        {showSearch && (
-          <View style={styles.searchContainer}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search venues by name or location..."
-              placeholderTextColor="#888888"
-              value={searchQuery}
-              onChangeText={handleSearchChange}
-              autoFocus
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-              accessibilityLabel="Search input"
-              accessibilityHint="Type venue name or location to filter results"
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity 
-                style={styles.searchClearButton}
-                onPress={() => setSearchQuery("")}
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
+
+      {isDesktop ? (
+        <View style={styles.desktopMapContainer}>
+          <View style={styles.desktopSidebar}>
+            <View style={styles.header}>
+              <View style={styles.headerTop}>
+                <View style={styles.headerTextContainer}>
+                  <Text style={styles.headerTitle}>Venue Locations</Text>
+                  <Text style={styles.headerSubtitle}>
+                    {searchQuery 
+                      ? `${venueCount} venue${venueCount !== 1 ? 's' : ''} found`
+                      : `Here's all our venues, sorted by vibe:`
+                    }
+                  </Text>
+                </View>
+                <TouchableOpacity 
+                  style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
+                  onPress={toggleSearch}
+                  accessibilityRole="button"
+                  accessibilityLabel={showSearch ? "Close search" : "Search venues"}
+                >
+                  <Ionicons name={showSearch ? "close" : "search"} size={22} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
+                </TouchableOpacity>
+              </View>
+              {showSearch && (
+                <View style={styles.searchContainer}>
+                  <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search venues by name..."
+                    placeholderTextColor="#888888"
+                    value={searchQuery}
+                    onChangeText={handleSearchChange}
+                    autoFocus
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    returnKeyType="search"
+                  />
+                  {searchQuery.length > 0 && (
+                    <TouchableOpacity 
+                      style={styles.searchClearButton}
+                      onPress={() => setSearchQuery("")}
+                    >
+                      <Ionicons name="close-circle" size={20} color="#666666" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+            </View>
+
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading venues...</Text>
+              </View>
+            ) : venues.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="location-outline" size={64} color="#666666" />
+                <Text style={styles.emptyText}>No venues found</Text>
+              </View>
+            ) : (
+              <ScrollView
+                ref={scrollRef}
+                style={styles.venueList}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={handleListContentSize}
+                onScroll={handleListScroll}
+                scrollEventThrottle={16}
               >
-                <Ionicons name="close-circle" size={20} color="#666666" />
-              </TouchableOpacity>
+                {filteredAndSortedVenues.map((venue, index) => {
+                  const venueId = venue.id || venue.slug || `desktop-venue-${index}`;
+                  return (
+                    <TouchableOpacity
+                      key={venueId}
+                      style={[
+                        styles.venueCard, 
+                        styles.venueCardDesktopFull,
+                        selectedVenue?.id === venue.id && styles.selectedVenueCard
+                      ]}
+                      onPress={() => handleVenueSelect(venue.slug || venue.id)}
+                    >
+                      <View style={styles.venueInfo}>
+                        <Text style={styles.venueName}>{venue.name}</Text>
+                        <Text style={styles.venueAddress}>{venue.location}</Text>
+                        <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
+                        <View style={styles.vibeRatingContainer}>
+                          <Text style={styles.vibeRatingLabel}>Vibe: </Text>
+                          <Text style={[styles.vibeRatingValue, { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" }]}>
+                            {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.venueActions}>
+                        <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
+                          <Ionicons name="information-circle" size={16} color="#2196F3" />
+                          <Text style={styles.actionText}>Details</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
+                          <Ionicons name="navigate" size={16} color="#2196F3" />
+                          <Text style={styles.actionText}>Directions</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                {loadingMore && (
+                  <View style={styles.listFooter}>
+                    <ActivityIndicator size="small" color="#22d3ee" />
+                    <Text style={styles.listFooterText}>Loading more venues…</Text>
+                  </View>
+                )}
+                {hasMore && !loadingMore && venues.length > 0 && (
+                  <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
+                    <Text style={styles.loadMoreButtonText}>Load more venues</Text>
+                  </TouchableOpacity>
+                )}
+                {!hasMore && venues.length > 0 && (
+                  <View style={styles.listFooter}>
+                    <Text style={styles.listFooterText}>All venues loaded</Text>
+                  </View>
+                )}
+              </ScrollView>
+            )}
+            </View>
+            <View style={styles.desktopMapViewport}>
+              <iframe
+                ref={mapIframeRef}
+                src="/map.html"
+                title="Venue map"
+                style={{ width: "100%", height: "100%", border: "none", background: "#0a0a12" } as any}
+                onLoad={handleMapLoad}
+              />
+              {selectedVenue ? (
+                <View style={styles.mapHudCard}>
+                  <View pointerEvents="none" style={styles.hudGlow} />
+                  <Text style={styles.hudEyebrow}>SELECTED VENUE</Text>
+                  <Text style={styles.hudTitle}>{selectedVenue.name}</Text>
+                  <Text style={styles.hudAddress}>{selectedVenue.location}</Text>
+                  <View style={styles.hudVibeRow}>
+                    <Text style={styles.hudVibeLabel}>Live Vibe: </Text>
+                    <Text style={[styles.hudVibeValue, { color: vibeColor(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating) }]}>
+                      {(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating).toFixed(1)}
+                    </Text>
+                  </View>
+                  <View style={styles.hudButtonsRow}>
+                    <TouchableOpacity style={styles.hudDirectionsBtn} onPress={() => openGoogleMaps(selectedVenue)}>
+                      <Ionicons name="navigate" size={15} color="#03121a" />
+                      <Text style={styles.hudDirectionsText}>Directions</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.hudButton} onPress={() => handleVenueSelect(selectedVenue.slug || selectedVenue.id)}>
+                      <Text style={styles.hudButtonText}>View Details</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.mapHudHint}>
+                  <Ionicons name="map-outline" size={20} color="#22d3ee" />
+                  <Text style={styles.mapHudHintText}>Select a venue to see its live vibe and directions</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ) : (
+          <View style={styles.venueList}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading venues...</Text>
+              </View>
+            ) : venues.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="location-outline" size={64} color="#666666" />
+                <Text style={styles.emptyText}>No venues found</Text>
+              </View>
+            ) : (
+              <ScrollView
+                ref={scrollRef}
+                style={styles.venueList}
+                showsVerticalScrollIndicator={false}
+                onContentSizeChange={handleListContentSize}
+                onScroll={handleListScroll}
+                scrollEventThrottle={16}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    colors={["#2196F3"]}
+                    tintColor="#2196F3"
+                  />
+                }
+              >
+                {filteredAndSortedVenues.map((venue, index) => {
+                  const venueId = venue.id || venue.slug || `mobile-venue-${index}`
+                  return (
+                    <TouchableOpacity
+                      key={venueId}
+                      style={[
+                        styles.venueCard,
+                        selectedVenue?.id === venue.id && styles.selectedVenueCard,
+                      ]}
+                      onPress={() => handleVenueSelect(venue.slug || venue.id)}
+                    >
+                      <View style={styles.venueCardRow}>
+                        <View style={styles.venueInfo}>
+                          <Text style={styles.venueName}>{venue.name}</Text>
+                          <Text style={styles.venueAddress}>{venue.location}</Text>
+                          <Text style={styles.venueCategories}>
+                            {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
+                          </Text>
+                          <View style={styles.vibeRatingContainer}>
+                            <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                            <Text
+                              style={[
+                                styles.vibeRatingValue,
+                                { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" },
+                              ]}
+                            >
+                              {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.venueActions}>
+                          <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
+                            <Ionicons name="information-circle" size={16} color="#2196F3" />
+                            <Text style={styles.actionText}>Details</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
+                            <Ionicons name="navigate" size={16} color="#2196F3" />
+                            <Text style={styles.actionText}>Directions</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    </TouchableOpacity>
+                  )
+                })}
+                {loadingMore && (
+                  <View style={styles.listFooter}>
+                    <ActivityIndicator size="small" color="#22d3ee" />
+                    <Text style={styles.listFooterText}>Loading more venues…</Text>
+                  </View>
+                )}
+                {hasMore && !loadingMore && venues.length > 0 && (
+                  <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
+                    <Text style={styles.loadMoreButtonText}>Load more venues</Text>
+                  </TouchableOpacity>
+                )}
+                {!hasMore && venues.length > 0 && (
+                  <View style={styles.listFooter}>
+                    <Text style={styles.listFooterText}>All venues loaded</Text>
+                  </View>
+                )}
+              </ScrollView>
             )}
           </View>
         )}
-      </View>
-
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading venues...</Text>
-        </View>
-      ) : venues.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="location-outline" size={64} color="#666666" />
-          <Text style={styles.emptyText}>No venues found</Text>
-        </View>
-      ) : (
-<ScrollView
-          ref={scrollRef}
-          style={styles.venueList}
-          contentContainerStyle={isDesktop ? styles.venueGrid : undefined}
-          onContentSizeChange={onContentSizeChange}
-          onScroll={onScroll}
-          scrollEventThrottle={16}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              colors={["#2196F3"]}
-              tintColor="#2196F3"
-            />
-          }
-        >
-          {filteredAndSortedVenues.map((venue) => (
-            <View key={venue?.id || venue?.slug || `map-venue-${Math.random()}`} style={[styles.venueCard, isDesktop && styles.venueCardDesktop, selectedVenue?.id === venue.id && styles.selectedVenueCard]}>
-              <View style={styles.venueCardRow}>
-                <View style={styles.venueInfo}>
-                  <Text style={styles.venueName}>{venue.name}</Text>
-                  <Text style={styles.venueAddress}>{venue.location}</Text>
-                  <Text style={styles.venueCategories}>
-                    {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
-                  </Text>
-                  <View style={styles.vibeRatingContainer}>
-                    <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-                    <Text
-                      style={[
-                        styles.vibeRatingValue,
-                        { color: VibeAnalysisService.getVibeColor(venueVibeRatings[venue.id] || 0.0) },
-                      ]}
-                    >
-                      {(venueVibeRatings[venue.id] || 0.0).toFixed(1)}
-                    </Text>
-                    <Text style={styles.vibeRatingDescription}>
-                      {" "}
-                      - {VibeAnalysisService.getVibeDescription(venueVibeRatings[venue.id] || 0.0)}
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.venueActions}>
-                  <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
-                    <Ionicons name="information-circle" size={16} color="#2196F3" />
-                    <Text style={styles.actionText}>Details</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
-                    <Ionicons name="navigate" size={16} color="#2196F3" />
-                    <Text style={styles.actionText}>Directions</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          ))}
-        </ScrollView>
-      )}
     </View>
   )
 }
@@ -490,7 +721,8 @@ const styles = StyleSheet.create({
   header: {
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    borderBottomColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(18, 18, 26, 0.5)",
   },
   headerTop: {
     flexDirection: "row",
@@ -574,7 +806,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   venueCard: {
-    backgroundColor: "#1E1E1E",
+    backgroundColor: "rgba(30, 30, 30, 0.6)",
     borderRadius: 6,
     padding: 8,
     marginBottom: 5,
@@ -648,6 +880,174 @@ const styles = StyleSheet.create({
     color: "#2196F3",
     marginLeft: 3,
     fontSize: 10,
+  },
+  desktopMapContainer: {
+    flexDirection: "row",
+    flex: 1,
+    height: "100%",
+  },
+  desktopSidebar: {
+    width: "40%",
+    height: "100%",
+    backgroundColor: "rgba(10, 12, 22, 0.6)",
+    borderRightWidth: 1,
+    borderRightColor: "rgba(255, 255, 255, 0.08)",
+  },
+  desktopMapViewport: {
+    width: "60%",
+    height: "100%",
+    backgroundColor: "#050508",
+    position: "relative",
+    overflow: "hidden",
+  },
+  mapHudCard: {
+    position: "absolute",
+    bottom: 24,
+    left: 24,
+    right: 24,
+    backgroundColor: "rgba(10, 12, 22, 0.85)",
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.35)",
+    shadowColor: "#22d3ee",
+    shadowOpacity: 0.25,
+    shadowRadius: 18,
+    elevation: 8,
+    overflow: "hidden",
+  },
+  hudGlow: {
+    position: "absolute",
+    top: -60,
+    right: -60,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "transparent",
+    shadowColor: "#22d3ee",
+    shadowOpacity: 0.25,
+    shadowRadius: 90,
+    elevation: 0,
+  },
+  hudEyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.5,
+    color: "#22d3ee",
+    fontWeight: "bold",
+    marginBottom: 6,
+  },
+  hudTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    marginBottom: 4,
+  },
+  hudAddress: {
+    fontSize: 13,
+    color: "#BBBBBB",
+    marginBottom: 10,
+  },
+  hudVibeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  hudVibeLabel: {
+    fontSize: 13,
+    color: "#888888",
+  },
+  hudVibeValue: {
+    fontSize: 13,
+    fontWeight: "bold",
+  },
+  hudButtonsRow: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  hudDirectionsBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: "#22d3ee",
+    shadowColor: "#22d3ee",
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  hudDirectionsText: {
+    color: "#03121a",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  hudButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+  },
+  hudButtonText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  mapHudHint: {
+    position: "absolute",
+    bottom: 24,
+    left: 24,
+    right: 24,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(18, 18, 26, 0.7)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.2)",
+  },
+  mapHudHintText: {
+    color: "#a5a5b8",
+    fontSize: 13,
+    flex: 1,
+  },
+  venueCardDesktopFull: {
+    width: "100%",
+    marginBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  listFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 16,
+  },
+  listFooterText: {
+    color: "#8b8b9e",
+    fontSize: 12,
+  },
+  loadMoreButton: {
+    marginVertical: 12,
+    marginHorizontal: 8,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(34, 211, 238, 0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.4)",
+  },
+  loadMoreButtonText: {
+    color: "#22d3ee",
+    fontSize: 13,
+    fontWeight: "bold",
   },
 })
 

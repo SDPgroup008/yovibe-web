@@ -44,6 +44,7 @@ import AdminStrandedPurchasesScreen from "../screens/admin/AdminStrandedPurchase
 import AdminRefundsScreen from "../screens/admin/AdminRefundsScreen"
 import AdminWithdrawalsScreen from "../screens/admin/AdminWithdrawalsScreen"
 import AdminPayoutsScreen from "../screens/admin/AdminPayoutsScreen"
+import AdminGeocodeScreen from "../screens/admin/AdminGeocodeScreen"
 import SettingsScreen from "../screens/SettingsScreen"
 import HelpSupportScreen from "../screens/HelpSupportScreen"
 import OrganiserDashboardScreen from "../screens/OrganiserDashboardScreen"
@@ -512,6 +513,7 @@ export const ProfileStackNavigator = () => {
       <ProfileStack.Screen name="AdminRefunds" component={AdminRefundsScreen} options={{ title: "Refund Requests" }} />
       <ProfileStack.Screen name="AdminWithdrawals" component={AdminWithdrawalsScreen} options={{ title: "Revenue Withdrawals" }} />
       <ProfileStack.Screen name="AdminPayouts" component={AdminPayoutsScreen} options={{ title: "Payout Requests" }} />
+      <ProfileStack.Screen name="AdminGeocode" component={AdminGeocodeScreen} options={{ title: "Venue Geocoding" }} />
       <ProfileStack.Screen name="Settings" component={SettingsScreen} options={{ title: "Settings" }} />
       <ProfileStack.Screen name="HelpSupport" component={HelpSupportScreen} options={{ title: "Help & Support" }} />
       <ProfileStack.Screen name="AddVibe" component={AddVibeScreen} options={{ title: "Add Vibe" }} />

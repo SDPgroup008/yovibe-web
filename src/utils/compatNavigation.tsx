@@ -55,6 +55,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminRefunds': () => navigate('/profile/admin/refunds'),
         'AdminWithdrawals': () => navigate('/profile/admin/withdrawals'),
         'AdminPayouts': () => navigate('/profile/admin/payouts'),
+        'AdminGeocode': () => navigate('/profile/admin/geocode'),
         'Settings': () => navigate('/profile/settings'),
         'HelpSupport': () => navigate('/profile/help'),
         'Auth': () => navigate('/login'),

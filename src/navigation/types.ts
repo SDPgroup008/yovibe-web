@@ -88,6 +88,7 @@ export type ProfileStackParamList = {
   AdminRefunds: undefined
   AdminWithdrawals: undefined
   AdminPayouts: undefined
+  AdminGeocode: undefined
   Settings: undefined
   HelpSupport: undefined
   Notification: undefined
@@ -173,3 +174,4 @@ export type AdminEventsScreenProps = NativeStackScreenProps<ProfileStackParamLis
 export type AdminOwnershipRequestsScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminOwnershipRequests">
 export type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminDashboard">
 export type AdminStrandedPurchasesScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminStrandedPurchases">
+export type AdminGeocodeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminGeocode">

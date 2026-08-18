@@ -305,20 +305,20 @@ export const SHADOWS = {
 
 // Color Palette
 export const COLORS = {
-  primary: '#2196F3',
-  accent: '#00D4FF',
+  primary: '#00D4FF', // Neon Cyan accent
+  accent: '#8B5CF6',  // Violet accent
   danger: '#FF3B30',
   warning: '#FFD700',
-  background: '#121212',
-  surface: '#1E1E1E',
-  surfaceLight: '#2A2A2A',
+  background: '#050508', // Deep obsidian dark background
+  surface: 'rgba(18, 18, 26, 0.7)', // Translucent glassmorphism surface
+  surfaceLight: 'rgba(30, 30, 46, 0.8)', // Translucent surface light
   text: '#FFFFFF',
-  textSecondary: '#BBBBBB',
-  textTertiary: '#888888',
-  border: 'rgba(255, 255, 255, 0.1)',
-  borderLight: 'rgba(255, 255, 255, 0.05)',
+  textSecondary: '#94A3B8', // Zinc-400 for premium readability
+  textTertiary: '#64748B', // Zinc-500
+  border: 'rgba(255, 255, 255, 0.08)',
+  borderLight: 'rgba(255, 255, 255, 0.04)',
   gradientStart: '#00D4FF',
-  gradientEnd: '#2196F3',
+  gradientEnd: '#8B5CF6', // Cyan to Violet gradient
 };
 
 // Border Radius (use useBorderRadius hook instead)

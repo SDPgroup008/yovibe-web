@@ -14,9 +14,11 @@ import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { SEOMetadata } from "../components/SEOMetadata"
-
 import VibeAnalysisService from "../services/VibeAnalysisService"
+import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+
 const VenueDetailScreen: React.FC = () => {
+  const { isLargeScreen, isTablet } = useDeviceType()
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
 
@@ -403,6 +405,7 @@ const VenueDetailScreen: React.FC = () => {
     )
   }
 
+
   return (
     <>
     <SEOMetadata
@@ -419,232 +422,452 @@ const VenueDetailScreen: React.FC = () => {
         image: venue.backgroundImageUrl,
       }}
     />
-    <ScrollView
-      ref={scrollViewRef}
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={onRefresh}
-          colors={["#2196F3"]}
-          tintColor="#2196F3"
-        />
-      }
-    >
-      <Image 
-        source={{ uri: venue.backgroundImageUrl }} 
-        style={styles.headerImage}
-        alt={`Venue image for ${venue.name}`}
-      />
-
-      <View style={styles.contentContainer}>
-        <View style={styles.headerRow}>
-          <View style={styles.titleContainer}>
-            <Text style={styles.venueName} accessibilityRole="header">{venue.name}</Text>
-            <Text style={styles.venueLocation}>{venue.location}</Text>
-          </View>
-          {showOwnButton && (
-            <TouchableOpacity
-              style={styles.moreButton}
-              onPress={() => setShowMoreMenu(!showMoreMenu)}
-            >
-              <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.categoriesContainer}>
-          {venue.categories.map((category, index) => (
-            <View key={index} style={styles.categoryTag}>
-              <Text style={styles.categoryText}>{category}</Text>
-            </View>
-          ))}
-        </View>
-
-        {showMoreMenu && (
-          <View style={styles.moreMenuOverlay}>
-            <TouchableOpacity 
-              style={styles.moreMenuOverlayBg} 
-              onPress={() => setShowMoreMenu(false)}
-            />
-            <View style={styles.moreMenu}>
+    {isLargeScreen ? (
+      <View style={[styles.container, { backgroundColor: COLORS.background, flexDirection: "row", padding: 24, gap: 24 }]}>
+        <ScrollView style={{ flex: 0.62 }} showsVerticalScrollIndicator={false}>
+          <Image 
+            source={{ uri: venue.backgroundImageUrl }} 
+            style={styles.desktopVenueHeaderImage}
+            alt={`Venue image for ${venue.name}`}
+          />
+          <View style={styles.desktopLeftContent}>
+            <View style={styles.headerRow}>
+              <View style={styles.titleContainer}>
+                <Text style={styles.venueName} accessibilityRole="header">{venue.name}</Text>
+                <Text style={styles.venueLocation}>{venue.location}</Text>
+              </View>
               {showOwnButton && (
-                <TouchableOpacity 
-                  style={styles.moreMenuItem} 
-                  onPress={() => {
-                    setShowMoreMenu(false)
-                    handleOpenOwnershipModal()
-                  }}
+                <TouchableOpacity
+                  style={styles.moreButton}
+                  onPress={() => setShowMoreMenu(!showMoreMenu)}
                 >
-                  <Ionicons name="business-outline" size={20} color="#00D4AA" />
-                  <Text style={styles.moreMenuItemText}>Own This Venue</Text>
+                  <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
                 </TouchableOpacity>
               )}
+            </View>
+
+            <View style={styles.categoriesContainer}>
+              {venue.categories.map((category, index) => (
+                <View key={index} style={[styles.categoryTag, { backgroundColor: COLORS.primary }]}>
+                  <Text style={styles.categoryText}>{category}</Text>
+                </View>
+              ))}
+            </View>
+
+            {showMoreMenu && (
+              <View style={styles.moreMenuOverlay}>
+                <TouchableOpacity 
+                  style={styles.moreMenuOverlayBg} 
+                  onPress={() => setShowMoreMenu(false)}
+                />
+                <View style={styles.moreMenu}>
+                  {showOwnButton && (
+                    <TouchableOpacity 
+                      style={styles.moreMenuItem} 
+                      onPress={() => {
+                        setShowMoreMenu(false)
+                        handleOpenOwnershipModal()
+                      }}
+                    >
+                      <Ionicons name="business-outline" size={20} color="#00D4AA" />
+                      <Text style={styles.moreMenuItemText}>Own This Venue</Text>
+                    </TouchableOpacity>
+                  )}
+                  {existingRequestStatus === "pending" && (
+                    <View style={styles.moreMenuItem}>
+                      <Ionicons name="time-outline" size={20} color="#FFA500" />
+                      <Text style={[styles.moreMenuItemText, { color: "#FFA500" }]}>Request Pending</Text>
+                    </View>
+                  )}
+                  {existingRequestStatus === "approved" && (
+                    <View style={styles.moreMenuItem}>
+                      <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                      <Text style={[styles.moreMenuItemText, { color: "#4CAF50" }]}>You Own This Venue</Text>
+                    </View>
+                  )}
+                  {existingRequestStatus === "rejected" && (
+                    <View style={styles.moreMenuItem}>
+                      <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                      <Text style={[styles.moreMenuItemText, { color: "#FF3B30" }]}>Request Rejected</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            )}
+
+            {existingRequestStatus && (
+              <View style={styles.requestStatusContainer}>
+                {existingRequestStatus === "pending" && (
+                  <View style={styles.pendingStatusBadge}>
+                    <Ionicons name="time-outline" size={16} color="#FFA500" />
+                    <Text style={styles.pendingStatusText}>Ownership Request Pending</Text>
+                  </View>
+                )}
+                {existingRequestStatus === "approved" && (
+                  <View style={styles.approvedStatusBadge}>
+                    <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
+                    <Text style={styles.approvedStatusText}>You Own This Venue</Text>
+                  </View>
+                )}
+                {existingRequestStatus === "rejected" && (
+                  <View style={styles.rejectedStatusBadge}>
+                    <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                    <Text style={styles.rejectedStatusText}>Request Rejected</Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            <View style={styles.vibeSection}>
+              <View style={styles.vibeSectionHeader}>
+                <Text style={styles.vibeSectionTitle}>Current Vibe: </Text>
+                <View style={styles.currentVibeRating}>
+                  <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(vibeRating) }]}>
+                    {vibeRating.toFixed(1)}
+                  </Text>
+                  <Text style={styles.vibeRatingLabel}>/5.0</Text>
+                </View>
+              </View>
+              <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
+              {currentVibeImage && (
+                <View style={styles.vibeImageContainer}>
+                  <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+                </View>
+              )}
+              <TouchableOpacity style={[styles.todaysVibeButton, { backgroundColor: COLORS.primary }]} onPress={handleTodaysVibe}>
+                <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.todaysVibeButtonText}>See Today's Vibe</Text>
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.sectionTitle}>About</Text>
+            <Text style={styles.description}>{venue.description}</Text>
+
+            {venue.todayImages && venue.todayImages.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Today at {venue.name}</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+                  {venue.todayImages.map((image, index) => (
+                    <Image key={index} source={{ uri: image }} style={styles.todayImage} />
+                  ))}
+                </ScrollView>
+              </>
+            )}
+
+            {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Weekly Program</Text>
+                <View style={styles.programContainer}>
+                  {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
+                    <View key={day} style={styles.programItem}>
+                      <Text style={styles.programDay}>{day}</Text>
+                      <Text style={styles.programDescription}>{program}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+        </ScrollView>
+
+        <View style={{ width: "36%" }}>
+          <View style={styles.stickyCard}>
+            {(isOwner || isAdmin) && (
+              <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
+                {isOwner && !isCustomVenue && (
+                  <>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
+                      <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.actionButtonText}>Manage Programs</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent, marginTop: 10 }]} onPress={handleAddEvent}>
+                      <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.actionButtonText}>Add Event</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+                {isAdmin && (
+                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton, { marginTop: 10 }]} onPress={handleDeleteVenue}>
+                    <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Delete Venue</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            <TouchableOpacity
+              style={[styles.directionsButton, { backgroundColor: COLORS.primary, marginTop: 0, marginBottom: 20 }]}
+              onPress={openInGoogleMaps}
+            >
+              <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.directionsButtonText}>Get Directions</Text>
+            </TouchableOpacity>
+
+            {events.length > 0 && (
+              <Text style={styles.debugText}>Showing {upcomingEvents.length} of {events.length} events</Text>
+            )}
+
+            <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Upcoming Events</Text>
+            {upcomingEvents.length > 0 ? (
+              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+                {upcomingEvents.map((event) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    style={styles.eventCard}
+                    onPress={() => {
+                      navigation.navigate("EventDetail", { eventId: event.slug || event.id })
+                    }}
+                  >
+                    <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+                    <View style={styles.eventInfo}>
+                      <Text style={styles.eventName}>{event.name}</Text>
+                      <Text style={styles.eventDate}>
+                        {event.date && typeof (event.date as any).toDate === "function"
+                          ? (event.date as any).toDate().toDateString()
+                          : new Date(event.date).toDateString()}
+                      </Text>
+                      <Text style={[styles.eventArtists, { color: COLORS.primary }]}>{event.artists.join(", ")}</Text>
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : (
+              <View style={styles.emptyEventsContainer}>
+                <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
+                <Text style={styles.emptyEventsSubtext}>Check back later for upcoming events</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    ) : (
+      <ScrollView
+        ref={scrollViewRef}
+        style={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#2196F3"]}
+            tintColor="#2196F3"
+          />
+        }
+      >
+        <Image 
+          source={{ uri: venue.backgroundImageUrl }} 
+          style={styles.headerImage}
+          alt={`Venue image for ${venue.name}`}
+        />
+
+        <View style={styles.contentContainer}>
+          <View style={styles.headerRow}>
+            <View style={styles.titleContainer}>
+              <Text style={styles.venueName} accessibilityRole="header">{venue.name}</Text>
+              <Text style={styles.venueLocation}>{venue.location}</Text>
+            </View>
+            {showOwnButton && (
+              <TouchableOpacity
+                style={styles.moreButton}
+                onPress={() => setShowMoreMenu(!showMoreMenu)}
+              >
+                <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          <View style={styles.categoriesContainer}>
+            {venue.categories.map((category, index) => (
+              <View key={index} style={[styles.categoryTag, { backgroundColor: COLORS.primary }]}>
+                <Text style={styles.categoryText}>{category}</Text>
+              </View>
+            ))}
+          </View>
+
+          {showMoreMenu && (
+            <View style={styles.moreMenuOverlay}>
+              <TouchableOpacity 
+                style={styles.moreMenuOverlayBg} 
+                onPress={() => setShowMoreMenu(false)}
+              />
+              <View style={styles.moreMenu}>
+                {showOwnButton && (
+                  <TouchableOpacity 
+                    style={styles.moreMenuItem} 
+                    onPress={() => {
+                      setShowMoreMenu(false)
+                      handleOpenOwnershipModal()
+                    }}
+                  >
+                    <Ionicons name="business-outline" size={20} color="#00D4AA" />
+                    <Text style={styles.moreMenuItemText}>Own This Venue</Text>
+                  </TouchableOpacity>
+                )}
+                {existingRequestStatus === "pending" && (
+                  <View style={styles.moreMenuItem}>
+                    <Ionicons name="time-outline" size={20} color="#FFA500" />
+                    <Text style={[styles.moreMenuItemText, { color: "#FFA500" }]}>Request Pending</Text>
+                  </View>
+                )}
+                {existingRequestStatus === "approved" && (
+                  <View style={styles.moreMenuItem}>
+                    <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
+                    <Text style={[styles.moreMenuItemText, { color: "#4CAF50" }]}>You Own This Venue</Text>
+                  </View>
+                )}
+                {existingRequestStatus === "rejected" && (
+                  <View style={styles.moreMenuItem}>
+                    <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
+                    <Text style={[styles.moreMenuItemText, { color: "#FF3B30" }]}>Request Rejected</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+          )}
+
+          {existingRequestStatus && (
+            <View style={styles.requestStatusContainer}>
               {existingRequestStatus === "pending" && (
-                <View style={styles.moreMenuItem}>
-                  <Ionicons name="time-outline" size={20} color="#FFA500" />
-                  <Text style={[styles.moreMenuItemText, { color: "#FFA500" }]}>Request Pending</Text>
+                <View style={styles.pendingStatusBadge}>
+                  <Ionicons name="time-outline" size={16} color="#FFA500" />
+                  <Text style={styles.pendingStatusText}>Ownership Request Pending</Text>
                 </View>
               )}
               {existingRequestStatus === "approved" && (
-                <View style={styles.moreMenuItem}>
-                  <Ionicons name="checkmark-circle-outline" size={20} color="#4CAF50" />
-                  <Text style={[styles.moreMenuItemText, { color: "#4CAF50" }]}>You Own This Venue</Text>
+                <View style={styles.approvedStatusBadge}>
+                  <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
+                  <Text style={styles.approvedStatusText}>You Own This Venue</Text>
                 </View>
               )}
               {existingRequestStatus === "rejected" && (
-                <View style={styles.moreMenuItem}>
-                  <Ionicons name="close-circle-outline" size={20} color="#FF3B30" />
-                  <Text style={[styles.moreMenuItemText, { color: "#FF3B30" }]}>Request Rejected</Text>
+                <View style={styles.rejectedStatusBadge}>
+                  <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
+                  <Text style={styles.rejectedStatusText}>Request Rejected</Text>
                 </View>
               )}
             </View>
-          </View>
-        )}
+          )}
 
-        {existingRequestStatus && (
-          <View style={styles.requestStatusContainer}>
-            {existingRequestStatus === "pending" && (
-              <View style={styles.pendingStatusBadge}>
-                <Ionicons name="time-outline" size={16} color="#FFA500" />
-                <Text style={styles.pendingStatusText}>Ownership Request Pending</Text>
-              </View>
-            )}
-            {existingRequestStatus === "approved" && (
-              <View style={styles.approvedStatusBadge}>
-                <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
-                <Text style={styles.approvedStatusText}>You Own This Venue</Text>
-              </View>
-            )}
-            {existingRequestStatus === "rejected" && (
-              <View style={styles.rejectedStatusBadge}>
-                <Ionicons name="close-circle-outline" size={16} color="#FF3B30" />
-                <Text style={styles.rejectedStatusText}>Request Rejected</Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {(isOwner || isAdmin) && (
-          <View style={styles.actionButtonsContainer}>
-            {isOwner && !isCustomVenue && (
-              <>
-                <TouchableOpacity style={styles.actionButton} onPress={handleManagePrograms}>
-                  <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Manage Programs</Text>
+          {(isOwner || isAdmin) && (
+            <View style={styles.actionButtonsContainer}>
+              {isOwner && !isCustomVenue && (
+                <>
+                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
+                    <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Manage Programs</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleAddEvent}>
+                    <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Add Event</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+              {isAdmin && (
+                <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
+                  <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Delete Venue</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.actionButton} onPress={handleAddEvent}>
-                  <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Add Event</Text>
-                </TouchableOpacity>
-              </>
-            )}
-            {isAdmin && (
-              <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
-                <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Delete Venue</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        <View style={styles.vibeSection}>
-          <View style={styles.vibeSectionHeader}>
-            <Text style={styles.vibeSectionTitle}>Current Vibe: </Text>
-            <View style={styles.currentVibeRating}>
-              <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(vibeRating) }]}>
-                {vibeRating.toFixed(1)}
-              </Text>
-              <Text style={styles.vibeRatingLabel}>/5.0</Text>
-            </View>
-          </View>
-
-          <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
-
-          {currentVibeImage && (
-            <View style={styles.vibeImageContainer}>
-              <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+              )}
             </View>
           )}
 
-          <TouchableOpacity style={styles.todaysVibeButton} onPress={handleTodaysVibe}>
-            <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-            <Text style={styles.todaysVibeButtonText}>See Today's Vibe</Text>
+          <View style={styles.vibeSection}>
+            <View style={styles.vibeSectionHeader}>
+              <Text style={styles.vibeSectionTitle}>Current Vibe: </Text>
+              <View style={styles.currentVibeRating}>
+                <Text style={[styles.vibeRatingText, { color: VibeAnalysisService.getVibeColor(vibeRating) }]}>
+                  {vibeRating.toFixed(1)}
+                </Text>
+                <Text style={styles.vibeRatingLabel}>/5.0</Text>
+              </View>
+            </View>
+
+            <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
+
+            {currentVibeImage && (
+              <View style={styles.vibeImageContainer}>
+                <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+              </View>
+            )}
+
+            <TouchableOpacity style={[styles.todaysVibeButton, { backgroundColor: COLORS.primary }]} onPress={handleTodaysVibe}>
+              <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.todaysVibeButtonText}>See Today's Vibe</Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={styles.description}>{venue.description}</Text>
+
+          {venue.todayImages && venue.todayImages.length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Today at {venue.name}</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
+                {venue.todayImages.map((image, index) => (
+                  <Image key={index} source={{ uri: image }} style={styles.todayImage} />
+                ))}
+              </ScrollView>
+            </>
+          )}
+
+          {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
+            <>
+              <Text style={styles.sectionTitle}>Weekly Program</Text>
+              <View style={styles.programContainer}>
+                {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
+                  <View key={day} style={styles.programItem}>
+                    <Text style={styles.programDay}>{day}</Text>
+                    <Text style={styles.programDescription}>{program}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {events.length > 0 && (
+            <Text style={styles.debugText}>Showing {upcomingEvents.length} of {events.length} events</Text>
+          )}
+
+          {upcomingEvents.length > 0 ? (
+            <>
+              <Text style={styles.sectionTitle}>Upcoming Events</Text>
+              {upcomingEvents.map((event) => (
+                <TouchableOpacity
+                  key={event.id}
+                  style={styles.eventCard}
+                  onPress={() => {
+                    navigation.navigate("EventDetail", { eventId: event.slug || event.id })
+                  }}
+                >
+                  <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+                  <View style={styles.eventInfo}>
+                    <Text style={styles.eventName}>{event.name}</Text>
+                    <Text style={styles.eventDate}>
+                      {event.date && typeof (event.date as any).toDate === "function"
+                        ? (event.date as any).toDate().toDateString()
+                        : new Date(event.date).toDateString()}
+                    </Text>
+                    <Text style={[styles.eventArtists, { color: COLORS.primary }]}>{event.artists.join(", ")}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          ) : (
+            <View style={styles.emptyEventsContainer}>
+              <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
+              <Text style={styles.emptyEventsSubtext}>Check back later for upcoming events</Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[styles.directionsButton, { backgroundColor: COLORS.primary }]}
+            onPress={openInGoogleMaps}
+          >
+            <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.directionsButtonText}>Get Directions</Text>
           </TouchableOpacity>
         </View>
-
-        <Text style={styles.sectionTitle}>About</Text>
-        <Text style={styles.description}>{venue.description}</Text>
-
-        {venue.todayImages && venue.todayImages.length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Today at {venue.name}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imagesContainer}>
-              {venue.todayImages.map((image, index) => (
-                <Image key={index} source={{ uri: image }} style={styles.todayImage} />
-              ))}
-            </ScrollView>
-          </>
-        )}
-
-        {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
-          <>
-            <Text style={styles.sectionTitle}>Weekly Program</Text>
-            <View style={styles.programContainer}>
-              {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
-                <View key={day} style={styles.programItem}>
-                  <Text style={styles.programDay}>{day}</Text>
-                  <Text style={styles.programDescription}>{program}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
-
-        {/* Debug info: Show event count */}
-        {events.length > 0 && (
-          <Text style={styles.debugText}>Showing {upcomingEvents.length} of {events.length} events</Text>
-        )}
-
-        {upcomingEvents.length > 0 ? (
-          <>
-            <Text style={styles.sectionTitle}>Upcoming Events</Text>
-            {upcomingEvents.map((event) => (
-              <TouchableOpacity
-                key={event.id}
-                style={styles.eventCard}
-                onPress={() => {
-                  navigation.navigate("EventDetail", { eventId: event.slug || event.id })
-                }}
-              >
-                <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
-                <View style={styles.eventInfo}>
-                  <Text style={styles.eventName}>{event.name}</Text>
-                  <Text style={styles.eventDate}>
-                    {event.date && typeof (event.date as any).toDate === "function"
-                      ? (event.date as any).toDate().toDateString()
-                      : new Date(event.date).toDateString()}
-                  </Text>
-                  <Text style={styles.eventArtists}>{event.artists.join(", ")}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </>
-        ) : (
-          <View style={styles.emptyEventsContainer}>
-            <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
-            <Text style={styles.emptyEventsSubtext}>Check back later for upcoming events</Text>
-          </View>
-        )}
-
-        <TouchableOpacity
-          style={styles.directionsButton}
-          onPress={openInGoogleMaps}
-        >
-          <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.directionsButtonText}>Get Directions</Text>
-        </TouchableOpacity>
-      </View>
+      </ScrollView>
+    )}
 
       <Modal
         visible={showOwnershipModal}
@@ -721,7 +944,6 @@ const VenueDetailScreen: React.FC = () => {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </ScrollView>
     </>
   )
 }
@@ -1204,6 +1426,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
     marginLeft: 12,
+  },
+  desktopVenueHeaderImage: {
+    width: "100%",
+    height: 380,
+    borderRadius: 16,
+  },
+  desktopLeftContent: {
+    paddingVertical: 20,
+    paddingHorizontal: 8,
+  },
+  stickyCard: {
+    backgroundColor: "rgba(18, 18, 26, 0.85)",
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
   },
 })
 
