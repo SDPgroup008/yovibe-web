@@ -99,6 +99,7 @@ exports.handler = async (event) => {
 
   const query = new URLSearchParams((event.rawUrl || event.url || "").split("?")[1] || "");
   const dryRun = query.get("dryRun") === "1";
+  const resetFailed = query.get("resetFailed") === "1";
   const isBackground =
     event.headers && (event.headers["x-nf-async"] === "true" || event.headers["x-nf-async"] === "1");
 
@@ -116,32 +117,101 @@ exports.handler = async (event) => {
   const admin = createClient(supabaseUrl, supabaseKey);
 
   try {
-    const { data: venues, error } = await admin
-      .from("venues")
-      .select("slug,name,location,latitude,longitude")
-      .eq("is_deleted", false)
-      .order("name", { ascending: true });
+    // The `geocode_failed` column only exists after the migration is applied.
+    // Detect it up-front so the function keeps working (without skip/mark
+    // behaviour) until the migration has run.
+    let geocodeFailedEnabled = true;
+    let venues = null;
+    {
+      const probe = await admin
+        .from("venues")
+        .select("slug,name,location,latitude,longitude,geocode_failed")
+        .eq("is_deleted", false)
+        .order("name", { ascending: true });
+      if (probe.error && /geocode_failed/i.test(probe.error.message || "")) {
+        geocodeFailedEnabled = false;
+        const fallback = await admin
+          .from("venues")
+          .select("slug,name,location,latitude,longitude")
+          .eq("is_deleted", false)
+          .order("name", { ascending: true });
+        if (fallback.error) throw fallback.error;
+        venues = fallback.data;
+      } else {
+        if (probe.error) throw probe.error;
+        venues = probe.data;
+      }
+    }
 
-    if (error) throw error;
+    // Clear the failed flag so previously-failed venues are retried.
+    if (resetFailed) {
+      if (!geocodeFailedEnabled) {
+        return {
+          statusCode: 200,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ok: true,
+            resetFailed: true,
+            message: "geocode_failed column not found — apply the migration supabase/migrations/20260818140000_geocode_failed_flag.sql first.",
+          }),
+        };
+      }
+      const { error: resetError } = await admin
+        .from("venues")
+        .update({ geocode_failed: false })
+        .eq("geocode_failed", true);
+      if (resetError) throw resetError;
+      return {
+        statusCode: 200,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ok: true, resetFailed: true, message: "Cleared geocode_failed flag for all venues." }),
+      };
+    }
 
-    const missing = (venues || []).filter(isMissingCoords);
+    const withCoords = (venues || []).filter(isMissingCoords);
+    const skipped = geocodeFailedEnabled
+      ? withCoords.filter((v) => v.geocode_failed === true)
+      : [];
+    const missing = geocodeFailedEnabled
+      ? withCoords.filter((v) => v.geocode_failed !== true)
+      : withCoords;
     const toGeocode = missing.slice(0, limit);
+
+    // Hard time budget so the function ALWAYS returns inside Netlify's
+    // timeout instead of dying with a 502 (sync functions get ~10s,
+    // background functions get ~15 min). Any venues not reached are
+    // reported via `remaining` so the caller can continue.
+    const START_TIME = Date.now();
+    const TIME_BUDGET_MS = isBackground ? 14 * 60 * 1000 : 7500;
 
     const stats = {
       scanned: (venues || []).length,
       missing: missing.length,
+      skipped: skipped.length,
       attempted: 0,
       geocoded: 0,
       failed: [],
     };
 
     for (const venue of toGeocode) {
+      if (Date.now() - START_TIME > TIME_BUDGET_MS) break;
       stats.attempted++;
       const result = await geocodeVenue(venue);
       await delay(THROTTLE_MS);
 
       if (!result) {
         stats.failed.push(venue.slug);
+        // Persist the failure so later runs skip this venue instead of
+        // retrying it on every batch/loop.
+        if (!dryRun && geocodeFailedEnabled) {
+          const { error: markError } = await admin
+            .from("venues")
+            .update({ geocode_failed: true })
+            .eq("slug", venue.slug);
+          if (markError) {
+            console.error(`[geocode-venues] Failed marking ${venue.slug} as geocode_failed:`, markError.message);
+          }
+        }
         continue;
       }
 
@@ -149,7 +219,11 @@ exports.handler = async (event) => {
       if (!dryRun) {
         const { error: updateError } = await admin
           .from("venues")
-          .update({ latitude: result.lat, longitude: result.lon })
+          .update({
+            latitude: result.lat,
+            longitude: result.lon,
+            ...(geocodeFailedEnabled ? { geocode_failed: false } : {}),
+          })
           .eq("slug", venue.slug);
         if (updateError) {
           stats.geocoded--;
@@ -166,14 +240,17 @@ exports.handler = async (event) => {
       body: JSON.stringify({
         ok: true,
         dryRun,
+        resetFailed: false,
         mode: isBackground ? "background" : "sync",
         limit,
         ...stats,
         remaining,
         tip:
-          remaining > 0
-            ? `Call again (or use background mode: header 'x-nf-async: true') to geocode the remaining ${remaining} venues.`
-            : "All venues currently missing coordinates were processed.",
+          skipped.length > 0
+            ? `${skipped.length} previously-failed venue(s) were skipped. Use ?resetFailed=1 to retry them.`
+            : remaining > 0
+              ? `Call again (or use background mode: header 'x-nf-async: true') to geocode the remaining ${remaining} venues.`
+              : "All venues currently missing coordinates were processed.",
       }),
     };
   } catch (error) {

@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useRef, useState } from "react"
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Alert, Switch,
@@ -17,6 +17,7 @@ interface GeocodeStats {
   total: number
   missing: number
   withCoords: number
+  skipped: number
 }
 
 interface MissingVenue {
@@ -46,43 +47,61 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
   const [missingVenues, setMissingVenues] = useState<MissingVenue[]>([])
   const [loadingStats, setLoadingStats] = useState(true)
   const [running, setRunning] = useState(false)
-  const [mode, setMode] = useState<"sync" | "background" | null>(null)
+  const [mode, setMode] = useState<"sync" | "background" | "loop" | null>(null)
   const [dryRun, setDryRun] = useState(false)
   const [limit, setLimit] = useState("8")
   const [result, setResult] = useState<ResultSummary | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  const finishLoadStats = (list: any[]) => {
+    const typed = list as Array<{
+      slug?: string | null
+      name?: string | null
+      location?: string | null
+      latitude?: number | null
+      longitude?: number | null
+      geocode_failed?: boolean | null
+    }>
+    const missing = typed.filter(
+      (v) => !v.latitude || !v.longitude || Number(v.latitude) === 0 || Number(v.longitude) === 0,
+    )
+    const skipped = missing.filter((v) => v.geocode_failed === true)
+    const pending = missing.filter((v) => v.geocode_failed !== true)
+
+    setStats({ total: typed.length, missing: pending.length, withCoords: typed.length - missing.length, skipped: skipped.length })
+    setMissingVenues(
+      pending
+        .map((v) => ({ id: v.slug || "", name: v.name || "Unknown venue", location: v.location || "" }))
+        .slice(0, 100),
+    )
+  }
 
   const loadStats = useCallback(async () => {
     try {
       setLoadingStats(true)
       setError(null)
       // GET with only columns known to exist on `venues`. Avoids HEAD/count
-      // and PostgREST `.or()` filters, which were returning 400s.
-      const { data, error } = await supabase
+      // and PostgREST `.or()` filters, which were returning 400s. Falls back
+      // to a query without `geocode_failed` until the migration is applied.
+      const query = supabase
         .from("venues")
-        .select("slug,name,location,latitude,longitude")
+        .select("slug,name,location,latitude,longitude,geocode_failed")
         .eq("is_deleted", false)
         .order("name", { ascending: true })
         .limit(5000)
+      const { data, error } = await query
+      if (error && /geocode_failed/i.test(error.message || "")) {
+        const fallback = await supabase
+          .from("venues")
+          .select("slug,name,location,latitude,longitude")
+          .eq("is_deleted", false)
+          .order("name", { ascending: true })
+          .limit(5000)
+        if (fallback.error) throw fallback.error
+        return finishLoadStats(fallback.data || [])
+      }
       if (error) throw error
-
-      const list = (data || []) as Array<{
-        slug?: string | null
-        name?: string | null
-        location?: string | null
-        latitude?: number | null
-        longitude?: number | null
-      }>
-      const missing = list.filter(
-        (v) => !v.latitude || !v.longitude || Number(v.latitude) === 0 || Number(v.longitude) === 0,
-      )
-
-      setStats({ total: list.length, missing: missing.length, withCoords: list.length - missing.length })
-      setMissingVenues(
-        missing
-          .map((v) => ({ id: v.slug || "", name: v.name || "Unknown venue", location: v.location || "" }))
-          .slice(0, 100),
-      )
+      return finishLoadStats(data || [])
     } catch (e: any) {
       console.error("[AdminGeocode] loadStats failed:", e)
       setError(e?.message || "Failed to load stats")
@@ -100,25 +119,87 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
     loadStats()
   }, [user, navigation, loadStats])
 
-  const parsedLimit = Math.max(1, Math.min(20, Number(limit) || 8))
+  const cancelRef = useRef(false)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+
+  // Sync runs must stay well inside Netlify's ~10s timeout (Nominatim
+  // throttles to ~1 req/s, so keep batches small).
+  const syncLimit = Math.max(1, Math.min(4, Number(limit) || 4))
+
+  const runSyncBatch = async (): Promise<ResultSummary> => {
+    const params = new URLSearchParams({ limit: String(syncLimit) })
+    if (dryRun) params.set("dryRun", "1")
+    const res = await fetch(`${FUNC_URL}?${params.toString()}`)
+    const body = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
+    return body as ResultSummary
+  }
 
   const runSync = async () => {
     setRunning(true)
     setMode("sync")
     setError(null)
     try {
-      const params = new URLSearchParams({ limit: String(parsedLimit) })
-      if (dryRun) params.set("dryRun", "1")
-      const res = await fetch(`${FUNC_URL}?${params.toString()}`)
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
-      setResult(body as ResultSummary)
+      const body = await runSyncBatch()
+      setResult(body)
       loadStats()
     } catch (e: any) {
       setError(e?.message || "Geocoding request failed")
     } finally {
       setRunning(false)
       setMode(null)
+    }
+  }
+
+  // Reliable path: repeatedly geocode small batches until all venues are
+  // done. Each individual request stays inside the function timeout, so this
+  // never 502s even if Netlify background mode is unavailable.
+  const runAll = async () => {
+    setRunning(true)
+    setMode("loop")
+    setError(null)
+    setResult(null)
+    cancelRef.current = false
+    const total = stats?.missing ?? 0
+    const cumulative = { attempted: 0, geocoded: 0, failed: [] as string[] }
+    let lastRemaining = 0
+    try {
+      while (true) {
+        if (cancelRef.current) break
+        const body = await runSyncBatch()
+        cumulative.attempted += body.attempted ?? 0
+        cumulative.geocoded += body.geocoded ?? 0
+        if (body.failed) cumulative.failed = [...cumulative.failed, ...body.failed]
+        lastRemaining = body.remaining ?? 0
+        setProgress({ done: cumulative.attempted, total: Math.max(total, cumulative.attempted + lastRemaining) })
+        // Stop if: nothing left, nothing was attempted, or this batch made no
+        // progress (venues that can't be geocoded would otherwise loop forever).
+        const noProgress = (body.geocoded ?? 0) === 0 && (body.attempted ?? 0) > 0
+        if (lastRemaining <= 0 || (body.attempted ?? 0) === 0 || noProgress) break
+        await new Promise((r) => setTimeout(r, 400))
+      }
+      const cancelled = cancelRef.current
+      setResult({
+        ok: true,
+        dryRun,
+        mode: "loop",
+        attempted: cumulative.attempted,
+        geocoded: cumulative.geocoded,
+        failed: cumulative.failed,
+        remaining: lastRemaining,
+        tip: cancelled
+          ? "Loop cancelled — press Geocode all to continue."
+          : lastRemaining > 0
+            ? `Stopped: ${lastRemaining} venue(s) left that couldn't be geocoded (no match found).`
+            : "All venues currently missing coordinates were processed.",
+      })
+    } catch (e: any) {
+      setError(e?.message || "Geocoding loop failed")
+    } finally {
+      setRunning(false)
+      setMode(null)
+      setProgress(null)
+      loadStats()
     }
   }
 
@@ -142,6 +223,30 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
       })
     } catch (e: any) {
       setError(e?.message || "Background geocoding failed to start")
+    } finally {
+      setRunning(false)
+      setMode(null)
+    }
+  }
+
+  // Clear the geocode_failed flag so previously-failed venues are retried.
+  const resetFailedVenues = async () => {
+    setRunning(true)
+    setMode("sync")
+    setError(null)
+    try {
+      const res = await fetch(`${FUNC_URL}?resetFailed=1`)
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
+      setResult({
+        ok: true,
+        mode: "sync",
+        tip: body?.message || "Failed venues cleared.",
+        ...(body as ResultSummary),
+      })
+      loadStats()
+    } catch (e: any) {
+      setError(e?.message || "Failed to reset venues")
     } finally {
       setRunning(false)
       setMode(null)
@@ -197,6 +302,12 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
                 </Text>
                 <Text style={st.metricLabel}>Need Coords</Text>
               </View>
+              <View style={[st.metricCard, { borderColor: stats && stats.skipped > 0 ? "rgba(245,158,11,0.5)" : "rgba(255,255,255,0.06)" }]}>
+                <Text style={[st.metricValue, { color: stats && stats.skipped > 0 ? "#F59E0B" : "#666" }]}>
+                  {stats?.skipped ?? 0}
+                </Text>
+                <Text style={st.metricLabel}>Skipped (failed)</Text>
+              </View>
             </View>
           )}
         </View>
@@ -214,7 +325,7 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
           </View>
 
           <View style={st.row}>
-            <Text style={st.label}>Batch size (sync)</Text>
+            <Text style={st.label}>Batch size (sync, max 4)</Text>
             <TextInput
               style={st.input}
               value={limit}
@@ -240,21 +351,62 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
 
             <TouchableOpacity
               style={[st.btnSecondary, running && st.btnDisabled]}
-              onPress={runBackground}
+              onPress={runAll}
               disabled={running}
             >
-              {running && mode === "background" ? (
+              {running && mode === "loop" ? (
                 <ActivityIndicator size="small" color="#00D4FF" />
               ) : (
-                <Ionicons name="flash" size={16} color="#00D4FF" />
+                <Ionicons name="infinite" size={16} color="#00D4FF" />
               )}
-              <Text style={st.btnSecondaryText}>Geocode all (background)</Text>
+              <Text style={st.btnSecondaryText}>Geocode all</Text>
             </TouchableOpacity>
           </View>
 
+          {running && mode === "loop" && progress && (
+            <View style={st.progressBox}>
+              <View style={st.progressRow}>
+                <Text style={st.progressText}>Geocoding {progress.done}/{progress.total}…</Text>
+                <TouchableOpacity style={st.cancelBtn} onPress={() => { cancelRef.current = true }}>
+                  <Ionicons name="close" size={16} color="#FF6B6B" />
+                  <Text style={st.cancelText}>Stop</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={st.progressTrack}>
+                <View
+                  style={[
+                    st.progressFill,
+                    { width: `${progress.total > 0 ? Math.min(100, (progress.done / progress.total) * 100) : 0}%` },
+                  ]}
+                />
+              </View>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[st.btnGhost, running && st.btnDisabled]}
+            onPress={runBackground}
+            disabled={running}
+          >
+            <Ionicons name="flash" size={15} color="#00D4FF" />
+            <Text style={st.btnGhostText}>Geocode all (Netlify background — 15 min run, refresh later)</Text>
+          </TouchableOpacity>
+
+          {stats && stats.skipped > 0 && (
+            <TouchableOpacity
+              style={[st.btnGhostWarn, running && st.btnDisabled]}
+              onPress={resetFailedVenues}
+              disabled={running}
+            >
+              <Ionicons name="refresh" size={15} color="#F59E0B" />
+              <Text style={st.btnGhostWarnText}>Reset {stats.skipped} failed venue(s) to retry them</Text>
+            </TouchableOpacity>
+          )}
+
           <Text style={st.hint}>
-            Sync mode: keeps each run inside Netlify's ~10s timeout. Background mode fires a detached run
-            (up to 15 min) that handles everything — refresh stats after ~2 minutes.
+            "Geocode all" runs small batches back-to-back so nothing exceeds Netlify's ~10s timeout (no 502s).
+            Venues that can't be matched are marked failed and skipped by later runs — use "Reset failed venues"
+            to retry them.
           </Text>
         </View>
 
@@ -263,7 +415,7 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
           <View style={st.card}>
             <View style={st.cardHeader}>
               <Ionicons name={result.ok ? "checkmark-circle" : "alert-circle"} size={20} color={result.ok ? "#4CAF50" : "#FF6B6B"} />
-              <Text style={st.cardTitle}>Last run {result.mode === "background" ? "(background)" : ""}</Text>
+              <Text style={st.cardTitle}>Last run {result.mode === "background" ? "(background)" : result.mode === "loop" ? "(loop)" : ""}</Text>
             </View>
             <View style={st.metricGrid}>
               <View style={st.metricCard}>
@@ -292,8 +444,7 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
             {result.mode === "background" && (
               <Text style={st.hint}>Background run started — press refresh to see updated stats in a couple of minutes.</Text>
             )}
-            {result.tip && <Text style={st.hint}>{result.tip}</Text>}
-          </View>
+            {result.tip && <Text style={st.hint}>{result.tip}</Text>}          </View>
         )}
 
         {/* ── Venues missing coordinates ────────────────────────── */}
@@ -373,6 +524,25 @@ const st = StyleSheet.create({
   },
   btnSecondaryText: { color: "#00D4FF", fontSize: 13, fontWeight: "800" },
   btnDisabled: { opacity: 0.5 },
+  btnGhost: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "rgba(0,212,255,0.25)",
+    marginBottom: 10,
+  },
+  btnGhostText: { color: "#00D4FF", fontSize: 12, fontWeight: "700" },
+  btnGhostWarn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: "rgba(245,158,11,0.4)",
+    marginBottom: 10, backgroundColor: "rgba(245,158,11,0.08)",
+  },
+  btnGhostWarnText: { color: "#F59E0B", fontSize: 12, fontWeight: "700" },
+  progressBox: { marginBottom: 12 },
+  progressRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 6 },
+  progressText: { color: "#CCC", fontSize: 12, fontWeight: "600" },
+  cancelBtn: { flexDirection: "row", alignItems: "center", gap: 4, padding: 4 },
+  cancelText: { color: "#FF6B6B", fontSize: 12, fontWeight: "700" },
+  progressTrack: { height: 6, borderRadius: 3, backgroundColor: "#1a1a2e", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 3, backgroundColor: "#00D4FF" },
   hint: { color: "#777", fontSize: 11, lineHeight: 16, marginTop: 4 },
   failedText: { color: "#FF6B6B", fontSize: 12, marginTop: 8 },
   failedItem: { color: "#FF6B6B", fontSize: 11, marginTop: 2, opacity: 0.8 },
