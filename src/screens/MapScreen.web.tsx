@@ -75,11 +75,23 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>(() => isCacheValid() ? mapCache!.vibeRatings : {})
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
+  const [showList, setShowList] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [lastCreatedAt, setLastCreatedAt] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const loadingMoreRef = useRef(false)
+  const hasMoreRef = useRef(true)
+  const lastCreatedAtRef = useRef<string | undefined>(undefined)
+  const autoLoadAllRef = useRef(false)
+
+  // Keep refs in sync so the auto-load loop always reads fresh state.
+  useEffect(() => {
+    hasMoreRef.current = hasMore
+  }, [hasMore])
+  useEffect(() => {
+    lastCreatedAtRef.current = lastCreatedAt
+  }, [lastCreatedAt])
 
   // ─── Hydrate once from cache on first mount (if cached) ────────
   const initialisedRef = useRef(false);
@@ -136,8 +148,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       return;
     }
 
-    // Cache invalid or empty — load fresh
-    loadVenues({ reset: true });
+    // Cache invalid or empty — load fresh, then auto-load every remaining
+    // batch so the full venue list is available without scrolling.
+    loadVenues({ reset: true }).then(() => {
+      autoLoadAll()
+    });
 
     if (!listenersSetup) {
       listenersSetup = true;
@@ -234,23 +249,32 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
   }, [destinationVenueId, venues])
 
-  const loadVenues = useCallback(async (opts?: { reset?: boolean }) => {
+  const loadVenues = useCallback(async (opts?: { reset?: boolean }): Promise<boolean> => {
     const reset = opts?.reset ?? false
     const BATCH_SIZE = 25
     if (reset) {
       setLoading(true)
     } else {
-      if (loadingMoreRef.current || !hasMore) return
+      // Another load is already in flight (or nothing left) — signal "continue"
+      // so an auto-load loop doesn't stop because a scroll-triggered load won.
+      if (loadingMoreRef.current || !hasMoreRef.current) return true
       loadingMoreRef.current = true
       setLoadingMore(true)
     }
     try {
-      const cursor = reset ? undefined : lastCreatedAt
+      const cursor = reset ? undefined : lastCreatedAtRef.current
       const { venues: batch, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, cursor);
 
       setVenues((prev) => (reset ? batch : [...prev, ...batch]));
       setLastCreatedAt(newLastCreatedAt ?? undefined);
-      setHasMore(!!newLastCreatedAt && batch.length > 0);
+      lastCreatedAtRef.current = newLastCreatedAt ?? undefined;
+
+      // Stop if the cursor didn't advance (protects against infinite loops
+      // caused by duplicate created_at values).
+      const advanced = !!reset || (!!newLastCreatedAt && newLastCreatedAt !== cursor)
+      const more = advanced && !!newLastCreatedAt && batch.length > 0
+      setHasMore(more);
+      hasMoreRef.current = more;
 
       const today = new Date();
       for (const venue of batch) {
@@ -268,26 +292,45 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
         }
       }
+      return true
     } catch (error) {
       console.error("[MapScreen.web] Error loading venues:", error);
+      return false
     } finally {
       setLoading(false);
       setLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, [lastCreatedAt, hasMore]);
+  }, []);
 
-  // Load the next page when the user scrolls near the bottom of the list.
+  // Load the next page (resolves true when a batch was fetched).
   const loadMore = useCallback(() => {
-    loadVenues({ reset: false })
+    return loadVenues({ reset: false })
   }, [loadVenues])
 
-  // Pull-to-refresh handler
+  // Load every remaining page back-to-back, without needing to scroll.
+  const autoLoadAll = useCallback(async () => {
+    if (autoLoadAllRef.current) return
+    autoLoadAllRef.current = true
+    try {
+      // Small pause between batches so we don't hammer the API.
+      while (hasMoreRef.current) {
+        const ok = await loadMore()
+        if (!ok) break
+        await new Promise((resolve) => setTimeout(resolve, 350))
+      }
+    } finally {
+      autoLoadAllRef.current = false
+    }
+  }, [loadMore])
+
+  // Pull-to-refresh handler — reloads everything, including all batches.
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     await loadVenues({ reset: true })
+    await autoLoadAll()
     setRefreshing(false)
-  }, [loadVenues])
+  }, [loadVenues, autoLoadAll])
 
   const handleVenueSelect = (venueId: string) => {
     navigation.navigate("VenueDetail", { venueId })
@@ -626,94 +669,203 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             </View>
           </View>
         ) : (
-          <View style={styles.venueList}>
-            {loading ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading venues...</Text>
-              </View>
-            ) : venues.length === 0 ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="location-outline" size={64} color="#666666" />
-                <Text style={styles.emptyText}>No venues found</Text>
-              </View>
-            ) : (
-              <ScrollView
-                ref={scrollRef}
-                style={styles.venueList}
-                showsVerticalScrollIndicator={false}
-                onContentSizeChange={handleListContentSize}
-                onScroll={handleListScroll}
-                scrollEventThrottle={16}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={onRefresh}
-                    colors={["#2196F3"]}
-                    tintColor="#2196F3"
-                  />
-                }
-              >
-                {filteredAndSortedVenues.map((venue, index) => {
-                  const venueId = venue.id || venue.slug || `mobile-venue-${index}`
-                  return (
-                    <TouchableOpacity
-                      key={venueId}
-                      style={[
-                        styles.venueCard,
-                        sameVenue(selectedVenue, venue) && styles.selectedVenueCard,
-                      ]}
-                      onPress={() => handleVenueSelect(venue.slug || venue.id)}
-                    >
-                      <View style={styles.venueCardRow}>
-                        <View style={styles.venueInfo}>
-                          <Text style={styles.venueName}>{venue.name}</Text>
-                          <Text style={styles.venueAddress}>{venue.location}</Text>
-                          <Text style={styles.venueCategories}>
-                            {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
-                          </Text>
-                          <View style={styles.vibeRatingContainer}>
-                            <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-                            <Text
-                              style={[
-                                styles.vibeRatingValue,
-                                { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" },
-                              ]}
-                            >
-                              {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
-                            </Text>
-                          </View>
-                        </View>
-                        <View style={styles.venueActions}>
-                          <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
-                            <Ionicons name="information-circle" size={16} color="#2196F3" />
-                            <Text style={styles.actionText}>Details</Text>
-                          </TouchableOpacity>
-                          <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
-                            <Ionicons name="navigate" size={16} color="#2196F3" />
-                            <Text style={styles.actionText}>Directions</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                    </TouchableOpacity>
-                  )
-                })}
-                {loadingMore && (
-                  <View style={styles.listFooter}>
-                    <ActivityIndicator size="small" color="#22d3ee" />
-                    <Text style={styles.listFooterText}>Loading more venues…</Text>
-                  </View>
-                )}
-                {hasMore && !loadingMore && venues.length > 0 && (
-                  <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
-                    <Text style={styles.loadMoreButtonText}>Load more venues</Text>
+          <View style={styles.mobileContainer}>
+            {/* Full-screen map is the default mobile view */}
+            <View style={styles.mobileMapWrap}>
+              <iframe
+                ref={mapIframeRef}
+                src="/map.html"
+                title="Venue map"
+                style={{ width: "100%", height: "100%", border: "none", background: "#0a0a12" } as any}
+                onLoad={handleMapLoad}
+              />
+              {selectedVenue ? (
+                <View style={styles.mapHudCard}>
+                  <View pointerEvents="none" style={styles.hudGlow} />
+                  <TouchableOpacity
+                    style={styles.hudCloseBtn}
+                    onPress={() => setSelectedVenue(null)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Close venue details"
+                  >
+                    <Ionicons name="close" size={18} color="#8b8b9e" />
                   </TouchableOpacity>
-                )}
-                {!hasMore && venues.length > 0 && (
-                  <View style={styles.listFooter}>
-                    <Text style={styles.listFooterText}>All venues loaded</Text>
+                  <Text style={styles.hudEyebrow}>SELECTED VENUE</Text>
+                  <Text style={styles.hudTitle}>{selectedVenue.name}</Text>
+                  <Text style={styles.hudAddress}>{selectedVenue.location}</Text>
+                  <View style={styles.hudVibeRow}>
+                    <Text style={styles.hudVibeLabel}>Live Vibe: </Text>
+                    <Text style={[styles.hudVibeValue, { color: vibeColor(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating) }]}>
+                      {(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating).toFixed(1)}
+                    </Text>
                   </View>
+                  <View style={styles.hudButtonsRow}>
+                    <TouchableOpacity style={styles.hudDirectionsBtn} onPress={() => openGoogleMaps(selectedVenue)}>
+                      <Ionicons name="navigate" size={15} color="#03121a" />
+                      <Text style={styles.hudDirectionsText}>Directions</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.hudButton} onPress={() => handleVenueSelect(selectedVenue.slug || selectedVenue.id)}>
+                      <Text style={styles.hudButtonText}>View Details</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.mapHudHint}>
+                  <Ionicons name="map-outline" size={20} color="#22d3ee" />
+                  <Text style={styles.mapHudHintText}>Select a venue to see its live vibe and directions</Text>
+                </View>
+              )}
+            </View>
+
+            {/* Toggle button (top-right) to overlay the list */}
+            <TouchableOpacity
+              style={[styles.mobileToggleBtn, showList && styles.mobileToggleBtnActive]}
+              onPress={() => setShowList((prev) => !prev)}
+              accessibilityRole="button"
+              accessibilityLabel={showList ? "Close venue list" : "Show venue list"}
+            >
+              <Ionicons name={showList ? "close" : "list"} size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            {/* Overlay list on top of the map */}
+            {showList && (
+              <View style={styles.mobileListOverlay}>
+                <View style={styles.header}>
+                  <View style={[styles.headerTop, { paddingRight: 52 }]}>
+                    <View style={styles.headerTextContainer}>
+                      <Text style={styles.headerTitle}>Venue Locations</Text>
+                      <Text style={styles.headerSubtitle}>
+                        {searchQuery 
+                          ? `${venueCount} venue${venueCount !== 1 ? 's' : ''} found`
+                          : `Here's all our venues, sorted by vibe:`
+                        }
+                      </Text>
+                    </View>
+                    <TouchableOpacity 
+                      style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
+                      onPress={toggleSearch}
+                      accessibilityRole="button"
+                      accessibilityLabel={showSearch ? "Close search" : "Search venues"}
+                    >
+                      <Ionicons name={showSearch ? "close" : "search"} size={22} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
+                    </TouchableOpacity>
+                  </View>
+                  {showSearch && (
+                    <View style={styles.searchContainer}>
+                      <TextInput
+                        style={styles.searchInput}
+                        placeholder="Search venues by name..."
+                        placeholderTextColor="#888888"
+                        value={searchQuery}
+                        onChangeText={handleSearchChange}
+                        autoFocus
+                        autoCorrect={false}
+                        autoCapitalize="none"
+                        returnKeyType="search"
+                      />
+                      {searchQuery.length > 0 && (
+                        <TouchableOpacity 
+                          style={styles.searchClearButton}
+                          onPress={() => setSearchQuery("")}
+                        >
+                          <Ionicons name="close-circle" size={20} color="#666666" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                </View>
+                {loading ? (
+                  <View style={styles.loadingContainer}>
+                    <Text style={styles.loadingText}>Loading venues...</Text>
+                  </View>
+                ) : venues.length === 0 ? (
+                  <View style={styles.emptyContainer}>
+                    <Ionicons name="location-outline" size={64} color="#666666" />
+                    <Text style={styles.emptyText}>No venues found</Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    ref={scrollRef}
+                    style={styles.venueList}
+                    showsVerticalScrollIndicator={false}
+                    onContentSizeChange={handleListContentSize}
+                    onScroll={handleListScroll}
+                    scrollEventThrottle={16}
+                    refreshControl={
+                      <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={["#2196F3"]}
+                        tintColor="#2196F3"
+                      />
+                    }
+                  >
+                    {filteredAndSortedVenues.map((venue, index) => {
+                      const venueId = venue.id || venue.slug || `mobile-venue-${index}`
+                      return (
+                        <TouchableOpacity
+                          key={venueId}
+                          style={[
+                            styles.venueCard,
+                            sameVenue(selectedVenue, venue) && styles.selectedVenueCard,
+                          ]}
+                          onPress={() => {
+                            setSelectedVenue(venue)
+                            setShowList(false)
+                          }}
+                        >
+                          <View style={styles.venueCardRow}>
+                            <View style={styles.venueInfo}>
+                              <Text style={styles.venueName}>{venue.name}</Text>
+                              <Text style={styles.venueAddress}>{venue.location}</Text>
+                              <Text style={styles.venueCategories}>
+                                {venue.categories && venue.categories.length > 0 ? venue.categories.join(", ") : "Other"}
+                              </Text>
+                              <View style={styles.vibeRatingContainer}>
+                                <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                                <Text
+                                  style={[
+                                    styles.vibeRatingValue,
+                                    { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" },
+                                  ]}
+                                >
+                                  {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                                </Text>
+                              </View>
+                            </View>
+                            <View style={styles.venueActions}>
+                              <TouchableOpacity style={styles.actionButton} onPress={() => handleVenueSelect(venue.slug || venue.id)}>
+                                <Ionicons name="information-circle" size={16} color="#2196F3" />
+                                <Text style={styles.actionText}>Details</Text>
+                              </TouchableOpacity>
+                              <TouchableOpacity style={styles.actionButton} onPress={() => openGoogleMaps(venue)}>
+                                <Ionicons name="navigate" size={16} color="#2196F3" />
+                                <Text style={styles.actionText}>Directions</Text>
+                              </TouchableOpacity>
+                            </View>
+                          </View>
+                        </TouchableOpacity>
+                      )
+                    })}
+                    {loadingMore && (
+                      <View style={styles.listFooter}>
+                        <ActivityIndicator size="small" color="#22d3ee" />
+                        <Text style={styles.listFooterText}>Loading more venues…</Text>
+                      </View>
+                    )}
+                    {hasMore && !loadingMore && venues.length > 0 && (
+                      <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
+                        <Text style={styles.loadMoreButtonText}>Load more venues</Text>
+                      </TouchableOpacity>
+                    )}
+                    {!hasMore && venues.length > 0 && (
+                      <View style={styles.listFooter}>
+                        <Text style={styles.listFooterText}>All venues loaded</Text>
+                      </View>
+                    )}
+                  </ScrollView>
                 )}
-              </ScrollView>
+              </View>
             )}
           </View>
         )}
@@ -906,18 +1058,62 @@ const styles = StyleSheet.create({
     height: "100%",
   },
   desktopSidebar: {
-    width: "40%",
+    width: "30%",
     height: "100%",
     backgroundColor: "rgba(10, 12, 22, 0.6)",
     borderRightWidth: 1,
     borderRightColor: "rgba(255, 255, 255, 0.08)",
   },
   desktopMapViewport: {
-    width: "60%",
+    width: "70%",
     height: "100%",
     backgroundColor: "#050508",
     position: "relative",
     overflow: "hidden",
+  },
+  mobileContainer: {
+    flex: 1,
+    backgroundColor: "#050508",
+    position: "relative",
+  },
+  mobileMapWrap: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  mobileToggleBtn: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 40,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(18, 18, 26, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.4)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 5,
+  },
+  mobileToggleBtnActive: {
+    backgroundColor: "rgba(34, 211, 238, 0.25)",
+    borderColor: "#22d3ee",
+  },
+  mobileListOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 20,
+    backgroundColor: "rgba(10, 12, 22, 0.72)",
   },
   mapHudCard: {
     position: "absolute",

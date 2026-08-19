@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import type React from "react";
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
@@ -309,7 +309,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       />
       {/* Visible H1 for SEO */}
       <Text style={styles.pageTitle} accessibilityRole="header">
-        Discover Nightlife Venues &amp; Clubs
+        Discover Venues &amp; Clubs
       </Text>
       <View style={styles.header}>
         <View style={styles.tabContainer}>
@@ -469,8 +469,8 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFFFFF",
     paddingHorizontal: responsiveSize(16, 24, 32),
-    paddingTop: responsiveSize(12, 16, 20),
-    paddingBottom: 4,
+    paddingTop: responsiveSize(6, 8, 10),
+    paddingBottom: 1,
   },
   recreationContainer: {
     backgroundColor: "#F5F5F5",
