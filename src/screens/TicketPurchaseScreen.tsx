@@ -24,6 +24,24 @@ import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 
+// ─── Design tokens (UI only) ─────────────────────────────────────────
+const SURFACE = "rgba(18, 18, 26, 0.72)"
+const SURFACE_INNER = "rgba(30, 30, 46, 0.55)"
+const SURFACE_BORDER = "rgba(255, 255, 255, 0.08)"
+const CARD_RADIUS = 14
+
+const STEP_LABELS = ["Ticket", "Attendees", "Delivery", "Payment"] as const
+
+// Compact section header with a step number chip (purely visual).
+const StepSectionTitle: React.FC<{ step: number; title: string }> = ({ step, title }) => (
+  <View style={styles.stepSectionTitleRow}>
+    <View style={styles.stepChip}>
+      <Text style={styles.stepChipText}>{step}</Text>
+    </View>
+    <Text style={styles.stepSectionTitle}>{title}</Text>
+  </View>
+)
+
 const TicketPurchaseScreen: React.FC = () => {
   const { isLargeScreen } = useDeviceType()
   const navigation = useCompatNavigation()
@@ -919,6 +937,22 @@ const handleInstallmentPurchase = async () => {
     }
   }
 
+  // Informational checkout progress (derived from state — never gates flows).
+  const checkoutStep = useMemo(() => {
+    const namesOk = Array.from({ length: actualTicketCount }).every(
+      (_, i) => ((buyerNames[i] || "").trim().length > 0),
+    )
+    const deliveryOk = emailDistribution === "multiple"
+      ? Array.from({ length: actualTicketCount }).every(
+          (_, i) => ((buyerEmails[i] || "").trim().length > 0),
+        )
+      : (visitorEmail || "").trim().length > 0
+    if (!selectedTicketType) return 1
+    if (!namesOk) return 2
+    if (!deliveryOk) return 3
+    return 4
+  }, [selectedTicketType, actualTicketCount, buyerNames, buyerEmails, emailDistribution, visitorEmail])
+
   if (initialLoading) {
     return (
       <View style={styles.loaderContainer}>
@@ -1000,25 +1034,74 @@ const handleInstallmentPurchase = async () => {
         </View>
       )}
       <ScrollView>
-        <View style={styles.header}>
+        <View style={[styles.header, isLargeScreen && styles.desktopHeader]}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+            accessibilityRole="button"
+            accessibilityLabel="Back to event"
+          >
+            <Ionicons name="chevron-back" size={22} color="#FFFFFF" />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Purchase Tickets</Text>
+          <View style={styles.headerSecure}>
+            <Ionicons name="lock-closed" size={13} color="#00D4FF" />
+            <Text style={styles.headerSecureText}>Secure Checkout</Text>
+          </View>
         </View>
 
-      <View style={styles.eventInfo}>
-        {event.posterImageUrl ? (
-          <Image
-            source={{ uri: event.posterImageUrl }}
-            style={styles.eventPosterBg as any}
-            resizeMode="cover"
-          />
-        ) : null}
-        <View style={styles.eventInfoGradient} />
-        <View style={styles.eventInfoContent}>
-          <Text style={styles.eventName}>{event.name}</Text>
-          <Text style={styles.eventVenue}>{event.venueName}</Text>
-          <Text style={styles.eventDate}>{new Date(event.date).toDateString()}</Text>
+        {/* ── Event hero band ────────────────────────────────────── */}
+        <View style={[styles.eventHero, isLargeScreen && styles.eventHeroDesktop]}>
+          {event.posterImageUrl ? (
+            <Image
+              source={{ uri: event.posterImageUrl }}
+              style={styles.eventHeroBg as any}
+              resizeMode="cover"
+            />
+          ) : null}
+          <View style={styles.eventHeroOverlay} />
+          <View style={styles.eventHeroContent}>
+            <Text style={styles.eventHeroName}>{event.name}</Text>
+            <View style={styles.eventHeroChips}>
+              <View style={styles.chip}>
+                <Ionicons name="location-outline" size={13} color="#00D4FF" />
+                <Text style={styles.chipText}>{event.venueName}</Text>
+              </View>
+              <View style={styles.chip}>
+                <Ionicons name="calendar-outline" size={13} color="#00D4FF" />
+                <Text style={styles.chipText}>{new Date(event.date).toDateString()}</Text>
+              </View>
+              {event.time ? (
+                <View style={styles.chip}>
+                  <Ionicons name="time-outline" size={13} color="#00D4FF" />
+                  <Text style={styles.chipText}>{event.time}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
         </View>
-      </View>
+
+        {/* ── Checkout progress ──────────────────────────────────── */}
+        <View style={[styles.stepper, isLargeScreen && styles.desktopStepper]}>
+          {STEP_LABELS.map((label, i) => {
+            const stepNum = i + 1
+            const done = checkoutStep > stepNum
+            const active = checkoutStep >= stepNum
+            return (
+              <View key={label} style={styles.stepperItem}>
+                <View style={[styles.stepperDot, active && styles.stepperDotActive]}>
+                  {done ? (
+                    <Ionicons name="checkmark" size={12} color="#03121a" />
+                  ) : (
+                    <Text style={[styles.stepperDotText, active && styles.stepperDotTextActive]}>{stepNum}</Text>
+                  )}
+                </View>
+                <Text style={[styles.stepperLabel, active && styles.stepperLabelActive]}>{label}</Text>
+                {i < STEP_LABELS.length - 1 && <View style={[styles.stepperLine, done && styles.stepperLineActive]} />}
+              </View>
+            )
+          })}
+        </View>
 
       {/* Purchase Status Dialog */}
       <StatusDialog
@@ -1029,30 +1112,83 @@ const handleInstallmentPurchase = async () => {
       />
 
       <View style={isLargeScreen ? styles.desktopTicketLayout : undefined}>
-      <View style={[styles.ticketSection, isLargeScreen && styles.desktopTicketLeft]}>
-        <Text style={styles.sectionTitle}>Select Ticket Type</Text>
+      <View style={isLargeScreen ? styles.desktopTicketLeft : undefined}>
+        <View style={[styles.ticketSection, isLargeScreen && styles.desktopSectionWide]}>
+        <StepSectionTitle step={1} title="Select Ticket Type" />
 
-        {/* Ticket Type Selector */}
+        {/* Ticket Type Selector: inline tier cards on desktop, modal elsewhere */}
         {ticketTypes.length > 0 ? (
-          <TouchableOpacity 
-            style={[styles.ticketTypeSelector, fieldErrors.ticketType && { borderColor: "#FF4444", borderWidth: 1.5 }]}
-            onPress={() => setShowTicketTypeModal(true)}
-          >
-            <View style={styles.ticketTypeSelectorContent}>
-              <Ionicons name="ticket" size={24} color="#00D4FF" />
-                <View style={styles.ticketTypeSelectorText}>
-                  <Text style={[styles.ticketTypeSelectorLabel, !selectedTicketType && { color: "#666", fontStyle: "italic" }]}>
-                    {selectedTicketTypeName}
-                  </Text>
-                  {selectedTicketType && (
-                    <Text style={styles.ticketTypeSelectorPrice}>
-                      UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
+          isLargeScreen ? (
+            <View style={styles.tierGrid}>
+              {ticketTypes.map((fee: any) => {
+                const isSelected = selectedTicketType?.name === fee.name
+                const soldOut = isSoldOut(fee)
+                const remaining = fee.maxTickets && fee.maxTickets > 0
+                  ? Math.max(0, fee.maxTickets - (soldCounts[fee.name] ?? 0))
+                  : null
+                const hasSeatMap = fee.seatMap && fee.seatMap.type !== "none"
+                return (
+                  <TouchableOpacity
+                    key={`${fee.name}_tier`}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.tierCard,
+                      isSelected && styles.tierCardSelected,
+                      soldOut && styles.tierCardSoldOut,
+                    ]}
+                    onPress={() => {
+                      if (soldOut) return
+                      setSelectedTicketType(fee)
+                      setFieldErrors((prev: any) => { const n = { ...prev }; delete n.ticketType; return n })
+                    }}
+                    disabled={soldOut}
+                  >
+                    <View style={styles.tierCardHeader}>
+                      <Text style={[styles.tierCardName, soldOut && { color: "#666" }]}>{fee.name}</Text>
+                      {soldOut ? (
+                        <View style={styles.soldOutBadge}>
+                          <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
+                        </View>
+                      ) : isSelected ? (
+                        <Ionicons name="checkmark-circle" size={22} color="#00FF9F" />
+                      ) : hasSeatMap ? (
+                        <View style={styles.seatMapBadge}>
+                          <Text style={styles.seatMapBadgeText}>PICK SEAT</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                    <Text style={[styles.tierCardPrice, soldOut && { color: "#555" }]}>
+                      UGX {Number.parseInt(String(fee.amount || "0").replace(/[^0-9]/g, "") || "0").toLocaleString()}
                     </Text>
-                  )}
-                </View>
+                    {remaining !== null && !soldOut && (
+                      <Text style={styles.remainingText}>{remaining} left</Text>
+                    )}
+                  </TouchableOpacity>
+                )
+              })}
             </View>
-            <Ionicons name="chevron-down" size={24} color="#888888" />
-          </TouchableOpacity>
+          ) : (
+            <TouchableOpacity 
+              style={[styles.ticketTypeSelector, fieldErrors.ticketType && { borderColor: "#FF4444", borderWidth: 1.5 }]}
+              onPress={() => setShowTicketTypeModal(true)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.ticketTypeSelectorContent}>
+                <Ionicons name="ticket" size={24} color="#00D4FF" />
+                  <View style={styles.ticketTypeSelectorText}>
+                    <Text style={[styles.ticketTypeSelectorLabel, !selectedTicketType && { color: "#666", fontStyle: "italic" }]}>
+                      {selectedTicketTypeName}
+                    </Text>
+                    {selectedTicketType && (
+                      <Text style={styles.ticketTypeSelectorPrice}>
+                        UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
+                      </Text>
+                    )}
+                  </View>
+              </View>
+              <Ionicons name="chevron-down" size={24} color="#888888" />
+            </TouchableOpacity>
+          )
         ) : (
           <Text style={styles.noTicketsText}>No ticket types available</Text>
         )}
@@ -1092,7 +1228,7 @@ const handleInstallmentPurchase = async () => {
       </View>
 
       {!user && (
-        <View style={styles.visitorInfoSection}>
+        <View style={[styles.visitorInfoSection, isLargeScreen && styles.desktopSectionWide]}>
           <Text style={styles.sectionTitle}>Buyer Contact Info</Text>
           <TextInput
             style={[styles.input, fieldErrors.buyerContactEmail && styles.inputError]}
@@ -1108,89 +1244,94 @@ const handleInstallmentPurchase = async () => {
       )}
 
       {/* Buyer Names Section - One input per ticket */}
-      <View style={styles.buyerNamesSection}>
-        <Text style={styles.sectionTitle}>
-          {isTableEntry
+      <View style={[styles.buyerNamesSection, isLargeScreen && styles.desktopSectionWide]}>
+        <StepSectionTitle
+          step={2}
+          title={isTableEntry
             ? `Names (${quantity} x ${tableSize} pax)`
             : `Names (${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""})`}
-        </Text>
+        />
         {!user && (
           <Text style={styles.sectionSubtitle}>Each ticket requires a unique name</Text>
         )}
 
         {isTableEntry ? (
           /* -- Table mode: group names by table -- */
-          Array.from({ length: quantity }).map((_, tableIdx) => {
-            const start = tableIdx * tableSize
-            const end = start + tableSize
-            return (
-              <View key={tableIdx} style={styles.tableGroupCard}>
-                <View style={styles.tableGroupHeader}>
-                  <Text style={styles.tableGroupTitle}>Table {tableIdx + 1}</Text>
-                  <TouchableOpacity
-                    style={[styles.seatSelectBtn, tableSeats[tableIdx] != null && styles.seatSelectBtnActive, fieldErrors[`table_${tableIdx}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
-                    onPress={() => {
-                      const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
-                      if (fee) openSeatMap(fee, tableIdx, "table")
-                    }}
-                  >
-                    <Text style={[styles.seatSelectBtnText, tableSeats[tableIdx] != null && styles.seatSelectBtnTextActive]}>
-                      {tableSeats[tableIdx] != null ? `Table ${tableSeats[tableIdx]}` : "Select Table"}
-                    </Text>
-                  </TouchableOpacity>
+          <View style={[isLargeScreen && styles.namesGrid]}>
+            {Array.from({ length: quantity }).map((_, tableIdx) => {
+              const start = tableIdx * tableSize
+              const end = start + tableSize
+              return (
+                <View key={tableIdx} style={[styles.tableGroupCard, isLargeScreen && styles.namesGridItem]}>
+                  <View style={styles.tableGroupHeader}>
+                    <Text style={styles.tableGroupTitle}>Table {tableIdx + 1}</Text>
+                    <TouchableOpacity
+                      style={[styles.seatSelectBtn, tableSeats[tableIdx] != null && styles.seatSelectBtnActive, fieldErrors[`table_${tableIdx}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
+                      onPress={() => {
+                        const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
+                        if (fee) openSeatMap(fee, tableIdx, "table")
+                      }}
+                    >
+                      <Text style={[styles.seatSelectBtnText, tableSeats[tableIdx] != null && styles.seatSelectBtnTextActive]}>
+                        {tableSeats[tableIdx] != null ? `Table ${tableSeats[tableIdx]}` : "Select Table"}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                  {Array.from({ length: tableSize }).map((_, seatIdx) => {
+                    const personIdx = start + seatIdx
+                    return (
+                      <View key={seatIdx} style={styles.tablePersonRow}>
+                        <TextInput
+                          style={[styles.input, { flex: 1 }, fieldErrors[`name_${personIdx}`] && styles.inputError]}
+                          value={buyerNames[personIdx] || ""}
+                          onChangeText={(text) => updateBuyerName(personIdx, text)}
+                          placeholder={`Person ${personIdx + 1} Name`}
+                          placeholderTextColor="#999"
+                        />
+                      </View>
+                    )
+                  })}
                 </View>
-                {Array.from({ length: tableSize }).map((_, seatIdx) => {
-                  const personIdx = start + seatIdx
-                  return (
-                    <View key={seatIdx} style={styles.tablePersonRow}>
-                      <TextInput
-                        style={[styles.input, { flex: 1 }, fieldErrors[`name_${personIdx}`] && styles.inputError]}
-                        value={buyerNames[personIdx] || ""}
-                        onChangeText={(text) => updateBuyerName(personIdx, text)}
-                        placeholder={`Person ${personIdx + 1} Name`}
-                        placeholderTextColor="#999"
-                      />
-                    </View>
-                  )
-                })}
-              </View>
-            )
-          })
+              )
+            })}
+          </View>
         ) : (
           /* -- Normal mode: one name per ticket with seat picker -- */
-          Array.from({ length: actualTicketCount }).map((_, index) => {
-            const hasSeatMap = selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none"
-            return (
-              <View key={index} style={styles.nameRow}>
-                <TextInput
-                  style={[styles.input, { flex: 1, marginRight: hasSeatMap ? 8 : 0 }, fieldErrors[`name_${index}`] && styles.inputError]}
-                  value={buyerNames[index] || ""}
-                  onChangeText={(text) => updateBuyerName(index, text)}
-                  placeholder={`Person ${index + 1} Name`}
-                  placeholderTextColor="#999"
-                />
-                {hasSeatMap && (
-                  <TouchableOpacity
-                    style={[styles.seatSelectBtn, perPersonSeats[index] != null && styles.seatSelectBtnActive, fieldErrors[`seat_${index}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
-                    onPress={() => {
-                      const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
-                      if (fee) openSeatMap(fee, index, "seat")
-                    }}
-                  >
-                    <Text style={[styles.seatSelectBtnText, perPersonSeats[index] != null && styles.seatSelectBtnTextActive]}>
-                      {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat �"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )
-          })
+          <View style={[isLargeScreen && styles.namesGrid]}>
+            {Array.from({ length: actualTicketCount }).map((_, index) => {
+              const hasSeatMap = selectedEntryFee?.seatMap && selectedEntryFee.seatMap.type !== "none"
+              return (
+                <View key={index} style={[styles.nameRow, isLargeScreen && styles.namesGridItem]}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginRight: hasSeatMap ? 8 : 0 }, fieldErrors[`name_${index}`] && styles.inputError]}
+                    value={buyerNames[index] || ""}
+                    onChangeText={(text) => updateBuyerName(index, text)}
+                    placeholder={`Person ${index + 1} Name`}
+                    placeholderTextColor="#999"
+                  />
+                  {hasSeatMap && (
+                    <TouchableOpacity
+                      style={[styles.seatSelectBtn, perPersonSeats[index] != null && styles.seatSelectBtnActive, fieldErrors[`seat_${index}`] && { borderColor: "#FF4444", borderWidth: 1.5 }]}
+                      onPress={() => {
+                        const fee = ticketTypes.find((t: any) => t.name === selectedTicketTypeName)
+                        if (fee) openSeatMap(fee, index, "seat")
+                      }}
+                    >
+                      <Text style={[styles.seatSelectBtnText, perPersonSeats[index] != null && styles.seatSelectBtnTextActive]}>
+                        {perPersonSeats[index] != null ? `Seat ${perPersonSeats[index]}` : "Seat �"}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )
+            })}
+          </View>
         )}
       </View>
 
       {/* Email Distribution Section */}
-      <View style={styles.emailDistributionSection}>
-        <Text style={styles.sectionTitle}>Email Distribution</Text>
+      <View style={[styles.emailDistributionSection, isLargeScreen && styles.desktopSectionHalf]}>
+        <StepSectionTitle step={3} title="Email Distribution" />
         <View style={styles.radioContainer}>
           <TouchableOpacity
             style={[styles.radioButton, emailDistribution === "single" && styles.radioButtonSelected]}
@@ -1257,8 +1398,8 @@ const handleInstallmentPurchase = async () => {
         )}
       </View>
 
-      <View style={styles.securitySection}>
-        <Text style={styles.sectionTitle}>Security (Optional)</Text>
+      <View style={[styles.securitySection, isLargeScreen && styles.desktopSectionHalf]}>
+        <StepSectionTitle step={2} title="Security (Optional)" />
         <Text style={styles.securityInfo}>
           Enable security photo to add an extra layer of verification to your ticket. This will help verify your identity at the event entrance.
         </Text>
@@ -1314,25 +1455,43 @@ const handleInstallmentPurchase = async () => {
         )}
       </View>
 
-      <View style={styles.paymentSection}>
-        <Text style={styles.sectionTitle}>Payment Method</Text>
+      <View style={[styles.paymentSection, isLargeScreen && styles.desktopSectionHalf]}>
+        <StepSectionTitle step={4} title="Payment Method" />
         
         {/* Mobile Money */}
         <TouchableOpacity
+          activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "mobile_money" && styles.paymentOptionSelected]}
           onPress={() => setPaymentMethod("mobile_money")}
         >
-          <Ionicons name="phone-portrait" size={24} color={paymentMethod === "mobile_money" ? "#00D4FF" : "#888888"} />
-          <Text style={[styles.paymentOptionText, paymentMethod === "mobile_money" && styles.paymentOptionTextSelected]}>Mobile Money</Text>
+          <View style={styles.paymentOptionMain}>
+            <View style={[styles.paymentOptionIcon, paymentMethod === "mobile_money" && styles.paymentOptionIconActive]}>
+              <Ionicons name="phone-portrait" size={22} color={paymentMethod === "mobile_money" ? "#00D4FF" : "#888888"} />
+            </View>
+            <View>
+              <Text style={[styles.paymentOptionText, paymentMethod === "mobile_money" && styles.paymentOptionTextSelected]}>Mobile Money</Text>
+              <Text style={styles.paymentOptionSub}>MTN &amp; Airtel — instant</Text>
+            </View>
+          </View>
+          {paymentMethod === "mobile_money" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
         </TouchableOpacity>
-        
+
         {/* Credit Card */}
         <TouchableOpacity
+          activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "credit_card" && styles.paymentOptionSelected]}
           onPress={() => setPaymentMethod("credit_card")}
         >
-          <Ionicons name="card" size={24} color={paymentMethod === "credit_card" ? "#00D4FF" : "#888888"} />
-          <Text style={[styles.paymentOptionText, paymentMethod === "credit_card" && styles.paymentOptionTextSelected]}>Credit Card</Text>
+          <View style={styles.paymentOptionMain}>
+            <View style={[styles.paymentOptionIcon, paymentMethod === "credit_card" && styles.paymentOptionIconActive]}>
+              <Ionicons name="card" size={22} color={paymentMethod === "credit_card" ? "#00D4FF" : "#888888"} />
+            </View>
+            <View>
+              <Text style={[styles.paymentOptionText, paymentMethod === "credit_card" && styles.paymentOptionTextSelected]}>Credit Card</Text>
+              <Text style={styles.paymentOptionSub}>Visa &amp; Mastercard</Text>
+            </View>
+          </View>
+          {paymentMethod === "credit_card" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
         </TouchableOpacity>
 
         {/* Payment Details Form */}
@@ -1387,9 +1546,9 @@ const handleInstallmentPurchase = async () => {
           )}
         </View>
 
-        {/* Installment Plan Toggle */}
-      <View style={styles.installmentSection}>
-        <Text style={styles.sectionTitle}>Payment Plan</Text>
+      {/* Installment Plan Toggle */}
+      <View style={[styles.installmentSection, isLargeScreen && styles.desktopSectionHalf]}>
+        <StepSectionTitle step={4} title="Payment Plan" />
         <View style={styles.planToggleRow}>
           <TouchableOpacity
             style={[styles.planToggleBtn, !useInstallments && styles.planToggleBtnActive]}
@@ -1446,8 +1605,25 @@ const handleInstallmentPurchase = async () => {
         )}
       </View>
 
+      </View>{/* desktopTicketLeft */}
       <View style={isLargeScreen ? styles.desktopTicketRight : undefined}>
-      <View style={styles.summarySection}>
+      <View style={[styles.summarySection, isLargeScreen && styles.desktopSummarySection]}>
+        {/* Event thumbnail */}
+        <View style={styles.summaryEventRow}>
+          {event.posterImageUrl ? (
+            <Image source={{ uri: event.posterImageUrl }} style={styles.summaryEventThumb} resizeMode="cover" />
+          ) : (
+            <View style={[styles.summaryEventThumb, styles.summaryEventThumbFallback]}>
+              <Ionicons name="ticket" size={20} color="#00D4FF" />
+            </View>
+          )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.summaryEventName} numberOfLines={1}>{event.name}</Text>
+            <Text style={styles.summaryEventMeta}>{new Date(event.date).toDateString()}</Text>
+          </View>
+        </View>
+        <View style={styles.summaryDivider} />
+
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
         <View style={styles.summaryRow}>
@@ -1495,16 +1671,21 @@ const handleInstallmentPurchase = async () => {
       {!user && useInstallments && (
         <TouchableOpacity
           onPress={() => { if (typeof window !== "undefined") window.location.href = "/login?returnTo=" + encodeURIComponent(window.location.pathname) }}
-          style={styles.loginToContinueLink}
+          style={[styles.loginToContinueLink, isLargeScreen && styles.desktopLoginToContinue]}
         >
           <Text style={styles.loginToContinueText}>Login to continue</Text>
         </TouchableOpacity>
       )}
 
       <TouchableOpacity
-        style={[styles.purchaseButton, (!paymentMethod || loading || (!user && useInstallments)) && styles.purchaseButtonDisabled]}
+        style={[
+          styles.purchaseButton,
+          isLargeScreen && styles.desktopPurchaseButton,
+          (!paymentMethod || loading || (!user && useInstallments)) && styles.purchaseButtonDisabled,
+        ]}
         onPress={useInstallments ? handleInstallmentPurchase : handlePurchase}
         disabled={!paymentMethod || loading || (!user && useInstallments)}
+        activeOpacity={0.85}
       >
         {loading ? (
           <ActivityIndicator color="#FFFFFF" />
@@ -1517,6 +1698,22 @@ const handleInstallmentPurchase = async () => {
           </>
         )}
       </TouchableOpacity>
+
+      {/* Trust cluster (visual only) */}
+      <View style={[styles.trustCluster, isLargeScreen && styles.desktopTrustCluster]}>
+        <View style={styles.trustRow}>
+          <Ionicons name="lock-closed" size={13} color="#00D4FF" />
+          <Text style={styles.trustText}>Secured by PesaPal &amp; PawaPay</Text>
+        </View>
+        <View style={styles.trustRow}>
+          <Ionicons name="shield-checkmark-outline" size={13} color="#00FF9F" />
+          <Text style={styles.trustText}>Instant ticket delivery to your email</Text>
+        </View>
+        <View style={styles.trustRow}>
+          <Ionicons name="information-circle-outline" size={13} color="#F59E0B" />
+          <Text style={styles.trustText}>Installment plans carry an 8% service fee</Text>
+        </View>
+      </View>
       </View>{/* desktopTicketRight */}
       </View>{/* desktopTicketLayout */}
 
@@ -1758,74 +1955,186 @@ const handleInstallmentPurchase = async () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: COLORS.background,
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    paddingTop: 50,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingTop: 48,
+    gap: 12,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#FFFFFF",
-    marginLeft: 16,
+    flex: 1,
   },
-  eventInfo: {
-    margin: 16,
-    borderRadius: 12,
+  headerSecure: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(0,212,255,0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.35)",
+  },
+  headerSecureText: {
+    color: "#00D4FF",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  desktopHeader: {
+    paddingTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  eventHero: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#1E1E1E",
-    height: 110,
+    height: 150,
+    position: "relative",
+    backgroundColor: "#0c0e16",
   },
-  eventPosterBg: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    width: "55%",
+  eventHeroDesktop: {
+    marginHorizontal: 0,
+    borderRadius: 0,
+    height: 150,
+    marginBottom: 12,
   },
-  eventInfoGradient: {
+  eventHeroBg: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    // left side fully opaque dark, fades to transparent on the right
-    // React Native Web supports backgroundImage for gradients
-    ...(Platform.OS === "web" ? {
-      backgroundImage: "linear-gradient(to right, #1E1E1E 38%, rgba(30,30,30,0.85) 55%, transparent 100%)",
-    } : {
-      backgroundColor: "rgba(30,30,30,0.5)",
-    }),
-  },
-  eventInfoContent: {
-    padding: 16,
-    justifyContent: "center",
-    width: "65%",
+    width: "100%",
     height: "100%",
   },
-  eventName: {
-    fontSize: 18,
-    fontWeight: "bold",
+  eventHeroOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // web: vertical gradient; native: flat translucent scrim
+    ...(Platform.OS === "web"
+      ? {
+          backgroundImage: "linear-gradient(180deg, rgba(5,5,8,0.15) 0%, rgba(5,5,8,0.72) 62%, rgba(5,5,8,0.95) 100%)",
+        }
+      : {
+          backgroundColor: "rgba(5,5,8,0.72)",
+        }),
+  },
+  eventHeroContent: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: 16,
+  },
+  eventHeroName: {
+    fontSize: 26,
+    fontWeight: "800",
     color: "#FFFFFF",
-    marginBottom: 6,
+    letterSpacing: -0.5,
+    marginBottom: 10,
   },
-  eventVenue: {
-    fontSize: 14,
-    color: "#2196F3",
-    marginBottom: 3,
+  eventHeroChips: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
-  eventDate: {
-    fontSize: 12,
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.1)",
+  },
+  chipText: {
     color: "#DDDDDD",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  stepper: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingHorizontal: 16,
+    marginBottom: 16,
+  },
+  stepperItem: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  stepperDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  stepperDotActive: {
+    backgroundColor: "rgba(0,212,255,0.16)",
+    borderColor: "#00D4FF",
+  },
+  stepperDotText: {
+    color: "#888888",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  stepperDotTextActive: {
+    color: "#00D4FF",
+  },
+  stepperLabel: {
+    color: "#888888",
+    fontSize: 12,
+    fontWeight: "600",
+    marginLeft: 8,
+    marginRight: 4,
+  },
+  stepperLabelActive: {
+    color: "#FFFFFF",
+  },
+  stepperLine: {
+    flex: 1,
+    height: 2,
+    minWidth: 18,
+    marginHorizontal: 8,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  stepperLineActive: {
+    backgroundColor: "#00D4FF",
   },
   ticketSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
     marginTop: 0,
   },
   sectionTitle: {
@@ -1833,6 +2142,34 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#FFFFFF",
     marginBottom: 16,
+  },
+  stepSectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  stepChip: {
+    minWidth: 26,
+    height: 26,
+    borderRadius: 13,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0,212,255,0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.4)",
+    marginRight: 10,
+  },
+  stepChipText: {
+    color: "#00D4FF",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  stepSectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#FFFFFF",
+    flex: 1,
   },
   sectionSubtitle: {
     fontSize: 14,
@@ -1868,6 +2205,47 @@ const styles = StyleSheet.create({
     color: "#00D4FF",
     fontSize: 14,
     marginTop: 2,
+  },
+  tierGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  tierCard: {
+    width: "48%",
+    backgroundColor: SURFACE_INNER,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+    padding: 14,
+  },
+  tierCardSelected: {
+    borderColor: "#00D4FF",
+    backgroundColor: "rgba(0,212,255,0.08)",
+    ...(Platform.OS === "web"
+      ? { boxShadow: "0 0 20px rgba(0,212,255,0.18)" }
+      : {}),
+  },
+  tierCardSoldOut: {
+    opacity: 0.55,
+  },
+  tierCardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 10,
+  },
+  tierCardName: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    flex: 1,
+  },
+  tierCardPrice: {
+    color: "#00D4FF",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 4,
   },
   noTicketsText: {
     color: "#888888",
@@ -1925,10 +2303,20 @@ const styles = StyleSheet.create({
   },
   buyerNamesSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
     marginTop: 0,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  namesGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
+  namesGridItem: {
+    width: "48%",
   },
   nameRow: {
     flexDirection: "row",
@@ -1981,17 +2369,21 @@ const styles = StyleSheet.create({
   },
   visitorInfoSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
     marginTop: 0,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   securitySection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
     marginTop: 0,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   securityInfo: {
     color: "#888888",
@@ -2085,10 +2477,12 @@ const styles = StyleSheet.create({
   },
   emailDistributionSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
     marginTop: 0,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   radioContainer: {
     flexDirection: "column",
@@ -2133,9 +2527,11 @@ const styles = StyleSheet.create({
   },
   summarySection: {
     padding: 16,  
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   summaryRow: {
     flexDirection: "row",
@@ -2170,13 +2566,27 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#2196F3",
     margin: 16,
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
+    ...(Platform.OS === "web"
+      ? {
+          backgroundImage: "linear-gradient(135deg, #00D4FF, #8B5CF6)",
+          boxShadow: "0 8px 28px rgba(0,212,255,0.3)",
+        }
+      : {
+          backgroundColor: "#2196F3",
+        }),
+  },
+  desktopPurchaseButton: {
+    margin: 0,
+    marginTop: 4,
   },
   purchaseButtonDisabled: {
-    backgroundColor: "#666666",
+    opacity: 0.5,
+    ...(Platform.OS === "web"
+      ? { backgroundImage: "linear-gradient(135deg, #555555, #444444)", boxShadow: "none" }
+      : { backgroundColor: "#666666" }),
   },
   purchaseButtonText: {
     color: "#FFFFFF",
@@ -2187,31 +2597,61 @@ const styles = StyleSheet.create({
   // Payment section styles
   paymentSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   paymentOption: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
-    backgroundColor: "#333333",
-    borderRadius: 8,
+    justifyContent: "space-between",
+    padding: 14,
+    backgroundColor: SURFACE_INNER,
+    borderRadius: 12,
     marginBottom: 10,
     borderWidth: 1,
     borderColor: "transparent",
   },
   paymentOptionSelected: {
     borderColor: "#00D4FF",
-    backgroundColor: "rgba(0, 212, 255, 0.1)",
+    backgroundColor: "rgba(0, 212, 255, 0.08)",
+    ...(Platform.OS === "web"
+      ? { boxShadow: "0 0 18px rgba(0,212,255,0.15)" }
+      : {}),
+  },
+  paymentOptionMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  paymentOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  paymentOptionIconActive: {
+    borderColor: "rgba(0,212,255,0.5)",
+    backgroundColor: "rgba(0,212,255,0.1)",
   },
   paymentOptionText: {
     color: "#888888",
-    fontSize: 16,
-    marginLeft: 12,
+    fontSize: 15,
+    fontWeight: "600",
   },
   paymentOptionTextSelected: {
     color: "#00D4FF",
+  },
+  paymentOptionSub: {
+    color: "#666666",
+    fontSize: 12,
+    marginTop: 2,
   },
   paymentForm: {
     marginTop: 16,
@@ -2427,9 +2867,11 @@ const styles = StyleSheet.create({
   // Installment styles
   installmentSection: {
     padding: 16,
-    backgroundColor: "#1E1E1E",
+    backgroundColor: SURFACE,
     margin: 16,
-    borderRadius: 12,
+    borderRadius: CARD_RADIUS,
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
   },
   planToggleRow: {
     flexDirection: "row",
@@ -2588,20 +3030,102 @@ const styles = StyleSheet.create({
     gap: 24,
     alignItems: "flex-start",
     paddingHorizontal: 24,
-    paddingVertical: 8,
+    paddingVertical: 4,
+  },
+  desktopStepper: {
+    marginBottom: 12,
+    paddingHorizontal: 24,
   },
   desktopTicketLeft: {
     flex: 1,
     minWidth: 0,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    alignContent: "flex-start",
+  },
+  desktopSectionWide: {
+    width: "100%",
+    margin: 0,
+  },
+  desktopSectionHalf: {
+    width: "48%",
+    minWidth: 0,
+    margin: 0,
   },
   desktopTicketRight: {
     width: 360,
-    backgroundColor: "rgba(18, 18, 26, 0.7)",
-    borderRadius: 16,
+    backgroundColor: "rgba(12, 14, 22, 0.85)",
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
+    borderColor: "rgba(255, 255, 255, 0.1)",
     padding: 16,
     alignSelf: "flex-start",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.4,
+    shadowRadius: 24,
+    elevation: 10,
+    ...((Platform.OS === "web"
+      ? { position: "sticky", top: 24, maxHeight: "calc(100vh - 48px)", overflow: "auto" }
+      : {}) as any),
+  },
+  desktopSummarySection: {
+    margin: 0,
+    marginBottom: 16,
+  },
+  desktopLoginToContinue: {
+    marginHorizontal: 0,
+  },
+  desktopTrustCluster: {
+    marginHorizontal: 0,
+  },
+  summaryEventRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 14,
+  },
+  summaryEventThumb: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+    backgroundColor: "#14141c",
+  },
+  summaryEventThumbFallback: {
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: SURFACE_BORDER,
+  },
+  summaryEventName: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  summaryEventMeta: {
+    color: "#888888",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  summaryDivider: {
+    height: 1,
+    backgroundColor: SURFACE_BORDER,
+    marginBottom: 16,
+  },
+  trustCluster: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    gap: 8,
+  },
+  trustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  trustText: {
+    color: "#7c7c8c",
+    fontSize: 12,
   },
 })
 
