@@ -67,6 +67,7 @@
   var map = null;
   var markers = {};   // id -> Leaflet marker
   var markerLayer = null;
+  var manualFit = false; // true once the user interacts or picks a country
 
   // Fallback centre: Kampala, Uganda (most venues are here).
   var DEFAULT_CENTER = [0.3476, 32.5825];
@@ -82,8 +83,30 @@
     markerLayer = L.layerGroup().addTo(map);
     document.getElementById("boot").style.display = "none";
 
+    // Once the user pans/zooms or picks a country, stop auto-fitting to markers.
+    map.on("dragstart", function () { manualFit = true; });
+    map.on("zoomstart", function () { manualFit = true; });
+
     // Tell the host the map is ready so it can push venues.
     parent.postMessage({ type: "map-ready" }, "*");
+  }
+
+  function fitToBounds(bounds) {
+    if (!map || !Array.isArray(bounds) || bounds.length !== 4) return;
+    // bounds = [south, west, north, east]
+    var latLngBounds = L.latLngBounds(
+      L.latLng(Number(bounds[0]), Number(bounds[1])),
+      L.latLng(Number(bounds[2]), Number(bounds[3]))
+    );
+    if (!latLngBounds.isValid()) return;
+    manualFit = true;
+    map.fitBounds(latLngBounds, { padding: [24, 24] });
+  }
+
+  function focusLocation(lat, lng, zoom) {
+    if (!map || !isFinite(Number(lat)) || !isFinite(Number(lng))) return;
+    manualFit = true;
+    map.flyTo([Number(lat), Number(lng)], Number(zoom) || 11, { duration: 0.8 });
   }
 
   function pinIcon(selected) {
@@ -124,12 +147,13 @@
     });
 
     console.log("[VenueMap] received", venues.length, "venues → placed", placed, "markers, skipped", skipped);
-    if (placed === 0 && typeof map.fitBounds === "function" && hasLatLng === false) {
+    if (placed === 0 && !manualFit && typeof map.fitBounds === "function" && hasLatLng === false) {
       map.setView([0.3476, 32.5825], 12);
     }
 
     // If we have real coordinates, fit the map to them; otherwise centre on default.
-    if (hasLatLng && typeof map.getBounds === "function") {
+    // Skipped once the user has panned/zoomed or picked a country.
+    if (!manualFit && hasLatLng && typeof map.getBounds === "function") {
       var bounds = L.latLngBounds(Object.keys(markers).map(function (id) { return markers[id].getLatLng(); }));
       if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     }
@@ -146,6 +170,8 @@
     }
     var m = markers[id];
     if (!m || !map) return;
+    // User-driven selection: keep the chosen view.
+    manualFit = true;
     // Update visual selection state.
     Object.keys(markers).forEach(function (key) {
       markers[key].setIcon(pinIcon(key === id));
@@ -158,6 +184,8 @@
     var d = e.data || {};
     if (d.type === "venues") setVenues(d.venues);
     else if (d.type === "select") selectVenue(d.id);
+    else if (d.type === "fit-bounds") fitToBounds(d.bounds);
+    else if (d.type === "focus-location") focusLocation(d.lat, d.lng, d.zoom);
   });
 
   boot();

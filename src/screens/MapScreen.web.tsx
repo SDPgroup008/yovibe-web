@@ -56,6 +56,241 @@ const sameVenue = (
   b?: { id?: string; slug?: string } | null,
 ) => !!a && !!b && venueKey(a) === venueKey(b)
 
+// ─── Country dropdown (map zoom-to-country) ──────────────────────
+// Bounding boxes are [south, west, north, east] in degrees.
+const COUNTRY_BOUNDS: Array<{ code: string; name: string; bounds: [number, number, number, number] }> = [
+  { code: "UG", name: "Uganda", bounds: [-1.48, 29.57, 4.23, 35.03] },
+  { code: "KE", name: "Kenya", bounds: [-4.68, 33.91, 5.51, 41.91] },
+  { code: "TZ", name: "Tanzania", bounds: [-11.76, 29.34, -0.99, 40.44] },
+  { code: "RW", name: "Rwanda", bounds: [-2.84, 28.86, -1.05, 30.9] },
+  { code: "BI", name: "Burundi", bounds: [-4.47, 28.99, -2.31, 30.85] },
+  { code: "SS", name: "South Sudan", bounds: [3.49, 24.15, 12.24, 35.95] },
+  { code: "CD", name: "DR Congo", bounds: [-13.46, 12.2, 5.39, 31.31] },
+  { code: "ET", name: "Ethiopia", bounds: [3.42, 32.99, 14.89, 47.99] },
+  { code: "SO", name: "Somalia", bounds: [-1.7, 40.99, 11.98, 51.41] },
+  { code: "SD", name: "Sudan", bounds: [8.68, 21.82, 22.23, 38.61] },
+  { code: "EG", name: "Egypt", bounds: [22.0, 24.7, 31.67, 36.87] },
+  { code: "NG", name: "Nigeria", bounds: [4.07, 2.69, 13.87, 14.68] },
+  { code: "GH", name: "Ghana", bounds: [4.74, -3.26, 11.17, 1.19] },
+  { code: "ZA", name: "South Africa", bounds: [-34.83, 16.46, -22.13, 32.9] },
+  { code: "MA", name: "Morocco", bounds: [27.66, -17.1, 35.92, -1.0] },
+  { code: "GB", name: "United Kingdom", bounds: [49.96, -8.65, 60.86, 1.77] },
+  { code: "US", name: "United States", bounds: [24.52, -125.0, 49.38, -66.95] },
+  { code: "CA", name: "Canada", bounds: [41.68, -141.0, 73.0, -52.62] },
+  { code: "AE", name: "United Arab Emirates", bounds: [22.63, 51.58, 26.08, 56.38] },
+  { code: "IN", name: "India", bounds: [8.07, 68.19, 35.67, 97.39] },
+]
+
+// Cities per country (capital first). Used to populate the city dropdown.
+type MapCity = { name: string; lat: number; lng: number; capital?: boolean }
+const CITY_LOOKUP: Record<string, MapCity[]> = {
+  UG: [
+    { name: "Kampala", lat: 0.3476, lng: 32.5825, capital: true },
+    { name: "Entebbe", lat: 0.056, lng: 32.4588 },
+    { name: "Jinja", lat: 0.4244, lng: 33.2042 },
+    { name: "Gulu", lat: 2.7746, lng: 32.299 },
+    { name: "Mbarara", lat: -0.6072, lng: 30.6545 },
+    { name: "Masaka", lat: -0.3347, lng: 31.7341 },
+    { name: "Mbale", lat: 1.0784, lng: 34.175 },
+    { name: "Lira", lat: 2.2499, lng: 32.8999 },
+    { name: "Fort Portal", lat: 0.671, lng: 30.2748 },
+    { name: "Arua", lat: 3.0208, lng: 30.9111 },
+  ],
+  KE: [
+    { name: "Nairobi", lat: -1.2921, lng: 36.8219, capital: true },
+    { name: "Mombasa", lat: -4.0435, lng: 39.6682 },
+    { name: "Kisumu", lat: -0.0917, lng: 34.768 },
+    { name: "Nakuru", lat: -0.3031, lng: 36.08 },
+  ],
+  TZ: [
+    { name: "Dodoma", lat: -6.1629, lng: 35.7516, capital: true },
+    { name: "Dar es Salaam", lat: -6.7924, lng: 39.2083 },
+    { name: "Arusha", lat: -3.3869, lng: 36.683 },
+    { name: "Mwanza", lat: -2.5164, lng: 32.9175 },
+  ],
+  RW: [
+    { name: "Kigali", lat: -1.9441, lng: 30.0619, capital: true },
+    { name: "Butare", lat: -2.5967, lng: 29.7394 },
+    { name: "Gisenyi", lat: -1.7028, lng: 29.2564 },
+  ],
+  BI: [
+    { name: "Gitega", lat: -3.4264, lng: 29.9306, capital: true },
+    { name: "Bujumbura", lat: -3.3614, lng: 29.3599 },
+  ],
+  SS: [{ name: "Juba", lat: 4.8594, lng: 31.5713, capital: true }],
+  CD: [
+    { name: "Kinshasa", lat: -4.4419, lng: 15.2663, capital: true },
+    { name: "Lubumbashi", lat: -11.6873, lng: 27.4893 },
+    { name: "Goma", lat: -1.6741, lng: 29.2237 },
+  ],
+  ET: [
+    { name: "Addis Ababa", lat: 9.0245, lng: 38.7469, capital: true },
+    { name: "Dire Dawa", lat: 9.5931, lng: 41.8661 },
+  ],
+  SO: [{ name: "Mogadishu", lat: 2.0469, lng: 45.3182, capital: true }],
+  SD: [{ name: "Khartoum", lat: 15.5007, lng: 32.5599, capital: true }],
+  EG: [
+    { name: "Cairo", lat: 30.0444, lng: 31.2357, capital: true },
+    { name: "Alexandria", lat: 31.2001, lng: 29.9187 },
+  ],
+  NG: [
+    { name: "Abuja", lat: 9.0579, lng: 7.4951, capital: true },
+    { name: "Lagos", lat: 6.5244, lng: 3.3792 },
+    { name: "Kano", lat: 12.0022, lng: 8.592 },
+  ],
+  GH: [
+    { name: "Accra", lat: 5.6037, lng: -0.187, capital: true },
+    { name: "Kumasi", lat: 6.6885, lng: -1.6244 },
+  ],
+  ZA: [
+    { name: "Pretoria", lat: -25.7479, lng: 28.2293, capital: true },
+    { name: "Cape Town", lat: -33.9249, lng: 18.4241 },
+    { name: "Johannesburg", lat: -26.2041, lng: 28.0473 },
+  ],
+  MA: [
+    { name: "Rabat", lat: 34.0209, lng: -6.8416, capital: true },
+    { name: "Casablanca", lat: 33.5731, lng: -7.5898 },
+  ],
+  GB: [
+    { name: "London", lat: 51.5074, lng: -0.1278, capital: true },
+    { name: "Manchester", lat: 53.4808, lng: -2.2426 },
+    { name: "Birmingham", lat: 52.4862, lng: -1.8904 },
+  ],
+  US: [
+    { name: "Washington, D.C.", lat: 38.9072, lng: -77.0369, capital: true },
+    { name: "New York", lat: 40.7128, lng: -74.006 },
+    { name: "Los Angeles", lat: 34.0522, lng: -118.2437 },
+    { name: "Chicago", lat: 41.8781, lng: -87.6298 },
+  ],
+  CA: [
+    { name: "Ottawa", lat: 45.4215, lng: -75.6972, capital: true },
+    { name: "Toronto", lat: 43.6532, lng: -79.3832 },
+    { name: "Vancouver", lat: 49.2827, lng: -123.1207 },
+  ],
+  AE: [
+    { name: "Abu Dhabi", lat: 24.4539, lng: 54.3773, capital: true },
+    { name: "Dubai", lat: 25.2048, lng: 55.2708 },
+  ],
+  IN: [
+    { name: "New Delhi", lat: 28.6139, lng: 77.209, capital: true },
+    { name: "Mumbai", lat: 19.076, lng: 72.8777 },
+    { name: "Bengaluru", lat: 12.9716, lng: 77.5946 },
+  ],
+}
+
+// Shared dropdown trigger button + panel styling used by both dropdowns.
+const DropdownPanel: React.FC<{
+  align: "left" | "right"
+  onClose: () => void
+  children: React.ReactNode
+}> = ({ align, onClose, children }) => (
+  <>
+    <TouchableOpacity
+      style={styles.countryBackdrop}
+      onPress={onClose}
+      accessibilityRole="button"
+      accessibilityLabel="Close dropdown"
+    />
+    <View style={[styles.dropdownPanel, align === "right" ? styles.dropdownPanelRight : styles.dropdownPanelLeft]}>
+      {children}
+    </View>
+  </>
+)
+
+// Custom country dropdown rendered in the top-right of the map.
+const CountryDropdown: React.FC<{
+  selected: string
+  onSelect: (code: string) => void
+  open: boolean
+  onToggle: () => void
+}> = ({ selected, onSelect, open, onToggle }) => {
+  const current = COUNTRY_BOUNDS.find((c) => c.code === selected) || COUNTRY_BOUNDS[0]
+  return (
+    <View>
+      <TouchableOpacity
+        style={[styles.countryBtn, open && styles.countryBtnOpen]}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`Select country: ${current.name}`}
+      >
+        <Ionicons name="globe-outline" size={15} color="#22d3ee" />
+        <Text style={styles.countryBtnText} numberOfLines={1}>{current.name}</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color="#8b8b9e" />
+      </TouchableOpacity>
+      {open && (
+        <DropdownPanel align="right" onClose={onToggle}>
+          <ScrollView style={styles.countryList} showsVerticalScrollIndicator={false}>
+            {COUNTRY_BOUNDS.map((c) => (
+              <TouchableOpacity
+                key={c.code}
+                style={[styles.countryItem, c.code === selected && styles.countryItemSelected]}
+                onPress={() => {
+                  onSelect(c.code)
+                  onToggle()
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom to ${c.name}`}
+              >
+                <Text style={[styles.countryItemText, c.code === selected && styles.countryItemTextSelected]}>
+                  {c.name}
+                </Text>
+                {c.code === selected && <Ionicons name="checkmark" size={16} color="#22d3ee" />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </DropdownPanel>
+      )}
+    </View>
+  )
+}
+
+// City dropdown — populated from the selected country, capital default.
+const CityDropdown: React.FC<{
+  cities: MapCity[]
+  selected: string
+  onSelect: (city: MapCity) => void
+  open: boolean
+  onToggle: () => void
+}> = ({ cities, selected, onSelect, open, onToggle }) => {
+  return (
+    <View>
+      <TouchableOpacity
+        style={[styles.countryBtn, open && styles.countryBtnOpen]}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityLabel={`Select city: ${selected || "None"}`}
+      >
+        <Ionicons name="location-outline" size={15} color="#22d3ee" />
+        <Text style={styles.countryBtnText} numberOfLines={1}>{selected || "Select city"}</Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={14} color="#8b8b9e" />
+      </TouchableOpacity>
+      {open && (
+        <DropdownPanel align="left" onClose={onToggle}>
+          <ScrollView style={styles.countryList} showsVerticalScrollIndicator={false}>
+            {cities.map((city) => (
+              <TouchableOpacity
+                key={city.name}
+                style={[styles.countryItem, city.name === selected && styles.countryItemSelected]}
+                onPress={() => {
+                  onSelect(city)
+                  onToggle()
+                }}
+                accessibilityRole="button"
+                accessibilityLabel={`Zoom to ${city.name}`}
+              >
+                <Text style={[styles.countryItemText, city.name === selected && styles.countryItemTextSelected]}>
+                  {city.name}
+                </Text>
+                {city.name === selected && <Ionicons name="checkmark" size={16} color="#22d3ee" />}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </DropdownPanel>
+      )}
+    </View>
+  )
+}
+
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   console.log('[MapScreen.web] 🏗️ RENDER/MOUNT');
   // SEO Metadata for Map page
@@ -76,6 +311,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
   const [showList, setShowList] = useState(false)
+  const [selectedCountry, setSelectedCountry] = useState("UG")
+  const [selectedCity, setSelectedCity] = useState<string>("Kampala")
+  const [openDropdown, setOpenDropdown] = useState<"city" | "country" | null>(null)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [lastCreatedAt, setLastCreatedAt] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(true)
@@ -406,6 +644,47 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     })),
   })
 
+  // Ask the map to zoom to a country's boundaries.
+  const fitCountry = (code: string) => {
+    const country = COUNTRY_BOUNDS.find((c) => c.code === code)
+    if (country) postToMap({ type: "fit-bounds", bounds: country.bounds, name: country.name })
+  }
+
+  // Zoom the map to a specific city.
+  const focusCity = (city: MapCity) => {
+    postToMap({ type: "focus-location", lat: city.lat, lng: city.lng, zoom: 11, name: city.name })
+  }
+
+  // Cities available for the selected country.
+  const currentCities = CITY_LOOKUP[selectedCountry] || CITY_LOOKUP.UG || []
+
+  // Selecting a country: populate cities, default to the capital, zoom to it.
+  const handleCountrySelect = (code: string) => {
+    setSelectedCountry(code)
+    const cities = CITY_LOOKUP[code] || []
+    const capital = cities.find((c) => c.capital) || cities[0]
+    setSelectedCity(capital ? capital.name : "")
+    if (capital) {
+      focusCity(capital)
+    } else {
+      // No city data for this country — fall back to fitting its boundaries.
+      fitCountry(code)
+    }
+  }
+
+  // Selecting a city: zoom the map to that location.
+  const handleCitySelect = (city: MapCity) => {
+    setSelectedCity(city.name)
+    focusCity(city)
+  }
+
+  // Initial load: zoom straight to the selected country's capital city.
+  const focusCapital = () => {
+    const cities = CITY_LOOKUP[selectedCountry] || CITY_LOOKUP.UG || []
+    const capital = cities.find((c) => c.capital) || cities[0]
+    if (capital) focusCity(capital)
+  }
+
   // Push venue markers whenever the loaded list changes.
   useEffect(() => {
     const withCoords = venues.filter((v) =>
@@ -431,15 +710,17 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // so markers render even if earlier posts were dropped by the iframe.
         postToMap(mapVenuesPayload())
         postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
+        focusCapital()
       }
     }
     window.addEventListener("message", handler)
     return () => window.removeEventListener("message", handler)
-  }, [venues, selectedVenue])
+  }, [venues, selectedVenue, selectedCountry])
 
   const handleMapLoad = () => {
     postToMap(mapVenuesPayload())
     postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
+    focusCapital()
   }
 
   // ─── Scroll → load more ────────────────────────────────────────
@@ -630,6 +911,21 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 style={{ width: "100%", height: "100%", border: "none", background: "#0a0a12" } as any}
                 onLoad={handleMapLoad}
               />
+              <View style={styles.mapTopRightControls}>
+                <CityDropdown
+                  cities={currentCities}
+                  selected={selectedCity}
+                  onSelect={handleCitySelect}
+                  open={openDropdown === "city"}
+                  onToggle={() => setOpenDropdown(openDropdown === "city" ? null : "city")}
+                />
+                <CountryDropdown
+                  selected={selectedCountry}
+                  onSelect={handleCountrySelect}
+                  open={openDropdown === "country"}
+                  onToggle={() => setOpenDropdown(openDropdown === "country" ? null : "country")}
+                />
+              </View>
               {selectedVenue ? (
                 <View style={styles.mapHudCard}>
                   <View pointerEvents="none" style={styles.hudGlow} />
@@ -717,10 +1013,31 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
               )}
             </View>
 
+            {/* Country + City dropdowns (top-right, next to the list toggle) */}
+            <View style={styles.mobileMapTopControls}>
+              <CityDropdown
+                cities={currentCities}
+                selected={selectedCity}
+                onSelect={handleCitySelect}
+                open={openDropdown === "city"}
+                onToggle={() => setOpenDropdown(openDropdown === "city" ? null : "city")}
+              />
+              <CountryDropdown
+                selected={selectedCountry}
+                onSelect={handleCountrySelect}
+                open={openDropdown === "country"}
+                onToggle={() => setOpenDropdown(openDropdown === "country" ? null : "country")}
+              />
+            </View>
+
             {/* Toggle button (top-right) to overlay the list */}
             <TouchableOpacity
               style={[styles.mobileToggleBtn, showList && styles.mobileToggleBtnActive]}
-              onPress={() => setShowList((prev) => !prev)}
+              onPress={() => {
+                // Close any open dropdown so the overlay fully covers it.
+                setOpenDropdown(null)
+                setShowList((prev) => !prev)
+              }}
               accessibilityRole="button"
               accessibilityLabel={showList ? "Close venue list" : "Show venue list"}
             >
@@ -1087,7 +1404,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 12,
     right: 12,
-    zIndex: 40,
+    zIndex: 45,
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -1106,13 +1423,113 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 211, 238, 0.25)",
     borderColor: "#22d3ee",
   },
+  mapTopRightControls: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    zIndex: 41,
+    flexDirection: "row",
+    gap: 8,
+  },
+  mobileMapTopControls: {
+    position: "absolute",
+    top: 12,
+    right: 58,
+    zIndex: 41,
+    flexDirection: "row",
+    gap: 8,
+  },
+  countryBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    backgroundColor: "rgba(18, 18, 26, 0.85)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.4)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4,
+    shadowRadius: 6,
+    elevation: 5,
+    maxWidth: 150,
+    flexShrink: 1,
+  },
+  countryBtnOpen: {
+    backgroundColor: "rgba(34, 211, 238, 0.2)",
+    borderColor: "#22d3ee",
+  },
+  countryBtnText: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+  countryBackdrop: {
+    position: "fixed" as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    backgroundColor: "transparent",
+  },
+  dropdownPanel: {
+    position: "absolute",
+    top: 46,
+    zIndex: 51,
+    width: 220,
+    maxHeight: 320,
+    borderRadius: 14,
+    backgroundColor: "rgba(13, 15, 24, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(34, 211, 238, 0.35)",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+    overflow: "hidden",
+  },
+  dropdownPanelRight: {
+    right: 0,
+  },
+  dropdownPanelLeft: {
+    left: 0,
+  },
+  countryList: {
+    flexGrow: 0,
+  },
+  countryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+  },
+  countryItemSelected: {
+    backgroundColor: "rgba(34, 211, 238, 0.1)",
+  },
+  countryItemText: {
+    color: "#C9C9D6",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  countryItemTextSelected: {
+    color: "#22d3ee",
+    fontWeight: "700",
+  },
   mobileListOverlay: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 20,
+    zIndex: 42,
     backgroundColor: "rgba(10, 12, 22, 0.72)",
   },
   mapHudCard: {
