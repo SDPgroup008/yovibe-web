@@ -50,6 +50,9 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   const typography = useTypography();
   const spacing = useSpacing();
   const deviceType = useDeviceType();
+  // Desktop (>=1024px) and tablet (768-1023px): title + tabs align in one row.
+  // Mobile keeps the stacked layout.
+  const isWide = deviceType.isLargeScreen || deviceType.isTablet;
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
@@ -308,47 +311,49 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         url={seoUrl}
       />
       {/* Visible H1 for SEO */}
-      <Text style={styles.pageTitle} accessibilityRole="header">
-        Discover Venues &amp; Clubs
-      </Text>
-      <View style={styles.header}>
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "all" && styles.activeTab]}
-            onPress={() => setActiveTab("all")}
-            accessibilityRole="button"
-            accessibilityLabel="All venues"
-            accessibilityState={{ selected: activeTab === "all" }}
-          >
-            <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
-            onPress={() => setActiveTab("nightlife")}
-            accessibilityRole="button"
-            accessibilityLabel="Night clubs"
-            accessibilityState={{ selected: activeTab === "nightlife" }}
-          >
-            <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "recreation" && styles.activeTab]}
-            onPress={() => setActiveTab("recreation")}
-            accessibilityRole="button"
-            accessibilityLabel="Recreation centers"
-            accessibilityState={{ selected: activeTab === "recreation" }}
-          >
-            <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centers</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
-            onPress={toggleSearch}
-            accessibilityRole="button"
-            accessibilityLabel={showSearch ? "Close search" : "Search venues"}
-            accessibilityHint="Double tap to search for venues by name or location"
-          >
-            <Ionicons name={showSearch ? "close" : "search"} size={responsiveSize(18, 20, 22)} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
-          </TouchableOpacity>
+      <View style={[styles.titleRow, isWide && styles.titleRowWide]}>
+        <Text style={[styles.pageTitle, isWide && styles.pageTitleWide]} accessibilityRole="header">
+          Discover Venues &amp; Clubs
+        </Text>
+        <View style={[styles.header, isWide && styles.headerWide]}>
+          <View style={[styles.tabContainer, isWide && styles.tabContainerWide]}>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "all" && styles.activeTab]}
+              onPress={() => setActiveTab("all")}
+              accessibilityRole="button"
+              accessibilityLabel="All venues"
+              accessibilityState={{ selected: activeTab === "all" }}
+            >
+              <Text style={[styles.tabText, activeTab === "all" && styles.activeTabText]}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "nightlife" && styles.activeTab]}
+              onPress={() => setActiveTab("nightlife")}
+              accessibilityRole="button"
+              accessibilityLabel="Night clubs"
+              accessibilityState={{ selected: activeTab === "nightlife" }}
+            >
+              <Text style={[styles.tabText, activeTab === "nightlife" && styles.activeTabText]}>Night Clubs</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tab, activeTab === "recreation" && styles.activeTab]}
+              onPress={() => setActiveTab("recreation")}
+              accessibilityRole="button"
+              accessibilityLabel="Recreation centers"
+              accessibilityState={{ selected: activeTab === "recreation" }}
+            >
+              <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centers</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
+              onPress={toggleSearch}
+              accessibilityRole="button"
+              accessibilityLabel={showSearch ? "Close search" : "Search venues"}
+              accessibilityHint="Double tap to search for venues by name or location"
+            >
+              <Ionicons name={showSearch ? "close" : "search"} size={responsiveSize(18, 20, 22)} color={showSearch ? "#FF6B6B" : "#FFFFFF"} />
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
 
@@ -471,6 +476,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: responsiveSize(16, 24, 32),
     paddingTop: responsiveSize(6, 8, 10),
     paddingBottom: 1,
+  },
+  titleRow: {
+    flexDirection: "column",
+  },
+  titleRowWide: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: responsiveSize(24, 24, 32),
+    paddingTop: responsiveSize(6, 8, 10),
+  },
+  pageTitleWide: {
+    paddingHorizontal: 8,
+    paddingTop: 0,
+    paddingBottom: 0,
+    flexShrink: 1,
+  },
+  headerWide: {
+    padding: 0,
+    paddingBottom: 0,
+    flex: 1,
+  },
+  tabContainerWide: {
+    flex: 1,
   },
   recreationContainer: {
     backgroundColor: "#F5F5F5",

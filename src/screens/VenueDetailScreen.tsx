@@ -424,7 +424,7 @@ const VenueDetailScreen: React.FC = () => {
     />
     {isLargeScreen ? (
       <View style={[styles.container, { backgroundColor: COLORS.background, flexDirection: "row", padding: 24, gap: 24 }]}>
-        <ScrollView style={{ flex: 0.62 }} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
           <Image 
             source={{ uri: venue.backgroundImageUrl }} 
             style={styles.desktopVenueHeaderImage}
@@ -570,7 +570,7 @@ const VenueDetailScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        <View style={{ width: "36%" }}>
+        <View style={{ width: "36%", flexShrink: 0 }}>
           <View style={styles.stickyCard}>
             {(isOwner || isAdmin) && (
               <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
@@ -981,7 +981,7 @@ const styles = StyleSheet.create({
   },
   headerImage: {
     width: "100%",
-    height: responsiveSize(180, 240, 300),
+    height: responsiveSize(240, 300, 360),
   },
   contentContainer: {
     padding: responsiveSize(12, 16, 24),
@@ -1431,6 +1431,7 @@ const styles = StyleSheet.create({
     width: "100%",
     height: 380,
     borderRadius: 16,
+    overflow: "hidden",
   },
   desktopLeftContent: {
     paddingVertical: 20,
