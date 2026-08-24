@@ -26,10 +26,18 @@ const TodaysVibeScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
 
-  // Extract venueId from current path: /venues/:venueId/vibe or /profile/todays-vibe/:venueId
+  // Extract venueId from current path.
+  //   /venues/:venueId/vibe              -> [venues, venueId, vibe]
+  //   /profile/todays-vibe/:venueId      -> [profile, todays-vibe, venueId]
+  //   /profile/add-vibe/:venueId         -> [profile, add-vibe, venueId]
   const pathParts = currentPath.split('/').filter(Boolean)
-  const venueId = pathParts.length === 3 ? pathParts[2] : pathParts[3] // venues/:venueId/vibe or profile/todays-vibe/:venueId
-  const venueName = "Venue" // We'll need to fetch this or pass it differently
+  let venueId = ""
+  if (pathParts[0] === "venues") {
+    venueId = pathParts[1]
+  } else if (pathParts[1] === "todays-vibe" || pathParts[1] === "add-vibe") {
+    venueId = pathParts[2]
+  }
+  const [venueName, setVenueName] = useState("Venue")
   const [activeTab, setActiveTab] = useState<"today" | "week">("today")
   const [todayVibes, setTodayVibes] = useState<VibeImage[]>([])
   const [weekVibes, setWeekVibes] = useState<Record<string, VibeImage[]>>({})
@@ -70,6 +78,16 @@ const TodaysVibeScreen: React.FC = () => {
     try {
       if (!isRefresh) {
         setLoading(true)
+      }
+
+      // Load the venue so the header shows its real name.
+      if (venueId) {
+        try {
+          const venue = await SupabaseService.getVenueById(venueId)
+          if (venue?.name) setVenueName(venue.name)
+        } catch (err) {
+          console.error("Error loading venue name:", err)
+        }
       }
 
       // Load today's vibes

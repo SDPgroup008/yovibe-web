@@ -41,6 +41,7 @@ const VenueDetailScreen: React.FC = () => {
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
   const [currentVibeImage, setCurrentVibeImage] = useState<string | null>(null)
+  const [showVibeImageFull, setShowVibeImageFull] = useState(false)
   const [showOwnershipModal, setShowOwnershipModal] = useState(false)
   const [ownershipRequest, setOwnershipRequest] = useState<{
     userPhone: string
@@ -531,7 +532,14 @@ const VenueDetailScreen: React.FC = () => {
               <Text style={styles.vibeDescription}>{VibeAnalysisService.getVibeDescription(vibeRating)}</Text>
               {currentVibeImage && (
                 <View style={styles.vibeImageContainer}>
-                  <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+                  <TouchableOpacity
+                    activeOpacity={0.9}
+                    onPress={() => setShowVibeImageFull(true)}
+                    accessibilityRole="button"
+                    accessibilityLabel="View vibe image full screen"
+                  >
+                    <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+                  </TouchableOpacity>
                 </View>
               )}
               <TouchableOpacity style={[styles.todaysVibeButton, { backgroundColor: COLORS.primary }]} onPress={handleTodaysVibe}>
@@ -785,7 +793,14 @@ const VenueDetailScreen: React.FC = () => {
 
             {currentVibeImage && (
               <View style={styles.vibeImageContainer}>
-                <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={() => setShowVibeImageFull(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel="View vibe image full screen"
+                >
+                  <Image source={{ uri: currentVibeImage }} style={styles.vibeImage} />
+                </TouchableOpacity>
               </View>
             )}
 
@@ -943,6 +958,32 @@ const VenueDetailScreen: React.FC = () => {
             </ScrollView>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Full-screen vibe image viewer */}
+      <Modal
+        visible={showVibeImageFull}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowVibeImageFull(false)}
+      >
+        <View style={styles.fullImageModal}>
+          <TouchableOpacity
+            style={styles.fullImageCloseButton}
+            onPress={() => setShowVibeImageFull(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close full screen image"
+          >
+            <Ionicons name="close" size={28} color="#FFFFFF" />
+          </TouchableOpacity>
+          {currentVibeImage && (
+            <Image
+              source={{ uri: currentVibeImage }}
+              style={styles.fullVibeImage}
+              resizeMode="contain"
+            />
+          )}
+        </View>
       </Modal>
     </>
   )
@@ -1178,6 +1219,30 @@ const styles = StyleSheet.create({
     height: responsiveSize(150, 180, 220),
     borderRadius: responsiveSize(8, 10, 12),
     resizeMode: "cover",
+  },
+  fullImageModal: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.96)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  fullImageCloseButton: {
+    position: "absolute",
+    top: responsiveSize(40, 50, 60),
+    right: responsiveSize(15, 20, 25),
+    zIndex: 2,
+    width: responsiveSize(40, 44, 48),
+    height: responsiveSize(40, 44, 48),
+    borderRadius: responsiveSize(20, 22, 24),
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  fullVibeImage: {
+    width: "100%",
+    height: "100%",
   },
   todaysVibeButton: {
     flexDirection: "row",
