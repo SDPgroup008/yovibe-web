@@ -22,14 +22,18 @@ export default function HelpSupportScreen() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
   const faqItems = [
-    { question: "How do I create an event?", answer: "Go to your Profile, tap 'Add Event', fill in the details (name, date, venue, ticket types), and publish." },
-    { question: "How do I purchase tickets?", answer: "Browse events, select one, choose your ticket type and quantity, enter attendee details, and complete payment via mobile money or card." },
-    { question: "How do I create a venue profile?", answer: "Sign up as a Club Owner, go to 'My Venues', tap 'Add Venue', and fill in the venue details." },
-    { question: "How do I post a vibe for my venue?", answer: "Navigate to your venue and tap 'Add Today's Vibe'. Take or upload a photo and the AI will analyze the atmosphere." },
-    { question: "How do I find events near me?", answer: "Use the Events tab to browse upcoming events. You can filter by date and venue." },
-    { question: "How do I get notifications?", answer: "Enable notifications in Settings > Notification Settings to control what you're notified about." },
-    { question: "Can I edit my profile?", answer: "Go to Profile to change your display name, photo, and other personal information." },
-    { question: "How do I delete my account?", answer: "Contact support to request account deletion. This action is permanent." },
+    { question: "How do I create an event?", answer: "Tap the '+' button on the Events tab (regular users and admins), or go to My Venues → 'Add Event' if you own a venue (club owners). Fill in the details: name, date, start/end times, artists, description, poster image, venue (pick an existing one or add a custom venue), ticket types (price, capacity, seats/tables, ticket design), ticket contacts, and payment reception details, then publish." },
+    { question: "How do I purchase tickets?", answer: "Open an event and tap 'Buy Tickets'. Follow the steps: 1) Ticket — choose your ticket type and quantity, and pick a seat or table if the event has a seat map; 2) Attendees — enter names and emails for each attendee; 3) Delivery — choose the email to receive your QR tickets; 4) Payment — pay with Mobile Money (MTN or Airtel), card, or bank transfer. Once paid, your QR tickets are emailed to you and saved under Profile → My Tickets." },
+    { question: "Can I pay for tickets in installments?", answer: "Yes. During checkout, turn on installments and choose a 2, 3, 4 or 5-payment plan. The first installment is charged immediately and the rest are due in equal parts before the event date. Each installment carries an 8% service fee. Pay remaining installments from Profile → My Tickets → Reserved Tickets (Installments)." },
+    { question: "How do I create a venue profile?", answer: "First upgrade to a Club Owner from Profile → 'Become an Club Owner'. Then open the Venues tab and tap the '+' button, or go to Profile → My Venues → 'Add New Venue'. Fill in the venue name, address, description, categories, and a photo, then save." },
+    { question: "How do I post a vibe for my venue?", answer: "From Profile → My Venues, tap the camera 'Add Vibe' button on your venue. Take or upload a photo of the atmosphere, and YoVibe's AI analyzes it and gives a vibe rating out of 5. The rating appears on your venue page and on the Map." },
+    { question: "How do I find events and venues near me?", answer: "Use the Events tab to browse and search upcoming events, the Calendar tab to see events by date, and the Map tab to explore venues by location. On the Map you can zoom to a country or city and get directions to any venue." },
+    { question: "How do I get notifications?", answer: "When you first open the app you'll be asked to allow notifications. These send you updates about events and venue vibes. Your notification history is under Profile → Notifications." },
+    { question: "Can I edit my profile?", answer: "Yes. Go to Profile → 'Edit Profile' to change your display name, and tap your avatar photo to upload a new profile picture." },
+    { question: "How do I view or resend my tickets?", answer: "Go to Profile → My Tickets. Tap a ticket to see its QR code and download it as a PDF. Use the 'Resend Ticket' link to have your tickets emailed to you again. Tickets show a status of Active, Used or Cancelled." },
+    { question: "How do I request a refund?", answer: "Open the ticket in Profile → My Tickets and tap 'Request refund'. Refunds are available only for a cancelled or postponed event, or an incomplete installment plan after the event date. An administrator reviews and processes every refund." },
+    { question: "How do I delete my account?", answer: "Go to Profile → Settings → 'Delete Account' and type DELETE to confirm. This is permanent: all your data, tickets and events are deleted and you are signed out immediately." },
+    { question: "How do I scan tickets at my event?", answer: "As an organiser, open your event's Organiser Dashboard and use the Ticket Scanner to validate QR tickets at the door, or generate staff scan links (https://yovibe.net/scan/...) for your team. Scanned tickets are recorded in your scan log." },
   ]
 
   const openEmailClient = async () => {
