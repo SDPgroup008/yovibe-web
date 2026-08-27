@@ -8,12 +8,7 @@ import {
   TouchableOpacity,
   Alert,
   ActivityIndicator,
-  TextInput,
-  Image,
-  Modal,
-  ScrollView,
   Platform,
-  Dimensions,
   Animated,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -22,13 +17,28 @@ import SupabaseService from "../services/SupabaseService";
 import { supabase } from "../config/supabase";
 import ImagePickerService from "../services/ImagePickerService";
 import { useCompatNavigation } from "../utils/compatNavigation";
+import { COLORS, BORDER_RADIUS, useDeviceType } from "../utils/ResponsiveDesign";
+import ProfileBanner from "../components/profile/ProfileBanner";
+import ProfileIdentityCard from "../components/profile/ProfileIdentityCard";
+import ProfileMenuSection from "../components/profile/ProfileMenuSection";
+import ProfileMenuItem from "../components/profile/ProfileMenuItem";
+import ProfileLayout from "../components/profile/ProfileLayout";
+import EditProfileModal from "../components/profile/EditProfileModal";
+import UpgradeConfirmModal from "../components/profile/UpgradeConfirmModal";
 
-const { width } = Dimensions.get('window');
+type MenuItemConfig = {
+  icon: keyof typeof Ionicons.glyphMap;
+  label: string;
+  description?: string;
+  accent?: string;
+  destructive?: boolean;
+  onPress: () => void;
+};
 
-const responsiveSize = (small: number, medium: number, large: number) => {
-  if (width >= 1024) return large;
-  if (width >= 768) return medium;
-  return small;
+type MenuSectionConfig = {
+  title: string;
+  subtitle?: string;
+  items: MenuItemConfig[];
 };
 
 const ProfileScreen: React.FC = () => {
@@ -49,6 +59,8 @@ const ProfileScreen: React.FC = () => {
   const [bannerStatus, setBannerStatus] = useState<"success" | "error" | null>(null);
   const [bannerMessage, setBannerMessage] = useState("");
   const bannerOpacity = useRef(new Animated.Value(0)).current;
+
+  const { isLargeScreen } = useDeviceType();
 
   // Auto-hide banner after 3 seconds
   useEffect(() => {
@@ -216,16 +228,16 @@ const ProfileScreen: React.FC = () => {
 
   const handleUpgradeToClubOwner = async () => {
     if (!user) return;
-    
+
     setUpgradeLoading(true);
     try {
       const { error } = await supabase
         .from("users")
         .update({ user_type: "club_owner" })
         .eq("id", user.id);
-      
+
       if (error) throw error;
-      
+
       const refreshedUser = await SupabaseService.getUserProfile(user.id);
       if (refreshedUser) {
         const { data: session } = await supabase.auth.getSession();
@@ -234,7 +246,7 @@ const ProfileScreen: React.FC = () => {
           updateProfile({ displayName: fullUser.displayName, photoURL: fullUser.photoURL });
         }
       }
-      
+
       setBannerStatus("success");
       setBannerMessage("Successfully upgraded to Club Owner!");
       setShowUpgradeConfirm(false);
@@ -336,261 +348,245 @@ const ProfileScreen: React.FC = () => {
     navigation.navigate("Notification");
   };
 
+  // ---------------------------------------------------------------------------
+  // UI composition (presentation only — all handlers/state above are untouched)
+  // ---------------------------------------------------------------------------
+
+  const accountItems: MenuItemConfig[] = [
+    {
+      icon: "person-outline",
+      label: "Edit Profile",
+      description: "Update your name and profile photo",
+      onPress: handleToggleEditProfile,
+    },
+  ];
+
+  if (user?.userType === "regular_user") {
+    accountItems.push({
+      icon: "business-outline",
+      label: "Become a Club Owner",
+      description: "Unlock organizer tools",
+      onPress: handleToggleUpgradeConfirm,
+    });
+  }
+
+  accountItems.push(
+    {
+      icon: "ticket-outline",
+      label: "My Tickets",
+      description: "View your tickets and passes",
+      onPress: navigateToMyTickets,
+    },
+    {
+      icon: "settings-outline",
+      label: "Settings",
+      description: "Account and app preferences",
+      onPress: navigateToSettings,
+    }
+  );
+
+  // On desktop, Sign Out lives at the end of the Account section; on mobile it
+  // remains the pinned button rendered below the scroll content.
+  if (isLargeScreen) {
+    accountItems.push({
+      icon: "log-out-outline",
+      label: "Sign Out",
+      destructive: true,
+      onPress: handleSignOut,
+    });
+  }
+
+  const menuSections: MenuSectionConfig[] = [
+    { title: "Account", items: accountItems },
+    {
+      title: "Support & System",
+      items: [
+        {
+          icon: "notifications-outline",
+          label: "Notifications",
+          description: "Manage notification preferences",
+          onPress: openNotifications,
+        },
+        {
+          icon: "help-circle-outline",
+          label: "Help & Support",
+          description: "Get help with your account",
+          onPress: navigateToHelpSupport,
+        },
+      ],
+    },
+  ];
+
+  if (user?.userType === "club_owner") {
+    menuSections.splice(1, 0, {
+      title: "Organiser Tools",
+      items: [
+        {
+          icon: "business-outline",
+          label: "My Venues",
+          description: "Manage your venues and events",
+          accent: COLORS.primary,
+          onPress: navigateToMyVenues,
+        },
+      ],
+    });
+  }
+
+  if (user?.userType === "admin") {
+    menuSections.splice(
+      1,
+      0,
+      {
+        title: "Admin Console",
+        subtitle: "Overview",
+        items: [
+          { icon: "analytics-outline", label: "Analytics Dashboard", accent: COLORS.primary, onPress: navigateToAdminDashboard },
+          { icon: "people-outline", label: "Manage Users", accent: COLORS.primary, onPress: navigateToAdminUsers },
+        ],
+      },
+      {
+        title: "Admin Console",
+        subtitle: "Management",
+        items: [
+          { icon: "business-outline", label: "Manage Venues", accent: COLORS.primary, onPress: navigateToAdminVenues },
+          { icon: "calendar-outline", label: "Manage Events", accent: COLORS.primary, onPress: navigateToAdminEvents },
+          { icon: "swap-horizontal-outline", label: "Ownership Requests", accent: COLORS.primary, onPress: navigateToAdminOwnershipRequests },
+        ],
+      },
+      {
+        title: "Admin Console",
+        subtitle: "Finance",
+        items: [
+          { icon: "return-down-back-outline", label: "Refund Requests", accent: "#F59E0B", onPress: navigateToAdminRefunds },
+          { icon: "cash-outline", label: "Revenue Withdrawals", accent: COLORS.primary, onPress: navigateToAdminWithdrawals },
+          { icon: "send-outline", label: "Payout Requests", accent: "#F59E0B", onPress: navigateToAdminPayouts },
+        ],
+      },
+      {
+        title: "Admin Console",
+        subtitle: "Operations",
+        items: [
+          { icon: "alert-circle-outline", label: "Stranded Purchases", accent: "#FF6B6B", onPress: navigateToAdminStrandedPurchases },
+          { icon: "map-outline", label: "Venue Geocoding", accent: "#22d3ee", onPress: navigateToAdminGeocode },
+        ],
+      }
+    );
+  }
+
+  const primaryActionConfig: {
+    label: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    onPress: () => void;
+  } | null = (() => {
+    const userType = user?.userType;
+    if (userType === "club_owner") {
+      return { label: "Open My Venues", icon: "business-outline", onPress: navigateToMyVenues };
+    }
+    if (userType === "admin") {
+      return { label: "Open Analytics", icon: "analytics-outline", onPress: navigateToAdminDashboard };
+    }
+    if (userType === "regular_user") {
+      return { label: "Edit Profile", icon: "person-outline", onPress: handleToggleEditProfile };
+    }
+    return null;
+  })();
+
+  const identityCard = (
+    <ProfileIdentityCard
+      isLargeScreen={isLargeScreen}
+      photoURL={photoURL || undefined}
+      displayName={displayName || undefined}
+      email={user?.email}
+      userType={user?.userType}
+      createdAt={user?.createdAt}
+      onPickImage={handlePickProfileImage}
+    />
+  );
+
+  const sectionCards = (
+    <>
+      {menuSections.map((section, index) => (
+        <ProfileMenuSection
+          key={`${section.title}-${section.subtitle ?? ""}-${index}`}
+          title={section.title}
+          subtitle={section.subtitle}
+        >
+          {section.items.map((item) => (
+            <ProfileMenuItem
+              key={item.label}
+              icon={item.icon}
+              label={item.label}
+              description={item.description}
+              accent={item.accent}
+              destructive={item.destructive}
+              onPress={item.onPress}
+            />
+          ))}
+        </ProfileMenuSection>
+      ))}
+    </>
+  );
+
+  const primaryAction = primaryActionConfig ? (
+    <TouchableOpacity style={styles.primaryAction} onPress={primaryActionConfig.onPress}>
+      <Ionicons name={primaryActionConfig.icon} size={18} color={COLORS.background} />
+      <Text style={styles.primaryActionText}>{primaryActionConfig.label}</Text>
+    </TouchableOpacity>
+  ) : null;
+
+  const mobileSignOut = user ? (
+    <TouchableOpacity
+      style={[styles.signOutButton, loading && styles.signOutButtonDisabled]}
+      onPress={handleSignOut}
+      disabled={loading}
+    >
+      {loading ? <ActivityIndicator color={COLORS.danger} /> : <Text style={styles.signOutText}>Sign Out</Text>}
+    </TouchableOpacity>
+  ) : null;
+
   return (
     <View style={styles.container}>
-      <View style={styles.profileHeader}>
-        <TouchableOpacity style={styles.avatarContainer} onPress={handlePickProfileImage}>
-          {photoURL ? (
-            <Image source={{ uri: photoURL }} style={styles.avatar} />
-          ) : (
-            <Text style={styles.avatarText}>{user?.email?.charAt(0).toUpperCase() || "U"}</Text>
-          )}
-          <View style={styles.avatarEditBadge}>
-            <Ionicons name="camera" size={16} color="#FFFFFF" />
-          </View>
-        </TouchableOpacity>
-
-        <Text style={styles.emailText}>{user?.email}</Text>
-        {displayName && <Text style={styles.displayNameText}>{displayName}</Text>}
-        <Text style={styles.userTypeText}>
-          {user?.userType === "regular_user" ? "Regular User" : user?.userType === "club_owner" ? "Club Owner" : user?.userType === "admin" ? "Admin" : "Vibe Master"}
-        </Text>
-      </View>
-
-      {/* Banner */}
-      {bannerStatus !== null && (
-        <Animated.View 
-          style={[
-            styles.banner, 
-            bannerStatus === "success" ? styles.bannerSuccess : styles.bannerError,
-            { opacity: bannerOpacity }
-          ]}
-        >
-          <Text style={styles.bannerText}>{bannerMessage}</Text>
-        </Animated.View>
-      )}
-
-      <ScrollView style={styles.menuContainer}>
-        <TouchableOpacity style={styles.menuItem} onPress={handleToggleEditProfile}>
-          <Ionicons name="person-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Edit Profile</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-        {user?.userType === "club_owner" && (
-          <TouchableOpacity style={styles.menuItem} onPress={navigateToMyVenues}>
-            <Ionicons name="business-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.menuText}>My Venues</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666666" />
-          </TouchableOpacity>
-        )}
-
-        {user?.userType === "regular_user" && (
-          <TouchableOpacity style={styles.menuItem} onPress={handleToggleUpgradeConfirm}>
-            <Ionicons name="business-outline" size={24} color="#FFFFFF" />
-            <Text style={styles.menuText}>Become an Club Owner</Text>
-            <Ionicons name="chevron-forward" size={24} color="#666666" />
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity style={styles.menuItem} onPress={navigateToMyTickets}>
-          <Ionicons name="ticket-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>My Tickets</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-        {user?.userType === "admin" && (
-          <>
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminDashboard}>
-              <Ionicons name="analytics-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.menuText}>Analytics Dashboard</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminUsers}>
-              <Ionicons name="people-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.menuText}>Manage Users</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminVenues}>
-              <Ionicons name="business-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.menuText}>Manage Venues</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminEvents}>
-              <Ionicons name="calendar-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.menuText}>Manage Events</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminRefunds}>
-              <Ionicons name="return-down-back-outline" size={24} color="#F59E0B" />
-              <Text style={styles.menuText}>Refund Requests</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminWithdrawals}>
-              <Ionicons name="cash-outline" size={24} color="#00D4FF" />
-              <Text style={styles.menuText}>Revenue Withdrawals</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminPayouts}>
-              <Ionicons name="send-outline" size={24} color="#F59E0B" />
-              <Text style={styles.menuText}>Payout Requests</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminOwnershipRequests}>
-              <Ionicons name="swap-horizontal-outline" size={24} color="#FFFFFF" />
-              <Text style={styles.menuText}>Ownership Requests</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminStrandedPurchases}>
-              <Ionicons name="alert-circle-outline" size={24} color="#FF6B6B" />
-              <Text style={styles.menuText}>Stranded Purchases</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.menuItem} onPress={navigateToAdminGeocode}>
-              <Ionicons name="map-outline" size={24} color="#22d3ee" />
-              <Text style={styles.menuText}>Venue Geocoding</Text>
-              <Ionicons name="chevron-forward" size={24} color="#666666" />
-            </TouchableOpacity>
-          </>
-        )}
-
-        <TouchableOpacity style={styles.menuItem} onPress={navigateToSettings}>
-          <Ionicons name="settings-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Settings</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={navigateToHelpSupport}>
-          <Ionicons name="help-circle-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Help & Support</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.menuItem} onPress={openNotifications}>
-          <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
-          <Text style={styles.menuText}>Notifications</Text>
-          <Ionicons name="chevron-forward" size={24} color="#666666" />
-        </TouchableOpacity>
-
-      </ScrollView>
-
-      {user ? (
-        <TouchableOpacity
-          style={[styles.signOutButton, loading && styles.disabledButton, { zIndex: 100 }]}
-          onPress={handleSignOut}
-          disabled={loading}
-        >
-          {loading ? <ActivityIndicator color="#FF3B30" /> : <Text style={styles.signOutText}>Sign Out</Text>}
-        </TouchableOpacity>
-      ) : null}
+      <ProfileBanner
+        status={bannerStatus}
+        message={bannerMessage}
+        opacity={bannerOpacity}
+        topOffset={isLargeScreen ? 20 : 50}
+      />
+      <ProfileLayout
+        isLargeScreen={isLargeScreen}
+        identityCard={identityCard}
+        primaryAction={isLargeScreen ? primaryAction : undefined}
+        sections={sectionCards}
+        signOutButton={isLargeScreen ? undefined : mobileSignOut}
+      />
 
       {/* Edit Profile Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
+      <EditProfileModal
         visible={showEditProfile}
-        onRequestClose={handleToggleEditProfile}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Edit Profile</Text>
-
-            <TouchableOpacity style={styles.profileImageContainer} onPress={handlePickProfileImage}>
-              {photoURL ? (
-                <Image source={{ uri: photoURL }} style={styles.profileImage} />
-              ) : (
-                <View style={styles.profileImagePlaceholder}>
-                  <Ionicons name="person" size={60} color="#666666" />
-                </View>
-              )}
-              <View style={styles.profileImageEditBadge}>
-                <Ionicons name="camera" size={20} color="#FFFFFF" />
-              </View>
-            </TouchableOpacity>
-
-            <Text style={styles.inputLabel}>Display Name</Text>
-            <TextInput
-              style={[styles.input, profileFieldErrors.displayName && styles.inputError]}
-              value={displayName}
-              onChangeText={(t) => { setDisplayName(t); setProfileFieldErrors(prev => { const n = {...prev}; delete n.displayName; return n }) }}
-              placeholder="Enter your name"
-              placeholderTextColor="#999"
-            />
-            {profileFieldErrors.displayName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 8 }}>{profileFieldErrors.displayName}</Text>}
-
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={handleToggleEditProfile}
-                disabled={editProfileLoading}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton, editProfileLoading && styles.disabledButton]}
-                onPress={handleUpdateProfile}
-                disabled={editProfileLoading}
-              >
-                {editProfileLoading ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.saveButtonText}>Save</Text>
-                )}
-</TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        photoURL={photoURL}
+        displayName={displayName}
+        fieldErrors={profileFieldErrors}
+        loading={editProfileLoading}
+        onPhotoPress={handlePickProfileImage}
+        onDisplayNameChange={(t) => {
+          setDisplayName(t);
+          setProfileFieldErrors((prev) => {
+            const next = { ...prev };
+            delete next.displayName;
+            return next;
+          });
+        }}
+        onCancel={handleToggleEditProfile}
+        onSave={handleUpdateProfile}
+      />
 
       {/* Upgrade Confirmation Modal */}
-      {showUpgradeConfirm && (
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={showUpgradeConfirm}
-          onRequestClose={handleToggleUpgradeConfirm}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Become an Organizer</Text>
-              <Text style={styles.upgradeDescription}>
-                By upgrading to Club Owner, you'll be able to create and manage events, venues, and organize ticket sales. 
-                You'll be responsible for event coordination and guest management.
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={handleToggleUpgradeConfirm}
-                  disabled={upgradeLoading}
-                >
-                  <Text style={styles.cancelButtonText}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.saveButton, upgradeLoading && styles.disabledButton]}
-                  onPress={handleUpgradeToClubOwner}
-                  disabled={upgradeLoading}
-                >
-                  {upgradeLoading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.saveButtonText}>Confirm Upgrade</Text>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
+      <UpgradeConfirmModal
+        visible={showUpgradeConfirm}
+        loading={upgradeLoading}
+        onCancel={handleToggleUpgradeConfirm}
+        onConfirm={handleUpgradeToClubOwner}
+      />
     </View>
   );
 };
@@ -598,225 +594,40 @@ const ProfileScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
-    paddingBottom: responsiveSize(8, 10, 12),
+    backgroundColor: COLORS.background,
   },
-  profileHeader: {
-    alignItems: "center",
-    padding: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
-  },
-  avatarContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "#2196F3",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 16,
-    position: "relative",
-  },
-  avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-  },
-  avatarText: {
-    fontSize: 40,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-  },
-  avatarEditBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#2196F3",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#121212",
-  },
-  emailText: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  displayNameText: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    marginBottom: 4,
-  },
-  userTypeText: {
-    fontSize: 16,
-    color: "#BBBBBB",
-  },
-  menuContainer: {
-    flex: 1,
-    marginTop: 24,
-  },
-  menuItem: {
+  primaryAction: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: BORDER_RADIUS.md,
+    backgroundColor: COLORS.primary,
   },
-  menuText: {
-    flex: 1,
-    fontSize: 16,
-    color: "#FFFFFF",
-    marginLeft: 16,
+  primaryActionText: {
+    color: COLORS.background,
+    fontSize: 15,
+    fontWeight: "700",
   },
   signOutButton: {
-    marginHorizontal: 24,
-    marginTop: 16,
-    marginBottom: 8,
-    padding: 16,
-    backgroundColor: "#FF3B30",
-    borderRadius: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    padding: 15,
+    backgroundColor: "rgba(220, 38, 38, 0.12)",
+    borderRadius: BORDER_RADIUS.md,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(248, 113, 113, 0.4)",
     zIndex: 100, // Added to prevent overlap
   },
   signOutText: {
-    fontSize: 16,
-    color: "#FFFFFF",
-    fontWeight: "bold",
+    fontSize: 15,
+    color: COLORS.danger,
+    fontWeight: "700",
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#1E1E1E",
-    borderRadius: 12,
-    padding: 24,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#FFFFFF",
-    marginBottom: 20,
-  },
-  profileImageContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#2196F3",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 24,
-    position: "relative",
-  },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-  },
-  profileImagePlaceholder: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: "#333",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  profileImageEditBadge: {
-    position: "absolute",
-    bottom: 0,
-    right: 0,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#2196F3",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#1E1E1E",
-  },
-  inputLabel: {
-    alignSelf: "flex-start",
-    fontSize: 16,
-    color: "#FFFFFF",
-    marginBottom: 8,
-  },
-  input: {
-    width: "100%",
-    backgroundColor: "#121212",
-    borderRadius: 8,
-    padding: 12,
-    color: "#FFFFFF",
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#333",
-  },
-  inputError: { borderColor: "#FF4444", borderWidth: 1.5 },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-  },
-  modalButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    marginHorizontal: 8,
-  },
-  cancelButton: {
-    backgroundColor: "#333",
-  },
-  cancelButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  saveButton: {
-    backgroundColor: "#2196F3",
-  },
-  saveButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-  },
-  disabledButton: {
+  signOutButtonDisabled: {
     opacity: 0.6,
-  },
-  banner: {
-    position: "absolute",
-    top: 50,
-    left: 16,
-    right: 16,
-    padding: 16,
-    borderRadius: 8,
-    alignItems: "center",
-    zIndex: 999,
-  },
-  bannerSuccess: {
-    backgroundColor: "#28a745",
-  },
-  bannerError: {
-    backgroundColor: "#dc3545",
-  },
-  bannerText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  upgradeDescription: {
-    color: "#CCCCCC",
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 24,
-    textAlign: "center",
   },
 })
 

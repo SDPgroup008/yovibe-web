@@ -498,7 +498,15 @@ export const ProfileStackNavigator = () => {
         headerBackTitleVisible: !isSmallDevice,
       }}
     >
-      <ProfileStack.Screen name="ProfileMain" component={ProfileScreenWrapper} options={{ title: "Profile" }} />
+      <ProfileStack.Screen
+        name="ProfileMain"
+        component={ProfileScreenWrapper}
+        options={{
+          title: "Profile",
+          // Desktop renders its own in-page layout; keep the native header on mobile/tablet.
+          headerShown: !isLargeScreen,
+        }}
+      />
       <ProfileStack.Screen name="MyVenues" component={MyVenuesScreen} options={{ title: "My Venues" }} />
       <ProfileStack.Screen name="AddVenue" component={AddVenueScreenProtected} options={{ title: "Add Venue" }} />
       <ProfileStack.Screen name="VenueDetail" component={VenueDetailScreen} options={{ title: "Venue Details" }} />
