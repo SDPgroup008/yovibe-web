@@ -251,65 +251,14 @@ export class PesaPalService {
   }
 
   /**
-   * Process payment - For testing, simulates success
-   * In production, this would handle the post-payment flow
+   * Process payment - verifies the payment status server-side via the
+   * verify-pesapal-payment function. Tickets are created only by the server
+   * (fulfill-purchase), never on a client-side "simulated success".
    */
   static async processPayment(paymentIntentId: string): Promise<boolean> {
     const verification = await this.verifyPayment(paymentIntentId)
     if (verification.status === "failed") throw new Error("Payment failed")
     return verification.status === "completed"
-
-    /* Legacy simulation retained below only as unreachable historical code.
-    console.log("========================================")
-    console.log("💳 PESAPAL PAYMENT PROCESSING")
-    console.log("========================================")
-    console.log("📋 PesaPalService.processPayment: Processing payment")
-    console.log("   - Payment Intent ID:", paymentIntentId)
-    console.log("   - Processing via PesaPal API...")
-
-    try {
-      // In production, we would verify the payment status with PesaPal
-      // For this integration, we'll simulate the payment completion
-      // since the user goes through the PesaPal iframe
-      
-      console.log("⏳ Verifying payment with PesaPal...")
-      
-      // For demo/testing: simulate successful payment after short delay
-      // In production, this would verify the actual transaction
-      return new Promise((resolve) => {
-        setTimeout(async () => {
-          // Try to verify with PesaPal first
-          try {
-            const verification = await this.verifyPayment(paymentIntentId)
-            
-            if (verification.status === "completed") {
-              console.log("✅ PesaPalService.processPayment: Payment verified successfully!")
-              console.log("   - Transaction ID:", verification.transactionId)
-              console.log("   - Status: COMPLETED")
-              console.log("========================================")
-              resolve(true)
-            } else if (verification.status === "failed") {
-              console.log("❌ PesaPalService.processPayment: Payment failed")
-              console.log("========================================")
-              throw new Error("Payment failed")
-            } else {
-              console.log("⚠️ Payment is still pending, completing for demo...")
-              console.log("========================================")
-              resolve(true)
-            }
-          } catch (error) {
-            // If verification fails, assume success for demo purposes
-            console.log("⚠️ Payment verification unavailable, completing for demo...")
-            console.log("========================================")
-            resolve(true)
-          }
-        }, 1500)
-      })
-    } catch (error) {
-      console.error("❌ Error processing payment:", error)
-      throw error
-    }
-    */
   }
 
   /**
@@ -449,39 +398,7 @@ export class PesaPalService {
       }
     } catch (error: any) {
       console.error("❌ Error processing PesaPal payout:", error.message)
-      console.log("⚠️ Falling back to simulated payout for demo/testing...")
-      
       return { success: false, error: error?.message || "Payout failed" }
-      // Legacy fallback removed
-      return new Promise((resolve) => {
-        setTimeout(() => {
-          const payoutId = `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-          const transactionReference = `PESAPAL_PAYOUT_${Date.now()}`
-          
-          console.log("✅ [SIMULATED] PesaPalService.processPayout: Payout processed successfully!")
-          console.log("   - Payout ID:", payoutId)
-          console.log("   - Transaction Reference:", transactionReference)
-          console.log("   - Status: COMPLETED")
-          
-          console.log("========================================")
-          console.log("💰 [SIMULATED] PESAPAL PAYOUT COMPLETED")
-          console.log("========================================")
-          console.log("📋 Payout Details:")
-          console.log("   - Payout ID:", payoutId)
-          console.log("   - Amount:", amount, "UGX")
-          console.log("   - Method:", payoutMethod)
-          console.log("   - Recipient:", recipientDetails.name)
-          console.log("   - Transaction Ref:", transactionReference)
-          console.log("   - Status: SUCCESS")
-          console.log("========================================")
-          
-          resolve({
-            success: true,
-            payoutId,
-            transactionReference,
-          })
-        }, 2000)
-      })
     }
   }
 
@@ -495,18 +412,10 @@ export class PesaPalService {
   }> {
     console.log("📋 PesaPalService.verifyPayoutStatus: Checking payout status")
     console.log("   - Payout ID:", payoutId)
-    
+
+    // Payout status is verified by polling verify-pawapay-payout / the payout
+    // callback; a client-side simulated status would be meaningless here.
     return { status: "pending", error: "Payout status verification is not available" }
-    // Legacy simulation removed
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log("✅ Payout status verified: COMPLETED")
-        resolve({
-          status: "completed",
-          transactionReference: `PESAPAL_VERIFY_${Date.now()}`,
-        })
-      }, 1000)
-    })
   }
 
   /**
@@ -514,33 +423,6 @@ export class PesaPalService {
    */
   static async refundPayment(paymentIntentId: string, amount: number): Promise<boolean> {
     throw new Error("Refunds must be requested and executed through the manual admin refund workflow")
-    console.log("📋 PesaPalService.refundPayment: Processing refund")
-    console.log("   - Payment ID:", paymentIntentId)
-    console.log("   - Amount:", amount)
-
-    // In production, this would call PesaPal's refund API
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        console.log("✅ Refund processed successfully")
-        resolve(true)
-      }, 2000)
-    })
-  }
-
-  /**
-   * Generate unique QR code data for ticket
-   */
-  static generateTicketQRCode(): string {
-    const timestamp = Date.now()
-    const random = Math.random().toString(36).substr(2, 15)
-    return `YOVIBE_TICKET_${timestamp}_${random}`
-  }
-
-  /**
-   * Validate QR code format
-   */
-  static isValidTicketQR(qrCode: string): boolean {
-    return qrCode.startsWith("YOVIBE_TICKET_")
   }
 }
 

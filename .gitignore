@@ -195,3 +195,5 @@ netlify/functions/package.json
 # netlify/functions/*.js
 
 supabase/migrations/
+supabase/functions/
+supabase/

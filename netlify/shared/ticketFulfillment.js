@@ -13,7 +13,7 @@
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { v4: uuidv4 } = require('uuid');
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getAdminClient } = require('./supabaseAdmin');
 
 const APP_COMMISSION_RATE = 0.15;
@@ -275,6 +275,8 @@ async function createTicketServerSide(admin, {
   buyerId,
   deliveryEmail,
   totalAmount,         // per-ticket total (totalAmount / quantity)
+  unitPrice,           // Phase 2.2: verified notified price for the selected fee
+  lateFeePercent,      // Phase 2.2: from event.late_fee_percent (with unitPrice)
   isTableEntry,
   tableSize,
   tableGroupId,
@@ -295,14 +297,20 @@ async function createTicketServerSide(admin, {
   // tickets store the slug in BOTH event_id and event_slug.
   const eventIdForTicket = eventSlug;
   const startTime = resolveEventStartTime(event);
-  const lateFeePct = Number(event.late_fee_percent ?? 0) || 0;
+  const lateFeePct = unitPrice != null
+    ? (Number(lateFeePercent ?? 0) || 0)
+    : (Number(event.late_fee_percent ?? 0) || 0);
   const sevenAm = new Date(startTime);
   sevenAm.setHours(7, 0, 0, 0);
   const isLatePurchase = new Date() >= sevenAm;
-  const lateFee = isLatePurchase ? Math.round(totalAmount * lateFeePct / 100) : 0;
+  const baseAmount = unitPrice != null ? unitPrice : totalAmount;
+  const lateFee = isLatePurchase ? Math.round(baseAmount * lateFeePct / 100) : 0;
 
-  const subtotal = totalAmount;
-  const total = totalAmount;
+  // With a verified unitPrice, the snapshot is authoritative: subtotal = price
+  // per ticket, total = price + late fee. Without it (stranded-retry path) the
+  // legacy behaviour is preserved (totalAmount is the per-ticket total).
+  const subtotal = baseAmount;
+  const total = unitPrice != null ? baseAmount + lateFee : totalAmount;
   const { appCommission, venueRevenue } = calculateRevenueSplit(total);
   const gatewayFee = calculateGatewayFee(payment.method, total);
   const purchaseDeadline = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
@@ -351,6 +359,7 @@ async function createTicketServerSide(admin, {
     venue_revenue: venueRevenue,
     app_commission: appCommission,
     purchase_date: new Date().toISOString(),
+    purchase_deadline: purchaseDeadline.toISOString(),
     event_start_time: startTime.toISOString(),
     qr_code: id,
     qr_code_data_url: qrUrl,
@@ -378,15 +387,68 @@ async function createTicketServerSide(admin, {
     payment_name: paymentName,
     qr_signature: signed.signature,
     reentry_pass: null,
+    refunded_amount: 0,
+    refund_status: 'none',
   };
 
-  const { error } = await admin.from('tickets').insert(row);
-  if (error) {
-    // A seat/table conflict or duplicate unique key — surface the DB reason.
-    throw new Error(`Ticket insert failed: ${error.message}`);
-  }
-
+  // Phase 2.1: NO insert here — the caller persists the whole batch atomically
+  // via persistTicketRows() → create_tickets_batch (capacity + table/seat
+  // conflict checks under an event-level advisory lock).
   return row;
+}
+
+// ─── Atomic batch persistence (Phase 2.1) ────────────────────────────────────
+
+/**
+ * Persist a batch of ticket rows atomically through the inventory RPC.
+ * Throws errors prefixed with SOLD_OUT / TABLE_TAKEN / SEAT_TAKEN / DUPLICATE
+ * so callers can map them to buyer-facing messages.
+ */
+async function persistTicketRows(admin, rows) {
+  if (!rows || rows.length === 0) return [];
+  const { data, error } = await admin.rpc('create_tickets_batch', {
+    p_event_slug: rows[0].event_slug,
+    p_rows: rows,
+  });
+  if (error) {
+    const msg = String(error.message || '');
+    let code = 'INVENTORY_ERROR';
+    if (msg.includes('SOLD_OUT')) code = 'SOLD_OUT';
+    else if (msg.includes('TABLE_TAKEN')) code = 'TABLE_TAKEN';
+    else if (msg.includes('SEAT_TAKEN')) code = 'SEAT_TAKEN';
+    else if (msg.includes('duplicate key') || msg.includes('23505')) code = 'DUPLICATE';
+    throw new Error(`${code}: ${msg}`);
+  }
+  return Array.isArray(data) ? data : (rows.map((r) => r.id));
+}
+
+/**
+ * Best-effort removal of QR images / buyer photos uploaded for a batch that
+ * failed to persist (avoids orphaned R2 objects).
+ */
+async function cleanupTicketAssets(rows) {
+  try {
+    if (!rows || rows.length === 0) return;
+    if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) return;
+    const s3 = getR2Client();
+    const bucket = process.env.R2_BUCKET_NAME || 'yovibe';
+    const keys = [];
+    for (const r of rows) {
+      if (r && r.id) keys.push(`qr-codes/${r.id}.png`);
+      if (r && r.buyer_photo_url && String(r.buyer_photo_url).includes('/buyer-photos/')) {
+        try {
+          keys.push(decodeURIComponent(new URL(String(r.buyer_photo_url)).pathname.slice(1)));
+        } catch {
+          // ignore malformed URL
+        }
+      }
+    }
+    await Promise.allSettled(
+      keys.map((key) => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })))
+    );
+  } catch (e) {
+    console.warn('[TicketFulfillment] asset cleanup failed:', e.message);
+  }
 }
 
 // ─── Reversal / failure reconciliation (P1.5) ───────────────────────────────
@@ -428,5 +490,7 @@ module.exports = {
   sendTicketEmail,
   siteBaseUrl,
   createTicketServerSide,
+  persistTicketRows,
+  cleanupTicketAssets,
   markTicketsByPayment,
 };

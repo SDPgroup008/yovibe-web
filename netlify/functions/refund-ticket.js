@@ -51,6 +51,52 @@ async function sendRefundNotification(admin, type, refund) {
   } catch (e) { console.error('sendRefundNotification error', e); }
 }
 
+/**
+ * Phase 3 (3.2): keep the TICKET in lock-step with its refund so a refunded or
+ * in-refund ticket can NEVER be paid out (and stays out of payout eligibility).
+ *   approved    → refund_status 'approved'  (+ payout_eligible false)
+ *   processing  → refund_status 'processing' (+ payout_eligible false)
+ *   completed   → status 'refunded', refund_status 'completed', payout_eligible false
+ */
+async function updateTicketRefundState(admin, refund, phase) {
+  try {
+    const ids = Array.isArray(refund.ticket_ids) && refund.ticket_ids.length
+      ? refund.ticket_ids
+      : (refund.ticket_id ? [refund.ticket_id] : []);
+    if (!ids.length) return;
+    const update = phase === 'completed'
+      ? { status: 'refunded', refund_status: 'completed', payout_eligible: false, updated_at: new Date().toISOString() }
+      : { refund_status: phase, payout_eligible: false, updated_at: new Date().toISOString() };
+    const { error } = await admin.from('tickets').update(update).in('id', ids);
+    if (error) console.warn('[RefundTicket] updateTicketRefundState error:', error.message);
+
+    // Phase 3 (3.2): clawback — if this refund completes on a ticket that was
+    // ALREADY paid out (or is mid-payout), record the recovery amount on the
+    // refund so admins can net it against FUTURE payouts.
+    if (phase === 'completed' && refund.approved_amount) {
+      const { data: paidTickets } = await admin
+        .from('tickets')
+        .select('id')
+        .in('id', ids)
+        .in('payout_status', ['paid', 'processing']);
+      if (paidTickets && paidTickets.length > 0) {
+        const clawback = Math.round(Number(refund.approved_amount || 0) * 100) / 100;
+        const { error: cbErr } = await admin
+          .from('refund_requests')
+          .update({ clawback_amount: clawback, updated_at: new Date().toISOString() })
+          .eq('id', refund.id);
+        if (cbErr) {
+          console.warn('[RefundTicket] clawback recording failed:', cbErr.message);
+        } else {
+          console.log(`[RefundTicket] ⚠️ Clawback UGX ${clawback} recorded for refund ${refund.request_reference} (ticket already paid out)`);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[RefundTicket] updateTicketRefundState failed:', e.message);
+  }
+}
+
 async function calculateEligibility(admin, ticketId, reasonCode, requestedAmount, installmentPlanId) {
   const { data: ticket, error: ticketError } = await admin.from('tickets').select('*').eq('id', ticketId).maybeSingle();
   if (ticketError) throw ticketError;
@@ -178,6 +224,7 @@ async function executeProviderRefund(admin, refund, authUser) {
       'Refund submitted manually to payment provider',
       { external_refund_id: result.externalRefundId, processor_payload: result.payload, submitted_at: new Date().toISOString(), completed_at: status === 'completed' ? new Date().toISOString() : null });
     await sendRefundNotification(admin, status === 'completed' ? 'completed' : 'executed', finalRefund);
+    await updateTicketRefundState(admin, finalRefund, status === 'completed' ? 'completed' : 'processing');
     return finalRefund;
   } catch (error) {
     const failed = await transition(admin, { ...refund, status: 'processing' }, 'needs_attention', authUser.id, 'admin', error.message);
@@ -253,6 +300,7 @@ exports.handler = async (event) => {
       const updated = await transition(admin, refund, 'approved', authUser.id, 'admin', body.note || 'Approved by admin',
         { approved_amount: approvedAmount, reviewed_by: authUser.id, reviewed_at: new Date().toISOString(), admin_note: body.note || null });
       await sendRefundNotification(admin, 'approved', updated);
+      await updateTicketRefundState(admin, updated, 'approved');
       return json(200, { refund: updated });
     }
 
@@ -278,6 +326,7 @@ exports.handler = async (event) => {
         const finalRefund = await transition(admin, refund, status, authUser.id, 'admin', `Retry #${retryCount} submitted`,
           { external_refund_id: result.externalRefundId, processor_payload: result.payload, submitted_at: new Date().toISOString(), completed_at: status === 'completed' ? new Date().toISOString() : null, retry_count: retryCount });
         await sendRefundNotification(admin, status === 'completed' ? 'completed' : 'executed', finalRefund);
+        await updateTicketRefundState(admin, finalRefund, status === 'completed' ? 'completed' : 'processing');
         return json(200, { refund: finalRefund });
       } catch (error) {
         const failed = await transition(admin, refund, 'needs_attention', authUser.id, 'admin', `Retry #${retryCount} failed: ${error.message}`, { retry_count: retryCount });

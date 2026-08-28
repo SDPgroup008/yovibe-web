@@ -208,6 +208,45 @@ const ProfileScreen: React.FC = () => {
     navigation.navigate("HelpSupport");
   };
 
+  // Phase 4 (4.2): DPPA right of access — download the user's personal data.
+  const handleDownloadMyData = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { Alert.alert("Session Expired", "Please sign in again."); return }
+
+      const response = await fetch("/.netlify/functions/data-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({}),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        Alert.alert("Export Failed", data.error || "Failed to export your data")
+        return
+      }
+
+      if (typeof document !== "undefined") {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = "yovibe-my-data.json"
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+      Alert.alert(
+        "Data Exported",
+        `Your data has been exported.\nTickets: ${(data.tickets || []).length}\nRefunds: ${(data.refunds || []).length}\nInstallment plans: ${(data.installment_plans || []).length}`
+      )
+    } catch (error) {
+      console.error("Data export error:", error)
+      Alert.alert("Error", "Failed to export your data")
+    }
+  };
+
   const navigateToAdminOwnershipRequests = () => {
     if (user?.userType === "admin") {
       navigation.navigate("AdminOwnershipRequests");
@@ -412,6 +451,12 @@ const ProfileScreen: React.FC = () => {
           label: "Help & Support",
           description: "Get help with your account",
           onPress: navigateToHelpSupport,
+        },
+        {
+          icon: "download-outline",
+          label: "Download My Data",
+          description: "Export your personal data (DPPA 2019)",
+          onPress: handleDownloadMyData,
         },
       ],
     },

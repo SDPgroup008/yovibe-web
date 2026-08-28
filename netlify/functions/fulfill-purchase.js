@@ -20,10 +20,13 @@ const {
   verifyPesapalPayment,
   verifyPawaPayDeposit,
   loadEvent,
+  resolveEventStartTime,
   uploadImageDataUrl,
   insertTicketNotification,
   sendTicketEmail,
   createTicketServerSide,
+  persistTicketRows,
+  cleanupTicketAssets,
 } = require('../shared/ticketFulfillment');
 
 const headers = {
@@ -132,6 +135,39 @@ exports.handler = async (event) => {
     const event = await loadEvent(admin, eventId);
     if (!event) return error(404, { success: false, error: `Event not found: ${eventId}` });
 
+    // ── Step 3b: Server-side price verification (Phase 2.2) ─────────────────
+    // Recompute the expected total from the NOTIFIED price + late fee and
+    // reject any client-supplied amount that does not match — a tampered
+    // amount (devtools) can never be charged.
+    const feeForPurchase = Array.isArray(event.entry_fees)
+      ? event.entry_fees.find((f) => f && f.name === ticketType)
+      : null;
+    if (!feeForPurchase) {
+      return error(409, {
+        success: false,
+        error: `Ticket category "${ticketType || 'Standard'}" is no longer available. Please refresh and try again.`,
+      });
+    }
+    const unitPrice = Number.parseInt(String(feeForPurchase.amount || '0').replace(/[^0-9]/g, ''), 10) || 0;
+    const lateFeePercent = Number(event.late_fee_percent ?? 0) || 0;
+    const startTime = resolveEventStartTime(event);
+    const sevenAm = new Date(startTime);
+    sevenAm.setHours(7, 0, 0, 0);
+    const isLatePurchase = new Date() >= sevenAm;
+    const expectedSubtotal = unitPrice * qty;
+    const expectedLateFee = isLatePurchase ? Math.round(expectedSubtotal * lateFeePercent / 100) : 0;
+    const expectedTotal = expectedSubtotal + expectedLateFee;
+    if (Math.abs(expectedTotal - total) > 1) {
+      console.warn(
+        `[FulfillPurchase] Price mismatch — client=${total}, expected=${expectedTotal} ` +
+        `(fee="${ticketType}", unit=${unitPrice}, qty=${qty}, lateFee=${expectedLateFee})`
+      );
+      return error(409, {
+        success: false,
+        error: 'Ticket prices have changed. Please refresh the page and try again.',
+      });
+    }
+
     // ── Step 4: Claim the fulfillment row (concurrency lock via PK) ────────
     const paymentId = method === 'mobile_money' ? verification.depositId : (verification.orderId || paymentIdFallback());
     const claim = await admin.from('pending_ticket_fulfillments').insert({
@@ -195,6 +231,8 @@ exports.handler = async (event) => {
     }
 
     // ── Step 6: Create the tickets server-side ─────────────────────────────
+    // createTicketServerSide builds the rows (QR, R2, pricing); they are NOT
+    // inserted individually — the whole batch is persisted atomically below.
     const perTicketTotal = total / qty;
     const tableGroupId = isTableEntry ? `YVG-${String(event.slug || event.id).slice(-6)}-${Date.now().toString().slice(-6)}` : undefined;
     const createdRows = [];
@@ -207,6 +245,8 @@ exports.handler = async (event) => {
         buyerId,
         deliveryEmail: deliveryEmails && deliveryEmails[i] ? deliveryEmails[i] : (buyerEmails[i] || payerEmail),
         totalAmount: perTicketTotal,
+        unitPrice,
+        lateFeePercent,
         isTableEntry: !!isTableEntry,
         tableSize: isTableEntry ? tableSize : undefined,
         tableGroupId,
@@ -222,12 +262,32 @@ exports.handler = async (event) => {
         pesapalConfirmationCode: verificationResult.confirmationCode,
       });
       createdRows.push(row);
+    }
 
+    // ── Step 6b: Atomic persistence with inventory checks (Phase 2.1) ───────
+    let ticketIds;
+    try {
+      ticketIds = await persistTicketRows(admin, createdRows);
+    } catch (err) {
+      // Remove the QR/photo objects we uploaded so nothing is orphaned.
+      await cleanupTicketAssets(createdRows);
+      const msg = String(err.message || '');
+      if (msg.startsWith('SOLD_OUT')) {
+        return error(409, { success: false, error: 'Tickets for this category are sold out.' });
+      }
+      if (msg.startsWith('TABLE_TAKEN')) {
+        return error(409, { success: false, error: 'That table was just taken — please pick another.' });
+      }
+      if (msg.startsWith('SEAT_TAKEN')) {
+        return error(409, { success: false, error: 'That seat was just taken — please pick another.' });
+      }
+      throw err;
+    }
+
+    for (const row of createdRows) {
       // Notification to the event owner (best-effort, mirrors the client flow)
       await insertTicketNotification(admin, event, row);
     }
-
-    const ticketIds = createdRows.map((r) => r.id);
 
     // ── Step 7: Mark fulfillment as fulfilled (persist before emails so a
     //            crashed email step never re-creates tickets) ───────────────

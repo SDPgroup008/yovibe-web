@@ -6,25 +6,17 @@
   package = "@netlify/plugin-functions-install-core"
 
 [build.environment]
-  # Cloudflare R2 Configuration
-  R2_ACCOUNT_ID = "your_account_id_here"
+  # Non-secret defaults only. Secrets (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+  # PESAPAL_CONSUMER_KEY/SECRET, PESAPAL_NOTIFICATION_ID, PAWAPAY_API_KEY,
+  # QR_HMAC_SECRET, ...) live in Netlify environment variables.
   R2_BUCKET_NAME = "yovibe"
   R2_PUBLIC_URL = "https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev"
   R2_ENDPOINT = "https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com"
-  R2_ACCESS_KEY_ID = "your_r2_access_key_here"
-  R2_SECRET_ACCESS_KEY = "your_r2_secret_key_here"
   # PesaPal API Configuration (production only)
-  PESAPAL_CONSUMER_KEY = "your_pesapal_consumer_key_here"
-  PESAPAL_CONSUMER_SECRET = "your_pesapal_consumer_secret_here"
   PESAPAL_API_URL = "https://pay.pesapal.com/v3/api"
   PESAPAL_BASE_URL = "https://pay.pesapal.com"
   # Your Netlify site URL (needed for IPN callback). Set to your actual domain.
   SITE_URL = "https://yovibe.net"
-  # IPN Notification ID - Register this once via /register-ipn function
-  PESAPAL_NOTIFICATION_ID = "your_ipn_notification_id_here"
-  # PawaPay API Configuration (for mobile money payments)
-  # Set PAWAPAY_API_KEY in Netlify environment variables for security
-  # PAWAPAY_API_KEY = "your_pawapay_jwt_token_here"
   # Secrets Scanning Configuration - Omit paths containing expected config values
   SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,src/services/PesaPalService.ts,src/services/PawaPayService.ts,sendNotifications.js,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,netlify/functions/create-pesapal-order.js,netlify/functions/verify-pesapal-payment.js,netlify/functions/process-pesapal-payout.js,netlify/functions/register-ipn.js,netlify/functions/pesapal-ipn.js,netlify/functions/create-pawapay-deposit.js,netlify/functions/verify-pawapay-payment.js,app.json,.gitignore,package.json,package-lock.json"
   # Omit environment variable keys that are public by design or appear in documentation
@@ -47,6 +39,10 @@
 [functions."process-stuck-fulfillments"]
   # Phase 1: automatic retry of stranded purchases every 5 minutes
   schedule = "*/5 * * * *"
+
+[functions."purge-expired-photos"]
+  # Phase 4 (4.3): daily photo/QR retention purge at 04:00
+  schedule = "0 4 * * *"
 
 [[headers]]
   for = "/manifest.webmanifest"

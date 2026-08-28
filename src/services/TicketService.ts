@@ -345,9 +345,14 @@ export class TicketService {
     cardPaymentName?: string,
   ): Promise<Ticket> {
     console.log("--- Step 1: Calculating ticket price ---")
-    const basePrice = event.entryFees && event.entryFees.length > 0
-      ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
-      : 0
+    // Phase 2.2: snapshot the price of the SELECTED ticket tier, not the first
+    // tier — a multi-tier event must record the tier the buyer actually chose.
+    const selectedFee = event.entryFees?.find((f: any) => f.name === paymentDetails?.ticketType)
+    const basePrice = selectedFee
+      ? Number.parseInt(selectedFee.amount?.replace(/[^0-9]/g, "") || "0")
+      : (event.entryFees && event.entryFees.length > 0
+          ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
+          : 0)
     console.log("💰 Base price:", basePrice)
 
     const eventStartTime = resolveEventStartTime(event)
@@ -1008,11 +1013,13 @@ console.error("❌ Error details:", updateError.details)
       if (ticketIds.length > 0) {
         const { data: tickets } = await supabase.from("tickets").select("*").in("id", ticketIds)
         for (const ticket of tickets || []) {
-          if (ticket.payout_eligible && ticket.payout_status === "pending") {
+          // Phase 3 (3.2): refunded or in-refund tickets are never payable.
+          const refundState = ticket.refund_status || "none"
+          if (ticket.payout_eligible && ticket.payout_status === "pending" && refundState === "none") {
             eligibleTickets.push(ticket as any)
             console.log("   ✅ Ticket", ticket.id, "eligible for payout")
           } else {
-            console.log("   ❌ Ticket", ticket.id, "not eligible")
+            console.log("   ❌ Ticket", ticket.id, "not eligible", { payout_eligible: ticket.payout_eligible, payout_status: ticket.payout_status, refund_status: ticket.refund_status })
           }
         }
       }

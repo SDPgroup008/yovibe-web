@@ -103,7 +103,8 @@ export default function AdminWithdrawalsScreen() {
         const eligible = allTickets.filter((t: any) => {
           const pe = t.payout_eligible ?? t.payoutEligible ?? false
           const ps = t.payout_status ?? t.payoutStatus ?? "pending"
-          return pe === true && ps === "pending"
+          const rs = t.refund_status ?? t.refundStatus ?? "none"
+          return pe === true && ps === "pending" && rs === "none"
         })
         const gross = eligible.reduce((s: number, t: any) => s + (t.total_amount ?? t.totalAmount ?? 0), 0)
         const gateway = eligible.reduce((s: number, t: any) => s + (t.gateway_fee ?? t.gatewayFee ?? 0), 0)
@@ -169,44 +170,49 @@ export default function AdminWithdrawalsScreen() {
     try {
       const { data: { user: sessionUser } } = await supabase.auth.getUser()
       if (!sessionUser) { setOtpError("Session expired"); return }
+      // Client-side sanity check only — the server verifies and consumes the OTP.
       const { data: otpRow } = await supabase.from('payout_otps')
         .select('*').eq('user_id', sessionUser.id).eq('otp', otpCode.trim()).eq('used', false).gt('expires_at', new Date().toISOString()).single()
       if (!otpRow) { setOtpError("Code is incorrect or expired"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('id', otpRow.id)
       setOtpLoading(false)
       setWithdrawLoading(true)
+
+      const allEligibleIds: string[] = []
+      for (const evt of selectedEvents) {
+        for (const tid of evt.eligibleTicketIds) allEligibleIds.push(tid)
+      }
+      if (allEligibleIds.length === 0) {
+        Alert.alert("Payout Failed", "No eligible tickets selected")
+        setWithdrawLoading(false)
+        return
+      }
+
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { setOtpError("Session expired"); setWithdrawLoading(false); return }
+
+      const intPhone = toInternationalPhone(phone)
+      // Phase 3 (3.4): the server verifies the OTP, recomputes the amount,
+      // checks refund/payout eligibility, submits to the provider, marks the
+      // tickets paid, and records the payout — all in one authoritative call.
+      const response = await fetch("/.netlify/functions/payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "execute",
+          otpCode: otpCode.trim(),
+          ticketIds: allEligibleIds,
+          amount: Math.round(netAfterFee * 100) / 100,
+          payoutMethod: "mobile_money",
+          recipientDetails: { name: user?.displayName || user?.email || "", phoneNumber: intPhone, provider },
+        }),
+      })
+      const data = await response.json()
+      if (!data.success) { Alert.alert("Payout Failed", data.error || "Payout failed"); setWithdrawLoading(false); return }
+      if (data.payoutId) { try { SupabaseService.sendPayoutReceipt(data.payoutId, user?.email || "") } catch {} }
+
       try {
-        const intPhone = toInternationalPhone(phone)
-        const payoutResult = await PawaPayService.initiatePayout(Math.round(netAfterFee * 100) / 100, "UGX", intPhone, provider)
-        if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
-
-        // Mark tickets for all selected events
-        const allEligibleIds: string[] = []
-        for (const evt of selectedEvents) {
-          for (const tid of evt.eligibleTicketIds) {
-            allEligibleIds.push(tid)
-            try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date(), payoutEligible: false }) } catch {}
-          }
-        }
-
-        // Save payout record
-        let savedPayoutId: string | null = null
-        try {
-          savedPayoutId = await SupabaseService.savePayout({
-            organizer_id: user?.id || "",
-            ticket_ids: allEligibleIds,
-            amount: withdrawAmount,
-            status: "completed",
-            processed_date: new Date().toISOString(),
-            transaction_reference: payoutResult.payoutId,
-            payout_method: "mobile_money",
-            recipient_name: user?.displayName || user?.email || "",
-            recipient_phone_number: intPhone,
-          })
-        } catch (err) { console.error("Failed to save payout:", err) }
-        if (savedPayoutId) SupabaseService.sendPayoutReceipt(savedPayoutId, user?.email || "")
-
-        Alert.alert("✅ Withdrawal Submitted!", `UGX ${netAfterFee.toLocaleString()} sent to ${intPhone}`)
+        Alert.alert("✅ Withdrawal Submitted!", `UGX ${(data.amount || netAfterFee).toLocaleString()} sent to ${intPhone}`)
         setShowModal(false)
         setOtpSent(false); setOtpCode(""); setPhone(""); setPhoneConfirm("")
         setEvents(prev => prev.map(e => e.selected ? { ...e, selected: false } : e))

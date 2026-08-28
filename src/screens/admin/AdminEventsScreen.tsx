@@ -5,6 +5,7 @@ import { useState, useEffect } from "react"
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator, Modal, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../../services/SupabaseService"
+import { supabase } from "../../config/supabase"
 import { useAuth } from "../../contexts/AuthContext"
 import type { Event } from "../../models/Event"
 import type { AdminEventsScreenProps } from "../../navigation/types"
@@ -18,6 +19,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   const [actionStatus, setActionStatus] = useState<"cancelled" | "postponed" | null>(null)
   const [postponedDate, setPostponedDate] = useState("")
   const [statusUpdating, setStatusUpdating] = useState(false)
+  const [reportDownloading, setReportDownloading] = useState<string | null>(null)
 
   useEffect(() => {
     if (currentUser?.userType !== "admin") {
@@ -106,6 +108,54 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     navigation.navigate("EventDetail", { eventId })
   }
 
+  // ── Sales report export (Phase 3, 3.3) ───────────────────────────────
+  const downloadCsv = (csv: string, filename: string) => {
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const handleDownloadReport = async (eventId: string) => {
+    try {
+      setReportDownloading(eventId)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { Alert.alert("Session Expired", "Please sign in again."); return }
+
+      const response = await fetch("/.netlify/functions/sales-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ eventId }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        Alert.alert("Report Failed", data.error || "Failed to generate report")
+        return
+      }
+
+      const s = data.summary
+      const summaryText = `${s.eventName}\nSold: ${s.soldCount}\nGross: UGX ${s.gross.toLocaleString()}\nCommission (15%): UGX ${s.commission.toLocaleString()}\nRefunds: ${s.completedRefunds} (UGX ${s.refundAmount.toLocaleString()})\nPayouts: UGX ${s.payoutsTotal.toLocaleString()}\nClawbacks: UGX ${s.clawbacks.toLocaleString()}`
+
+      if (typeof document !== "undefined" && data.csv) {
+        downloadCsv(data.csv, `${eventId}-sales-report.csv`)
+        Alert.alert("Report Downloaded", `CSV exported.\n\n${summaryText}`)
+      } else {
+        Alert.alert("Sales Report", summaryText)
+      }
+    } catch (error) {
+      console.error("Report error:", error)
+      Alert.alert("Error", "Failed to download report")
+    } finally {
+      setReportDownloading(null)
+    }
+  }
+
   const getStatusBadge = (event: Event) => {
     const status = event.eventStatus || "scheduled"
     const config: Record<string, { label: string; color: string; bg: string }> = {
@@ -142,6 +192,14 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
             <TouchableOpacity style={[styles.actionButton, styles.postponeButton]} onPress={() => openStatusModal(item, "postponed")}>
               <Ionicons name="calendar-outline" size={18} color="#FFFFFF" />
               <Text style={styles.actionButtonText}>Postpone</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.actionButton, styles.reportButton]} onPress={() => handleDownloadReport(item.id)} disabled={reportDownloading === item.id}>
+              {reportDownloading === item.id ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name="download-outline" size={18} color="#FFFFFF" />
+              )}
+              <Text style={styles.actionButtonText}>Report</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, item.isFeatured ? styles.unfeaturedButton : styles.featuredButton]} onPress={() => handleToggleFeature(item.id, item.isFeatured)}>
               <Ionicons name={item.isFeatured ? "star-outline" : "star"} size={18} color="#FFFFFF" />
@@ -244,6 +302,7 @@ const styles = StyleSheet.create({
   viewButton: { backgroundColor: "#2196F3" },
   cancelButton: { backgroundColor: "#DC2626" },
   postponeButton: { backgroundColor: "#F59E0B" },
+  reportButton: { backgroundColor: "#8B5CF6" },
   featuredButton: { backgroundColor: "#FFD700" },
   unfeaturedButton: { backgroundColor: "#333" },
   deleteButton: { backgroundColor: "rgba(255,59,48,0.2)" },

@@ -993,6 +993,24 @@ const TermsAndConditionsScreen: React.FC = () => {
             personal data. A copy of our Privacy Policy is available on our website and may be requested
             from support.
           </Text>
+          <Text style={styles.paragraph}>
+            12.11 Sharing with Event Organizers and Partners:
+          </Text>
+          <Text style={styles.paragraph}>
+            (a) When you purchase a Ticket, the Platform shares your name, email address, phone number,
+            ticket details, and security photo (where applicable) with the Organizer of the Event and, where
+            the Organizer has appointed one, the Organizer's authorised sales partners — solely for the
+            purposes of event administration, entry validation and security checks, and event-related
+            communications.
+          </Text>
+          <Text style={styles.paragraph}>
+            (b) Your personal data is not used by the Organizer or its partners for unrelated marketing
+            without your separate consent.
+          </Text>
+          <Text style={styles.paragraph}>
+            (c) By completing a purchase (including by checking the acceptance box at checkout), you consent
+            to this sharing in accordance with the Data Protection and Privacy Act, 2019.
+          </Text>
 
           <Text style={styles.sectionTitle}>13. INTELLECTUAL PROPERTY RIGHTS</Text>
           <Text style={styles.paragraph}>

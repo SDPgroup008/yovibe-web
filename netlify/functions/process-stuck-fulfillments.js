@@ -27,6 +27,7 @@ const {
   insertTicketNotification,
   sendTicketEmail,
   createTicketServerSide,
+  persistTicketRows,
 } = require('../shared/ticketFulfillment');
 
 const MAX_ATTEMPTS = 5;
@@ -131,7 +132,7 @@ async function processOne(admin, f) {
   const method = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
   const sharedPaymentId = f.payment_id;
 
-  const createdIds = [];
+  const createdRows = [];
   for (let i = 0; i < qty; i++) {
     const row = await createTicketServerSide(admin, {
       event,
@@ -149,7 +150,13 @@ async function processOne(admin, f) {
       pesapalTransactionId: verification.transactionId,
       pesapalConfirmationCode: verification.confirmationCode,
     });
-    createdIds.push(row.id);
+    createdRows.push(row);
+  }
+
+  // Persist the whole batch atomically (inventory checks included).
+  const createdIds = await persistTicketRows(admin, createdRows);
+
+  for (const row of createdRows) {
     await insertTicketNotification(admin, event, row);
 
     // Best-effort email with the hosted QR URL.

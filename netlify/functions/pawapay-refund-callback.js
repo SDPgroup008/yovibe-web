@@ -68,8 +68,16 @@ exports.handler = async (event) => {
       processor_payload: payload,
     });
 
-    if (status === 'completed' && refund.ticket_id) {
-      await admin.from('tickets').update({ status: 'refunded', refund_status: 'completed', refunded_amount: refund.approved_amount }).eq('id', refund.ticket_id);
+    const ticketIds = refund.ticket_ids && refund.ticket_ids.length
+      ? refund.ticket_ids
+      : (refund.ticket_id ? [refund.ticket_id] : []);
+
+    if (ticketIds.length) {
+      // Phase 3 (3.2): a ticket in any refund state must never be paid out.
+      const ticketUpdate = status === 'completed'
+        ? { status: 'refunded', refund_status: 'completed', refunded_amount: refund.approved_amount, payout_eligible: false, updated_at: new Date().toISOString() }
+        : { refund_status: status === 'failed' ? 'failed' : 'processing', payout_eligible: false, updated_at: new Date().toISOString() };
+      await admin.from('tickets').update(ticketUpdate).in('id', ticketIds);
     }
 
     return json(200, { received: true, status });

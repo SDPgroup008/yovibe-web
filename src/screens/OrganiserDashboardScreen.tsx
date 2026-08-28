@@ -471,7 +471,8 @@ const OrganiserDashboardScreen: React.FC = () => {
       const amount = t.totalAmount || 0
       const isLate = t.isLatePurchase
       const isScanned = t.isScanned || t.status === "used"
-      const isEligible = t.payoutEligible === true && t.payoutStatus === "pending"
+      const refundState = t.refundStatus ?? t.refund_status ?? "none"
+      const isEligible = t.payoutEligible === true && t.payoutStatus === "pending" && refundState === "none"
       const tPaymentMethod = t.paymentMethod || "mobile_money"
 
       if (isLate) lateCount++; else earlyCount++
@@ -889,10 +890,8 @@ const OrganiserDashboardScreen: React.FC = () => {
         return;
       }
 
-      await supabase
-        .from('payout_otps')
-        .update({ used: true })
-        .eq('id', data.id);
+      // Note: the OTP is NOT marked used here — the server-side payout function
+      // (payout.js) verifies and consumes it authoritatively.
 
       console.log("[PayoutOTP] OTP verified successfully!");
       await handlePayoutSubmit();
@@ -981,43 +980,43 @@ const OrganiserDashboardScreen: React.FC = () => {
     setWithdrawLoading(true)
     try {
       if (payoutTab === "mobile_money") {
-        // ── Mobile Money: existing PawaPay flow ──
-        console.log("[PayoutSubmit] 📱 Starting Mobile Money payout flow...")
-        const payoutResult = await PawaPayService.initiatePayout(totalAmount, "UGX", toInternationalPhone(payoutPhone), payoutProvider)
+        // ── Mobile Money: server-side payout (Phase 3) ──
+        // The server verifies the OTP, recomputes the amount, checks refund/
+        // payout eligibility, submits to PawaPay, marks tickets paid, persists
+        // the recipient to the event's payout_config, and records the payout.
+        const { data: { session } } = await supabase.auth.getSession()
+        const token = session?.access_token
+        if (!token) { Alert.alert("Session expired", "Please sign in again."); setWithdrawLoading(false); return }
 
-        if (!payoutResult.success) {
-          Alert.alert("Payout Failed", payoutResult.error || "Unknown error"); setWithdrawLoading(false); return
-        }
-
-        console.log("✅ Payout initiated:", payoutResult.payoutId)
-
-        // Mark tickets as paid
-        for (const tid of selectedTicketIds) {
-          try { await SupabaseService.updateTicket(tid, { payoutStatus: "paid", payoutDate: new Date(), payoutEligible: false }) } catch {}
-        }
-
-        // Save payout record
-        try {
-          const savedPayoutId = await SupabaseService.savePayout({
-            organizer_id: user.id,
-            ticket_ids: selectedTicketIds,
+        const intPhone = toInternationalPhone(payoutPhone)
+        const response = await fetch("/.netlify/functions/payout", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+          body: JSON.stringify({
+            action: "execute",
+            otpCode: otpCode.trim(),
+            ticketIds: selectedTicketIds,
             amount: totalAmount,
-            status: "completed",
-            processed_date: new Date().toISOString(),
-            transaction_reference: payoutResult.payoutId,
-            payout_method: "mobile_money",
-            recipient_name: user.displayName || user.email || "",
-            recipient_phone_number: toInternationalPhone(payoutPhone),
-          })
-          if (savedPayoutId) SupabaseService.sendPayoutReceipt(savedPayoutId, user.email || "")
-        } catch (err) { console.error("Failed to save payout record:", err) }
+            payoutMethod: "mobile_money",
+            recipientDetails: { name: user.displayName || user.email || "", phoneNumber: intPhone, provider: payoutProvider },
+          }),
+        })
+        const data = await response.json()
+        if (!data.success) {
+          Alert.alert("Payout Failed", data.error || "Payout failed")
+          setWithdrawLoading(false)
+          return
+        }
+        if (data.payoutId) { try { SupabaseService.sendPayoutReceipt(data.payoutId, user.email || "") } catch {} }
+
+        const paidAmount = data.amount || totalAmount
 
         // Update organizer wallet
-        await updateWalletAfterPayout(totalAmount)
+        await updateWalletAfterPayout(paidAmount)
 
-        setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${totalAmount.toLocaleString()}`, status: "Completed" }, ...prev])
-        setEligiblePayoutTotal(prev => Math.max(0, prev - totalAmount))
-        Alert.alert("✅ Payout Submitted!", `UGX ${totalAmount.toLocaleString()} sent to ${toInternationalPhone(payoutPhone)}\nPayout ID: ${payoutResult.payoutId}`)
+        setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${paidAmount.toLocaleString()}`, status: "Completed" }, ...prev])
+        setEligiblePayoutTotal(prev => Math.max(0, prev - paidAmount))
+        Alert.alert("✅ Payout Submitted!", `UGX ${paidAmount.toLocaleString()} sent to ${intPhone}\nPayout ID: ${data.payoutId || ""}`)
 
       } else {
         // ── Card: save payout request for admin processing with bank details ──
