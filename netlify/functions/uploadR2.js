@@ -28,6 +28,28 @@ if (accessKeyId && secretAccessKey &&
 const BUCKET = process.env.R2_BUCKET_NAME || 'yovibe';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
 
+// Detect the actual image format from the file bytes. Callers can mislabel an
+// image (e.g. JPEG bytes sent as image/png or with a .png filename); storing it
+// with the wrong Content-Type/extension breaks every downstream decoder, so
+// correct the label from the magic bytes before the object is persisted.
+function sniffImageMime(bytes) {
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
+  if (bytes.length > 0 && bytes.subarray(0, 256).toString('latin1').toLowerCase().includes('<svg')) return 'image/svg+xml';
+  return null;
+}
+
+const IMAGE_EXTENSION = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/svg+xml': 'svg',
+};
+
 exports.handler = async (event) => {
   // Enable CORS
   const headers = {
@@ -87,7 +109,19 @@ exports.handler = async (event) => {
     }
 
     // Construct R2 key
-    const key = `${path}/${filename}`;
+    let finalContentType = contentType;
+    let finalFilename = filename;
+    const sniffed = sniffImageMime(uploadBody);
+    if (sniffed) {
+      // Trust the real bytes over whatever the caller declared so the stored
+      // object's Content-Type and extension always match its format.
+      finalContentType = sniffed;
+      const ext = IMAGE_EXTENSION[sniffed];
+      if (ext && !filename.toLowerCase().endsWith('.' + ext)) {
+        finalFilename = filename.replace(/\.[a-z0-9]{1,5}$/i, '') + '.' + ext;
+      }
+    }
+    const key = `${path}/${finalFilename}`;
 
     // Prepare file body
     let uploadBody;
@@ -112,7 +146,7 @@ exports.handler = async (event) => {
       Bucket: BUCKET,
       Key: key,
       Body: uploadBody,
-      ContentType: contentType,
+      ContentType: finalContentType,
       ACL: 'public-read',
     });
 
@@ -131,7 +165,7 @@ exports.handler = async (event) => {
         url: publicUrl,
         key,
         path,
-        filename,
+        filename: finalFilename,
         size: uploadBody.length,
       }),
     };

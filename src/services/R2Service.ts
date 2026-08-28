@@ -20,6 +20,74 @@ export interface UploadOptions {
   body: Buffer | Blob | string;
 }
 
+// Detect the actual image format from the file bytes. Upload callers can
+// mislabel images (e.g. JPEG bytes sent as image/png); the stored object must
+// carry the Content-Type/extension that matches its real format or every
+// downstream decoder (resvg, native Image) silently drops it.
+function sniffImageMime(bytes: Uint8Array): string | null {
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "image/webp";
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif";
+  let head = "";
+  for (let i = 0; i < Math.min(bytes.length, 256); i++) head += String.fromCharCode(bytes[i]);
+  if (head.toLowerCase().includes("<svg")) return "image/svg+xml";
+  return null;
+}
+
+// Raster formats the server-side PDF rasterizer (@resvg/resvg-js) cannot decode.
+// Anything in this list is re-encoded to PNG in the browser before uploading.
+const RESVG_UNSUPPORTED_IMAGE_MIMES = new Set([
+  "image/webp",
+  "image/avif",
+  "image/heic",
+  "image/heif",
+  "image/tiff",
+  "image/bmp",
+  "image/x-ms-bmp",
+]);
+
+// Re-encode an image blob to a PNG data URL in the browser. Used to normalize
+// formats resvg cannot decode (WebP, AVIF, HEIC, TIFF, BMP) so ticket PDFs can
+// always embed the background. Falls back to null so uploaders keep the
+// original bytes when conversion is not possible.
+async function convertImageBlobToPngDataUrl(input: Blob): Promise<string | null> {
+  try {
+    let bitmap: ImageBitmap | null = null;
+    let source: ImageBitmap | HTMLImageElement;
+    if (typeof createImageBitmap === "function") {
+      bitmap = await createImageBitmap(input);
+      source = bitmap;
+    } else {
+      source = await new Promise<HTMLImageElement>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("image decode failed"));
+        img.src = URL.createObjectURL(input);
+      });
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = source.width;
+    canvas.height = source.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(source as CanvasImageSource, 0, 0);
+    if (bitmap) bitmap.close();
+    return await new Promise((resolve) => {
+      canvas.toBlob((blob) => {
+        if (!blob) return resolve(null);
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      }, "image/png");
+    });
+  } catch {
+    return null;
+  }
+}
+
 function resolveFunctionUrl(functionName: string): string {
   const normalizedBase = FUNCTIONS_BASE_URL.replace(/\/$/, '');
   if (normalizedBase) {
@@ -93,11 +161,21 @@ async function uploadToR2Server(
     uploadBody = body;
   }
 
+  // Correct the stored Content-Type from the real bytes so the object is never
+  // mislabeled (e.g. JPEG data declared as image/png).
+  let finalContentType = contentType;
+  if (uploadBody instanceof Uint8Array) {
+    const sniffed = sniffImageMime(new Uint8Array(uploadBody.buffer, uploadBody.byteOffset, uploadBody.byteLength));
+    if (sniffed && String(contentType || "").toLowerCase().startsWith("image/")) {
+      finalContentType = sniffed;
+    }
+  }
+
   const command = new PutObjectCommand({
     Bucket: BUCKET,
     Key: key,
     Body: uploadBody,
-    ContentType: contentType,
+    ContentType: finalContentType,
     ACL: 'public-read',
   });
 
@@ -118,6 +196,8 @@ async function uploadToR2Browser(
   filename: string
 ): Promise<{ url: string; key: string }> {
   let fileData: string | Buffer;
+  let finalContentType = contentType;
+  let finalFilename = filename;
 
   const blobToDataUrl = (blob: Blob): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -139,6 +219,32 @@ async function uploadToR2Browser(
     fileData = body as string;
   }
 
+  // resvg (the server-side PDF rasterizer) cannot decode WebP/AVIF/HEIC/TIFF/BMP.
+  // Re-encode those to PNG in the browser so every format still renders in the
+  // generated ticket PDF.
+  if (String(contentType || "").toLowerCase().startsWith("image/") && RESVG_UNSUPPORTED_IMAGE_MIMES.has(String(contentType).toLowerCase())) {
+    try {
+      const isDataUrl = typeof body === "string" && body.startsWith("data:");
+      const sourceBlob =
+        body instanceof Blob
+          ? body
+          : isDataUrl
+            ? await (await fetch(body)).blob()
+            : null;
+      if (sourceBlob) {
+        const pngDataUrl = await convertImageBlobToPngDataUrl(sourceBlob);
+        if (pngDataUrl) {
+          fileData = pngDataUrl.replace(/^data:[^;]+;base64,/, "");
+          finalContentType = "image/png";
+          finalFilename = filename.replace(/\.[a-z0-9]{1,5}$/i, "") + ".png";
+          key = `${path}/${finalFilename}`;
+        }
+      }
+    } catch (error) {
+      console.warn("[R2Service] Format normalization failed, uploading original:", error);
+    }
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), UPLOAD_TIMEOUT_MS);
 
@@ -152,8 +258,8 @@ async function uploadToR2Browser(
       signal: controller.signal,
       body: JSON.stringify({
         file: fileData,
-        filename,
-        contentType,
+        filename: finalFilename,
+        contentType: finalContentType,
         path,
         type: 'media',
       }),

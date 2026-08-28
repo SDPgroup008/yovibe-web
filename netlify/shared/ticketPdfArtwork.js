@@ -4,6 +4,20 @@ const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const href = (v) => esc(v).replace(/#/g, '%23');
+
+// Detect the actual image format from the file bytes. R2/custom-domain responses
+// can mislabel JPEG data as image/png (or vice-versa); decoders (resvg, native
+// Image) trust the data-URL MIME, so a mismatch silently drops the image. Sniff
+// the magic bytes and prefer them over the Content-Type header.
+function sniffImageMime(bytes) {
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
+  if (bytes.length > 0 && bytes.subarray(0, 256).toString('latin1').toLowerCase().includes('<svg')) return 'image/svg+xml';
+  return null;
+}
 const TEMPLATE_COLORS = {
   midnight: ['#111827', '#7c3aed', '#ffffff', '#a78bfa', '#1e1b4b', 'rgba(167,139,250,0.25)'],
   neon: ['#111827', '#ff0080', '#ffffff', '#f0abfc', '#1a0533', 'rgba(255,0,128,0.3)'],
@@ -202,7 +216,8 @@ async function asData(value) {
   const response = await fetch(value);
   if (!response.ok) return value;
   const bytes = Buffer.from(await response.arrayBuffer());
-  return `data:${response.headers.get('content-type') || 'image/jpeg'};base64,${bytes.toString('base64')}`;
+  const mime = sniffImageMime(bytes) || response.headers.get('content-type') || 'image/jpeg';
+  return `data:${mime};base64,${bytes.toString('base64')}`;
 }
 
 async function renderTicketPng(data, options = {}) {

@@ -27,6 +27,31 @@ const esc = (value: unknown) => String(value ?? "")
 
 const xmlUrl = (value: string) => esc(value).replace(/#/g, "%23")
 
+// Detect the actual image format from the file bytes. Uploaded ticket backgrounds
+// can be served with a Content-Type that mismatches the real data (e.g. JPEG
+// bytes labeled image/png on a custom R2 domain); decoders trust the data-URL
+// MIME, so a mismatch silently drops the image. Sniff the magic bytes.
+function sniffImageMime(bytes: Uint8Array): string | null {
+  if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png"
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg"
+  if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return "image/webp"
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif"
+  let head = ""
+  for (let i = 0; i < Math.min(bytes.length, 256); i++) head += String.fromCharCode(bytes[i])
+  if (head.toLowerCase().includes("<svg")) return "image/svg+xml"
+  return null
+}
+
+async function sniffImageMimeFromBlob(blob: Blob): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(sniffImageMime(new Uint8Array(reader.result as ArrayBuffer)))
+    reader.onerror = () => resolve(null)
+    reader.readAsArrayBuffer(blob.slice(0, 12))
+  })
+}
+
 function formatDate(value: Date | string | undefined) {
   const d = value instanceof Date ? value : new Date(value || Date.now())
   return d.toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })
@@ -440,8 +465,13 @@ export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket,
         reader.onerror = reject
         reader.readAsDataURL(blob)
       })
+      // Rebuild the data URL with the MIME sniffed from the bytes: a mismatched
+      // Content-Type (e.g. JPEG bytes labeled image/png) breaks decoding.
+      const mime = (await sniffImageMimeFromBlob(blob)) || blob.type || "image/jpeg"
+      const payloadIndex = dataUrl.indexOf(",")
+      const embeddedUrl = payloadIndex >= 0 ? `data:${mime};base64,${dataUrl.slice(payloadIndex + 1)}` : dataUrl
       const escaped = xmlUrl(asset)
-      svg = svg.split(`href="${escaped}"`).join(`href="${dataUrl}"`)
+      svg = svg.split(`href="${escaped}"`).join(`href="${embeddedUrl}"`)
     } catch (error) {
       console.warn("Ticket asset could not be embedded", asset, error)
     }
