@@ -108,21 +108,6 @@ exports.handler = async (event) => {
       };
     }
 
-    // Construct R2 key
-    let finalContentType = contentType;
-    let finalFilename = filename;
-    const sniffed = sniffImageMime(uploadBody);
-    if (sniffed) {
-      // Trust the real bytes over whatever the caller declared so the stored
-      // object's Content-Type and extension always match its format.
-      finalContentType = sniffed;
-      const ext = IMAGE_EXTENSION[sniffed];
-      if (ext && !filename.toLowerCase().endsWith('.' + ext)) {
-        finalFilename = filename.replace(/\.[a-z0-9]{1,5}$/i, '') + '.' + ext;
-      }
-    }
-    const key = `${path}/${finalFilename}`;
-
     // Prepare file body
     let uploadBody;
     if (typeof file === 'string' && file.startsWith('data:')) {
@@ -140,6 +125,23 @@ exports.handler = async (event) => {
         body: JSON.stringify({ error: 'Invalid file format' }),
       };
     }
+
+    // Construct R2 key
+    let finalContentType = contentType;
+    let finalFilename = filename;
+    const sniffed = sniffImageMime(uploadBody);
+    if (sniffed) {
+      // Trust the real bytes over whatever the caller declared so the stored
+      // object's Content-Type and extension always match its format.
+      finalContentType = sniffed;
+      const ext = IMAGE_EXTENSION[sniffed];
+      // Accept both .jpg and .jpeg for JPEG; otherwise require the exact match.
+      const acceptedExtensions = sniffed === 'image/jpeg' ? ['jpg', 'jpeg'] : [ext];
+      if (ext && !acceptedExtensions.some((e) => filename.toLowerCase().endsWith('.' + e))) {
+        finalFilename = filename.replace(/\.[a-z0-9]{1,5}$/i, '') + '.' + ext;
+      }
+    }
+    const key = `${path}/${finalFilename}`;
 
     // Upload to R2
     const command = new PutObjectCommand({
