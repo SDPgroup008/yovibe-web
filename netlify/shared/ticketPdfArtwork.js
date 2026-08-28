@@ -212,9 +212,33 @@ function renderSvg(data, options = {}) {
 }
 
 async function asData(value) {
-  if (!value || value.startsWith('data:') || !/^https?:\/\//i.test(value)) return value;
-  const response = await fetch(value);
-  if (!response.ok) return value;
+  if (!value) return value;
+  // Already a data URL: re-label it when the declared MIME mismatches the real
+  // bytes (e.g. a background stored as data:image/png whose bytes are JPEG), so
+  // resvg can decode it regardless of how it was stored.
+  if (value.startsWith('data:')) {
+    const match = /^data:([^;,]*);base64,(.+)$/.exec(value);
+    if (match && match[2]) {
+      const bytes = Buffer.from(match[2], 'base64');
+      const sniffed = sniffImageMime(bytes);
+      if (sniffed && sniffed !== String(match[1] || '').toLowerCase()) {
+        return `data:${sniffed};base64,${bytes.toString('base64')}`;
+      }
+    }
+    return value;
+  }
+  if (!/^https?:\/\//i.test(value)) return value;
+  let response;
+  try {
+    response = await fetch(value, { signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    console.warn(`asData: fetch failed for ${value.slice(0, 120)}: ${error.message || error}`);
+    return value;
+  }
+  if (!response.ok) {
+    console.warn(`asData: fetch returned ${response.status} for ${value.slice(0, 120)}`);
+    return value;
+  }
   const bytes = Buffer.from(await response.arrayBuffer());
   const mime = sniffImageMime(bytes) || response.headers.get('content-type') || 'image/jpeg';
   return `data:${mime};base64,${bytes.toString('base64')}`;
