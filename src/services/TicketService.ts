@@ -11,13 +11,74 @@ import type { Event } from "../models/Event"
 import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
 import { deriveTicketRef } from "../utils/ticketRef"
-import { generateQRPayload, parseAndVerifyQR } from "./TicketQRService"
 
 const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   ""
+
+/**
+ * Resolve a Netlify function URL the same way R2Service does, honouring an
+ * explicit base URL (used by the native app / tests) and falling back to the
+ * same-origin path on the web.
+ */
+function resolveFunctionUrl(functionName: string): string {
+  const base = (FUNCTIONS_BASE_URL || "").replace(/\/$/, "")
+  if (base) return `${base}/.netlify/functions/${functionName}`
+  return `/.netlify/functions/${functionName}`
+}
+
+/**
+ * Sign a ticket QR payload server-side. The HMAC secret (QR_HMAC_SECRET) lives
+ * only in Netlify environment variables and is never shipped to the client.
+ */
+async function signTicketQr(ticketId: string): Promise<{ url: string; signature: string; issuedAt: number }> {
+  const response = await fetch(resolveFunctionUrl("ticket-qr"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "sign", ticketId }),
+  })
+  const data = await response.json()
+  if (!response.ok || !data.ok) {
+    throw new Error(data?.error || "Failed to sign ticket QR")
+  }
+  return { url: data.url, signature: data.signature, issuedAt: data.issuedAt }
+}
+
+interface QrVerifyResult {
+  valid: boolean
+  ticketId?: string
+  /** "signed" = a yovibe.net/t/ QR URL was detected; "unknown" = legacy format */
+  format?: "signed" | "unknown"
+  reason?: string
+}
+
+/**
+ * Verify a ticket QR payload server-side. Returns format "unknown" (allowing
+ * legacy raw/JSON QR fallback) only when the input is not a signed-URL QR or
+ * when the verification endpoint is unreachable — never for a bad signature.
+ */
+async function verifyTicketQr(qrText: string): Promise<QrVerifyResult> {
+  try {
+    const response = await fetch(resolveFunctionUrl("ticket-qr"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "verify", qrText }),
+    })
+    const data = await response.json()
+    if (!response.ok || !data.ok) {
+      throw new Error(data?.error || "QR verification failed")
+    }
+    return { valid: data.valid, ticketId: data.ticketId, format: data.format, reason: data.reason }
+  } catch (error) {
+    console.warn(
+      "[TicketService] QR verification endpoint unavailable, using legacy parsing:",
+      (error as Error)?.message || error,
+    )
+    return { valid: false, format: "unknown" }
+  }
+}
 
 /**
  * Parse the start time out of the event's human-readable `time` text (e.g.
@@ -505,6 +566,79 @@ export class TicketService {
     return ticket
   }
 
+  /**
+   * Phase 1: server-side purchase fulfillment.
+   *
+   * The client submits the full purchase payload plus the payment references;
+   * the server re-verifies the payment directly with PesaPal/PawaPay and only
+   * then creates the tickets. The client no longer writes ticket rows.
+   *
+   * Returns:
+   *   { success: true, fulfillmentId, ticketIds, tickets[] } — done
+   *   { success: false, status: "pending" | "in_progress", message } — retry later
+   *   { success: false, status: "failed", error } — payment not completed
+   */
+  static async fulfillPurchase(input: {
+    fulfillmentId: string
+    eventId: string
+    ticketType?: string
+    quantity: number
+    totalAmount: number
+    isTableEntry: boolean
+    tableSize: number
+    buyerNames: string[]
+    buyerEmails: string[]
+    deliveryEmails: string[]
+    payerEmail: string
+    buyerId?: string | null
+    buyerPhone?: string
+    buyerPhotoDataUrl?: string
+    seatNumbers?: (number | null)[]
+    tableNumbers?: (number | null)[]
+    payment: {
+      method: "mobile_money" | "credit_card" | "bank_transfer"
+      provider?: string
+      number?: string
+      name?: string
+      cardName?: string
+      bankName?: string
+      accountNumber?: string
+      accountName?: string
+    }
+    verification: {
+      orderId?: string
+      trackingId?: string
+      depositId?: string
+    }
+  }): Promise<{
+    success: boolean
+    status?: string
+    fulfillmentId?: string
+    ticketIds?: string[]
+    tickets?: Array<{ id: string; ticketRef: string; qrCodeDataUrl: string }>
+    error?: string
+  }> {
+    try {
+      const response = await fetch(resolveFunctionUrl("fulfill-purchase"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      })
+      const data = await response.json()
+      if (!response.ok) {
+        return {
+          success: false,
+          status: data.status,
+          error: data.error || `Failed to fulfill purchase (${response.status})`,
+        }
+      }
+      return data
+    } catch (error: any) {
+      console.error("[TicketService] fulfillPurchase error:", error?.message || error)
+      return { success: false, error: error?.message || "Network error during purchase finalization" }
+    }
+  }
+
   static async validateTicket(
     ticketId: string,
     validatorId: string,
@@ -531,17 +665,22 @@ export class TicketService {
       console.log("📋 TicketService.validateTicket: Starting ticket validation")
       console.log("📋 Ticket QR data:", ticketId)
 
-      // Step 0: Parse and cryptographically verify the QR payload
-      // Rejects forged QR codes without a DB round-trip
+      // Step 0: Verify the QR payload server-side (HMAC secret never reaches
+      // the client). Rejects forged signed QRs without a DB round-trip.
       let qrCodeValue = ticketId
       let scanningEventId: string | undefined
 
-      const parsed = parseAndVerifyQR(ticketId)
-      if (parsed) {
-        qrCodeValue = parsed.ticketId
+      const verified = await verifyTicketQr(ticketId)
+      if (verified.valid && verified.ticketId) {
+        qrCodeValue = verified.ticketId
         console.log("📋 QR verified cryptographically — ticketId:", qrCodeValue)
+      } else if (verified.format === "signed") {
+        // A signed-URL QR that failed HMAC is a forgery — reject immediately.
+        console.log("📋 QR signature invalid:", verified.reason || "forgery")
+        return { success: false, reason: "Invalid QR code" }
       } else {
-        // Fallback: raw string lookup (legacy tickets without HMAC)
+        // Legacy fallback: raw string / JSON QRs that were issued before HMAC
+        // signing (or when the verification endpoint is unreachable).
         console.log("📋 QR not in signed URL format — trying legacy fallback...")
         try {
           const ticketData = JSON.parse(ticketId)
@@ -1049,7 +1188,8 @@ console.error("❌ Error details:", updateError.details)
   ): Promise<{ qrCode: string; qrCodeDataUrl: string; qrSignature: string; expiresAt: Date }> {
     const uniqueId = uuidv4()
     const expiresAt = new Date(eventStartTime.getTime() + 24 * 60 * 60 * 1000)
-    const { url, signature } = generateQRPayload(uniqueId)
+    // Signing happens server-side so the HMAC secret never ships to the client.
+    const { url, signature } = await signTicketQr(uniqueId)
 
     const qrCodeDataUrl = await QRCode.toDataURL(url, {
       width: 300,

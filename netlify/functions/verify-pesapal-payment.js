@@ -1,4 +1,6 @@
 const { getPesapalToken } = require('../shared/pesapalAuth');
+const { getAdminClient } = require('../shared/supabaseAdmin');
+const { markTicketsByPayment } = require('../shared/ticketFulfillment');
 
 const STATUS_CODES = { 0: 'invalid', 1: 'completed', 2: 'failed', 3: 'reversed' };
 
@@ -22,27 +24,31 @@ exports.handler = async (event) => {
     const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
 
     let orderTrackingId;
+    let orderId; // merchant reference (our order id = fulfillment payment_id)
     if (event.httpMethod === 'GET') {
       orderTrackingId = event.queryStringParameters?.orderTrackingId || event.queryStringParameters?.orderId;
+      orderId = event.queryStringParameters?.merchantReference || event.queryStringParameters?.orderRef;
     } else {
       const body = JSON.parse(event.body);
       orderTrackingId = body.orderTrackingId || body.orderId;
+      orderId = body.merchantReference || body.orderRef;
     }
 
-    if (!orderTrackingId) {
+    if (!orderTrackingId && !orderId) {
       throw new Error('Missing orderTrackingId parameter — provide the PesaPal order_tracking_id from SubmitOrderRequest response');
     }
 
     console.log('[VerifyPayment] 🔍 Verifying payment status');
-    console.log('[VerifyPayment]    OrderTrackingId:', orderTrackingId);
+    console.log('[VerifyPayment]    OrderTrackingId:', orderTrackingId, 'MerchantReference:', orderId);
 
     // Step 1: Get shared auth token
     const token = await getPesapalToken();
 
     // Step 2: Query payment status via v3 GetTransactionStatus
+    const idToQuery = orderTrackingId || orderId;
     console.log('[VerifyPayment] 📤 Querying PesaPal v3 GetTransactionStatus...');
     const response = await fetch(
-      `${apiUrl}/Transactions/GetTransactionStatus?orderTrackingId=${encodeURIComponent(orderTrackingId)}`,
+      `${apiUrl}/Transactions/GetTransactionStatus?orderTrackingId=${encodeURIComponent(idToQuery)}`,
       {
         method: 'GET',
         headers: {
@@ -62,27 +68,41 @@ exports.handler = async (event) => {
     console.log('[VerifyPayment]    payment_status_description:', data.payment_status_description);
     console.log('[VerifyPayment]    status_code:', data.status_code);
     console.log('[VerifyPayment]    confirmation_code:', data.confirmation_code);
-    console.log('[VerifyPayment]    amount:', data.amount, data.currency);
-    console.log('[VerifyPayment]    payment_method:', data.payment_method);
 
     // Map status_code per v3 spec: 0=INVALID, 1=COMPLETED, 2=FAILED, 3=REVERSED
     const statusCode = data.status_code != null ? Number(data.status_code) : -1;
-    const status = STATUS_CODES[statusCode]
+    const rawStatus = STATUS_CODES[statusCode]
       || (data.payment_status_description ? data.payment_status_description.toLowerCase() : 'pending');
 
-    // Also accept string-based status from API (some versions return "COMPLETED")
-    const finalStatus = status === 'completed' || status === 'COMPLETED' ? 'completed'
-      : status === 'failed' || status === 'FAILED' || status === 'INVALID' || status === 'REVERSED' ? 'failed'
+    const finalStatus = rawStatus === 'completed' ? 'completed'
+      : rawStatus === 'failed' || rawStatus === 'invalid' || rawStatus === 'reversed' ? 'failed'
       : 'pending';
 
-    console.log('[VerifyPayment]    Mapped status:', finalStatus);
+    // Step 3 (P1.5): Reversal / cancellation reconciliation. If the payment was
+    // reversed or cancelled after tickets were issued, strike them server-side.
+    if (finalStatus === 'failed' && orderId) {
+      try {
+        const admin = getAdminClient();
+        const target = rawStatus === 'reversed'
+          ? { status: 'refunded', refundStatus: 'completed' }
+          : (rawStatus === 'cancelled' || rawStatus === 'invalid')
+            ? { status: 'cancelled', refundStatus: null }
+            : null;
+        if (target) {
+          const result = await markTicketsByPayment(admin, { paymentId: orderId, ...target });
+          console.log('[VerifyPayment] Reversal reconciliation:', result);
+        }
+      } catch (reconErr) {
+        console.warn('[VerifyPayment] Reversal reconciliation failed:', reconErr.message);
+      }
+    }
 
     return {
       statusCode: 200,
       headers,
       body: JSON.stringify({
         status: finalStatus,
-        transactionId: data.confirmation_code || data.merchant_reference || orderTrackingId,
+        transactionId: data.confirmation_code || data.merchant_reference || idToQuery,
         confirmationCode: data.confirmation_code || undefined,
         amount: parseFloat(data.amount) || 0,
         currency: data.currency || 'UGX',

@@ -8,6 +8,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 
 import { useAuth } from "../contexts/AuthContext"
+import { v4 as uuidv4 } from "uuid"
 import TicketService from "../services/TicketService"
 import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
@@ -18,7 +19,6 @@ import type { InstallmentPlanType } from "../models/InstallmentPlan"
 import { INSTALLMENT_SERVICE_FEE_RATE } from "../models/InstallmentPlan"
 import * as ImagePicker from "expo-image-picker"
 import type { Event } from "../models/Event"
-import type { CreateFulfillmentInput } from "../models/PendingFulfillment"
 import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
@@ -235,6 +235,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
+  // Reused across retries so the server-side fulfillment is idempotent.
+  const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null)
   const [checkingPayment, setCheckingPayment] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [validationVisible, setValidationVisible] = useState(false)
@@ -399,11 +401,13 @@ const TicketPurchaseScreen: React.FC = () => {
         const verification = await PesaPalService.verifyPayment(merchantReference, trackingId)
         if (verification.status === "completed") {
           setCheckingPayment(false)
-          setPesapalOrderRef(null)
-          setPesapalTrackingId(null)
           setPurchaseStatus("success")
           setStatusMessage("Payment verified! Creating your ticket...")
           await createTicketAndNavigate(false, verification)
+          // Clear the refs only AFTER fulfillment consumed them (server-side
+          // payment re-verification needs the tracking id / merchant ref).
+          setPesapalOrderRef(null)
+          setPesapalTrackingId(null)
           return
         }
         if (verification.status === "failed") {
@@ -420,8 +424,13 @@ const TicketPurchaseScreen: React.FC = () => {
   }
 
   const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
-    let fulfillmentId: string | null = null
-    
+    // Phase 1: ticket creation is server-side. We submit the full purchase
+    // payload; the server re-verifies the payment with the provider and only
+    // then creates the tickets, uploads the QR/photo, emails, and records the
+    // fulfillment row. The client no longer writes ticket rows.
+    const fulfillmentId = activeFulfillmentId ?? uuidv4()
+    setActiveFulfillmentId(fulfillmentId)
+
     try {
       setLoading(true)
       setProgressVisible(true)
@@ -430,164 +439,98 @@ const TicketPurchaseScreen: React.FC = () => {
 
       const buyerNamesList = getBuyerNames()
       const buyerEmailsList = getBuyerEmails()
-      const paymentId = verificationResult.depositId || paymentOrderId || `pi_${Date.now()}`
       const buyerEmailFinal = user?.email || buyerContactEmail.trim() || ""
-      const buyerNameFinal = visitorName.trim() || buyerContactEmail.trim().split('@')[0] || "Guest"
-      
-      fulfillmentId = await TicketService.createPendingFulfillment({
-        paymentId,
-        pawapayDepositId: isMobileMoney ? verificationResult.depositId : undefined,
-        buyerEmail: user?.email || buyerContactEmail.trim() || "",
-        buyerName: buyerNameFinal,
-        buyerId: user?.id,
-        eventId: event!.id,
-        eventName: event!.name,
-        ticketType: selectedTicketTypeName,
-        quantity: actualTicketCount,
-        amount: total,
-        attendeeNames: buyerNamesList,
-      })
-      console.log("? Created pending fulfillment:", fulfillmentId)
-      
-      await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilling")
 
-      const includePhoto = securityPhotoEnabled && photoCaptured
-      
-      const ticketCount = actualTicketCount
-
-      const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
       const deliveryEmails = emailDistribution === "single"
-        ? Array(actualTicketCount).fill(visitorEmail.trim() || buyerEmails[0]?.trim() || payerEmail)
+        ? Array(actualTicketCount).fill(visitorEmail.trim() || buyerEmails[0]?.trim() || buyerEmailFinal)
         : buyerEmailsList
 
-      setDeliveryEmail(deliveryEmails[0]?.trim() || payerEmail)
+      const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
 
-      const isBuyingForSelf = actualTicketCount === 1 && !isTableEntry && !buyingForSomeoneElse
-      const showManualPhotoCapture = isBuyingForSelf
-      const securityPhotoForcedViaEmail = actualTicketCount > 1 || isTableEntry || (actualTicketCount === 1 && !isBuyingForSelf)
+      const includePhoto = securityPhotoEnabled && photoCaptured
 
-      setProgressStep(1) // Saving ticket�
-      const tickets = await TicketService.purchaseTicketsForTable(
-        event!,
-        buyerNamesList,
-        buyerEmailsList,
-        ticketCount,
+      setProgressStep(1) // Saving ticket
+      const result = await TicketService.fulfillPurchase({
+        fulfillmentId,
+        eventId: event!.id,
+        ticketType: selectedTicketTypeName,
+        quantity: actualTicketCount,
+        totalAmount: total,
         isTableEntry,
         tableSize,
-        quantity,
-        includePhoto ? buyerPhotoUrl : "",
-        total,
-        {
+        buyerNames: buyerNamesList,
+        buyerEmails: buyerEmailsList,
+        deliveryEmails,
+        payerEmail,
+        buyerId: user?.id ?? null,
+        buyerPhone: (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
+        buyerPhotoDataUrl: includePhoto ? buyerPhotoUrl : undefined,
+        seatNumbers: isTableEntry ? undefined : perPersonSeats,
+        tableNumbers: isTableEntry
+          ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
+          : undefined,
+        payment: {
           method: paymentMethod || "mobile_money",
           provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
           number: paymentMethod === "mobile_money" ? mobileMoneyNumber : (paymentMethod === "credit_card" ? cardPhone : undefined),
           name: paymentMethod === "mobile_money" ? mobileMoneyName : undefined,
-          expiry: paymentMethod === "credit_card" ? cardExpiry : undefined,
-          cardNumber: paymentMethod === "credit_card" ? cardNumber.slice(-4) : undefined,
+          cardName: paymentMethod === "credit_card" ? `${cardFirstName} ${cardLastName}`.trim() : undefined,
           bankName: paymentMethod === "bank_transfer" ? bankName : undefined,
           accountNumber: paymentMethod === "bank_transfer" ? bankAccountNumber : undefined,
           accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
-          ticketType: selectedTicketTypeName,
-          paymentReference: paymentOrderId || undefined,
-          pesapalTransactionId: !isMobileMoney ? verificationResult.transactionId : undefined,
-          pesapalConfirmationCode: !isMobileMoney ? verificationResult.confirmationCode : undefined,
         },
-        user?.id ?? null,
-        payerEmail,
-        deliveryEmails,
-        isTableEntry
-          ? undefined
-          : perPersonSeats,
-        isTableEntry
-          ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
-          : undefined,
-        (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
-        paymentId,
-        paymentMethod === "credit_card" ? `${cardFirstName} ${cardLastName}`.trim() : undefined,
-      )
+        verification: {
+          orderId: isMobileMoney ? undefined : (paymentOrderId || pesapalOrderRef || undefined),
+          trackingId: isMobileMoney ? undefined : (pesapalTrackingId || undefined),
+          depositId: isMobileMoney ? (pawaPayDepositId || verificationResult.depositId || undefined) : undefined,
+        },
+      })
 
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
-      
-      setProgressStep(2) // Generating ticket email�
-      for (const ticket of tickets) {
-        try {
-          const payerEmailMatchesDelivery = ticket.deliveryEmail === payerEmail
-          const shouldIncludePhotoLink = ticket.photoUploadToken && (!ticket.buyerPhotoUrl || !payerEmailMatchesDelivery)
-          const photoUploadLink = shouldIncludePhotoLink 
-            ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
-            : undefined
-          
-          // Find the ticket design from the entry fee
-          const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
-
-          setProgressStep(3) // Sending email to {delivery email}�
-          await fetch(`/.netlify/functions/send-ticket-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              buyerEmail: ticket.deliveryEmail ?? ticket.buyerEmail,
-              buyerName: ticket.buyerName,
-              eventName: ticket.eventName,
-              ticketType: ticket.entryFeeType,
-              venue: ticket.venueName,
-              date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-              time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              ticketRef: ticket.ticketRef,
-              qrCodeDataUrl: ticket.qrCodeDataUrl,
-              seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
-              tableNumber: ticket.tableNumber,
-              tableGroupId: ticket.tableGroupId,
-              photoUploadLink,
-              ticketDesign,
-              posterUrl: event?.posterImageUrl,
-            }),
-          })
-          console.log(`Email sent for ticket ${ticket.id}`)
-        } catch (err) {
-          console.error(`Failed to send email for ticket ${ticket.id}:`, err)
-          Alert.alert("Notice", "Your ticket is ready! We had trouble emailing a copy � you can always find it under My Tickets.")
-        }
+      if (result.success) {
+        setProgressStep(4) // Ticket successfully delivered
+        setProgressCompleted(true)
+        setPurchaseStatus("success")
+        setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
+        setTimeout(() => {
+          setProgressVisible(false)
+          navigation.navigate("MyTickets")
+        }, 1000)
+        return
       }
 
-      await TicketService.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
-        ticketIds: tickets.map(t => t.id),
-      })
-      console.log("? Fulfillment completed successfully")
+      setProgressVisible(false)
 
-      setProgressStep(4) // Ticket successfully delivered
-      setProgressCompleted(true)
+      if (result.status === "pending" || result.status === "in_progress") {
+        setCheckingPayment(true)
+        setPurchaseStatus(null)
+        setStatusMessage(
+          result.status === "in_progress"
+            ? "Your purchase is being finalized. Check My Tickets shortly, or retry below."
+            : "Payment is still being verified. You can retry verification or cancel. Do not pay again unless the payment is confirmed failed.",
+        )
+        return
+      }
 
-      setPurchaseStatus("success")
-      setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
-      
-      setTimeout(() => {
-        setProgressVisible(false)
-        navigation.navigate("MyTickets")
-      }, 1000)
-
+      // Payment failed or a server error — surface it with the reference.
+      setCheckingPayment(false)
+      setPurchaseStatus("error")
+      setStatusMessage(result.error || "We could not finalize your purchase. Please try again.")
+      Alert.alert(
+        "Purchase Not Completed",
+        result.error || "We could not finalize your purchase. Please try again or contact support.",
+        [{ text: "OK" }],
+      )
     } catch (error: any) {
       console.error("Ticket creation error:", error)
       setProgressVisible(false)
-      
-      if (fulfillmentId) {
-        await TicketService.updateFulfillmentStatus(fulfillmentId, "failed", {
-          lastError: error.message || "Unknown error during ticket fulfillment",
-          attemptCount: 1,
-        })
-      }
-      
-      const referenceMsg = fulfillmentId 
-        ? `If you don't receive your ticket within 30 minutes, contact support with this reference: ${fulfillmentId}`
-        : "Please contact support with your payment reference."
-      
+      setCheckingPayment(false)
+      setPurchaseStatus("error")
+      setStatusMessage(error?.message || "Failed to finalize your purchase. Please try again.")
       Alert.alert(
-        "Payment Received",
-        `Your payment was successful. We're finalizing your ticket and will email it shortly. If you don't receive it within 30 minutes, contact support.`,
-        [{ text: "OK", onPress: () => navigation.navigate("MyTickets") }]
+        "Purchase Error",
+        `We could not finalize your purchase. Reference: ${fulfillmentId}. If you paid, contact support with this reference.`,
+        [{ text: "OK", onPress: () => navigation.navigate("MyTickets") }],
       )
-      
-      setPurchaseStatus("success")
-      setStatusMessage("Payment received � finalizing ticket...")
     } finally {
       setLoading(false)
     }

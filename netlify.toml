@@ -13,10 +13,11 @@
   R2_ENDPOINT = "https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com"
   R2_ACCESS_KEY_ID = "your_r2_access_key_here"
   R2_SECRET_ACCESS_KEY = "your_r2_secret_key_here"
-  # PesaPal API Configuration
+  # PesaPal API Configuration (production only)
   PESAPAL_CONSUMER_KEY = "your_pesapal_consumer_key_here"
   PESAPAL_CONSUMER_SECRET = "your_pesapal_consumer_secret_here"
-  PESAPAL_API_URL = "https://cybqa.pesapal.com/pesapalv3/api"
+  PESAPAL_API_URL = "https://pay.pesapal.com/v3/api"
+  PESAPAL_BASE_URL = "https://pay.pesapal.com"
   # Your Netlify site URL (needed for IPN callback). Set to your actual domain.
   SITE_URL = "https://yovibe.net"
   # IPN Notification ID - Register this once via /register-ipn function
@@ -42,6 +43,10 @@
   # Use esbuild to bundle function dependencies (including firebase-admin)
   node_bundler = "esbuild"
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
+
+[functions."process-stuck-fulfillments"]
+  # Phase 1: automatic retry of stranded purchases every 5 minutes
+  schedule = "*/5 * * * *"
 
 [[headers]]
   for = "/manifest.webmanifest"

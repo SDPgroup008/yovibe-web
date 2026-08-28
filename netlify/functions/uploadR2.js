@@ -28,27 +28,46 @@ if (accessKeyId && secretAccessKey &&
 const BUCKET = process.env.R2_BUCKET_NAME || 'yovibe';
 const PUBLIC_URL = process.env.R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
 
-// Detect the actual image format from the file bytes. Callers can mislabel an
-// image (e.g. JPEG bytes sent as image/png or with a .png filename); storing it
-// with the wrong Content-Type/extension breaks every downstream decoder, so
-// correct the label from the magic bytes before the object is persisted.
+// ─── Input validation (endpoint intentionally stays unauthenticated so guest
+//     buyers can upload security photos, so we validate the content instead) ──
+const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const PATH_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/i;
+const FILENAME_RE = /^[a-zA-Z0-9._-]{1,120}$/;
+const MAX_PATH_DEPTH = 3;
+
+/**
+ * Sniff the real image format from file bytes. Returns the MIME type or null
+ * when the payload is not a supported image, so arbitrary/non-image uploads
+ * (HTML, executables, archives) are rejected regardless of the declared type.
+ */
 function sniffImageMime(bytes) {
   if (bytes.length >= 4 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
   if (bytes.length >= 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
-      && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
+    && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'image/webp';
   if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
-  if (bytes.length > 0 && bytes.subarray(0, 256).toString('latin1').toLowerCase().includes('<svg')) return 'image/svg+xml';
+  let head = '';
+  for (let i = 0; i < Math.min(bytes.length, 256); i++) head += String.fromCharCode(bytes[i]);
+  if (head.toLowerCase().includes('<svg')) return 'image/svg+xml';
   return null;
 }
 
-const IMAGE_EXTENSION = {
-  'image/png': 'png',
-  'image/jpeg': 'jpg',
-  'image/webp': 'webp',
-  'image/gif': 'gif',
-  'image/svg+xml': 'svg',
-};
+function validatePath(path) {
+  if (typeof path !== 'string' || !path) return 'path is required';
+  const segments = path.split('/').filter(Boolean);
+  if (segments.length === 0 || segments.length > MAX_PATH_DEPTH) return 'path has an invalid number of segments';
+  for (const segment of segments) {
+    if (segment === '..' || !PATH_SEGMENT_RE.test(segment)) return 'path contains invalid characters';
+  }
+  return null;
+}
+
+function validateFilename(filename) {
+  if (typeof filename !== 'string' || !filename) return 'filename is required';
+  if (filename.includes('/') || filename.includes('\\') || filename.includes('..')) return 'filename is invalid';
+  if (!FILENAME_RE.test(filename)) return 'filename contains invalid characters';
+  return null;
+}
 
 exports.handler = async (event) => {
   // Enable CORS
@@ -90,7 +109,7 @@ exports.handler = async (event) => {
 
   try {
     const body = JSON.parse(event.body);
-    const { 
+    const {
       file,           // base64 data URL or Buffer
       filename,       // e.g., "image.jpg"
       contentType,    // e.g., "image/jpeg"
@@ -102,11 +121,33 @@ exports.handler = async (event) => {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ 
-          error: 'Missing required fields: file, filename, contentType, path' 
+        body: JSON.stringify({
+          error: 'Missing required fields: file, filename, contentType, path'
         }),
       };
     }
+
+    // Validate path and filename structure before touching storage
+    const pathError = validatePath(path);
+    if (pathError) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Invalid path: ${pathError}` }) };
+    }
+    const filenameError = validateFilename(filename);
+    if (filenameError) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: `Invalid filename: ${filenameError}` }) };
+    }
+
+    // Reject non-image content types
+    if (!String(contentType || '').toLowerCase().startsWith('image/')) {
+      return {
+        statusCode: 415,
+        headers,
+        body: JSON.stringify({ error: 'Only image uploads are supported' }),
+      };
+    }
+
+    // Construct R2 key
+    const key = `${path}/${filename}`;
 
     // Prepare file body
     let uploadBody;
@@ -126,29 +167,32 @@ exports.handler = async (event) => {
       };
     }
 
-    // Construct R2 key
-    let finalContentType = contentType;
-    let finalFilename = filename;
-    const sniffed = sniffImageMime(uploadBody);
-    if (sniffed) {
-      // Trust the real bytes over whatever the caller declared so the stored
-      // object's Content-Type and extension always match its format.
-      finalContentType = sniffed;
-      const ext = IMAGE_EXTENSION[sniffed];
-      // Accept both .jpg and .jpeg for JPEG; otherwise require the exact match.
-      const acceptedExtensions = sniffed === 'image/jpeg' ? ['jpg', 'jpeg'] : [ext];
-      if (ext && !acceptedExtensions.some((e) => filename.toLowerCase().endsWith('.' + e))) {
-        finalFilename = filename.replace(/\.[a-z0-9]{1,5}$/i, '') + '.' + ext;
-      }
+    // Size cap
+    if (uploadBody.length > MAX_BYTES) {
+      return {
+        statusCode: 413,
+        headers,
+        body: JSON.stringify({ error: `File exceeds the ${Math.round(MAX_BYTES / 1024 / 1024)} MB upload limit` }),
+      };
     }
-    const key = `${path}/${finalFilename}`;
 
-    // Upload to R2
+    // Verify the bytes are actually a supported image (sniff magic bytes)
+    const sniffed = sniffImageMime(uploadBody);
+    if (!sniffed) {
+      return {
+        statusCode: 415,
+        headers,
+        body: JSON.stringify({ error: 'File content is not a supported image' }),
+      };
+    }
+
+    // Upload to R2 with the real sniffed content type so decoders never get a
+    // mislabeled object
     const command = new PutObjectCommand({
       Bucket: BUCKET,
       Key: key,
       Body: uploadBody,
-      ContentType: finalContentType,
+      ContentType: sniffed,
       ACL: 'public-read',
     });
 
@@ -167,7 +211,8 @@ exports.handler = async (event) => {
         url: publicUrl,
         key,
         path,
-        filename: finalFilename,
+        filename,
+        contentType: sniffed,
         size: uploadBody.length,
       }),
     };

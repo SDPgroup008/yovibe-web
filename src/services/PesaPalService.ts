@@ -175,10 +175,16 @@ export class PesaPalService {
     console.log("   - Order Tracking ID:", trackingId || "Not provided")
 
     try {
-      const idParam = encodeURIComponent(trackingId || orderId)
+      // Pass BOTH the order tracking id (authoritative for status) and the
+      // merchant reference (our order id) so the verify function can also run
+      // reversal/cancellation reconciliation against our tickets.
+      const params = new URLSearchParams()
+      if (trackingId) params.set("orderTrackingId", trackingId)
+      if (orderId) params.set("merchantReference", orderId)
+      const query = params.toString()
       console.log("📤 Querying Netlify Function for payment status...")
 
-      const response = await fetch(`/.netlify/functions/verify-pesapal-payment?orderId=${idParam}`)
+      const response = await fetch(`/.netlify/functions/verify-pesapal-payment?${query}`)
       const data = await response.json()
 
       if (!response.ok) {

@@ -1,4 +1,8 @@
-const BUFFER_BROWSER = Buffer.from ? Buffer : { from: (string) => global.Buffer.from(string) };
+const { getPesapalToken, invalidatePesapalToken } = require('../shared/pesapalAuth');
+
+// Production-only PesaPal endpoints. Sandbox (cybqa.pesapal.com) is intentionally
+// NOT used as a default; live payouts must never silently fall back to a simulation.
+const DEFAULT_API_URL = 'https://pay.pesapal.com/v3/api';
 
 exports.handler = async (event) => {
   const headers = {
@@ -21,54 +25,19 @@ exports.handler = async (event) => {
       organizerId,
       amount,
       payoutMethod,
-      recipientDetails
+      recipientDetails,
     } = JSON.parse(event.body);
 
-    const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
-    const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    // Use v3 API path (disbursement endpoint may differ; using v3 pattern)
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://cybqa.pesapal.com/pesapalv3/api';
-    const baseUrl = process.env.PESAPAL_BASE_URL || 'https://cybqa.pesapal.com';
-
-    if (!consumerKey || !consumerSecret) {
-      throw new Error('PesaPal credentials not configured');
-    }
+    const apiUrl = process.env.PESAPAL_API_URL || DEFAULT_API_URL;
 
     if (!organizerId || !amount || !payoutMethod || !recipientDetails?.name) {
       throw new Error('Missing required fields: organizerId, amount, payoutMethod, recipientDetails.name');
     }
 
-    // Step 1: Get OAuth token (v3 endpoint)
-    const credentials = `${consumerKey}:${consumerSecret}`;
-    const basicAuth = `Basic ${BUFFER_BROWSER.from(credentials).toString('base64')}`;
-
-    const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'Authorization': basicAuth,
-      },
-      body: JSON.stringify({
-        consumer_key: consumerKey,
-        consumer_secret: consumerSecret,
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${errorText}`);
-    }
-
-    const tokenData = await tokenResponse.json();
-    const token = tokenData.token;
-
-    if (!token) {
-      throw new Error('No token received from PesaPal');
-    }
+    // Step 1: Get OAuth token via the shared cached module (same path as order creation)
+    const token = await getPesapalToken();
 
     // Step 2: Submit disbursement
-    // Note: Disbursement endpoint may vary in v3; using old path as placeholder
     const disbursementRequest = {
       oauth_token: token,
       pesapal_merchant_reference: `PAYOUT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -82,10 +51,9 @@ exports.handler = async (event) => {
         account_number: payoutMethod === 'bank_transfer' ? recipientDetails.accountNumber : undefined,
         bank: payoutMethod === 'bank_transfer' ? recipientDetails.bankName : undefined,
       },
-      callback_url: `${baseUrl}/disbursementcallback`,
+      callback_url: `${process.env.SITE_URL || 'https://yovibe.net'}/disbursementcallback`,
     };
 
-    // Try v3 disbursement endpoint (if it exists); if 404, fallback to simulation
     let response;
     try {
       response = await fetch(`${apiUrl}/Transactions/SubmitDisbursement`, {
@@ -98,14 +66,14 @@ exports.handler = async (event) => {
         body: JSON.stringify(disbursementRequest),
       });
     } catch (fetchError) {
-      console.log('⚠️ Disbursement endpoint not found, using simulated payout');
-      throw new Error('Disbursement API not available in sandbox');
+      console.error('[PesaPalPayout] Disbursement request failed:', fetchError.message);
+      throw new Error(`PesaPal disbursement request failed: ${fetchError.message}`);
     }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.log("⚠️ PesaPal disbursement API error:", response.status, errorText);
-      throw new Error(`PesaPal API error: ${response.status}`);
+      console.error('[PesaPalPayout] Disbursement API error:', response.status, errorText);
+      throw new Error(`PesaPal API error: ${response.status} — ${errorText.substring(0, 200)}`);
     }
 
     const data = await response.json();
@@ -127,16 +95,15 @@ exports.handler = async (event) => {
       throw new Error('Payout status unclear');
     }
   } catch (error) {
-    console.error('Error processing PesaPal payout:', error);
-    // Fallback: simulate success for demo/testing
+    console.error('[PesaPalPayout] Error:', error.message);
+    // Never simulate a successful payout — return a real error so the caller
+    // can mark tickets as payout-failed and retry deliberately.
     return {
-      statusCode: 200,
+      statusCode: 502,
       headers,
       body: JSON.stringify({
-        success: true,
-        payoutId: `payout_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        transactionReference: `PESAPAL_PAYOUT_${Date.now()}`,
-        status: 'SIMULATED',
+        success: false,
+        error: error instanceof Error ? error.message : 'Payout failed',
       }),
     };
   }
