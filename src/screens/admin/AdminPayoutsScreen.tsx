@@ -1,9 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react"
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { supabase } from "../../config/supabase"
 import SupabaseService from "../../services/SupabaseService"
-import { useAuth } from "../../contexts/AuthContext"
+import AdminPayoutService from "../../services/AdminPayoutService"
 
 type StatusFilter = "all" | "pending_admin_review" | "approved" | "rejected" | "processing" | "completed"
 
@@ -18,7 +17,6 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 const FILTERS: StatusFilter[] = ["all", "pending_admin_review", "approved", "rejected", "completed"]
 
 export default function AdminPayoutsScreen() {
-  const { user } = useAuth()
   const [payouts, setPayouts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
@@ -52,25 +50,10 @@ export default function AdminPayoutsScreen() {
 
   useEffect(() => { void load() }, [load])
 
-  const sendNotification = async (userId: string, title: string, body: string) => {
-    try {
-      await supabase.from("notifications").insert({
-        user_id: userId,
-        title,
-        body,
-        type: "payout_update",
-        data: { payoutId: detailModal?.id },
-        is_read: false,
-        created_at: new Date().toISOString(),
-      })
-    } catch (err) { console.error("Failed to send notification:", err) }
-  }
-
-  const handleApprove = async (payoutId: string, organizerId: string) => {
+  const handleApprove = async (payoutId: string) => {
     setActionLoading(true)
     try {
-      await SupabaseService.approvePayout(payoutId, user?.id || "")
-      await sendNotification(organizerId, "✅ Payout Approved", `Your payout of UGX ${detailModal?.amount?.toLocaleString()} has been approved and is being processed.`)
+      await AdminPayoutService.approve(payoutId)
       setDetailModal(null)
       await load()
     } catch (e: any) {
@@ -78,12 +61,11 @@ export default function AdminPayoutsScreen() {
     } finally { setActionLoading(false) }
   }
 
-  const handleReject = async (payoutId: string, organizerId: string) => {
+  const handleReject = async (payoutId: string) => {
     if (!rejectReason.trim()) { Alert.alert("Reason Required", "Enter a reason for rejection"); return }
     setActionLoading(true)
     try {
-      await SupabaseService.rejectPayout(payoutId, user?.id || "", rejectReason.trim())
-      await sendNotification(organizerId, "❌ Payout Rejected", `Your payout of UGX ${detailModal?.amount?.toLocaleString()} was rejected. Reason: ${rejectReason.trim()}`)
+      await AdminPayoutService.reject(payoutId, rejectReason.trim())
       setDetailModal(null)
       setRejectReason("")
       await load()
@@ -92,11 +74,10 @@ export default function AdminPayoutsScreen() {
     } finally { setActionLoading(false) }
   }
 
-  const handleComplete = async (payoutId: string, organizerId: string) => {
+  const handleComplete = async (payoutId: string) => {
     setActionLoading(true)
     try {
-      await SupabaseService.completePayout(payoutId, user?.id || "", `manual_${Date.now()}`)
-      await sendNotification(organizerId, "✅ Payout Completed", `Your payout of UGX ${detailModal?.amount?.toLocaleString()} has been processed. Check your bank account.`)
+      await AdminPayoutService.complete(payoutId, `manual_${Date.now()}`)
       setDetailModal(null)
       await load()
     } catch (e: any) {
@@ -147,17 +128,17 @@ export default function AdminPayoutsScreen() {
           <>
             <TextInput style={styles.modalInput} value={rejectReason} onChangeText={setRejectReason} placeholder="Rejection reason (required for reject)" placeholderTextColor="#666" multiline />
             <View style={styles.actionRow}>
-              <TouchableOpacity style={[styles.btn, { backgroundColor: "#10B981" }]} onPress={() => handleApprove(detailModal.id, detailModal.organizer_id)} disabled={actionLoading}>
+              <TouchableOpacity style={[styles.btn, { backgroundColor: "#10B981" }]} onPress={() => handleApprove(detailModal.id)} disabled={actionLoading}>
                 {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="checkmark-outline" size={18} color="#FFF" /><Text style={styles.btnText}>Approve</Text></>}
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.btn, { backgroundColor: "#EF4444" }]} onPress={() => handleReject(detailModal.id, detailModal.organizer_id)} disabled={actionLoading || !rejectReason.trim()}>
+              <TouchableOpacity style={[styles.btn, { backgroundColor: "#EF4444" }]} onPress={() => handleReject(detailModal.id)} disabled={actionLoading || !rejectReason.trim()}>
                 {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="close-outline" size={18} color="#FFF" /><Text style={styles.btnText}>Reject</Text></>}
               </TouchableOpacity>
             </View>
           </>
         )}
         {s === "approved" && (
-          <TouchableOpacity style={[styles.btn, styles.btnFull, { backgroundColor: "#10B981" }]} onPress={() => handleComplete(detailModal.id, detailModal.organizer_id)} disabled={actionLoading}>
+          <TouchableOpacity style={[styles.btn, styles.btnFull, { backgroundColor: "#10B981" }]} onPress={() => handleComplete(detailModal.id)} disabled={actionLoading}>
             {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="checkmark-done-outline" size={18} color="#FFF" /><Text style={styles.btnText}>Mark as Completed</Text></>}
           </TouchableOpacity>
         )}
