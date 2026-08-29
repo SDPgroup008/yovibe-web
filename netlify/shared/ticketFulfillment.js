@@ -180,7 +180,11 @@ async function verifyPawaPayDeposit(depositId) {
 // deployed functions instead of a parallel implementation that can drift.
 
 function siteBase() {
-  return process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
+  // Prefer the explicit production domain. `process.env.URL` (the netlify.app
+  // default alias) is deliberately NOT used: internal function→function calls
+  // must hit the SAME deployment as the browser, and the netlify.app alias can
+  // resolve to a stale bundle on branch/alias deploys.
+  return process.env.SITE_URL || 'https://yovibe.net';
 }
 
 async function verifyPawaPayDepositViaFunction(depositId) {
@@ -235,31 +239,39 @@ async function confirmPaymentVerified(method, verification) {
         : await verifyPesapalPaymentViaFunction({ trackingId: verification.trackingId, orderId: verification.orderId });
     } catch (e) { viaErr = e.message; }
 
-    if (via && via.status === 'completed') {
-      console.log(`[FulfillPayment] CONFIRMED via deployed verify function (attempt ${i + 1})`);
-      return { confirmed: true, verificationResult: via, source: 'via-function' };
-    }
-    if (via && (via.status === 'failed' || via.status === 'invalid')) {
-      return { confirmed: false, failed: true, verificationResult: via, source: 'via-function' };
-    }
-
     try {
       direct = method === 'mobile_money'
         ? await verifyPawaPayDeposit(verification.depositId)
         : await verifyPesapalPayment({ trackingId: verification.trackingId, orderId: verification.orderId });
     } catch (e) { directErr = e.message; }
 
-    if (direct && direct.status === 'completed') {
+    const viaCompleted = !!via && via.status === 'completed';
+    const directCompleted = !!direct && direct.status === 'completed';
+    const viaFailed = !!via && (via.status === 'failed' || via.status === 'invalid');
+    const directFailed = !!direct && (direct.status === 'failed' || direct.status === 'invalid');
+
+    if (viaCompleted) {
+      console.log(`[FulfillPayment] CONFIRMED via deployed verify function (attempt ${i + 1})`);
+      return { confirmed: true, verificationResult: via, source: 'via-function' };
+    }
+    if (directCompleted) {
       console.log(`[FulfillPayment] CONFIRMED via direct provider call (attempt ${i + 1})`);
       return { confirmed: true, verificationResult: direct, source: 'direct' };
     }
-    if (direct && (direct.status === 'failed' || direct.status === 'invalid')) {
-      return { confirmed: false, failed: true, verificationResult: direct, source: 'direct' };
+
+    // Fail ONLY when BOTH independent paths agree the payment failed. A single
+    // path claiming FAILED while the other disagrees (or errors) is a
+    // contradiction — treat it as pending so a charged buyer is never hard-
+    // rejected, and let the retry/scheduled backstop resolve it.
+    if (viaFailed && directFailed) {
+      console.warn(`[FulfillPayment] BOTH paths report failed (via=${via.rawStatus || via.status}, direct=${direct.rawStatus || direct.status})`);
+      return { confirmed: false, failed: true, verificationResult: direct, source: 'both' };
+    }
+    if (viaFailed || directFailed) {
+      console.warn(`[FulfillPayment] Path disagreement — via=${via ? via.status : 'ERR'}, direct=${direct ? direct.status : 'ERR'}; treating as pending, NOT failed`);
     }
 
-    const viaStatus = via ? via.status : `ERR(${viaErr || 'unknown'})`;
-    const directStatus = direct ? direct.status : `ERR(${directErr || 'unknown'})`;
-    outcomes.push(`via=${viaStatus}, direct=${directStatus}`);
+    outcomes.push(`via=${via ? via.status : `ERR(${viaErr || '?'})`}, direct=${direct ? direct.status : `ERR(${directErr || '?'})`}`);
     console.warn(`[FulfillPayment] Verify attempt ${i + 1}/${attempts}: ${outcomes[outcomes.length - 1]}`);
 
     if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 1500));

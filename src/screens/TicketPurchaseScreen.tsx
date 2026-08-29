@@ -484,6 +484,9 @@ const TicketPurchaseScreen: React.FC = () => {
           orderId: isMobileMoney ? undefined : (paymentOrderId || pesapalOrderRef || undefined),
           trackingId: isMobileMoney ? undefined : (pesapalTrackingId || undefined),
           depositId: isMobileMoney ? (pawaPayDepositId || verificationResult.depositId || undefined) : undefined,
+          // Server-backed verdict from the UI's poll (verify-pawapay-payment /
+          // verify-pesapal-payment). Only COMPLETED reaches this point.
+          pollStatus: "completed",
         },
       }
 

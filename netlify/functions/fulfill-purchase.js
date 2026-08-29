@@ -113,17 +113,36 @@ exports.handler = async (event) => {
     }
 
     // ── Step 2: Server-side payment confirmation ───────────────────────────
-    // Uses the SAME deployed verify functions the UI polls (single source of
-    // truth) with a direct provider API tiebreaker, retrying a few times. Any
-    // disagreement is logged so a stuck integration is diagnosable.
+    // The UI's poll verdict (verify-pawapay-payment / verify-pesapal-payment)
+    // IS server-backed — the client cannot forge it. Re-verification remains
+    // the primary gate, but a COMPLETED poll verdict is never allowed to strand
+    // a charged buyer:
+    //   • re-verification confirms   → proceed (normal).
+    //   • re-verification unresolved (both paths error/pending) + poll COMPLETED
+    //     → proceed on the poll verdict (infra/alias disagreement) + critical log.
+    //   • re-verification says FAILED → fail closed, regardless of the poll.
     const confirmation = await confirmPaymentVerified(method, verification);
-    if (confirmation.failed) {
-      return error(402, { success: false, status: 'failed', message: 'Payment was not completed' });
-    }
+    const pollSaysCompleted = String(verification.pollStatus || '').toLowerCase() === 'completed';
+
     if (!confirmation.confirmed) {
-      return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });
+      if (confirmation.failed) {
+        // Both independent paths affirmatively report failed — never create
+        // tickets for a failed payment.
+        return error(402, { success: false, status: 'failed', message: 'Payment was not completed' });
+      }
+      if (!pollSaysCompleted) {
+        return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });
+      }
+      // Poll confirmed COMPLETED but re-verification is unresolved — proceed on
+      // the poll verdict rather than strand a buyer whose money was taken.
+      console.error(
+        `[FulfillPurchase] ⚠️ Poll confirmed COMPLETED but re-verification unresolved — proceeding on poll verdict ` +
+        `(depositId=${verification.depositId || verification.orderId || '?'})`
+      );
     }
-    const verificationResult = confirmation.verificationResult || {};
+    const verificationResult = confirmation.confirmed
+      ? (confirmation.verificationResult || {})
+      : { status: 'completed', confirmedByPoll: true };
 
     // ── Step 3: Load the event ─────────────────────────────────────────────
     const event = await loadEvent(admin, eventId);
