@@ -102,7 +102,8 @@ async function buildPdfReport(ev, summary, fees) {
     page.drawRectangle({ x: tableX, y: yy, width: W - 96, height: rowH, color: DARK });
     let cx = tableX;
     cols.forEach((c) => {
-      page.drawText(c.label.toUpperCase(), { x: cx + (c.align === 'right' ? c.w - 10 : c.align === 'center' ? (c.w - page.widthOfText(c.label.toUpperCase(), helvBold, 8)) / 2 : 10), y: yy + 8, size: 8, font: helvBold, color: WHITE });
+      const label = c.label.toUpperCase();
+      page.drawText(label, { x: cx + (c.align === 'right' ? c.w - 10 : c.align === 'center' ? (c.w - helvBold.widthOfTextAtSize(label, 8)) / 2 : 10), y: yy + 8, size: 8, font: helvBold, color: WHITE });
       cx += c.w;
     });
   };
@@ -111,7 +112,7 @@ async function buildPdfReport(ev, summary, fees) {
     let cx = tableX;
     cols.forEach((c, i) => {
       const v = String(values[i]);
-      page.drawText(v, { x: cx + (c.align === 'right' ? c.w - 10 - page.widthOfText(v, helv, 9) : c.align === 'center' ? (c.w - page.widthOfText(v, helv, 9)) / 2 : 10), y: yy + 7.5, size: 9, font: helv, color: INK });
+      page.drawText(v, { x: cx + (c.align === 'right' ? c.w - 10 - helv.widthOfTextAtSize(v, 9) : c.align === 'center' ? (c.w - helv.widthOfTextAtSize(v, 9)) / 2 : 10), y: yy + 7.5, size: 9, font: helv, color: INK });
       cx += c.w;
     });
     page.drawRectangle({ x: tableX, y: yy, width: W - 96, height: 0.4, color: LINE });
@@ -131,7 +132,7 @@ async function buildPdfReport(ev, summary, fees) {
   const totalValues = ['TOTAL', String(summary.soldCount), fmtUGX(summary.gross), fmtUGX(summary.lateFees), fmtUGX(summary.gatewayFees), fmtUGX(summary.commission), fmtUGX(summary.venueRevenue)];
   cols.forEach((c, i) => {
     const v = String(totalValues[i]);
-    page.drawText(v, { x: cx + (c.align === 'right' ? c.w - 10 - page.widthOfText(v, helvBold, 9) : c.align === 'center' ? (c.w - page.widthOfText(v, helvBold, 9)) / 2 : 10), y: y - rowH + 7.5, size: 9, font: helvBold, color: WHITE });
+    page.drawText(v, { x: cx + (c.align === 'right' ? c.w - 10 - helvBold.widthOfTextAtSize(v, 9) : c.align === 'center' ? (c.w - helvBold.widthOfTextAtSize(v, 9)) / 2 : 10), y: y - rowH + 7.5, size: 9, font: helvBold, color: WHITE });
     cx += c.w;
   });
   y -= rowH + 22;
@@ -264,3 +265,5 @@ exports.handler = async (event) => {
     return json(error.statusCode || 500, { error: error.message || 'Failed to generate report' });
   }
 };
+
+module.exports = { handler: exports.handler, buildPdfReport };
