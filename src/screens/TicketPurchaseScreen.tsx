@@ -375,7 +375,10 @@ const TicketPurchaseScreen: React.FC = () => {
       try { sessionStorage.removeItem("yovibe_ticket_draft_" + (event ? event.id : "")) } catch {}
       setPurchaseStatus("success")
       setStatusMessage("Payment successful! Creating your ticket...")
-      await createTicketAndNavigate(true, verificationResult)
+      // Pass the depositId from THIS loop's local parameter — React state is
+      // stale inside this closure (setPawaPayDepositId happens in handlePurchase
+      // of the earlier render), which previously sent depositId=undefined.
+      await createTicketAndNavigate(true, verificationResult, depositId)
     } else if (resultStatus === "FAILED") {
       setCheckingPayment(false)
       const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed."
@@ -404,7 +407,9 @@ const TicketPurchaseScreen: React.FC = () => {
           setCheckingPayment(false)
           setPurchaseStatus("success")
           setStatusMessage("Payment verified! Creating your ticket...")
-          await createTicketAndNavigate(false, verification)
+          // Pass the refs from THIS loop's local params (state is stale in
+          // this closure) so the server gets the real order/tracking ids.
+          await createTicketAndNavigate(false, verification, undefined, merchantReference, trackingId)
           // Clear the refs only AFTER fulfillment consumed them (server-side
           // payment re-verification needs the tracking id / merchant ref).
           setPesapalOrderRef(null)
@@ -424,7 +429,7 @@ const TicketPurchaseScreen: React.FC = () => {
     setStatusMessage("Payment is still being verified. You can retry verification or cancel. Do not pay again unless the payment is confirmed failed.")
   }
 
-  const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any) => {
+  const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any, pollDepositId?: string, pollOrderId?: string, pollTrackingId?: string) => {
     // Phase 1: ticket creation is server-side. We submit the full purchase
     // payload; the server re-verifies the payment with the provider and only
     // then creates the tickets, uploads the QR/photo, emails, and records the
@@ -481,9 +486,9 @@ const TicketPurchaseScreen: React.FC = () => {
           accountName: paymentMethod === "bank_transfer" ? bankAccountName : undefined,
         },
         verification: {
-          orderId: isMobileMoney ? undefined : (paymentOrderId || pesapalOrderRef || undefined),
-          trackingId: isMobileMoney ? undefined : (pesapalTrackingId || undefined),
-          depositId: isMobileMoney ? (pawaPayDepositId || verificationResult.depositId || undefined) : undefined,
+          orderId: isMobileMoney ? undefined : (pollOrderId || paymentOrderId || pesapalOrderRef || undefined),
+          trackingId: isMobileMoney ? undefined : (pollTrackingId || pesapalTrackingId || undefined),
+          depositId: isMobileMoney ? (pollDepositId || pawaPayDepositId || verificationResult.depositId || undefined) : undefined,
           // Server-backed verdict from the UI's poll (verify-pawapay-payment /
           // verify-pesapal-payment). Only COMPLETED reaches this point.
           pollStatus: "completed",
