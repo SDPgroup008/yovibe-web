@@ -108,9 +108,10 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     navigation.navigate("EventDetail", { eventId })
   }
 
-  // ── Sales report export (Phase 3, 3.3) ───────────────────────────────
-  const downloadCsv = (csv: string, filename: string) => {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+  // ── Sales report export (Phase 3, 3.3) — professional PDF ────────────
+  const downloadPdf = (pdfBase64: string, filename: string) => {
+    const bytes = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0))
+    const blob = new Blob([bytes], { type: "application/pdf" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
@@ -140,11 +141,23 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
       }
 
       const s = data.summary
-      const summaryText = `${s.eventName}\nSold: ${s.soldCount}\nGross: UGX ${s.gross.toLocaleString()}\nCommission (15%): UGX ${s.commission.toLocaleString()}\nRefunds: ${s.completedRefunds} (UGX ${s.refundAmount.toLocaleString()})\nPayouts: UGX ${s.payoutsTotal.toLocaleString()}\nClawbacks: UGX ${s.clawbacks.toLocaleString()}`
+      const summaryText = `Tickets: ${s.soldCount}\nGross: UGX ${s.gross.toLocaleString()}\nCommission (15%): UGX ${s.commission.toLocaleString()}\nNet to venue: UGX ${s.venueRevenue.toLocaleString()}\nRefunds: ${s.completedRefunds} (UGX ${s.refundAmount.toLocaleString()})\nPayouts: UGX ${s.payoutsTotal.toLocaleString()}\nClawbacks: UGX ${s.clawbacks.toLocaleString()}`
 
-      if (typeof document !== "undefined" && data.csv) {
-        downloadCsv(data.csv, `${eventId}-sales-report.csv`)
-        Alert.alert("Report Downloaded", `CSV exported.\n\n${summaryText}`)
+      if (typeof document !== "undefined" && data.pdfBase64) {
+        downloadPdf(data.pdfBase64, `${eventId}-sales-report.pdf`)
+        Alert.alert("Report Downloaded", `PDF report exported for ${s.eventName}.\n\n${summaryText}`)
+      } else if (typeof document !== "undefined" && data.csv) {
+        // Fallback: CSV if the PDF was unavailable
+        const blob = new Blob([data.csv], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${eventId}-sales-report.csv`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        Alert.alert("Report Downloaded", `CSV exported (PDF unavailable).\n\n${summaryText}`)
       } else {
         Alert.alert("Sales Report", summaryText)
       }

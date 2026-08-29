@@ -227,6 +227,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeDashboardTab, setActiveDashboardTab] = useState<'organizer' | 'admin'>('organizer')
+  const [reportDownloading, setReportDownloading] = useState(false)
   const [allowLatePurchases, setAllowLatePurchases] = useState(true)
   const [ticketSalesEarly, setTicketSalesEarly] = useState(0)
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
@@ -627,6 +628,49 @@ const OrganiserDashboardScreen: React.FC = () => {
   const adminNetRevenue = Math.max(0, adminTotalAppCommission - adminTotalGatewayFees)
   const adminWithdrawFee = calculatePayoutFee(adminNetRevenue, payoutProvider)
   const adminNetAfterFee = Math.max(0, adminNetRevenue - adminWithdrawFee)
+
+  // Phase 3 (3.3): per-event PDF sales report (admin tab).
+  const handleDownloadEventReport = async () => {
+    const eventId = event?.slug || event?.id
+    if (!eventId) return
+    try {
+      setReportDownloading(true)
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { Alert.alert("Session Expired", "Please sign in again."); return }
+
+      const response = await fetch("/.netlify/functions/sales-report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ eventId }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        Alert.alert("Report Failed", data.error || "Failed to generate report")
+        return
+      }
+
+      if (typeof document !== "undefined" && data.pdfBase64) {
+        const bytes = Uint8Array.from(atob(data.pdfBase64), (c) => c.charCodeAt(0))
+        const blob = new Blob([bytes], { type: "application/pdf" })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `${eventId}-sales-report.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+      }
+      const s = data.summary
+      Alert.alert("Report Downloaded", `PDF report exported for ${s.eventName}.\n\nTickets: ${s.soldCount}\nGross: UGX ${s.gross.toLocaleString()}\nCommission (15%): UGX ${s.commission.toLocaleString()}\nNet to venue: UGX ${s.venueRevenue.toLocaleString()}\nRefunds: ${s.completedRefunds} (UGX ${s.refundAmount.toLocaleString()})\nPayouts: UGX ${s.payoutsTotal.toLocaleString()}\nClawbacks: UGX ${s.clawbacks.toLocaleString()}`)
+    } catch (error) {
+      console.error("Report error:", error)
+      Alert.alert("Error", "Failed to download report")
+    } finally {
+      setReportDownloading(false)
+    }
+  }
 
   const handleAdminSendOtp = async () => {
     if (!user?.email) return
@@ -1814,6 +1858,18 @@ const OrganiserDashboardScreen: React.FC = () => {
                     <Text style={styles.withdrawBtnText}>Withdraw Net Revenue</Text>
                   </TouchableOpacity>
                 )}
+                <TouchableOpacity
+                  style={[styles.withdrawBtn, { backgroundColor: "#8B5CF6", marginTop: 10 }]}
+                  onPress={handleDownloadEventReport}
+                  disabled={reportDownloading}
+                >
+                  {reportDownloading ? (
+                    <ActivityIndicator size="small" color="#FFF" />
+                  ) : (
+                    <Ionicons name="download-outline" size={20} color="#FFF" />
+                  )}
+                  <Text style={styles.withdrawBtnText}>Download Sales Report</Text>
+                </TouchableOpacity>
               </View>
             </View>
 
