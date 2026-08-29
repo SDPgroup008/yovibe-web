@@ -1621,38 +1621,39 @@ const handleInstallmentPurchase = async () => {
         </TouchableOpacity>
       )}
 
-      {/* Phase 4 (4.1): explicit consent — Terms-only acceptance, gating the button */}
-      <TouchableOpacity style={styles.termsRow} onPress={() => setAcceptedTerms(prev => !prev)} activeOpacity={0.7}>
-        <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
-          {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-        </View>
-        <Text style={styles.termsText}>
-          I have read and agree to the{" "}
-          <Text
-            style={styles.termsLink}
-            onPress={(e) => { e?.stopPropagation?.(); (navigation as any).navigate("TermsAndConditions") }}
-          >
-            Terms &amp; Conditions
-          </Text>{" "}
-          and privacy policy, including the sharing of my details with the event organizer for event administration
-          and entry validation.
-        </Text>
-      </TouchableOpacity>
+      {/* Guest-only explicit consent — authenticated users already agreed to the
+          Terms & Conditions during signup, so the checkbox gates only guests. */}
+      {!user && (
+        <TouchableOpacity style={styles.termsRow} onPress={() => setAcceptedTerms(prev => !prev)} activeOpacity={0.7}>
+          <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+            {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+          </View>
+          <Text style={styles.termsText}>
+            I agree to the{" "}
+            <Text
+              style={styles.termsLink}
+              onPress={(e) => { e?.stopPropagation?.(); (navigation as any).navigate("TermsAndConditions") }}
+            >
+              Terms &amp; Conditions
+            </Text>
+          </Text>
+        </TouchableOpacity>
+      )}
 
       <TouchableOpacity
         style={[
           styles.purchaseButton,
           isLargeScreen && styles.desktopPurchaseButton,
-          (!paymentMethod || loading || (!user && useInstallments) || !acceptedTerms) && styles.purchaseButtonDisabled,
+          (!paymentMethod || loading || (!user && useInstallments) || (!user && !acceptedTerms)) && styles.purchaseButtonDisabled,
         ]}
         onPress={() => {
-          if (!acceptedTerms) {
+          if (!user && !acceptedTerms) {
             Alert.alert("Accept Terms", "Please read and accept the Terms & Conditions to continue.")
             return
           }
           useInstallments ? handleInstallmentPurchase() : handlePurchase()
         }}
-        disabled={!paymentMethod || loading || (!user && useInstallments) || !acceptedTerms}
+        disabled={!paymentMethod || loading || (!user && useInstallments) || (!user && !acceptedTerms)}
         activeOpacity={0.85}
       >
         {loading ? (
@@ -2556,10 +2557,10 @@ const styles = StyleSheet.create({
       ? { backgroundImage: "linear-gradient(135deg, #555555, #444444)", boxShadow: "none" }
       : { backgroundColor: "#666666" }),
   },
-  termsRow: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginTop: 14, marginBottom: 4, paddingHorizontal: 2 },
-  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: "#888", alignItems: "center", justifyContent: "center", marginTop: 1 },
+  termsRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 14, marginBottom: 4, paddingHorizontal: 2 },
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: "#888", alignItems: "center", justifyContent: "center" },
   checkboxChecked: { backgroundColor: "#00D4FF", borderColor: "#00D4FF" },
-  termsText: { flex: 1, color: "#AAA", fontSize: 12, lineHeight: 18 },
+  termsText: { color: "#AAA", fontSize: 12, lineHeight: 18 },
   termsLink: { color: "#00D4FF", fontWeight: "600", textDecorationLine: "underline" },
   purchaseButtonText: {
     color: "#FFFFFF",

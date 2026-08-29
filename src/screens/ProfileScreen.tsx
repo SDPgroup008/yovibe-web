@@ -409,20 +409,22 @@ const ProfileScreen: React.FC = () => {
     });
   }
 
-  accountItems.push(
-    {
-      icon: "ticket-outline",
-      label: "My Tickets",
-      description: "View your tickets and passes",
-      onPress: navigateToMyTickets,
-    },
-    {
+  accountItems.push({
+    icon: "ticket-outline",
+    label: "My Tickets",
+    description: "View your tickets and passes",
+    onPress: navigateToMyTickets,
+  });
+
+  // Settings is account-scoped — only shown to authenticated users.
+  if (user) {
+    accountItems.push({
       icon: "settings-outline",
       label: "Settings",
       description: "Account and app preferences",
       onPress: navigateToSettings,
-    }
-  );
+    });
+  }
 
   // On desktop, Sign Out lives at the end of the Account section; on mobile it
   // remains the pinned button rendered below the scroll content.
@@ -435,31 +437,34 @@ const ProfileScreen: React.FC = () => {
     });
   }
 
+  const supportItems: MenuItemConfig[] = [
+    {
+      icon: "notifications-outline",
+      label: "Notifications",
+      description: "Manage notification preferences",
+      onPress: openNotifications,
+    },
+    {
+      icon: "help-circle-outline",
+      label: "Help & Support",
+      description: "Get help with your account",
+      onPress: navigateToHelpSupport,
+    },
+  ];
+
+  // DPPA right of access is account-scoped — only shown to authenticated users.
+  if (user) {
+    supportItems.push({
+      icon: "download-outline",
+      label: "Download My Data",
+      description: "Export your personal data (DPPA 2019)",
+      onPress: handleDownloadMyData,
+    });
+  }
+
   const menuSections: MenuSectionConfig[] = [
     { title: "Account", items: accountItems },
-    {
-      title: "Support & System",
-      items: [
-        {
-          icon: "notifications-outline",
-          label: "Notifications",
-          description: "Manage notification preferences",
-          onPress: openNotifications,
-        },
-        {
-          icon: "help-circle-outline",
-          label: "Help & Support",
-          description: "Get help with your account",
-          onPress: navigateToHelpSupport,
-        },
-        {
-          icon: "download-outline",
-          label: "Download My Data",
-          description: "Export your personal data (DPPA 2019)",
-          onPress: handleDownloadMyData,
-        },
-      ],
-    },
+    { title: "Support & System", items: supportItems },
   ];
 
   if (user?.userType === "club_owner") {

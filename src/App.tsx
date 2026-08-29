@@ -10,6 +10,16 @@ import { DesktopLayout, MobileLayout } from "./components/Navigation";
 import { LayoutProvider, useLayout } from "./contexts/LayoutContext";
 import { Ionicons } from "@expo/vector-icons";
 
+// 🔍 Error tracking (Phase 5) — init once at module scope, before React
+// renders. Runs for BOTH web and native entries (App is the shared root).
+// Wrapped so a Sentry/DSN failure can never white-screen the app.
+import { initSentry } from "./config/sentry";
+try {
+  initSentry();
+} catch (e) {
+  console.warn("[Sentry] Init failed (non-fatal):", (e as Error)?.message || e);
+}
+
 // 🔔 Import Firebase helpers for notifications
 import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
 import { onMessage } from "firebase/messaging";

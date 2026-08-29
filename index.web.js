@@ -1,9 +1,5 @@
 // Web entry point - loads polyfills before the app
 
-// Error tracking (Phase 5) - init before the app renders
-import { initSentry } from './src/config/sentry'
-initSentry()
-
 // SEO META TAGS INJECTION - Must run BEFORE React loads for crawlers to see them
 (function() {
   // Only run on server-side (initial page load), not on navigation
