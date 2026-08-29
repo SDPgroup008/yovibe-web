@@ -21,8 +21,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const {
-  verifyPawaPayDepositViaFunction,
-  verifyPesapalPaymentViaFunction,
+  confirmPaymentVerified,
   loadEvent,
   insertTicketNotification,
   sendTicketEmail,
@@ -89,27 +88,22 @@ exports.handler = async (event, context) => {
 };
 
 async function processOne(admin, f) {
-  // 1. Re-verify the payment through the SAME deployed verify functions the
-  //    UI polls (single source of truth — never drift from what the buyer saw).
-  let verification;
-  if (f.pawapay_deposit_id) {
-    verification = await verifyPawaPayDepositViaFunction(f.pawapay_deposit_id);
-  } else if (f.payment_id) {
-    verification = await verifyPesapalPaymentViaFunction({ orderId: f.payment_id, trackingId: undefined });
-  } else {
-    await bump(admin, f, 'failed', 'No payment reference stored on fulfillment');
+  // 1. Confirm the payment (deployed verify functions + direct API tiebreaker).
+  const verifyMethod = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
+  const confirmation = await confirmPaymentVerified(verifyMethod, {
+    depositId: f.pawapay_deposit_id,
+    orderId: f.payment_id,
+    trackingId: undefined,
+  });
+  if (confirmation.failed) {
+    await bump(admin, f, 'failed', 'Payment not completed');
     return 'failed';
   }
-
-  if (verification.status === 'failed') {
-    await bump(admin, f, 'failed', `Payment not completed (${verification.rawStatus})`);
-    return 'failed';
-  }
-
-  if (verification.status === 'pending') {
+  if (!confirmation.confirmed) {
     await bump(admin, f, f.status, 'Payment still pending, will retry on next run');
     return 'pending';
   }
+  const verification = confirmation.verificationResult || {};
 
   // Payment is COMPLETED — fulfil.
   const existingIds = f.ticket_ids || [];

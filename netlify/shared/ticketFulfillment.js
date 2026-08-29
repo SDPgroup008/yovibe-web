@@ -185,9 +185,13 @@ function siteBase() {
 
 async function verifyPawaPayDepositViaFunction(depositId) {
   if (!depositId) return { status: 'invalid', reason: 'missing_deposit_id' };
-  const res = await fetch(
-    `${siteBase()}/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`
-  );
+  const url = `${siteBase()}/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    console.warn(`[VerifyViaFunction] verify-pawapay-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
+    return { status: 'error', error: `verify function HTTP ${res.status}`, httpStatus: res.status };
+  }
   const data = await res.json().catch(() => ({}));
   const status = ['completed', 'failed', 'pending'].includes(data.status) ? data.status : 'pending';
   return { status, ...data };
@@ -197,10 +201,71 @@ async function verifyPesapalPaymentViaFunction({ trackingId, orderId }) {
   const params = new URLSearchParams();
   if (trackingId) params.set('orderTrackingId', trackingId);
   if (orderId) params.set('merchantReference', orderId);
-  const res = await fetch(`${siteBase()}/.netlify/functions/verify-pesapal-payment?${params.toString()}`);
+  const url = `${siteBase()}/.netlify/functions/verify-pesapal-payment?${params.toString()}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    console.warn(`[VerifyViaFunction] verify-pesapal-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
+    return { status: 'error', error: `verify function HTTP ${res.status}`, httpStatus: res.status };
+  }
   const data = await res.json().catch(() => ({}));
   const status = ['completed', 'failed', 'pending'].includes(data.status) ? data.status : 'pending';
   return { status, transactionId: data.transactionId, confirmationCode: data.confirmationCode, ...data };
+}
+
+/**
+ * Confirm a payment for fulfillment. Tries the deployed verify function FIRST
+ * (byte-identical to what the UI polled), then the direct provider API as a
+ * tiebreaker. COMPLETED from EITHER path confirms; FAILED/INVALID from either
+ * path fails fast; otherwise it retries a few times and reports pending.
+ * Logs every attempt so a stuck integration is diagnosable from function logs.
+ */
+async function confirmPaymentVerified(method, verification) {
+  const attempts = 6;
+  const outcomes = [];
+  for (let i = 0; i < attempts; i++) {
+    let via = null;
+    let direct = null;
+    let viaErr = null;
+    let directErr = null;
+
+    try {
+      via = method === 'mobile_money'
+        ? await verifyPawaPayDepositViaFunction(verification.depositId)
+        : await verifyPesapalPaymentViaFunction({ trackingId: verification.trackingId, orderId: verification.orderId });
+    } catch (e) { viaErr = e.message; }
+
+    if (via && via.status === 'completed') {
+      console.log(`[FulfillPayment] CONFIRMED via deployed verify function (attempt ${i + 1})`);
+      return { confirmed: true, verificationResult: via, source: 'via-function' };
+    }
+    if (via && (via.status === 'failed' || via.status === 'invalid')) {
+      return { confirmed: false, failed: true, verificationResult: via, source: 'via-function' };
+    }
+
+    try {
+      direct = method === 'mobile_money'
+        ? await verifyPawaPayDeposit(verification.depositId)
+        : await verifyPesapalPayment({ trackingId: verification.trackingId, orderId: verification.orderId });
+    } catch (e) { directErr = e.message; }
+
+    if (direct && direct.status === 'completed') {
+      console.log(`[FulfillPayment] CONFIRMED via direct provider call (attempt ${i + 1})`);
+      return { confirmed: true, verificationResult: direct, source: 'direct' };
+    }
+    if (direct && (direct.status === 'failed' || direct.status === 'invalid')) {
+      return { confirmed: false, failed: true, verificationResult: direct, source: 'direct' };
+    }
+
+    const viaStatus = via ? via.status : `ERR(${viaErr || 'unknown'})`;
+    const directStatus = direct ? direct.status : `ERR(${directErr || 'unknown'})`;
+    outcomes.push(`via=${viaStatus}, direct=${directStatus}`);
+    console.warn(`[FulfillPayment] Verify attempt ${i + 1}/${attempts}: ${outcomes[outcomes.length - 1]}`);
+
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 1500));
+  }
+  console.warn(`[FulfillPayment] NOT confirmed after ${attempts} attempts: ${outcomes.join(' | ')}`);
+  return { confirmed: false, failed: false };
 }
 
 // ─── R2 uploads ─────────────────────────────────────────────────────────────
@@ -513,6 +578,7 @@ module.exports = {
   verifyPawaPayDeposit,
   verifyPawaPayDepositViaFunction,
   verifyPesapalPaymentViaFunction,
+  confirmPaymentVerified,
   uploadToR2,
   uploadImageDataUrl,
   generateQrPngDataUrl,

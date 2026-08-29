@@ -17,8 +17,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const {
-  verifyPawaPayDepositViaFunction,
-  verifyPesapalPaymentViaFunction,
+  confirmPaymentVerified,
   loadEvent,
   resolveEventStartTime,
   uploadImageDataUrl,
@@ -113,36 +112,18 @@ exports.handler = async (event) => {
       });
     }
 
-    // ── Step 2: Server-side payment verification ───────────────────────────
-    // Routed through the SAME deployed verify functions the UI polls, so the
-    // server's confirmation is byte-identical to what the buyer's screen saw
-    // (a parallel re-implementation can drift, which caused the retry loop).
-    // Grace retry absorbs brief processor propagation lag.
-    let verificationResult;
-    let verifyAttempts = 0;
-    const MAX_VERIFY_ATTEMPTS = 5;
-    do {
-      if (method === 'mobile_money') {
-        verificationResult = await verifyPawaPayDepositViaFunction(verification.depositId);
-      } else {
-        verificationResult = await verifyPesapalPaymentViaFunction({
-          trackingId: verification.trackingId,
-          orderId: verification.orderId,
-        });
-      }
-      verifyAttempts++;
-      if (verificationResult.status === 'pending' && verifyAttempts < MAX_VERIFY_ATTEMPTS) {
-        console.log(`[FulfillPurchase] Payment still pending — re-verifying (${verifyAttempts}/${MAX_VERIFY_ATTEMPTS})...`);
-        await new Promise((resolve) => setTimeout(resolve, 1200));
-      }
-    } while (verificationResult.status === 'pending' && verifyAttempts < MAX_VERIFY_ATTEMPTS);
-
-    if (verificationResult.status === 'pending' || verificationResult.status === 'invalid') {
-      return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });
-    }
-    if (verificationResult.status === 'failed') {
+    // ── Step 2: Server-side payment confirmation ───────────────────────────
+    // Uses the SAME deployed verify functions the UI polls (single source of
+    // truth) with a direct provider API tiebreaker, retrying a few times. Any
+    // disagreement is logged so a stuck integration is diagnosable.
+    const confirmation = await confirmPaymentVerified(method, verification);
+    if (confirmation.failed) {
       return error(402, { success: false, status: 'failed', message: 'Payment was not completed' });
     }
+    if (!confirmation.confirmed) {
+      return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });
+    }
+    const verificationResult = confirmation.verificationResult || {};
 
     // ── Step 3: Load the event ─────────────────────────────────────────────
     const event = await loadEvent(admin, eventId);
