@@ -42,14 +42,15 @@ function truncate(text, font, size, maxWidth) {
   return s + '…';
 }
 
-// ─── Page 1: financial summary ────────────────────────────────────────────────
-function drawPage1(doc, page, helv, helvBold, ev, summary, fees, totalPages) {
+// ─── Page 1: financial summary + engagement ──────────────────────────────────
+function drawPage1(doc, page, helv, helvBold, ev, summary, fees, insights, totalPages) {
   const W = 595.28;
   let y = 841.89;
 
   // Header band
   page.drawRectangle({ x: 0, y: y - 104, width: W, height: 104, color: DARK });
-  page.drawText('YoVibe', { x: 48, y: y - 62, size: 26, font: helvBold, color: WHITE });
+  page.drawText('Yo', { x: 48, y: y - 62, size: 26, font: helvBold, color: ACCENT });
+  page.drawText('Vibe', { x: 48 + helvBold.widthOfTextAtSize('Yo', 26), y: y - 62, size: 26, font: helvBold, color: WHITE });
   page.drawText('EVENT SALES REPORT', { x: 48, y: y - 88, size: 12, font: helvBold, color: ACCENT });
   page.drawText('yovibe.net', { x: W - 160, y: y - 62, size: 11, font: helv, color: rgb(0.7, 0.7, 0.75) });
   page.drawText('CONFIDENTIAL', { x: W - 160, y: y - 88, size: 9, font: helv, color: rgb(0.6, 0.6, 0.65) });
@@ -157,6 +158,27 @@ function drawPage1(doc, page, helv, helvBold, ev, summary, fees, totalPages) {
     if (val) page.drawText(val, { x: W - 200, y, size: 9.5, font: helvBold, color: INK });
     y -= 17;
   });
+  y -= 8;
+
+  // Engagement (attendance + purchase timing — supports organiser decisions)
+  page.drawText('ENGAGEMENT', { x: 48, y, size: 11, font: helvBold, color: DARK });
+  y -= 14;
+  page.drawRectangle({ x: 48, y, width: W - 96, height: 1.2, color: ACCENT });
+  y -= 18;
+  const engagementRows = [
+    ['Scanned / attended', `${insights.scannedCount}`, `${insights.attendanceRate}%`],
+    ['Early purchases', `${insights.totalTickets - insights.lateCount}`, `${insights.totalTickets ? Math.round(((insights.totalTickets - insights.lateCount) / insights.totalTickets) * 100) : 0}%`],
+    ['Late-fee purchases', `${insights.lateCount}`, `${insights.lateRate}%`],
+    ['Returning buyers', `${insights.returning}/${insights.uniqueBuyers}`, `${insights.returningRate}%`],
+    ['Average order value', '', fmtUGX(insights.avgOrderValue)],
+    ['Average tickets / order', '', insights.avgTicketsPerOrder.toFixed(1)],
+  ];
+  engagementRows.forEach(([label, mid, val]) => {
+    page.drawText(label, { x: 48, y, size: 9.5, font: helv, color: INK });
+    if (mid) page.drawText(mid, { x: 300, y, size: 9.5, font: helv, color: GRAY });
+    if (val) page.drawText(val, { x: W - 200, y, size: 9.5, font: helvBold, color: INK });
+    y -= 17;
+  });
 
   // Footer
   page.drawRectangle({ x: 0, y: 28, width: W, height: 1.2, color: LINE });
@@ -164,99 +186,25 @@ function drawPage1(doc, page, helv, helvBold, ev, summary, fees, totalPages) {
   page.drawText(`Page 1 of ${totalPages}`, { x: W - 120, y: 16, size: 8, font: helv, color: GRAY });
 }
 
-async function buildPdfReport(ev, summary, fees) {
+async function buildPdfReport(ev, summary, fees, insights) {
   const doc = await PDFDocument.create();
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
   const page = doc.addPage([595.28, 841.89]);
-  drawPage1(doc, page, helv, helvBold, ev, summary, fees, 1);
+  drawPage1(doc, page, helv, helvBold, ev, summary, fees, insights || {}, 1);
   const pdfBytes = await doc.save();
   return Buffer.from(pdfBytes).toString('base64');
 }
 
-// ─── Page 2: organiser insights (engagement + retention) ──────────────────────
-function drawPage2(doc, page, helv, helvBold, ev, summary, fees, insights, totalPages) {
-  const W = 595.28;
-  let y = 841.89;
-
-  // Header band
-  page.drawRectangle({ x: 0, y: y - 84, width: W, height: 84, color: DARK });
-  page.drawText('YoVibe', { x: 48, y: y - 52, size: 24, font: helvBold, color: WHITE });
-  page.drawText('ORGANISER INSIGHTS', { x: 48, y: y - 74, size: 12, font: helvBold, color: ACCENT });
-  page.drawText(String(ev.name || '').toUpperCase(), { x: W - 280, y: y - 52, size: 8, font: helvBold, color: rgb(0.85, 0.85, 0.9) });
-  page.drawText('Engagement & retention for decision-making', { x: W - 280, y: y - 68, size: 8, font: helv, color: rgb(0.7, 0.7, 0.75) });
-  y -= 108;
-
-  // KPI tiles: attendance, returning buyers, avg order value, tickets/order
-  const tiles = [
-    ['ATTENDANCE / REDEMPTION', `${insights.scannedCount}/${insights.totalTickets} · ${insights.attendanceRate}%`],
-    ['RETURNING BUYERS', `${insights.returning}/${insights.uniqueBuyers} · ${insights.returningRate}%`],
-    ['AVG ORDER VALUE', fmtUGX(insights.avgOrderValue)],
-    ['AVG TICKETS / ORDER', insights.avgTicketsPerOrder.toFixed(1)],
-  ];
-  const tileW = (W - 96 - 18) / 2;
-  const tileH = 46;
-  tiles.forEach(([label, value], i) => {
-    const col = i % 2;
-    const row = Math.floor(i / 2);
-    const x = 48 + col * (tileW + 18);
-    const cy = y - row * (tileH + 12) - tileH;
-    page.drawRectangle({ x, y: cy, width: tileW, height: tileH, color: CARD_BG, borderColor: LINE, borderWidth: 1 });
-    page.drawText(label, { x: x + 12, y: cy + tileH - 18, size: 7.5, font: helvBold, color: GRAY });
-    page.drawText(value, { x: x + 12, y: cy + 10, size: 12, font: helvBold, color: INK });
-  });
-  y -= 2 * (tileH + 12) + 24;
-
-  // Engagement
-  page.drawText('ENGAGEMENT', { x: 48, y, size: 10, font: helvBold, color: DARK });
-  y -= 12;
-  page.drawRectangle({ x: 48, y, width: W - 96, height: 1, color: ACCENT });
-  y -= 18;
-  const engagementRows = [
-    ['Early purchases', `${insights.totalTickets - insights.lateCount}`, `${insights.totalTickets ? Math.round(((insights.totalTickets - insights.lateCount) / insights.totalTickets) * 100) : 0}%`],
-    ['Late-fee purchases', `${insights.lateCount}`, `${insights.lateRate}%`],
-    ['Scanned / attended', `${insights.scannedCount}`, `${insights.attendanceRate}%`],
-    ['Refunded tickets', `${summary.refundedCount}`, ''],
-  ];
-  engagementRows.forEach(([label, mid, val]) => {
-    page.drawText(label, { x: 48, y, size: 9, font: helv, color: INK });
-    page.drawText(mid, { x: 300, y, size: 9, font: helvBold, color: INK });
-    if (val) page.drawText(val, { x: W - 200, y, size: 9, font: helvBold, color: ACCENT });
-    y -= 16;
-  });
-  y -= 4;
-
-  // Recommendations
-  page.drawText('RECOMMENDATIONS', { x: 48, y, size: 10, font: helvBold, color: DARK });
-  y -= 12;
-  page.drawRectangle({ x: 48, y, width: W - 96, height: 1, color: ACCENT });
-  y -= 18;
-  const recs = [];
-  if (insights.attendanceRate < 60) recs.push('Redemption is below 60% — send a reminder to ticket holders 24h before the event.');
-  if (insights.returningRate < 20) recs.push('Returning-buyer rate is under 20% — run a post-event re-engagement campaign to convert first-timers.');
-  if (insights.lateRate > 40) recs.push('Over 40% bought at the late-fee rate — introduce earlier-bird tiers or countdown pricing.');
-  const mmShare = ((insights.channelMix || []).find((c) => c.name === 'mobile_money') || { count: 0 }).count / (insights.totalTickets || 1);
-  if (mmShare > 0.8) recs.push('Mobile-money share is very high — test card incentives (fees or checkout offers) to balance channels.');
-  if (!recs.length) recs.push('Healthy metrics across the board — keep the current pricing, cadence, and channel mix.');
-  recs.forEach((r) => {
-    page.drawText(`• ${r}`, { x: 52, y, size: 8.5, font: helv, color: INK, maxWidth: W - 120 });
-    y -= 15;
-  });
-
-  // Footer
-  page.drawRectangle({ x: 0, y: 28, width: W, height: 1.2, color: LINE });
-  page.drawText('Generated by YoVibe • yovibe.net • support@yovibe.net', { x: 48, y: 16, size: 8, font: helv, color: GRAY });
-  page.drawText(`Page 2 of ${totalPages}`, { x: W - 120, y: 16, size: 8, font: helv, color: GRAY });
-}
-
 // ─── Buyer register (complete buyer list, paginated, audit-grade) ────────────
+// Columns sized to fit inside the page (40..555) so nothing is cut off.
 const REG_COLS = [
-  { label: 'TICKET REF', x: 48, w: 78 },
-  { label: 'BUYER NAME', x: 130, w: 118 },
-  { label: 'EMAIL', x: 252, w: 142 },
-  { label: 'PHONE', x: 398, w: 92 },
-  { label: 'TICKET TYPE', x: 494, w: 50 },
-  { label: 'PAYMENT', x: 548, w: 48 },
+  { label: 'TICKET REF', x: 48, w: 72 },
+  { label: 'BUYER NAME', x: 124, w: 110 },
+  { label: 'EMAIL', x: 238, w: 130 },
+  { label: 'PHONE', x: 372, w: 84 },
+  { label: 'TYPE', x: 460, w: 48 },
+  { label: 'PAYMENT', x: 512, w: 44 },
 ];
 
 function drawBuyerPages(doc, helv, helvBold, ev, buyerRows, totalPages) {
@@ -266,11 +214,12 @@ function drawBuyerPages(doc, helv, helvBold, ev, buyerRows, totalPages) {
 
   for (let p = 0; p < pages; p++) {
     const page = doc.addPage([595.28, 841.89]);
-    const pageNo = 3 + p;
+    const pageNo = 2 + p;
 
     // Header band
     page.drawRectangle({ x: 0, y: 841.89 - 70, width: W, height: 70, color: DARK });
-    page.drawText('YoVibe', { x: 48, y: 841.89 - 42, size: 20, font: helvBold, color: WHITE });
+    page.drawText('Yo', { x: 48, y: 841.89 - 42, size: 20, font: helvBold, color: ACCENT });
+    page.drawText('Vibe', { x: 48 + helvBold.widthOfTextAtSize('Yo', 20), y: 841.89 - 42, size: 20, font: helvBold, color: WHITE });
     page.drawText(`BUYER REGISTER — ${String(ev.name || '').toUpperCase()}`, { x: 48, y: 841.89 - 62, size: 10, font: helvBold, color: ACCENT });
     page.drawText('All buyers (tickets in active/used/pending status)', { x: W - 220, y: 841.89 - 42, size: 8, font: helv, color: rgb(0.7, 0.7, 0.75) });
     page.drawText(`Page ${pageNo} of ${totalPages}`, { x: W - 220, y: 841.89 - 62, size: 8, font: helv, color: rgb(0.7, 0.7, 0.75) });
@@ -289,12 +238,12 @@ function drawBuyerPages(doc, helv, helvBold, ev, buyerRows, totalPages) {
     chunk.forEach((b, i) => {
       if (i % 2 === 1) page.drawRectangle({ x: 40, y: y, width: W - 80, height: rowH, color: CARD_BG });
       const cells = [
-        truncate(b.ref, helv, 8.5, 72),
-        truncate(b.name, helv, 8.5, 112),
-        truncate(b.email, helv, 8.5, 136),
-        truncate(b.phone, helv, 8.5, 86),
-        truncate(b.type, helv, 8.5, 46),
-        truncate(b.method === 'mobile_money' ? 'Mobile Money' : b.method === 'credit_card' ? 'Card' : b.method === 'bank_transfer' ? 'Bank' : (b.method || ''), helv, 8.5, 44),
+        truncate(b.ref, helv, 8.5, 68),
+        truncate(b.name, helv, 8.5, 104),
+        truncate(b.email, helv, 8.5, 124),
+        truncate(b.phone, helv, 8.5, 78),
+        truncate(b.type, helv, 8.5, 44),
+        truncate(b.method === 'mobile_money' ? 'Mobile Money' : b.method === 'credit_card' ? 'Card' : b.method === 'bank_transfer' ? 'Bank' : (b.method || ''), helv, 8.5, 40),
       ];
       REG_COLS.forEach((c, ci) => {
         page.drawText(cells[ci], { x: c.x, y: y + 5.5, size: 8.5, font: helv, color: INK });
@@ -318,12 +267,11 @@ async function buildFullPdf(ev, summary, fees, insights, buyerRows) {
   const doc = await PDFDocument.create();
   const helv = await doc.embedFont(StandardFonts.Helvetica);
   const helvBold = await doc.embedFont(StandardFonts.HelveticaBold);
+  // Register pages scale with the number of tickets (26 rows/page).
   const buyerPages = Math.max(1, Math.ceil((buyerRows || []).length / ROWS_PER_PAGE));
-  const totalPages = 2 + buyerPages;
+  const totalPages = 1 + buyerPages;
   const page1 = doc.addPage([595.28, 841.89]);
-  drawPage1(doc, page1, helv, helvBold, ev, summary, fees, totalPages);
-  const page2 = doc.addPage([595.28, 841.89]);
-  drawPage2(doc, page2, helv, helvBold, ev, summary, fees, insights, totalPages);
+  drawPage1(doc, page1, helv, helvBold, ev, summary, fees, insights || {}, totalPages);
   drawBuyerPages(doc, helv, helvBold, ev, buyerRows || [], totalPages);
   const pdfBytes = await doc.save();
   return Buffer.from(pdfBytes).toString('base64');
