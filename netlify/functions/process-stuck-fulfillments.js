@@ -21,8 +21,8 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const {
-  verifyPesapalPayment,
-  verifyPawaPayDeposit,
+  verifyPawaPayDepositViaFunction,
+  verifyPesapalPaymentViaFunction,
   loadEvent,
   insertTicketNotification,
   sendTicketEmail,
@@ -89,12 +89,13 @@ exports.handler = async (event, context) => {
 };
 
 async function processOne(admin, f) {
-  // 1. Re-verify the payment server-side.
+  // 1. Re-verify the payment through the SAME deployed verify functions the
+  //    UI polls (single source of truth — never drift from what the buyer saw).
   let verification;
   if (f.pawapay_deposit_id) {
-    verification = await verifyPawaPayDeposit(f.pawapay_deposit_id);
+    verification = await verifyPawaPayDepositViaFunction(f.pawapay_deposit_id);
   } else if (f.payment_id) {
-    verification = await verifyPesapalPayment({ orderId: f.payment_id, trackingId: undefined });
+    verification = await verifyPesapalPaymentViaFunction({ orderId: f.payment_id, trackingId: undefined });
   } else {
     await bump(admin, f, 'failed', 'No payment reference stored on fulfillment');
     return 'failed';

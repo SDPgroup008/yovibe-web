@@ -17,8 +17,8 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const {
-  verifyPesapalPayment,
-  verifyPawaPayDeposit,
+  verifyPawaPayDepositViaFunction,
+  verifyPesapalPaymentViaFunction,
   loadEvent,
   resolveEventStartTime,
   uploadImageDataUrl,
@@ -114,16 +114,18 @@ exports.handler = async (event) => {
     }
 
     // ── Step 2: Server-side payment verification ───────────────────────────
-    // Grace retry: the processor may briefly lag the UI poll's COMPLETED
-    // signal, so re-verify a few times before giving up on this request.
+    // Routed through the SAME deployed verify functions the UI polls, so the
+    // server's confirmation is byte-identical to what the buyer's screen saw
+    // (a parallel re-implementation can drift, which caused the retry loop).
+    // Grace retry absorbs brief processor propagation lag.
     let verificationResult;
     let verifyAttempts = 0;
     const MAX_VERIFY_ATTEMPTS = 5;
     do {
       if (method === 'mobile_money') {
-        verificationResult = await verifyPawaPayDeposit(verification.depositId);
+        verificationResult = await verifyPawaPayDepositViaFunction(verification.depositId);
       } else {
-        verificationResult = await verifyPesapalPayment({
+        verificationResult = await verifyPesapalPaymentViaFunction({
           trackingId: verification.trackingId,
           orderId: verification.orderId,
         });

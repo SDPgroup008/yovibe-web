@@ -174,6 +174,35 @@ async function verifyPawaPayDeposit(depositId) {
   };
 }
 
+// ─── Verify via the deployed Netlify verify functions ────────────────────────
+// The UI polls /verify-pawapay-payment and /verify-pesapal-payment. Fulfillment
+// MUST agree with what the buyer's screen saw, so these route through the SAME
+// deployed functions instead of a parallel implementation that can drift.
+
+function siteBase() {
+  return process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
+}
+
+async function verifyPawaPayDepositViaFunction(depositId) {
+  if (!depositId) return { status: 'invalid', reason: 'missing_deposit_id' };
+  const res = await fetch(
+    `${siteBase()}/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`
+  );
+  const data = await res.json().catch(() => ({}));
+  const status = ['completed', 'failed', 'pending'].includes(data.status) ? data.status : 'pending';
+  return { status, ...data };
+}
+
+async function verifyPesapalPaymentViaFunction({ trackingId, orderId }) {
+  const params = new URLSearchParams();
+  if (trackingId) params.set('orderTrackingId', trackingId);
+  if (orderId) params.set('merchantReference', orderId);
+  const res = await fetch(`${siteBase()}/.netlify/functions/verify-pesapal-payment?${params.toString()}`);
+  const data = await res.json().catch(() => ({}));
+  const status = ['completed', 'failed', 'pending'].includes(data.status) ? data.status : 'pending';
+  return { status, transactionId: data.transactionId, confirmationCode: data.confirmationCode, ...data };
+}
+
 // ─── R2 uploads ─────────────────────────────────────────────────────────────
 
 function getR2Client() {
@@ -482,6 +511,8 @@ module.exports = {
   calculateGatewayFee,
   verifyPesapalPayment,
   verifyPawaPayDeposit,
+  verifyPawaPayDepositViaFunction,
+  verifyPesapalPaymentViaFunction,
   uploadToR2,
   uploadImageDataUrl,
   generateQrPngDataUrl,
