@@ -451,7 +451,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const includePhoto = securityPhotoEnabled && photoCaptured
 
       setProgressStep(1) // Saving ticket
-      const result = await TicketService.fulfillPurchase({
+      const fulfillPayload = {
         fulfillmentId,
         eventId: event!.id,
         ticketType: selectedTicketTypeName,
@@ -485,7 +485,20 @@ const TicketPurchaseScreen: React.FC = () => {
           trackingId: isMobileMoney ? undefined : (pesapalTrackingId || undefined),
           depositId: isMobileMoney ? (pawaPayDepositId || verificationResult.depositId || undefined) : undefined,
         },
-      })
+      }
+
+      // The UI poll and the server's re-verification can briefly disagree while
+      // the processor propagates COMPLETED. Retry automatically (safe: the
+      // fulfillmentId makes every retry idempotent) before surfacing the
+      // pending banner — no manual "retry verification" needed.
+      let result = await TicketService.fulfillPurchase(fulfillPayload)
+      let pendingRetries = 0
+      while ((result.status === "pending" || result.status === "in_progress") && pendingRetries < 5) {
+        pendingRetries++
+        console.log(`[FulfillPurchase] ${result.status} — auto-retrying (${pendingRetries}/5)...`)
+        await new Promise((resolve) => setTimeout(resolve, 2000))
+        result = await TicketService.fulfillPurchase(fulfillPayload)
+      }
 
       if (result.success) {
         setProgressStep(4) // Ticket successfully delivered

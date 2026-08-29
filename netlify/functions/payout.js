@@ -233,7 +233,7 @@ exports.handler = async (event) => {
     }
 
     // 7. Mark tickets + record the payout.
-    const { error: ticketError } = await admin.from('tickets').update({ ...ticketsUpdate, updated_at: new Date().toISOString() }).in('id', payableIds);
+    const { error: ticketError } = await admin.from('tickets').update(ticketsUpdate).in('id', payableIds);
     if (ticketError) throw ticketError;
 
     const payoutRow = {

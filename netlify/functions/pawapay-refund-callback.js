@@ -75,8 +75,8 @@ exports.handler = async (event) => {
     if (ticketIds.length) {
       // Phase 3 (3.2): a ticket in any refund state must never be paid out.
       const ticketUpdate = status === 'completed'
-        ? { status: 'refunded', refund_status: 'completed', refunded_amount: refund.approved_amount, payout_eligible: false, updated_at: new Date().toISOString() }
-        : { refund_status: status === 'failed' ? 'failed' : 'processing', payout_eligible: false, updated_at: new Date().toISOString() };
+        ? { status: 'refunded', refund_status: 'completed', refunded_amount: refund.approved_amount, payout_eligible: false }
+        : { refund_status: status === 'failed' ? 'failed' : 'processing', payout_eligible: false };
       await admin.from('tickets').update(ticketUpdate).in('id', ticketIds);
     }
 

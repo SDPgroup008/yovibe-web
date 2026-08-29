@@ -114,15 +114,26 @@ exports.handler = async (event) => {
     }
 
     // ── Step 2: Server-side payment verification ───────────────────────────
+    // Grace retry: the processor may briefly lag the UI poll's COMPLETED
+    // signal, so re-verify a few times before giving up on this request.
     let verificationResult;
-    if (method === 'mobile_money') {
-      verificationResult = await verifyPawaPayDeposit(verification.depositId);
-    } else {
-      verificationResult = await verifyPesapalPayment({
-        trackingId: verification.trackingId,
-        orderId: verification.orderId,
-      });
-    }
+    let verifyAttempts = 0;
+    const MAX_VERIFY_ATTEMPTS = 5;
+    do {
+      if (method === 'mobile_money') {
+        verificationResult = await verifyPawaPayDeposit(verification.depositId);
+      } else {
+        verificationResult = await verifyPesapalPayment({
+          trackingId: verification.trackingId,
+          orderId: verification.orderId,
+        });
+      }
+      verifyAttempts++;
+      if (verificationResult.status === 'pending' && verifyAttempts < MAX_VERIFY_ATTEMPTS) {
+        console.log(`[FulfillPurchase] Payment still pending — re-verifying (${verifyAttempts}/${MAX_VERIFY_ATTEMPTS})...`);
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+      }
+    } while (verificationResult.status === 'pending' && verifyAttempts < MAX_VERIFY_ATTEMPTS);
 
     if (verificationResult.status === 'pending' || verificationResult.status === 'invalid') {
       return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });

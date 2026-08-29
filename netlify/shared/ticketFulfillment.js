@@ -457,7 +457,6 @@ async function markTicketsByPayment(admin, { paymentId, depositId, status, refun
   let query = admin.from('tickets').update({
     status,
     refund_status: refundStatus || null,
-    updated_at: new Date().toISOString(),
   });
   if (depositId) {
     query = query.eq('pawapay_deposit_id', depositId);

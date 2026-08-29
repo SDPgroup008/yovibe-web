@@ -65,8 +65,8 @@ async function updateTicketRefundState(admin, refund, phase) {
       : (refund.ticket_id ? [refund.ticket_id] : []);
     if (!ids.length) return;
     const update = phase === 'completed'
-      ? { status: 'refunded', refund_status: 'completed', payout_eligible: false, updated_at: new Date().toISOString() }
-      : { refund_status: phase, payout_eligible: false, updated_at: new Date().toISOString() };
+      ? { status: 'refunded', refund_status: 'completed', payout_eligible: false }
+      : { refund_status: phase, payout_eligible: false };
     const { error } = await admin.from('tickets').update(update).in('id', ids);
     if (error) console.warn('[RefundTicket] updateTicketRefundState error:', error.message);
 

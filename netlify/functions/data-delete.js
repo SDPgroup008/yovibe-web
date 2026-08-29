@@ -16,12 +16,12 @@ exports.handler = async (event) => {
     const email = (profile && profile.email) || authUser.email || '';
     const now = new Date().toISOString();
 
-    // 1. Anonymize tickets (keep financial rows, strip PII).
+    // 1. Anonymize tickets (keep financial rows, strip PII). Note: the tickets
+    // table has no updated_at column — intentionally omitted.
     const { error: tErr } = await admin.from('tickets').update({
       buyer_name: 'Deleted User', buyer_email: `deleted-${authUser.id}@yovibe.invalid`,
       buyer_phone: null, buyer_id: null, buyer_photo_url: null,
       photo_upload_token: null, photo_upload_token_expires_at: null,
-      updated_at: now,
     }).or(`buyer_email.eq.${email},buyer_id.eq.${authUser.id}`);
     if (tErr) throw tErr;
 
@@ -36,7 +36,7 @@ exports.handler = async (event) => {
     const { error: pErr } = await admin.from('ticket_installment_plans').update({
       buyer_email: `deleted-${authUser.id}@yovibe.invalid`, buyer_names: null,
       buyer_emails: null, delivery_emails: null, payer_email: null,
-      buyer_photo_url: null, updated_at: now,
+      buyer_photo_url: null,
     }).eq('buyer_email', email);
     if (pErr) throw pErr;
 
