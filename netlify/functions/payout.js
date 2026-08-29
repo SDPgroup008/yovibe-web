@@ -162,14 +162,17 @@ exports.handler = async (event) => {
     // 4. Ownership + event + recipient (3.1).
     const { data: firstTicket } = await admin.from('tickets').select('event_slug').eq('id', payableIds[0]).single();
     const eventId = firstTicket ? firstTicket.event_slug : null;
-    let event = null;
+    // NOTE: named `payoutEvent` — the handler parameter is already `event`, and
+    // a block-scoped `let event` here hoists over the whole try (binding every
+    // earlier `event` reference to it → "Cannot access 'event2' before init").
+    let payoutEvent = null;
     if (eventId) {
       const ev = await admin.from('events').select('*').eq('slug', eventId).maybeSingle();
-      event = ev.data || null;
+      payoutEvent = ev.data || null;
       if (!isAdmin) {
-        const ownerOk = event && (
-          String(event.created_by || '') === String(authUser.id) ||
-          String(event.created_by_auth || '') === String(authUser.id)
+        const ownerOk = payoutEvent && (
+          String(payoutEvent.created_by || '') === String(authUser.id) ||
+          String(payoutEvent.created_by_auth || '') === String(authUser.id)
         );
         if (!ownerOk) {
           return json(403, { error: 'You do not own this event' });
@@ -177,7 +180,7 @@ exports.handler = async (event) => {
       }
     }
 
-    const recipient = buildRecipient(event, {
+    const recipient = buildRecipient(payoutEvent, {
       method: payoutMethod,
       name: requestedRecipient.name,
       phoneNumber: requestedRecipient.phoneNumber,
@@ -189,7 +192,7 @@ exports.handler = async (event) => {
 
     // 5. Persist the recipient as the event's default payout config (3.1).
     let persistedConfig = false;
-    if (event && recipient.method && recipient.name) {
+    if (payoutEvent && recipient.method && recipient.name) {
       const configUpdate = {
         method: recipient.method,
         name: recipient.name,
@@ -198,7 +201,7 @@ exports.handler = async (event) => {
         bankName: recipient.bankName || null,
         accountNumber: recipient.accountNumber || null,
       };
-      const { error: cfgError } = await admin.from('events').update({ payout_config: configUpdate }).eq('slug', event.slug);
+      const { error: cfgError } = await admin.from('events').update({ payout_config: configUpdate }).eq('slug', payoutEvent.slug);
       if (!cfgError) persistedConfig = true;
     }
 
@@ -237,7 +240,7 @@ exports.handler = async (event) => {
     if (ticketError) throw ticketError;
 
     const payoutRow = {
-      organizer_id: event && event.created_by ? String(event.created_by) : (profile && profile.uid ? profile.uid : authUser.id),
+      organizer_id: payoutEvent && payoutEvent.created_by ? String(payoutEvent.created_by) : (profile && profile.uid ? profile.uid : authUser.id),
       ticket_ids: payableIds,
       amount: serverAmount,
       status: payoutStatus,
