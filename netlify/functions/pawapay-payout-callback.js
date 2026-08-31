@@ -36,11 +36,14 @@ function normalizeStatus(status) {
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
 
-  // Signature verification (fail closed when signing is enabled).
-  const signatureResult = await verifyCallbackSignature(event);
-  if (!signatureResult.ok) {
-    console.warn('[PawaPayPayoutCallback] Signature verification failed:', signatureResult.error);
-    return { statusCode: 401, headers, body: JSON.stringify({ error: signatureResult.error }) };
+  // Signature verification applies ONLY to real PawaPay POST callbacks. GET
+  // requests are uptime-monitor probes (PawaPay never sends GET callbacks).
+  if (event.httpMethod === 'POST') {
+    const signatureResult = await verifyCallbackSignature(event);
+    if (!signatureResult.ok) {
+      console.warn('[PawaPayPayoutCallback] Signature verification failed:', signatureResult.error);
+      return { statusCode: 401, headers, body: JSON.stringify({ error: signatureResult.error }) };
+    }
   }
 
   let payoutId;

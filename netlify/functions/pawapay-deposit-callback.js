@@ -44,11 +44,15 @@ exports.handler = async (event) => {
 
   console.log('[PawaPayCallback] Received deposit callback:', { depositId, status });
 
-  // 1. Signature verification (fail closed when signing is enabled).
-  const signatureResult = await verifyCallbackSignature(event);
-  if (!signatureResult.ok) {
-    console.warn('[PawaPayCallback] Signature verification failed:', signatureResult.error);
-    return { statusCode: 401, headers, body: JSON.stringify({ error: signatureResult.error }) };
+  // Signature verification applies ONLY to real PawaPay POST callbacks. GET
+  // requests are uptime-monitor probes (PawaPay never sends GET callbacks),
+  // so they are acknowledged without signature checks.
+  if (event.httpMethod === 'POST') {
+    const signatureResult = await verifyCallbackSignature(event);
+    if (!signatureResult.ok) {
+      console.warn('[PawaPayCallback] Signature verification failed:', signatureResult.error);
+      return { statusCode: 401, headers, body: JSON.stringify({ error: signatureResult.error }) };
+    }
   }
 
   if (!depositId) {
