@@ -13,11 +13,7 @@
 //   POST { action: "sign",   ticketId } -> { ok, url, signature, issuedAt }
 //   POST { action: "verify", qrText   } -> { ok, valid, ticketId?, format?, reason? }
 //        format: "signed" (a yovibe.net/t/ URL was detected)
-//                "unknown" (not a signed-URL QR — caller may use legacy parsing)
-//
-// Optional migration aid: QR_LEGACY_HMAC_SECRET. If set, signatures produced
-// with the previous secret are also accepted. Remove once all live tickets use
-// the current secret.
+//                "unknown" (not a signed-URL QR — caller rejects it)
 
 const crypto = require('crypto');
 
@@ -84,15 +80,6 @@ function verify(qrText) {
 
   if (safeEqual(expected, signature)) {
     return { format: 'signed', valid: true, ticketId };
-  }
-
-  // Optional migration key: accept signatures produced by the previous secret.
-  const legacySecret = process.env.QR_LEGACY_HMAC_SECRET;
-  if (legacySecret) {
-    const legacyExpected = hmacSign(ticketId, issuedAt, legacySecret);
-    if (safeEqual(legacyExpected, signature)) {
-      return { format: 'signed', valid: true, ticketId };
-    }
   }
 
   return { format: 'signed', valid: false, reason: 'bad_signature' };

@@ -27,6 +27,7 @@ const {
   sendTicketEmail,
   createTicketServerSide,
   persistTicketRows,
+  uploadImageDataUrl,
 } = require('../shared/ticketFulfillment');
 
 const MAX_ATTEMPTS = 5;
@@ -112,38 +113,62 @@ async function processOne(admin, f) {
     return 'succeeded';
   }
 
-  const event = await loadEvent(admin, f.event_id);
+  // Full-fidelity rebuild when the claim stored the complete payload
+  // (seats/tables/photo/payment — no degraded tickets).
+  const payload = f.payload && typeof f.payload === 'object' ? f.payload : null;
+  const event = await loadEvent(admin, payload && payload.eventId ? payload.eventId : f.event_id);
   if (!event) {
     await bump(admin, f, 'failed', `Event not found: ${f.event_id}`);
     return 'failed';
   }
 
-  const names = f.attendee_names && f.attendee_names.length
-    ? f.attendee_names
-    : [f.buyer_name || 'Attendee'];
-  const qty = Math.max(1, Math.floor(Number(f.quantity) || 1));
-  const total = Math.floor(Number(f.amount) || 0);
+  const names = (payload && payload.buyerNames && payload.buyerNames.length)
+    ? payload.buyerNames
+    : (f.attendee_names && f.attendee_names.length ? f.attendee_names : [f.buyer_name || 'Attendee']);
+  const qty = Math.max(1, Math.floor(Number((payload && payload.quantity) || f.quantity) || 1));
+  const total = Math.floor(Number((payload && payload.totalAmount) || f.amount) || 0);
   const perTicketTotal = total > 0 ? total / qty : 0;
-  const method = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
-  const sharedPaymentId = f.payment_id;
+  const method = f.pawapay_deposit_id ? 'mobile_money' : ((payload && payload.payment && payload.payment.method) || 'credit_card');
+  const sharedPaymentId = f.payment_id || (payload && payload.paymentId);
+
+  // Photo: hosted R2 URL from the payload, or re-upload the data URL once.
+  let photoUrl = null;
+  if (payload && payload.buyerPhotoUrl) {
+    photoUrl = payload.buyerPhotoUrl;
+  } else if (payload && payload.buyerPhotoDataUrl) {
+    try {
+      photoUrl = await uploadImageDataUrl(payload.buyerPhotoDataUrl, 'buyer-photos', `purchase_${f.id}`);
+    } catch (e) {
+      console.warn('[StuckFulfillments] Photo re-upload failed:', e.message);
+    }
+  }
 
   const createdRows = [];
   for (let i = 0; i < qty; i++) {
     const row = await createTicketServerSide(admin, {
       event,
       attendeeName: names[i] || names[0] || 'Attendee',
-      payerEmail: f.buyer_email,
-      buyerId: f.buyer_id,
-      deliveryEmail: f.buyer_email,
+      payerEmail: (payload && payload.payerEmail) || f.buyer_email,
+      buyerId: (payload && payload.buyerId) || f.buyer_id,
+      deliveryEmail: (payload && payload.deliveryEmails && payload.deliveryEmails[i])
+        || (payload && payload.buyerEmails && payload.buyerEmails[i])
+        || (payload && payload.payerEmail) || f.buyer_email,
       totalAmount: perTicketTotal,
-      isTableEntry: false,
-      buyerPhone: undefined,
+      unitPrice: payload && payload.unitPrice,
+      lateFeePercent: payload && payload.lateFeePercent,
+      isTableEntry: !!(payload && payload.isTableEntry),
+      tableSize: payload && payload.isTableEntry ? payload.tableSize : undefined,
+      tableGroupId: payload && payload.tableGroupId,
+      tableTotalAmount: payload && payload.isTableEntry ? total : undefined,
+      seatNumber: payload && payload.seatNumbers && payload.seatNumbers[i] != null ? payload.seatNumbers[i] : undefined,
+      tableNumber: payload && payload.tableNumbers && payload.tableNumbers[i] != null ? payload.tableNumbers[i] : undefined,
+      buyerPhone: payload && payload.buyerPhone,
       sharedPaymentId,
-      cardPaymentName: undefined,
-      photoUrl: null,
-      payment: { method, ticketType: f.ticket_type || undefined },
-      pesapalTransactionId: verification.transactionId,
-      pesapalConfirmationCode: verification.confirmationCode,
+      cardPaymentName: payload && payload.payment && payload.payment.cardName,
+      photoUrl,
+      payment: { ...((payload && payload.payment) || {}), ticketType: (payload && payload.ticketType) || f.ticket_type || undefined },
+      pesapalTransactionId: verification.transactionId || (payload && payload.pesapalTransactionId),
+      pesapalConfirmationCode: verification.confirmationCode || (payload && payload.pesapalConfirmationCode),
     });
     createdRows.push(row);
   }

@@ -69,6 +69,7 @@ exports.handler = async (event) => {
     buyerId,
     buyerPhone,
     buyerPhotoDataUrl,
+    buyerPhotoUrl,
     seatNumbers,
     tableNumbers,
     payment,
@@ -183,6 +184,34 @@ exports.handler = async (event) => {
 
     // ── Step 4: Claim the fulfillment row (concurrency lock via PK) ────────
     const paymentId = method === 'mobile_money' ? verification.depositId : (verification.orderId || paymentIdFallback());
+    const tableGroupId = isTableEntry ? `YVG-${String(event.slug || event.id).slice(-6)}-${Date.now().toString().slice(-6)}` : undefined;
+    // Persist the FULL payload so the scheduled retry can rebuild full-fidelity
+    // tickets (seats/tables/photo/payment) for a stranded purchase.
+    const claimPayload = {
+      eventId,
+      ticketType: ticketType || (event.entry_fees && event.entry_fees[0] ? event.entry_fees[0].name : 'Standard'),
+      quantity: qty,
+      totalAmount: total,
+      unitPrice,
+      lateFeePercent,
+      isTableEntry: !!isTableEntry,
+      tableSize: isTableEntry ? tableSize : null,
+      tableGroupId: tableGroupId || null,
+      buyerNames,
+      buyerEmails,
+      deliveryEmails,
+      payerEmail,
+      buyerId: buyerId || null,
+      buyerPhone: buyerPhone || null,
+      buyerPhotoDataUrl: buyerPhotoDataUrl || null,
+      buyerPhotoUrl: buyerPhotoUrl || null,
+      seatNumbers: seatNumbers || null,
+      tableNumbers: tableNumbers || null,
+      payment: { ...payment },
+      paymentId,
+      pesapalTransactionId: verificationResult.transactionId || null,
+      pesapalConfirmationCode: verificationResult.confirmationCode || null,
+    };
     const claim = await admin.from('pending_ticket_fulfillments').insert({
       id: fulfillmentId,
       payment_id: paymentId,
@@ -192,13 +221,14 @@ exports.handler = async (event) => {
       buyer_id: buyerId || null,
       event_id: eventId,
       event_name: event.name,
-      ticket_type: ticketType || (event.entry_fees && event.entry_fees[0] ? event.entry_fees[0].name : 'Standard'),
+      ticket_type: claimPayload.ticketType,
       quantity: qty,
       amount: total,
       status: 'fulfilling',
       ticket_ids: [],
       attempt_count: 0,
       attendee_names: buyerNames,
+      payload: claimPayload,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -233,9 +263,12 @@ exports.handler = async (event) => {
       throw claim.error;
     }
 
-    // ── Step 5: Upload the buyer security photo once ───────────────────────
+    // ── Step 5: Buyer security photo ────────────────────────────────────────
     let photoUrl = null;
-    if (buyerPhotoDataUrl) {
+    if (buyerPhotoUrl) {
+      // Already-hosted R2 URL (e.g. installment plans) — use as-is.
+      photoUrl = buyerPhotoUrl;
+    } else if (buyerPhotoDataUrl) {
       try {
         photoUrl = await uploadImageDataUrl(buyerPhotoDataUrl, 'buyer-photos', `purchase_${fulfillmentId}`);
       } catch (e) {
@@ -247,7 +280,6 @@ exports.handler = async (event) => {
     // createTicketServerSide builds the rows (QR, R2, pricing); they are NOT
     // inserted individually — the whole batch is persisted atomically below.
     const perTicketTotal = total / qty;
-    const tableGroupId = isTableEntry ? `YVG-${String(event.slug || event.id).slice(-6)}-${Date.now().toString().slice(-6)}` : undefined;
     const createdRows = [];
 
     for (let i = 0; i < qty; i++) {

@@ -22,21 +22,30 @@ exports.handler = async (event) => {
     if (!present) missing.push(key);
   }
 
+  // quick=1: uptime monitors should use this — env check only, no DB ping,
+  // so cold-start latency is minimal and transient platform 503s are rare.
+  const quick = (event.queryStringParameters && event.queryStringParameters.quick === '1');
+
   let dbOk = false;
   let dbError = null;
-  try {
-    const admin = getAdminClient();
-    const { error } = await admin.from('events').select('slug', { count: 'exact', head: true });
-    dbOk = !error;
-    dbError = error ? error.message : null;
-  } catch (e) {
-    dbError = e.message;
+  if (!quick) {
+    try {
+      const admin = getAdminClient();
+      const { error } = await admin.from('events').select('slug', { count: 'exact', head: true });
+      dbOk = !error;
+      dbError = error ? error.message : null;
+    } catch (e) {
+      dbError = e.message;
+    }
+  } else {
+    dbOk = true; // not checked in quick mode
   }
 
   const healthy = dbOk && missing.length === 0;
   return json(healthy ? 200 : 503, {
     ok: healthy,
-    db: dbOk ? 'reachable' : `unreachable: ${dbError || 'unknown'}`,
+    mode: quick ? 'quick' : 'full',
+    db: quick ? 'skipped' : (dbOk ? 'reachable' : `unreachable: ${dbError || 'unknown'}`),
     missingEnv: missing,
     env,
     timestamp: new Date().toISOString(),

@@ -52,12 +52,14 @@ interface QrVerifyResult {
   /** "signed" = a yovibe.net/t/ QR URL was detected; "unknown" = legacy format */
   format?: "signed" | "unknown"
   reason?: string
+  /** true when the verification endpoint itself could not be reached */
+  unreachable?: boolean
 }
 
 /**
- * Verify a ticket QR payload server-side. Returns format "unknown" (allowing
- * legacy raw/JSON QR fallback) only when the input is not a signed-URL QR or
- * when the verification endpoint is unreachable — never for a bad signature.
+ * Verify a ticket QR payload server-side. Legacy (unsigned raw/JSON) QRs are
+ * NOT accepted: format "unknown" → rejected, and an unreachable endpoint is
+ * reported distinctly so the scanner fails closed with a clear message.
  */
 async function verifyTicketQr(qrText: string): Promise<QrVerifyResult> {
   try {
@@ -73,10 +75,10 @@ async function verifyTicketQr(qrText: string): Promise<QrVerifyResult> {
     return { valid: data.valid, ticketId: data.ticketId, format: data.format, reason: data.reason }
   } catch (error) {
     console.warn(
-      "[TicketService] QR verification endpoint unavailable, using legacy parsing:",
+      "[TicketService] QR verification endpoint unavailable (fail-closed):",
       (error as Error)?.message || error,
     )
-    return { valid: false, format: "unknown" }
+    return { valid: false, format: "unknown", unreachable: true }
   }
 }
 
@@ -598,6 +600,8 @@ export class TicketService {
     buyerId?: string | null
     buyerPhone?: string
     buyerPhotoDataUrl?: string
+    /** Already-hosted R2 photo URL (installment plans) — used as-is */
+    buyerPhotoUrl?: string
     seatNumbers?: (number | null)[]
     tableNumbers?: (number | null)[]
     payment: {
@@ -614,6 +618,8 @@ export class TicketService {
       orderId?: string
       trackingId?: string
       depositId?: string
+      /** Server-backed verdict from the UI poll ("completed") */
+      pollStatus?: string
     }
   }): Promise<{
     success: boolean
@@ -679,23 +685,15 @@ export class TicketService {
       if (verified.valid && verified.ticketId) {
         qrCodeValue = verified.ticketId
         console.log("📋 QR verified cryptographically — ticketId:", qrCodeValue)
-      } else if (verified.format === "signed") {
-        // A signed-URL QR that failed HMAC is a forgery — reject immediately.
-        console.log("📋 QR signature invalid:", verified.reason || "forgery")
-        return { success: false, reason: "Invalid QR code" }
+      } else if (verified.unreachable) {
+        // Verification endpoint down — fail closed rather than accept anything.
+        console.log("📋 QR verification service unavailable — rejecting")
+        return { success: false, reason: "Verification service unavailable. Please retry." }
       } else {
-        // Legacy fallback: raw string / JSON QRs that were issued before HMAC
-        // signing (or when the verification endpoint is unreachable).
-        console.log("📋 QR not in signed URL format — trying legacy fallback...")
-        try {
-          const ticketData = JSON.parse(ticketId)
-          qrCodeValue = (ticketData.id || ticketId).trim()
-          scanningEventId = ticketData.eventId
-          console.log("📋 Parsed legacy JSON QR — ID:", qrCodeValue, "Event:", scanningEventId)
-        } catch {
-          qrCodeValue = ticketId.trim()
-          console.log("📋 Raw QR code string:", qrCodeValue)
-        }
+        // Signed-URL QRs that fail HMAC, and ANY non-signed QR (legacy
+        // raw/JSON formats) are rejected. Legacy unsigned QRs are disabled.
+        console.log("📋 QR rejected:", verified.format === "signed" ? (verified.reason || "forgery") : "not a signed QR")
+        return { success: false, reason: "Invalid QR code" }
       }
 
       if (!qrCodeValue) {

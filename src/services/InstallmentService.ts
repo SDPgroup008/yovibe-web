@@ -1,4 +1,5 @@
 import supabase from "../config/supabase"
+import { v4 as uuidv4 } from "uuid"
 import TicketService from "./TicketService"
 import PawaPayService from "./PawaPayService"
 import PesaPalService from "./PesaPalService"
@@ -161,15 +162,25 @@ export class InstallmentService {
     planId: string,
     installmentIndex: number,
     depositId: string,
-    paymentMethod: "mobile_money" | "credit_card" | "bank_transfer"
+    paymentMethod: "mobile_money" | "credit_card" | "bank_transfer",
+    extra?: { orderId?: string; trackingId?: string }
   ): Promise<{ planComplete: boolean; ticketIds?: string[] }> {
     const plan = await this.getPlanById(planId)
     if (!plan) throw new Error("Plan not found")
 
-    // Mark this installment paid
+    // Mark this installment paid (keep the payment refs for server-side
+    // verification at final fulfillment).
     const updatedInstallments = plan.installments.map((inst) =>
       inst.index === installmentIndex
-        ? { ...inst, status: "paid" as const, depositId, paymentMethod, paidAt: new Date() }
+        ? {
+            ...inst,
+            status: "paid" as const,
+            depositId,
+            paymentMethod,
+            paidAt: new Date(),
+            orderId: extra?.orderId,
+            trackingId: extra?.trackingId,
+          }
         : inst
     )
 
@@ -203,82 +214,62 @@ export class InstallmentService {
 
   // ─── Ticket Fulfillment (final step) ─────────────────────────────────────
 
+  /**
+   * Phase 1+: final fulfillment runs through the SERVER (fulfill-purchase) —
+   * the client no longer creates ticket rows for installments. The server
+   * re-verifies the LAST installment's payment, enforces inventory, uploads
+   * QR/photo, emails, and records the fulfillment.
+   */
   private static async fulfillTickets(plan: InstallmentPlan): Promise<string[]> {
-    const SupabaseService = (await import("./SupabaseService")).default
-    const event = await SupabaseService.getEventById(plan.eventId)
-    if (!event) throw new Error(`Event not found: ${plan.eventId}`)
+    const lastInst = plan.installments[plan.installments.length - 1]
+    const lastMethod = lastInst.paymentMethod || "mobile_money"
+    const isMM = lastMethod === "mobile_money"
+    const photo = plan.buyerPhotoUrl || ""
+    const isRemotePhoto = /^https?:\/\//.test(photo)
 
-    const tickets = await TicketService.purchaseTicketsForTable(
-      event,
-      plan.buyerNames,
-      plan.buyerEmails,
-      plan.quantity,
-      plan.isTableEntry,
-      plan.tableSize,
-      plan.quantity,
-      plan.buyerPhotoUrl || "",
-      plan.totalAmount,
-      {
-        method: plan.installments[plan.installments.length - 1].paymentMethod || "mobile_money",
-        ticketType: plan.ticketType,
-        paymentReference: `installment_plan_${plan.id}`,
+    const result = await TicketService.fulfillPurchase({
+      fulfillmentId: uuidv4(),
+      eventId: plan.eventId,
+      ticketType: plan.ticketType,
+      quantity: plan.quantity,
+      totalAmount: plan.totalAmount,
+      isTableEntry: plan.isTableEntry,
+      tableSize: plan.tableSize,
+      buyerNames: plan.buyerNames,
+      buyerEmails: plan.buyerEmails,
+      deliveryEmails: plan.deliveryEmails,
+      payerEmail: plan.payerEmail,
+      buyerId: plan.buyerId ?? null,
+      buyerPhone: plan.paymentNumber,
+      buyerPhotoUrl: isRemotePhoto ? photo : undefined,
+      buyerPhotoDataUrl: !isRemotePhoto && photo ? photo : undefined,
+      seatNumbers: plan.seatNumber != null ? [plan.seatNumber] : undefined,
+      tableNumbers: undefined,
+      payment: {
+        method: lastMethod,
+        provider: plan.paymentProvider,
+        number: plan.paymentNumber,
+        name: plan.buyerName,
+        cardName: plan.buyerName,
       },
-      plan.buyerId ?? null,
-      plan.payerEmail,
-      plan.deliveryEmails,
-      plan.seatNumber != null ? [plan.seatNumber] : undefined,
-      undefined, // tableNumbers — not tracked in installment plans yet
-    )
+      verification: {
+        depositId: isMM ? (lastInst.depositId || undefined) : undefined,
+        orderId: !isMM ? ((lastInst as any).orderId || lastInst.depositId || undefined) : undefined,
+        trackingId: !isMM ? ((lastInst as any).trackingId || undefined) : undefined,
+        pollStatus: "completed",
+      },
+    })
 
-    const ticketIds = tickets.map((t) => t.id)
+    if (!result.success || !result.ticketIds || result.ticketIds.length === 0) {
+      throw new Error(result.error || "Installment fulfillment failed")
+    }
+    const ticketIds = result.ticketIds
 
     // Update plan with ticket IDs
     await supabase
       .from("ticket_installment_plans")
       .update({ ticket_ids: ticketIds, updated_at: new Date().toISOString() })
       .eq("id", plan.id)
-
-// Send ticket emails
-    const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
-    for (const ticket of tickets) {
-      try {
-        const photoUploadLink =
-          ticket.photoUploadToken && !ticket.buyerPhotoUrl
-          ? `${baseUrl}/add-photo?ticket=${ticket.id}&token=${ticket.photoUploadToken}`
-          : undefined
-
-        // Find the ticket design from the entry fee
-        const ticketDesign = event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign
-
-        await fetch(`/.netlify/functions/send-ticket-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            buyerEmail: ticket.deliveryEmail ?? ticket.buyerEmail,
-            buyerName: ticket.buyerName,
-            eventName: ticket.eventName,
-            ticketType: ticket.entryFeeType,
-            venue: event.venueName,
-            date: ticket.eventStartTime.toLocaleDateString("en-US", {
-              weekday: "short",
-              month: "short",
-              day: "numeric",
-            }),
-            time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            ticketRef: ticket.ticketRef,
-            qrCodeDataUrl: ticket.qrCodeDataUrl,
-            seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
-            tableNumber: ticket.tableNumber,
-            tableGroupId: ticket.tableGroupId,
-            photoUploadLink,
-            ticketDesign,
-            posterUrl: event.posterImageUrl,
-          }),
-        })
-      } catch (err) {
-        console.error(`[InstallmentService] Email failed for ticket ${ticket.id}:`, err)
-      }
-    }
 
     return ticketIds
   }

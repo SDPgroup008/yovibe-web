@@ -765,7 +765,12 @@ const handleInstallmentPurchase = async () => {
     for (let attempt = 0; attempt < 60; attempt++) {
       const verification = await PesaPalService.verifyPayment(merchantReference, trackingId)
       if (verification.status === "completed") {
-        await InstallmentService.onInstallmentPaid(planId, 0, verification.transactionId || merchantReference, "credit_card")
+        // Store the merchant ref + tracking id on the plan so the server-side
+        // final fulfillment can re-verify the last card payment.
+        await InstallmentService.onInstallmentPaid(planId, 0, merchantReference, "credit_card", {
+          orderId: merchantReference,
+          trackingId,
+        })
         setCheckingPayment(false)
         setPurchaseStatus("success")
         setStatusMessage("Installment payment verified. Your installment plan has been updated.")
