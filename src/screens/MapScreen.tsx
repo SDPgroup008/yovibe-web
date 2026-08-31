@@ -12,7 +12,7 @@ import { useIsFocused } from "../utils/compatNavigation"
 
 // This is a web-only implementation of the MapScreen
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
-  console.log('[MapScreen] 🏗️ RENDER/MOUNT');
+  /* console.log('[MapScreen] 🏗️ RENDER/MOUNT'); */
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useMapScroll()
   const isFocused = useIsFocused()
 
@@ -33,7 +33,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   // Restore scroll position when screen regains focus
   useEffect(() => {
-    console.log('[MapScreen] 👁️ focus effect - isFocused=', isFocused);
+    /* console.log('[MapScreen] 👁️ focus effect - isFocused=', isFocused); */
     if (isFocused) restorePosition()
   }, [isFocused])
 

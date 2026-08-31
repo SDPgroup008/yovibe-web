@@ -31,8 +31,8 @@ Object.entries(assets).forEach(([filename, data]) => {
     const base64Data = data.replace(/^data:image\/png;base64,/, "")
     const buffer = Buffer.from(base64Data, "base64")
     fs.writeFileSync(filepath, buffer)
-    console.log(`Generated ${filename}`)
+    /* console.log(`Generated ${filename}`) */
   }
 })
 
-console.log("Asset generation complete!")
+/* console.log("Asset generation complete!") */

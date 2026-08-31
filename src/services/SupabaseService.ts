@@ -50,7 +50,7 @@ class SupabaseService {
 
   async signUp(email: string, password: string, userType: "regular_user" | "club_owner" | "admin"): Promise<void> {
     try {
-      console.log("SupabaseService.signUp: Starting sign up for:", email);
+      /* console.log("SupabaseService.signUp: Starting sign up for:", email); */
 
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -91,7 +91,7 @@ class SupabaseService {
         throw profileError;
       }
 
-      console.log("SupabaseService.signUp: Sign up successful. Profile created in public.users");
+      /* console.log("SupabaseService.signUp: Sign up successful. Profile created in public.users"); */
     } catch (error) {
       console.error("SupabaseService.signUp: Error:", error);
       throw error;
@@ -99,7 +99,7 @@ class SupabaseService {
   }
 
   async signIn(email: string, password: string): Promise<void> {
-    console.log("SupabaseService.signIn: Starting sign in for", email);
+    /* console.log("SupabaseService.signIn: Starting sign in for", email); */
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
@@ -108,7 +108,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService.signIn: Sign in successful, UID:", data.user.id);
+      /* console.log("SupabaseService.signIn: Sign in successful, UID:", data.user.id); */
 
       // Ensure profile exists (handles edge case where profile was never created)
       await this.ensureUserProfile(data.user);
@@ -121,7 +121,7 @@ class SupabaseService {
   async signOut(): Promise<void> {
     try {
       await supabase.auth.signOut();
-      console.log("SupabaseService: Signed out successfully");
+      /* console.log("SupabaseService: Signed out successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error during sign out:", error);
     }
@@ -146,7 +146,7 @@ class SupabaseService {
   }
 
   async getUserProfileOrNull(userIdentifier: string): Promise<User | null> {
-    console.log("SupabaseService.getUserProfile: Looking for user with identifier:", userIdentifier);
+    /* console.log("SupabaseService.getUserProfile: Looking for user with identifier:", userIdentifier); */
     try {
       const { data: byUidData, error: byUidError } = await supabase
         .from("users")
@@ -156,7 +156,7 @@ class SupabaseService {
 
       if (byUidError) throw byUidError;
       if (byUidData) {
-        console.log("SupabaseService.getUserProfile: User profile found by uid:", byUidData.email);
+        /* console.log("SupabaseService.getUserProfile: User profile found by uid:", byUidData.email); */
         return this.mapUserRowToUser(byUidData);
       }
 
@@ -169,7 +169,7 @@ class SupabaseService {
       if (byIdError) throw byIdError;
       if (!byIdData) return null;
 
-      console.log("SupabaseService.getUserProfile: User profile found by id:", byIdData.email);
+      /* console.log("SupabaseService.getUserProfile: User profile found by id:", byIdData.email); */
       return this.mapUserRowToUser(byIdData);
     } catch (error) {
       console.error("SupabaseService.getUserProfile: Error:", error);
@@ -211,7 +211,7 @@ class SupabaseService {
       }
     } catch (error) {
       // Profile doesn't exist yet — we'll create it below
-      console.log("SupabaseService.ensureUserProfile: No profile row found for UID:", authUser.id);
+      /* console.log("SupabaseService.ensureUserProfile: No profile row found for UID:", authUser.id); */
     }
 
     // Get user_type from metadata (set during signup in SignUpScreen)
@@ -246,7 +246,7 @@ class SupabaseService {
         return this.createBasicProfile(authUser, userType);
       }
 
-      console.log("SupabaseService.ensureUserProfile: Profile created successfully for:", authUser.email);
+      /* console.log("SupabaseService.ensureUserProfile: Profile created successfully for:", authUser.email); */
 
       // Fetch the newly created profile
       return await this.getUserProfile(authUser.id);
@@ -285,7 +285,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: User profile updated");
+      /* console.log("SupabaseService: User profile updated"); */
     } catch (error) {
       console.error("SupabaseService: Error updating user profile:", error);
       throw error;
@@ -341,7 +341,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: User frozen status updated");
+      /* console.log("SupabaseService: User frozen status updated"); */
     } catch (error) {
       console.error("SupabaseService: Error freezing/unfreezing user:", error);
       throw error;
@@ -362,7 +362,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: User soft deleted successfully");
+      /* console.log("SupabaseService: User soft deleted successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error deleting user:", error);
       throw error;
@@ -647,7 +647,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: Venue soft deleted successfully");
+      /* console.log("SupabaseService: Venue soft deleted successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error deleting venue:", error);
       throw error;
@@ -663,7 +663,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: Venue programs updated");
+      /* console.log("SupabaseService: Venue programs updated"); */
     } catch (error) {
       console.error("SupabaseService: Error updating venue programs:", error);
       throw error;
@@ -679,7 +679,7 @@ class SupabaseService {
 
       if (error) throw error;
 
-      console.log("SupabaseService: Venue restored successfully");
+      /* console.log("SupabaseService: Venue restored successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error restoring venue:", error);
       throw error;
@@ -892,9 +892,9 @@ class SupabaseService {
 
 async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     try {
-      console.log(`[addEvent] 📝 Creating event: ${eventData.name}`);
-      console.log(`[addEvent] ticket_design value:`, JSON.stringify(eventData.ticket_design));
-      console.log(`[addEvent] customTicketDesign would be:`, eventData.ticket_design?.enabled);
+      /* console.log(`[addEvent] 📝 Creating event: ${eventData.name}`); */
+      /* console.log(`[addEvent] ticket_design value:`, JSON.stringify(eventData.ticket_design)); */
+      /* console.log(`[addEvent] customTicketDesign would be:`, eventData.ticket_design?.enabled); */
       if (!(eventData.date instanceof Date) || isNaN(eventData.date.getTime())) {
         throw new Error("Invalid event date provided")
       }
@@ -914,7 +914,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           ? baseSlug
           : `${baseSlug}-${Date.now().toString(36)}-${attempt}`
 
-        console.log("[SupabaseService.addEvent] generating event as auth uid:", sessionUser.id)
+        /* console.log("[SupabaseService.addEvent] generating event as auth uid:", sessionUser.id) */
 
         const { data, error } = await supabase
           .from("events")
@@ -947,7 +947,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           .single()
 
         if (!error) {
-          console.log(`[addEvent] ✅ Event created successfully with slug: ${data.slug}`);
+          /* console.log(`[addEvent] ✅ Event created successfully with slug: ${data.slug}`); */
           return data.slug
         }
 
@@ -983,7 +983,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       if (error) throw error;
 
-      console.log("SupabaseService: Event soft deleted successfully");
+      /* console.log("SupabaseService: Event soft deleted successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error deleting event:", error);
       throw error;
@@ -991,12 +991,12 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
   }
 
   async updateEvent(eventSlug: string, data: Partial<Event>): Promise<void> {
-    console.log("[SupabaseService.updateEvent] 🚀 Called")
-    console.log("[SupabaseService.updateEvent]   eventSlug:", eventSlug)
-    console.log("[SupabaseService.updateEvent]   data keys:", Object.keys(data))
-    console.log("[SupabaseService.updateEvent]   data.eventStatus:", data.eventStatus)
-    console.log("[SupabaseService.updateEvent]   data.lateFeePercent:", data.lateFeePercent)
-    console.log("[SupabaseService.updateEvent]   data.postponedTo:", data.postponedTo)
+    /* console.log("[SupabaseService.updateEvent] 🚀 Called") */
+    /* console.log("[SupabaseService.updateEvent]   eventSlug:", eventSlug) */
+    /* console.log("[SupabaseService.updateEvent]   data keys:", Object.keys(data)) */
+    /* console.log("[SupabaseService.updateEvent]   data.eventStatus:", data.eventStatus) */
+    /* console.log("[SupabaseService.updateEvent]   data.lateFeePercent:", data.lateFeePercent) */
+    /* console.log("[SupabaseService.updateEvent]   data.postponedTo:", data.postponedTo) */
     try {
       const updateData: any = {};
       if (data.name) updateData.name = data.name;
@@ -1015,23 +1015,23 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data.postponedTo) updateData.postponed_to = data.postponedTo.toISOString();
       if (data.lateFeePercent !== undefined) updateData.late_fee_percent = data.lateFeePercent;
 
-      console.log("[SupabaseService.updateEvent]   updateData payload:", JSON.stringify(updateData))
+      /* console.log("[SupabaseService.updateEvent]   updateData payload:", JSON.stringify(updateData)) */
 
       let { error } = await supabase
         .from("events")
         .update(updateData)
         .eq("slug", eventSlug);
-      console.log("[SupabaseService.updateEvent]   Slug update result — error:", error?.message || "none")
+      /* console.log("[SupabaseService.updateEvent]   Slug update result — error:", error?.message || "none") */
 
       if (error) throw error;
 
       // Check if any rows were affected by re-fetching the slug
       const { data: checkSlug } = await supabase.from("events").select("slug, event_status, late_fee_percent").eq("slug", eventSlug).maybeSingle();
       if (checkSlug) {
-        console.log("[SupabaseService.updateEvent] ✅ Slug lookup found row — event_status:", checkSlug.event_status, "late_fee_percent:", checkSlug.late_fee_percent)
+        /* console.log("[SupabaseService.updateEvent] ✅ Slug lookup found row — event_status:", checkSlug.event_status, "late_fee_percent:", checkSlug.late_fee_percent) */
       } else {
-        console.log("[SupabaseService.updateEvent] ⚠️ Slug lookup returned NO ROWS — slug may not exist in DB")
-        console.log("[SupabaseService.updateEvent] ⚠️ Falling back to id lookup...")
+        /* console.log("[SupabaseService.updateEvent] ⚠️ Slug lookup returned NO ROWS — slug may not exist in DB") */
+        /* console.log("[SupabaseService.updateEvent] ⚠️ Falling back to id lookup...") */
         if (eventSlug && eventSlug.length > 20) {
           const { error: idError, data: idCheck } = await supabase
             .from("events")
@@ -1040,12 +1040,12 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
             .select("id, event_status, late_fee_percent")
             .maybeSingle();
           if (idError) {
-            console.log("[SupabaseService.updateEvent] ❌ ID fallback also failed:", idError.message)
+            /* console.log("[SupabaseService.updateEvent] ❌ ID fallback also failed:", idError.message) */
             throw idError
           }
-          console.log("[SupabaseService.updateEvent] ✅ ID fallback succeeded — event_status:", idCheck?.event_status, "late_fee_percent:", idCheck?.late_fee_percent)
+          /* console.log("[SupabaseService.updateEvent] ✅ ID fallback succeeded — event_status:", idCheck?.event_status, "late_fee_percent:", idCheck?.late_fee_percent) */
         } else {
-          console.log("[SupabaseService.updateEvent] ❌ eventSlug is too short for UUID, likely not a valid id")
+          /* console.log("[SupabaseService.updateEvent] ❌ eventSlug is too short for UUID, likely not a valid id") */
         }
       }
     } catch (error) {
@@ -1127,13 +1127,13 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
             failedUpdates.push(event.slug);
           } else {
             deletedCount++;
-            console.log(`SupabaseService: Soft-deleted past event: "${event.name}" (slug: ${event.slug})`);
+            /* console.log(`SupabaseService: Soft-deleted past event: "${event.name}" (slug: ${event.slug})`); */
           }
         }
       }
 
       if (deletedCount > 0) {
-        console.log(`SupabaseService: Successfully soft-deleted ${deletedCount} past events in the database.`);
+        /* console.log(`SupabaseService: Successfully soft-deleted ${deletedCount} past events in the database.`); */
       }
       if (failedUpdates.length > 0) {
         console.warn(`SupabaseService: Failed to soft-delete ${failedUpdates.length} events (possible RLS issue).`);
@@ -1359,7 +1359,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         })
         .eq("id", requestId);
 
-      console.log("SupabaseService: Ownership request approved");
+      /* console.log("SupabaseService: Ownership request approved"); */
     } catch (error) {
       console.error("SupabaseService: Error approving ownership request:", error);
       throw error;
@@ -1384,7 +1384,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       if (error) throw error;
 
-      console.log("SupabaseService: Ownership request rejected");
+      /* console.log("SupabaseService: Ownership request rejected"); */
     } catch (error) {
       console.error("SupabaseService: Error rejecting ownership request:", error);
       throw error;
@@ -1492,7 +1492,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       if (deletePromises.length > 0) {
         await Promise.all(deletePromises);
-        console.log(`SupabaseService: Soft-deleted ${deletePromises.length} expired custom venues`);
+        /* console.log(`SupabaseService: Soft-deleted ${deletePromises.length} expired custom venues`); */
       }
     } catch (error) {
       console.error("SupabaseService: Error deleting expired custom venues:", error);
@@ -2016,14 +2016,14 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
 
   async getOccupiedSeats(eventSlug: string, feeTypeName: string): Promise<number[]> {
     try {
-      console.log(`[getOccupiedSeats] 🔍 Fetching occupied seats for eventSlug="${eventSlug}", feeTypeName="${feeTypeName}"`);
+      /* console.log(`[getOccupiedSeats] 🔍 Fetching occupied seats for eventSlug="${eventSlug}", feeTypeName="${feeTypeName}"`); */
       const { data, error } = await supabase
         .from("tickets_api")
         .select("seatNumber, entryFeeType")
         .eq("event_slug", eventSlug)
         .eq("entryFeeType", feeTypeName)
         .in("status", ["active", "used", "pending"])
-      console.log(`[getOccupiedSeats] Query result: ${JSON.stringify(data)}`);
+      /* console.log(`[getOccupiedSeats] Query result: ${JSON.stringify(data)}`); */
       if (error) {
         console.error(`[getOccupiedSeats] ❌ Query error:`, error);
         throw error
@@ -2032,7 +2032,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
         .map((r: any) => r.seatNumber)
         .filter(Boolean)
         .map((n: any) => typeof n === 'number' ? n : parseInt(n, 10));
-      console.log(`[getOccupiedSeats] ✅ Final occupied seats: ${JSON.stringify(seatNumbers)}`);
+      /* console.log(`[getOccupiedSeats] ✅ Final occupied seats: ${JSON.stringify(seatNumbers)}`); */
       return seatNumbers;
     } catch (error) {
       console.error("SupabaseService: Error getting occupied seats:", error)

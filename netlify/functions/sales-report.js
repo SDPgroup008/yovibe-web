@@ -432,7 +432,7 @@ exports.handler = async (event) => {
     // 7. PDF (summary + insights + buyer register).
     const pdfBase64 = await buildFullPdf(ev, summary, fees, insights, buyerRows);
 
-    console.log(`[SalesReport] ${summary.soldCount} tickets, UGX ${gross} gross, ${uniqueBuyers} buyers, PDF ${Math.round(pdfBase64.length * 0.75 / 1024)}KB for ${eventId}`);
+    /* console.log(`[SalesReport] ${summary.soldCount} tickets, UGX ${gross} gross, ${uniqueBuyers} buyers, PDF ${Math.round(pdfBase64.length * 0.75 / 1024)}KB for ${eventId}`); */
 
     return json(200, { success: true, eventId, summary, csv, pdfBase64, fees, insights, buyerCount: buyerRows.length });
   } catch (error) {

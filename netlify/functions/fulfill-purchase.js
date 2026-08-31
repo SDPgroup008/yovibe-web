@@ -258,7 +258,7 @@ exports.handler = async (event) => {
         })
         .eq('id', fulfillmentId);
       if (resume.error) throw resume.error;
-      console.log(`[FulfillPurchase] Resumed stranded claim ${fulfillmentId}`);
+      /* console.log(`[FulfillPurchase] Resumed stranded claim ${fulfillmentId}`); */
     } else if (claim.error) {
       throw claim.error;
     }
@@ -371,7 +371,7 @@ exports.handler = async (event) => {
     const emailResults = await Promise.allSettled(emailPromises);
     emailResults.forEach((res, i) => {
       if (res.status === 'fulfilled') {
-        console.log(`[FulfillPurchase] Email sent for ticket ${createdRows[i].id}`);
+        /* console.log(`[FulfillPurchase] Email sent for ticket ${createdRows[i].id}`); */
       } else {
         console.warn(`[FulfillPurchase] Email failed for ticket ${createdRows[i].id}:`, res.reason?.message || res.reason);
       }

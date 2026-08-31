@@ -36,7 +36,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, refetch } = useCachedVenues()
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useVenuesScroll()
-  console.log('[VenuesScreen] 🏗️ RENDER/MOUNT');
+  /* console.log('[VenuesScreen] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Venues page
   const venueSeo = SCREEN_SEO.venues;
   const seoUrl =
@@ -66,7 +66,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   // Restore scroll position when screen regains focus
   useEffect(() => {
-    console.log('[VenuesScreen] 👁️ focus effect - isFocused=', isFocused);
+    /* console.log('[VenuesScreen] 👁️ focus effect - isFocused=', isFocused); */
     if (isFocused) restorePosition();
   }, [isFocused]);
 

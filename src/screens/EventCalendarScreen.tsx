@@ -186,7 +186,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   useEffect(() => {
     const cache = readCalendarCache();
     if (cache && isCalendarCacheValid()) {
-      console.log('[EventCalendar] 💾 Hydrated from sessionStorage cache, events:', cache.events.length);
+      /* console.log('[EventCalendar] 💾 Hydrated from sessionStorage cache, events:', cache.events.length); */
       setLoading(false);
       return;
     }

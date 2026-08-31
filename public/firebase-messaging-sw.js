@@ -48,7 +48,7 @@ self.addEventListener("install", (event) => {
       try {
         const cache = await caches.open(APP_CACHE);
         await cache.addAll(APP_SHELL);
-        console.log("[SW] App shell cached successfully");
+        /* console.log("[SW] App shell cached successfully"); */
       } catch (error) {
         console.warn("[SW] App shell caching error:", error);
       }
@@ -197,7 +197,7 @@ self.addEventListener("fetch", (event) => {
 
 // Background sync: retry failed requests when back online
 self.addEventListener("sync", (event) => {
-  console.log("[SW] Background sync event:", event.tag);
+  /* console.log("[SW] Background sync event:", event.tag); */
   // Tag-based sync handlers can be added here
   // For example, retrying failed ticket purchases or event creations
   if (event.tag === "sync-purchases") {
@@ -205,14 +205,14 @@ self.addEventListener("sync", (event) => {
       (async () => {
         // Retrieve queued requests from IndexedDB and retry them
         // This is a placeholder for future implementation
-        console.log("[SW] Processing queued purchases...");
+        /* console.log("[SW] Processing queued purchases..."); */
       })()
     );
   }
   if (event.tag === "sync-events") {
     event.waitUntil(
       (async () => {
-        console.log("[SW] Processing queued events...");
+        /* console.log("[SW] Processing queued events..."); */
       })()
     );
   }

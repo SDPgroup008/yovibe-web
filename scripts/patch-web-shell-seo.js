@@ -49,4 +49,4 @@ html = html.replace(/<title>[\s\S]*?<\/title>/i, headInjection.trim());
 html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, noScriptReplacement.trim());
 
 fs.writeFileSync(indexPath, html, "utf8");
-console.log("[patch-web-shell-seo] Patched dist/index.html with crawlable metadata and fallback copy.");
+/* console.log("[patch-web-shell-seo] Patched dist/index.html with crawlable metadata and fallback copy."); */

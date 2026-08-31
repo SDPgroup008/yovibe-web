@@ -88,7 +88,7 @@ async function updateTicketRefundState(admin, refund, phase) {
         if (cbErr) {
           console.warn('[RefundTicket] clawback recording failed:', cbErr.message);
         } else {
-          console.log(`[RefundTicket] ⚠️ Clawback UGX ${clawback} recorded for refund ${refund.request_reference} (ticket already paid out)`);
+          /* console.log(`[RefundTicket] ⚠️ Clawback UGX ${clawback} recorded for refund ${refund.request_reference} (ticket already paid out)`); */
         }
       }
     }
@@ -161,7 +161,7 @@ async function submitPesaPal(refund) {
   let lastError;
   for (let attempt = 0; attempt <= 1; attempt++) {
     const token = await getPesapalToken();
-    console.log(`[RefundPesaPal] 📤 Sending refund request (attempt ${attempt + 1})...`);
+    /* console.log(`[RefundPesaPal] 📤 Sending refund request (attempt ${attempt + 1})...`); */
     const response = await fetch(`${apiUrl}/Transactions/RefundRequest`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -174,7 +174,7 @@ async function submitPesaPal(refund) {
     });
 
     if (response.status === 401 && attempt === 0) {
-      console.log('[RefundPesaPal] 🔑 Token expired, refreshing and retrying...');
+      /* console.log('[RefundPesaPal] 🔑 Token expired, refreshing and retrying...'); */
       invalidatePesapalToken();
       continue;
     }

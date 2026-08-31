@@ -201,7 +201,7 @@ exports.handler = async (event) => {
     // Construct public URL
     const publicUrl = `${PUBLIC_URL}/${key}`;
 
-    console.log(`[R2 Upload] ${type} uploaded: ${key} -> ${publicUrl}`);
+    /* console.log(`[R2 Upload] ${type} uploaded: ${key} -> ${publicUrl}`); */
 
     return {
       statusCode: 200,

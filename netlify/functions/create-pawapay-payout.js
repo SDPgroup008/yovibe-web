@@ -15,11 +15,11 @@ const generateUUID = () => {
 }
 
 exports.handler = async (event, context) => {
-  console.log("========================================")
-  console.log("💰 PAWAPAY PAYOUT INITIATION (Netlify Functions)")
-  console.log("========================================")
-  console.log("📋 Event:", event.httpMethod)
-  console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET")
+  /* console.log("========================================") */
+  /* console.log("💰 PAWAPAY PAYOUT INITIATION (Netlify Functions)") */
+  /* console.log("========================================") */
+  /* console.log("📋 Event:", event.httpMethod) */
+  /* console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET") */
 
   if (event.httpMethod !== "POST") {
     return {
@@ -32,10 +32,10 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body || "{}")
     const { amount, currency, phoneNumber, provider } = body
 
-    console.log("📥 Request body:")
-    console.log("   - Amount:", amount, currency)
-    console.log("   - Phone:", phoneNumber)
-    console.log("   - Provider:", provider)
+    /* console.log("📥 Request body:") */
+    /* console.log("   - Amount:", amount, currency) */
+    /* console.log("   - Phone:", phoneNumber) */
+    /* console.log("   - Provider:", provider) */
 
     if (!amount || !phoneNumber || !provider) {
       return {
@@ -71,9 +71,9 @@ exports.handler = async (event, context) => {
       },
     }
 
-    console.log("📤 Calling PawaPay Payout API...")
-    console.log("📤 Payload:", JSON.stringify(payload, null, 2))
-    console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...")
+    /* console.log("📤 Calling PawaPay Payout API...") */
+    /* console.log("📤 Payload:", JSON.stringify(payload, null, 2)) */
+    /* console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...") */
 
     const response = await fetch(`${PAWAPAY_BASE_URL}/payouts`, {
       method: "POST",
@@ -85,8 +85,8 @@ exports.handler = async (event, context) => {
     })
 
     const data = await response.json()
-    console.log("📥 PawaPay response:", JSON.stringify(data, null, 2))
-    console.log("📥 Response status:", response.status)
+    /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
+    /* console.log("📥 Response status:", response.status) */
 
     // PawaPay returns payoutId in the root (not nested)
     if (!response.ok || data.status === "REJECTED") {
@@ -100,9 +100,9 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log("✅ Payout initiated successfully")
-    console.log("   - Payout ID:", data.payoutId || payoutId)
-    console.log("========================================")
+    /* console.log("✅ Payout initiated successfully") */
+    /* console.log("   - Payout ID:", data.payoutId || payoutId) */
+    /* console.log("========================================") */
 
     return {
       statusCode: 200,

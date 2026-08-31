@@ -72,7 +72,7 @@ class ServiceWorkerManager {
       this.status.registered = true
       this.status.isControlling = !!navigator.serviceWorker.controller
 
-      console.log("[SW] Registered successfully:", this.registration.scope)
+      /* console.log("[SW] Registered successfully:", this.registration.scope) */
 
       // Handle updates
       this.registration.addEventListener("updatefound", () => {
@@ -83,7 +83,7 @@ class ServiceWorkerManager {
               if (navigator.serviceWorker.controller) {
                 // New version available
                 this.status.updateAvailable = true
-                console.log("[SW] New version available")
+                /* console.log("[SW] New version available") */
                 this.notify()
               }
             }
@@ -95,7 +95,7 @@ class ServiceWorkerManager {
       navigator.serviceWorker.addEventListener("controllerchange", () => {
         this.status.isControlling = true
         this.status.updateAvailable = false
-        console.log("[SW] New controller activated")
+        /* console.log("[SW] New controller activated") */
         this.notify()
       })
 

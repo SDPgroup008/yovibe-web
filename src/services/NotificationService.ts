@@ -16,7 +16,7 @@ export class NotificationService {
 
   // Save a notification to Supabase
   async saveNotification(notification: Omit<AppNotification, "id" | "createdAt">): Promise<string> {
-    console.log("[NotificationService] saveNotification called");
+    /* console.log("[NotificationService] saveNotification called"); */
     
     try {
       const notificationData: any = {
@@ -39,7 +39,7 @@ export class NotificationService {
 
       if (error) throw error
 
-      console.log("[NotificationService] ✅ Saved notification with ID:", data.id);
+      /* console.log("[NotificationService] ✅ Saved notification with ID:", data.id); */
       return data.id
     } catch (error) {
       console.error("[NotificationService] ❌ ERROR saving notification:", error);
@@ -144,7 +144,7 @@ export class NotificationService {
         count += userData?.length || 0
       }
 
-      console.log(`NotificationService: Total unread count for user ${userId || 'anonymous'}: ${count}`)
+      /* console.log(`NotificationService: Total unread count for user ${userId || 'anonymous'}: ${count}`) */
       return count
     } catch (error) {
       console.error("NotificationService: Error getting unread count:", error)
@@ -165,7 +165,7 @@ export class NotificationService {
 
       if (error) throw error
 
-      console.log("NotificationService: Marked notification as read:", notificationId)
+      /* console.log("NotificationService: Marked notification as read:", notificationId) */
     } catch (error) {
       console.error("NotificationService: Error marking as read:", error)
     }
@@ -185,7 +185,7 @@ export class NotificationService {
 
       if (error) throw error
 
-      console.log("NotificationService: Marked notification as opened:", notificationId)
+      /* console.log("NotificationService: Marked notification as opened:", notificationId) */
     } catch (error) {
       console.error("NotificationService: Error marking as opened:", error)
     }
@@ -201,7 +201,7 @@ export class NotificationService {
         await this.markAsRead(notification.id)
       }
 
-      console.log(`NotificationService: Marked ${unreadNotifications.length} notifications as read`)
+      /* console.log(`NotificationService: Marked ${unreadNotifications.length} notifications as read`) */
     } catch (error) {
       console.error("NotificationService: Error marking all as read:", error)
     }
@@ -210,7 +210,7 @@ export class NotificationService {
   // Send ticket purchase notification to event owner
   async notifyTicketPurchase(event: Event, ticket: Ticket): Promise<void> {
     try {
-      console.log("NotificationService: Sending ticket purchase notification")
+      /* console.log("NotificationService: Sending ticket purchase notification") */
 
       await this.saveNotification({
         userId: event.createdBy,
@@ -226,7 +226,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Ticket purchase notification saved successfully")
+      /* console.log("NotificationService: Ticket purchase notification saved successfully") */
     } catch (error) {
       console.error("NotificationService: Error sending ticket purchase notification:", error)
     }
@@ -255,7 +255,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Validation notification saved")
+      /* console.log("NotificationService: Validation notification saved") */
     } catch (error) {
       console.error("NotificationService: Error sending validation notification:", error)
     }
@@ -282,7 +282,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Payment confirmation saved")
+      /* console.log("NotificationService: Payment confirmation saved") */
     } catch (error) {
       console.error("NotificationService: Error sending payment confirmation:", error)
     }
@@ -306,7 +306,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Event reminder saved")
+      /* console.log("NotificationService: Event reminder saved") */
     } catch (error) {
       console.error("NotificationService: Error sending event reminder:", error)
     }
@@ -326,7 +326,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Welcome notification saved")
+      /* console.log("NotificationService: Welcome notification saved") */
     } catch (error) {
       console.error("NotificationService: Error sending welcome notification:", error)
     }
@@ -356,7 +356,7 @@ export class NotificationService {
         isRead: false,
       })
 
-      console.log("NotificationService: Security photo notification saved")
+      /* console.log("NotificationService: Security photo notification saved") */
     } catch (error) {
       console.error("NotificationService: Error sending security photo notification:", error)
     }
@@ -461,7 +461,7 @@ export class NotificationService {
 
   // Process incoming push notification and save to database
   async processIncomingNotification(payload: any, userId?: string): Promise<void> {
-    console.log("[NotificationService] processIncomingNotification called");
+    /* console.log("[NotificationService] processIncomingNotification called"); */
 
     try {
       const notificationType = payload.data?.type || "other"
@@ -480,7 +480,7 @@ export class NotificationService {
 
       const notificationId = await this.saveNotification(notification)
 
-      console.log("[NotificationService] ✅ Notification saved with ID:", notificationId);
+      /* console.log("[NotificationService] ✅ Notification saved with ID:", notificationId); */
       this.notifyListeners()
     } catch (error) {
       console.error("[NotificationService] ❌ ERROR processing incoming notification:", error);
@@ -655,7 +655,7 @@ export class NotificationService {
         })
 
       if (error) throw error
-      console.log("NotificationService: New subscription tracked")
+      /* console.log("NotificationService: New subscription tracked") */
     } catch (error) {
       console.error("NotificationService: Error tracking subscription:", error)
     }

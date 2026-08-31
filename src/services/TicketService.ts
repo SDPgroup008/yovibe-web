@@ -197,17 +197,17 @@ export class TicketService {
     cardPaymentName?: string,
   ): Promise<Ticket[]> {
     try {
-      console.log("========================================")
-      console.log("🎫 BULK TICKET PURCHASE FLOW STARTED")
-      console.log("========================================")
-      console.log("📋 TicketService.purchaseTickets: Creating", totalTickets, "individual tickets")
-      console.log("📋 Event:", event.name, "ID:", event.id)
-      console.log("📋 Buyer Names:", buyerNames)
-      console.log("📋 Buyer Emails:", buyerEmails)
-      console.log("📋 Is Table Entry:", isTableEntry, "Table Size:", tableSize, "Quantity:", quantity)
-      console.log("📋 Shared Payment ID:", sharedPaymentId || "none")
-      console.log("📋 Buyer Phone:", buyerPhone || "none")
-      console.log("📋 Card Payment Name:", cardPaymentName || "none")
+      /* console.log("========================================") */
+      /* console.log("🎫 BULK TICKET PURCHASE FLOW STARTED") */
+      /* console.log("========================================") */
+      /* console.log("📋 TicketService.purchaseTickets: Creating", totalTickets, "individual tickets") */
+      /* console.log("📋 Event:", event.name, "ID:", event.id) */
+      /* console.log("📋 Buyer Names:", buyerNames) */
+      /* console.log("📋 Buyer Emails:", buyerEmails) */
+      /* console.log("📋 Is Table Entry:", isTableEntry, "Table Size:", tableSize, "Quantity:", quantity) */
+      /* console.log("📋 Shared Payment ID:", sharedPaymentId || "none") */
+      /* console.log("📋 Buyer Phone:", buyerPhone || "none") */
+      /* console.log("📋 Card Payment Name:", cardPaymentName || "none") */
 
       const createdTickets: Ticket[] = []
       const ticketsPerPurchase = totalTickets
@@ -220,7 +220,7 @@ export class TicketService {
         const attendeeName = buyerNames[i]
         const attendeeEmail = buyerEmails[i] || ""
         const deliveryEmail = deliveryEmails?.[i] ?? attendeeEmail
-        console.log(`\n--- Creating ticket ${i + 1}/${totalTickets} for ${attendeeName} (${attendeeEmail}) ---`)
+        /* console.log(`\n--- Creating ticket ${i + 1}/${totalTickets} for ${attendeeName} (${attendeeEmail}) ---`) */
 
         const ticket = await this.createSingleTicket(
           event,
@@ -245,9 +245,9 @@ export class TicketService {
         createdTickets.push(ticket)
       }
 
-      console.log("\n========================================")
-      console.log("🎫 BULK TICKET PURCHASE COMPLETED")
-      console.log("========================================")
+      /* console.log("\n========================================") */
+      /* console.log("🎫 BULK TICKET PURCHASE COMPLETED") */
+      /* console.log("========================================") */
 
       return createdTickets
     } catch (error) {
@@ -281,15 +281,15 @@ export class TicketService {
     },
   ): Promise<Ticket> {
     try {
-      console.log("========================================")
-      console.log("🎫 TICKET PURCHASE FLOW STARTED")
-      console.log("========================================")
-      console.log("📋 TicketService.purchaseTicket: Starting ticket purchase")
-      console.log("📋 Event:", event.name, "ID:", event.id)
-      console.log("📋 Buyer ID:", buyerId)
-      console.log("📋 Buyer Name:", buyerName)
-      console.log("📋 Buyer Email:", buyerEmail)
-      console.log("📋 Quantity:", quantity)
+      /* console.log("========================================") */
+      /* console.log("🎫 TICKET PURCHASE FLOW STARTED") */
+      /* console.log("========================================") */
+      /* console.log("📋 TicketService.purchaseTicket: Starting ticket purchase") */
+      /* console.log("📋 Event:", event.name, "ID:", event.id) */
+      /* console.log("📋 Buyer ID:", buyerId) */
+      /* console.log("📋 Buyer Name:", buyerName) */
+      /* console.log("📋 Buyer Email:", buyerEmail) */
+      /* console.log("📋 Quantity:", quantity) */
 
       const ticket = await this.createSingleTicket(
         event,
@@ -301,9 +301,9 @@ export class TicketService {
         paymentDetails
       )
 
-      console.log("========================================")
-      console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
-      console.log("========================================")
+      /* console.log("========================================") */
+      /* console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY") */
+      /* console.log("========================================") */
 
       return ticket
     } catch (error) {
@@ -346,7 +346,7 @@ export class TicketService {
     sharedPaymentId?: string,
     cardPaymentName?: string,
   ): Promise<Ticket> {
-    console.log("--- Step 1: Calculating ticket price ---")
+    /* console.log("--- Step 1: Calculating ticket price ---") */
     // Phase 2.2: snapshot the price of the SELECTED ticket tier, not the first
     // tier — a multi-tier event must record the tier the buyer actually chose.
     const selectedFee = event.entryFees?.find((f: any) => f.name === paymentDetails?.ticketType)
@@ -355,10 +355,10 @@ export class TicketService {
       : (event.entryFees && event.entryFees.length > 0
           ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
           : 0)
-    console.log("💰 Base price:", basePrice)
+    /* console.log("💰 Base price:", basePrice) */
 
     const eventStartTime = resolveEventStartTime(event)
-    console.log("📅 Event start time:", eventStartTime)
+    /* console.log("📅 Event start time:", eventStartTime) */
     
     let pricing
     if (totalAmount !== undefined && totalAmount > 0) {
@@ -374,7 +374,7 @@ export class TicketService {
         total: totalAmount, 
         isLatePurchase 
       }
-      console.log("💰 Using provided totalAmount:", totalAmount)
+      /* console.log("💰 Using provided totalAmount:", totalAmount) */
     } else {
       pricing = PesaPalService.calculateTicketPrice(basePrice, 1, eventStartTime)
     }
@@ -382,56 +382,56 @@ export class TicketService {
     const { subtotal, lateFee, total, isLatePurchase } = pricing
     const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
 
-    console.log("💰 Pricing calculated:")
-    console.log("   - Subtotal:", subtotal)
-    console.log("   - Late Fee:", lateFee)
-    console.log("   - Total:", total)
-    console.log("   - Is Late Purchase:", isLatePurchase)
-    console.log("   - App Commission (15%):", appCommission)
-    console.log("   - Venue Revenue:", venueRevenue)
+    /* console.log("💰 Pricing calculated:") */
+    /* console.log("   - Subtotal:", subtotal) */
+    /* console.log("   - Late Fee:", lateFee) */
+    /* console.log("   - Total:", total) */
+    /* console.log("   - Is Late Purchase:", isLatePurchase) */
+    /* console.log("   - App Commission (15%):", appCommission) */
+    /* console.log("   - Venue Revenue:", venueRevenue) */
 
     let paymentIntent: PaymentIntent | undefined
 
     if (shouldCreatePaymentIntent) {
       if (paymentDetails?.method === "mobile_money") {
-        console.log("--- Step 2: Creating payment intent for mobile money ---")
+        /* console.log("--- Step 2: Creating payment intent for mobile money ---") */
         const buyerId = `buyer_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerId)
-        console.log("💳 Payment intent created:")
-        console.log("   - Payment ID:", paymentIntent.id)
-        console.log("   - Amount:", paymentIntent.amount)
-        console.log("   - Currency:", paymentIntent.currency)
-        console.log("   - Status: pending (mobile money verification required)")
+        /* console.log("💳 Payment intent created:") */
+        /* console.log("   - Payment ID:", paymentIntent.id) */
+        /* console.log("   - Amount:", paymentIntent.amount) */
+        /* console.log("   - Currency:", paymentIntent.currency) */
+        /* console.log("   - Status: pending (mobile money verification required)") */
       } else {
-        console.log("--- Step 2: Creating payment intent for card/bank transfer ---")
+        /* console.log("--- Step 2: Creating payment intent for card/bank transfer ---") */
         paymentIntent = await PaymentService.createPaymentIntent(total, event.id, buyerName)
-        console.log("💳 Payment intent created:")
-        console.log("   - Payment ID:", paymentIntent.id)
-        console.log("   - Amount:", paymentIntent.amount)
-        console.log("   - Currency:", paymentIntent.currency)
-        console.log("   - Status: completed (verified via PesaPal)")
+        /* console.log("💳 Payment intent created:") */
+        /* console.log("   - Payment ID:", paymentIntent.id) */
+        /* console.log("   - Amount:", paymentIntent.amount) */
+        /* console.log("   - Currency:", paymentIntent.currency) */
+        /* console.log("   - Status: completed (verified via PesaPal)") */
       }
     } else {
-      console.log("--- Step 2: Skipping payment intent creation (bulk purchase) ---")
+      /* console.log("--- Step 2: Skipping payment intent creation (bulk purchase) ---") */
     }
 
-    console.log("--- Step 3: Payment verification ---")
+    /* console.log("--- Step 3: Payment verification ---") */
     if (paymentDetails?.method === "mobile_money") {
-      console.log("⏳ Mobile money payment pending - will be verified via PawaPay callback")
+      /* console.log("⏳ Mobile money payment pending - will be verified via PawaPay callback") */
     } else {
-      console.log("✅ Payment verified successfully via PesaPal!")
+      /* console.log("✅ Payment verified successfully via PesaPal!") */
     }
 
-    console.log("--- Step 4: Calculating purchase deadline ---")
+    /* console.log("--- Step 4: Calculating purchase deadline ---") */
     const purchaseDeadline = new Date(eventStartTime.getTime() - 24 * 60 * 60 * 1000)
-    console.log("📅 Purchase deadline:", purchaseDeadline)
+    /* console.log("📅 Purchase deadline:", purchaseDeadline) */
 
-    console.log("--- Step 5: Generating secure QR code ---")
+    /* console.log("--- Step 5: Generating secure QR code ---") */
     const qrCodeResult = await this.generateSecureQRCode(event.id, eventStartTime)
-    console.log("🔒 QR Code generated:", qrCodeResult.qrCode)
-    console.log("🔒 Expires at:", qrCodeResult.expiresAt)
+    /* console.log("🔒 QR Code generated:", qrCodeResult.qrCode) */
+    /* console.log("🔒 Expires at:", qrCodeResult.expiresAt) */
 
-      console.log("--- Step 6: Creating ticket object ---")
+      /* console.log("--- Step 6: Creating ticket object ---") */
     const photoUploadToken = uuidv4()
     const ticketId = uuidv4()
     const isTableEntry = !!tableGroupId
@@ -508,33 +508,33 @@ export class TicketService {
       pesapalConfirmationCode: paymentDetails?.pesapalConfirmationCode,
     }
 
-    console.log("📝 Ticket object created:")
-    console.log("   - Ticket ID:", ticket.id)
-    console.log("   - Status:", ticket.status)
-    console.log("   - QR Code:", ticket.qrCode)
+    /* console.log("📝 Ticket object created:") */
+    /* console.log("   - Ticket ID:", ticket.id) */
+    /* console.log("   - Status:", ticket.status) */
+    /* console.log("   - QR Code:", ticket.qrCode) */
 
-    console.log("--- Step 7: Uploading files to R2 ---")
+    /* console.log("--- Step 7: Uploading files to R2 ---") */
     if (ticket.qrCodeDataUrl) {
-      console.log("📤 Uploading QR code to R2...")
+      /* console.log("📤 Uploading QR code to R2...") */
       const qrUploadResult = await withRetry(
         () => uploadQRCode(ticket.qrCodeDataUrl!, ticket.id),
         { maxAttempts: 3, baseDelayMs: 500 }
       )
       ticket.qrCodeDataUrl = qrUploadResult.url
-      console.log("✅ QR code uploaded to R2:", qrUploadResult.url)
+      /* console.log("✅ QR code uploaded to R2:", qrUploadResult.url) */
     }
 
     if (ticket.buyerPhotoUrl) {
-      console.log("📤 Uploading buyer photo to R2...")
+      /* console.log("📤 Uploading buyer photo to R2...") */
       const photoUploadResult = await withRetry(
         () => uploadBuyerPhoto(ticket.buyerPhotoUrl!, ticket.id),
         { maxAttempts: 3, baseDelayMs: 500 }
       )
       ticket.buyerPhotoUrl = photoUploadResult.url
-      console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url)
+      /* console.log("✅ Buyer photo uploaded to R2:", photoUploadResult.url) */
     }
 
-    console.log("--- Step 8: Saving ticket to Supabase ---")
+    /* console.log("--- Step 8: Saving ticket to Supabase ---") */
     const savedTicket = await withRetry(
       async () => {
         const result = await supabase.from("tickets_api").insert({ 
@@ -550,25 +550,25 @@ export class TicketService {
       },
       { maxAttempts: 3, baseDelayMs: 1000 }
     )
-    console.log("✅ Ticket saved to database!")
-    console.log("   - Supabase ID:", savedTicket.id)
+    /* console.log("✅ Ticket saved to database!") */
+    /* console.log("   - Supabase ID:", savedTicket.id) */
 
-    console.log("--- Step 9: Sending notification to event owner ---")
+    /* console.log("--- Step 9: Sending notification to event owner ---") */
     await NotificationService.notifyTicketPurchase(event, ticket)
-    console.log("✅ Notification sent to event owner")
+    /* console.log("✅ Notification sent to event owner") */
 
-    console.log("========================================")
-    console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY")
-    console.log("========================================")
-    console.log("📋 Final Ticket Details:")
-    console.log("   - Ticket ID:", ticket.id)
-    console.log("   - Event:", event.name)
-    console.log("   - Buyer:", buyerName, `(${buyerEmail})`)
-    console.log("   - Quantity:", 1)
-    console.log("   - Total Paid:", total, "UGX")
-    console.log("   - QR Code:", ticket.qrCode)
-    console.log("   - Status:", ticket.status)
-    console.log("========================================")
+    /* console.log("========================================") */
+    /* console.log("🎫 TICKET PURCHASE COMPLETED SUCCESSFULLY") */
+    /* console.log("========================================") */
+    /* console.log("📋 Final Ticket Details:") */
+    /* console.log("   - Ticket ID:", ticket.id) */
+    /* console.log("   - Event:", event.name) */
+    /* console.log("   - Buyer:", buyerName, `(${buyerEmail})`) */
+    /* console.log("   - Quantity:", 1) */
+    /* console.log("   - Total Paid:", total, "UGX") */
+    /* console.log("   - QR Code:", ticket.qrCode) */
+    /* console.log("   - Status:", ticket.status) */
+    /* console.log("========================================") */
 
     return ticket
   }
@@ -670,11 +670,11 @@ export class TicketService {
     tableNumber?: number;
   }> {
     try {
-      console.log("========================================")
-      console.log("🔍 TICKET VALIDATION FLOW STARTED")
-      console.log("========================================")
-      console.log("📋 TicketService.validateTicket: Starting ticket validation")
-      console.log("📋 Ticket QR data:", ticketId)
+      /* console.log("========================================") */
+      /* console.log("🔍 TICKET VALIDATION FLOW STARTED") */
+      /* console.log("========================================") */
+      /* console.log("📋 TicketService.validateTicket: Starting ticket validation") */
+      /* console.log("📋 Ticket QR data:", ticketId) */
 
       // Step 0: Verify the QR payload server-side (HMAC secret never reaches
       // the client). Rejects forged signed QRs without a DB round-trip.
@@ -684,15 +684,15 @@ export class TicketService {
       const verified = await verifyTicketQr(ticketId)
       if (verified.valid && verified.ticketId) {
         qrCodeValue = verified.ticketId
-        console.log("📋 QR verified cryptographically — ticketId:", qrCodeValue)
+        /* console.log("📋 QR verified cryptographically — ticketId:", qrCodeValue) */
       } else if (verified.unreachable) {
         // Verification endpoint down — fail closed rather than accept anything.
-        console.log("📋 QR verification service unavailable — rejecting")
+        /* console.log("📋 QR verification service unavailable — rejecting") */
         return { success: false, reason: "Verification service unavailable. Please retry." }
       } else {
         // Signed-URL QRs that fail HMAC, and ANY non-signed QR (legacy
         // raw/JSON formats) are rejected. Legacy unsigned QRs are disabled.
-        console.log("📋 QR rejected:", verified.format === "signed" ? (verified.reason || "forgery") : "not a signed QR")
+        /* console.log("📋 QR rejected:", verified.format === "signed" ? (verified.reason || "forgery") : "not a signed QR") */
         return { success: false, reason: "Invalid QR code" }
       }
 
@@ -701,7 +701,7 @@ export class TicketService {
       }
 
       // Step 1: Get ticket by QR code
-      console.log("--- Step 1: Fetching ticket by QR code ---")
+      /* console.log("--- Step 1: Fetching ticket by QR code ---") */
       const { data: ticket, error: ticketError } = await supabase.from("tickets").select("*").eq("qr_code", qrCodeValue).single()
       
       if (ticketError && ticketError.code !== "PGRST116") {
@@ -710,14 +710,14 @@ export class TicketService {
       }
 
       if (!ticket) {
-        console.log("❌ Ticket not found with QR code:", qrCodeValue)
+        /* console.log("❌ Ticket not found with QR code:", qrCodeValue) */
         return { success: false, reason: "Invalid QR code - ticket not found" }
       }
 
       const t = this.rowToTicket(ticket)
       const now = new Date()
 
-      console.log("✅ Ticket found: ID:", t.id, "Status:", t.status, "Event:", t.eventName)
+      /* console.log("✅ Ticket found: ID:", t.id, "Status:", t.status, "Event:", t.eventName) */
 
       // Step 2: Check if expired
       if (t.expiresAt && new Date(t.expiresAt) < now) {
@@ -769,11 +769,11 @@ export class TicketService {
         return { success: false, reason: "Ticket is for a different event", ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
       }
 
-      console.log("✅ All checks passed - updating ticket")
+      /* console.log("✅ All checks passed - updating ticket") */
       
       // Step 5: Check photo verification
       if (t.buyerPhotoUrl) {
-        console.log("   - Ticket needs photo verification")
+        /* console.log("   - Ticket needs photo verification") */
         return { 
           success: true, 
           needsPhotoVerification: true,
@@ -788,7 +788,7 @@ export class TicketService {
       }
 
       // Step 6: Mark ticket as used
-      console.log("--- Step 6: Marking ticket as used ---")
+      /* console.log("--- Step 6: Marking ticket as used ---") */
       
       // Update ticket status directly using the ticket id
       const { data: updateResult, error: updateError } = await supabase
@@ -811,7 +811,7 @@ console.error("❌ Error details:", updateError.details)
         console.error("❌ Error hint:", updateError.hint)
         
         // Try alternative approach: use the tickets_api view
-        console.log("⚠️ Trying update via tickets_api view...")
+        /* console.log("⚠️ Trying update via tickets_api view...") */
         const { error: apiError } = await supabase
           .from("tickets_api")
           .update({ 
@@ -828,17 +828,17 @@ console.error("❌ Error details:", updateError.details)
           throw apiError
         }
         
-        console.log("✅ Update via tickets_api succeeded")
+        /* console.log("✅ Update via tickets_api succeeded") */
       } else {
-        console.log("✅ Ticket updated successfully:", JSON.stringify(updateResult))
+        /* console.log("✅ Ticket updated successfully:", JSON.stringify(updateResult)) */
       }
 
       // Step 7: Log validation
       await this.logValidation({ id: `val_${Date.now()}`, ticketId: t.id, eventId: t.eventId, validatedAt: now, validatedBy: validatorId, location, status: "granted" })
       
-      console.log("========================================")
-      console.log("🔍 TICKET VALIDATION SUCCESSFUL")
-      console.log("========================================")
+      /* console.log("========================================") */
+      /* console.log("🔍 TICKET VALIDATION SUCCESSFUL") */
+      /* console.log("========================================") */
       return { success: true, ticketRef: t.ticketRef, entryFeeType: t.entryFeeType, seatNumber: t.seatNumber, tableNumber: t.tableNumber, buyerName: t.buyerName }
     } catch (error: any) {
       console.error("❌ Error validating ticket:", error?.message || error)
@@ -909,13 +909,13 @@ console.error("❌ Error details:", updateError.details)
     eventId?: string,
   ): Promise<{ success: boolean; reason?: string }> {
     try {
-      console.log("========================================")
-      console.log("✅ PHOTO VERIFICATION CONFIRMATION")
-      console.log("========================================")
-      console.log("📋 TicketService.confirmTicketUsage: Confirming ticket after photo verification")
-      console.log("📋 Ticket Doc ID:", ticketDocId)
-      console.log("📋 Validator ID:", validatorId)
-      console.log("📋 Event ID:", eventId)
+      /* console.log("========================================") */
+      /* console.log("✅ PHOTO VERIFICATION CONFIRMATION") */
+      /* console.log("========================================") */
+      /* console.log("📋 TicketService.confirmTicketUsage: Confirming ticket after photo verification") */
+      /* console.log("📋 Ticket Doc ID:", ticketDocId) */
+      /* console.log("📋 Validator ID:", validatorId) */
+      /* console.log("📋 Event ID:", eventId) */
 
       const now = new Date()
 
@@ -923,18 +923,18 @@ console.error("❌ Error details:", updateError.details)
       const { data: ticket, error: getErr } = await supabase.from("tickets").select("*").eq("id", ticketDocId).single()
       if (getErr) throw getErr
       if (!ticket) {
-        console.log("❌ Ticket not found:", ticketDocId)
+        /* console.log("❌ Ticket not found:", ticketDocId) */
         return { success: false, reason: "Ticket not found" }
       }
 
       // Check if already used
       if (ticket.status === "used") {
-        console.log("❌ Ticket already used")
+        /* console.log("❌ Ticket already used") */
         return { success: false, reason: "Ticket already used" }
       }
 
       const ct = this.rowToTicket(ticket)
-      console.log("--- Marking ticket as used (eligible for payout) ---")
+      /* console.log("--- Marking ticket as used (eligible for payout) ---") */
       
       // Mark ticket as used
       const { error: updateError } = await supabase
@@ -952,7 +952,7 @@ console.error("❌ Error details:", updateError.details)
         console.error("❌ Update failed:", updateError)
         throw updateError
       }
-      console.log("✅ Ticket status updated to: USED")
+      /* console.log("✅ Ticket status updated to: USED") */
 
       const validation: TicketValidation = {
         id: `val_${Date.now()}`,
@@ -966,10 +966,10 @@ console.error("❌ Error details:", updateError.details)
       }
 
       await this.logValidation(validation)
-      console.log("✅ Validation logged to database")
-      console.log("========================================")
-      console.log("✅ PHOTO VERIFICATION CONFIRMED - ENTRY GRANTED")
-      console.log("========================================")
+      /* console.log("✅ Validation logged to database") */
+      /* console.log("========================================") */
+      /* console.log("✅ PHOTO VERIFICATION CONFIRMED - ENTRY GRANTED") */
+      /* console.log("========================================") */
       return { success: true }
     } catch (error: any) {
       console.error("❌ Error confirming ticket usage:", error?.message || error)
@@ -990,18 +990,18 @@ console.error("❌ Error details:", updateError.details)
     }
   ): Promise<{ success: boolean; payoutId?: string; error?: string }> {
     try {
-      console.log("========================================")
-      console.log("💰 PAYOUT REQUEST FLOW STARTED")
-      console.log("========================================")
-      console.log("📋 TicketService.requestPayout: Starting payout request")
-      console.log("📋 Organizer ID:", organizerId)
-      console.log("📋 Number of tickets:", ticketIds.length)
-      console.log("📋 Total amount:", amount, "UGX")
-      console.log("📋 Payout method:", payoutMethod)
-      console.log("📋 Recipient:", recipientDetails.name)
+      /* console.log("========================================") */
+      /* console.log("💰 PAYOUT REQUEST FLOW STARTED") */
+      /* console.log("========================================") */
+      /* console.log("📋 TicketService.requestPayout: Starting payout request") */
+      /* console.log("📋 Organizer ID:", organizerId) */
+      /* console.log("📋 Number of tickets:", ticketIds.length) */
+      /* console.log("📋 Total amount:", amount, "UGX") */
+      /* console.log("📋 Payout method:", payoutMethod) */
+      /* console.log("📋 Recipient:", recipientDetails.name) */
 
       // Step 1: Verify tickets are eligible for payout
-      console.log("--- Step 1: Verifying ticket eligibility ---")
+      /* console.log("--- Step 1: Verifying ticket eligibility ---") */
       const eligibleTickets: Ticket[] = []
       
       for (const ticketId of ticketIds) {
@@ -1015,25 +1015,25 @@ console.error("❌ Error details:", updateError.details)
           const refundState = ticket.refund_status || "none"
           if (ticket.payout_eligible && ticket.payout_status === "pending" && refundState === "none") {
             eligibleTickets.push(ticket as any)
-            console.log("   ✅ Ticket", ticket.id, "eligible for payout")
+            /* console.log("   ✅ Ticket", ticket.id, "eligible for payout") */
           } else {
-            console.log("   ❌ Ticket", ticket.id, "not eligible", { payout_eligible: ticket.payout_eligible, payout_status: ticket.payout_status, refund_status: ticket.refund_status })
+            /* console.log("   ❌ Ticket", ticket.id, "not eligible", { payout_eligible: ticket.payout_eligible, payout_status: ticket.payout_status, refund_status: ticket.refund_status }) */
           }
         }
       }
 
       if (eligibleTickets.length === 0) {
-        console.log("❌ No eligible tickets for payout")
+        /* console.log("❌ No eligible tickets for payout") */
         return { success: false, error: "No eligible tickets for payout" }
       }
 
       const eligibleAmount = eligibleTickets.reduce((sum, t) => sum + t.venueRevenue, 0)
-      console.log("   - Eligible tickets:", eligibleTickets.length)
-      console.log("   - Eligible amount:", eligibleAmount, "UGX")
+      /* console.log("   - Eligible tickets:", eligibleTickets.length) */
+      /* console.log("   - Eligible amount:", eligibleAmount, "UGX") */
 
       // Step 2: Process payout via PesaPal
-      console.log("--- Step 2: Processing payout via PesaPal ---")
-      console.log("⏳ Initiating payout request...")
+      /* console.log("--- Step 2: Processing payout via PesaPal ---") */
+      /* console.log("⏳ Initiating payout request...") */
       
       const payoutResult = await PesaPalService.processPayout(
         organizerId,
@@ -1043,7 +1043,7 @@ console.error("❌ Error details:", updateError.details)
       )
 
       if (!payoutResult.success) {
-        console.log("❌ PesaPal payout failed:", payoutResult.error)
+        /* console.log("❌ PesaPal payout failed:", payoutResult.error) */
         
         // Update ticket statuses to failed
         await Promise.all(eligibleTickets.map(ticket =>
@@ -1053,28 +1053,28 @@ console.error("❌ Error details:", updateError.details)
         return { success: false, error: payoutResult.error }
       }
 
-      console.log("✅ Payout processed successfully!")
-      console.log("   - Payout ID:", payoutResult.payoutId)
-      console.log("   - Transaction Ref:", payoutResult.transactionReference)
+      /* console.log("✅ Payout processed successfully!") */
+      /* console.log("   - Payout ID:", payoutResult.payoutId) */
+      /* console.log("   - Transaction Ref:", payoutResult.transactionReference) */
 
       // Step 3: Update ticket statuses
-      console.log("--- Step 3: Updating ticket payout statuses ---")
+      /* console.log("--- Step 3: Updating ticket payout statuses ---") */
       await Promise.all(eligibleTickets.map(ticket =>
         supabase.from("tickets").update({ payout_status: "processing" }).eq("id", ticket.id).then(() => {
-          console.log("   ✅ Ticket", ticket.id, "marked as processing")
+          /* console.log("   ✅ Ticket", ticket.id, "marked as processing") */
         })
       ))
 
-      console.log("========================================")
-      console.log("💰 PAYOUT REQUEST COMPLETED SUCCESSFULLY")
-      console.log("========================================")
-      console.log("📋 Payout Details:")
-      console.log("   - Payout ID:", payoutResult.payoutId)
-      console.log("   - Amount:", eligibleAmount, "UGX")
-      console.log("   - Method:", payoutMethod)
-      console.log("   - Recipient:", recipientDetails.name)
-      console.log("   - Tickets:", eligibleTickets.length)
-      console.log("========================================")
+      /* console.log("========================================") */
+      /* console.log("💰 PAYOUT REQUEST COMPLETED SUCCESSFULLY") */
+      /* console.log("========================================") */
+      /* console.log("📋 Payout Details:") */
+      /* console.log("   - Payout ID:", payoutResult.payoutId) */
+      /* console.log("   - Amount:", eligibleAmount, "UGX") */
+      /* console.log("   - Method:", payoutMethod) */
+      /* console.log("   - Recipient:", recipientDetails.name) */
+      /* console.log("   - Tickets:", eligibleTickets.length) */
+      /* console.log("========================================") */
 
       return { 
         success: true, 
@@ -1150,10 +1150,10 @@ console.error("❌ Error details:", updateError.details)
 
   static async getEventTickets(eventId: string): Promise<Ticket[]> {
     try {
-      console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId)
+      /* console.log("📋 TicketService.getEventTickets: Fetching tickets for event:", eventId) */
       const { data: rows } = await supabase.from("tickets").select("*").eq("event_slug", eventId)
       const ticketList = (rows || []).map(this.rowToTicket)
-      console.log("✅ Found", ticketList.length, "tickets")
+      /* console.log("✅ Found", ticketList.length, "tickets") */
       return ticketList
     } catch (error) {
       console.error("Error getting event tickets:", error)
@@ -1163,10 +1163,10 @@ console.error("❌ Error details:", updateError.details)
 
   static async getUserTickets(userId: string): Promise<Ticket[]> {
     try {
-      console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId)
+      /* console.log("📋 TicketService.getUserTickets: Fetching tickets for user:", userId) */
       const { data: rows } = await supabase.from("tickets").select("*").eq("buyer_id", userId)
       const ticketList = (rows || []).map(this.rowToTicket)
-      console.log("✅ Found", ticketList.length, "tickets")
+      /* console.log("✅ Found", ticketList.length, "tickets") */
       return ticketList
     } catch (error) {
       console.error("Error getting user tickets:", error)
@@ -1176,10 +1176,10 @@ console.error("❌ Error details:", updateError.details)
 
   static async getTicketsByEmail(email: string): Promise<Ticket[]> {
     try {
-      console.log("📋 TicketService.getTicketsByEmail: Fetching tickets for email:", email)
+      /* console.log("📋 TicketService.getTicketsByEmail: Fetching tickets for email:", email) */
       const { data: rows } = await supabase.from("tickets").select("*").eq("buyer_email", email)
       const ticketList = (rows || []).map(this.rowToTicket)
-      console.log("✅ Found", ticketList.length, "tickets")
+      /* console.log("✅ Found", ticketList.length, "tickets") */
       return ticketList
     } catch (error) {
       console.error("Error getting tickets by email:", error)
@@ -1208,12 +1208,12 @@ console.error("❌ Error details:", updateError.details)
 
   private static async logValidation(validation: TicketValidation): Promise<void> {
     try {
-      console.log("📝 Logging ticket validation to database:")
-      console.log("   - Validation ID:", validation.id)
-      console.log("   - Ticket ID:", validation.ticketId)
-      console.log("   - Status:", validation.status)
-      console.log("   - Validated By:", validation.validatedBy)
-      console.log("   - Event ID:", validation.eventId)
+      /* console.log("📝 Logging ticket validation to database:") */
+      /* console.log("   - Validation ID:", validation.id) */
+      /* console.log("   - Ticket ID:", validation.ticketId) */
+      /* console.log("   - Status:", validation.status) */
+      /* console.log("   - Validated By:", validation.validatedBy) */
+      /* console.log("   - Event ID:", validation.eventId) */
       
       // Don't insert id — let DB auto-generate (avoids TEXT vs UUID mismatch)
       const { error } = await supabase.from("ticket_validations").insert({
@@ -1232,7 +1232,7 @@ console.error("❌ Error details:", updateError.details)
         console.error("❌ Error code:", error.code)
         console.error("❌ Error message:", error.message)
       } else {
-        console.log("✅ Validation logged successfully")
+        /* console.log("✅ Validation logged successfully") */
       }
     } catch (error) {
       console.error("Error logging validation:", error)
@@ -1245,9 +1245,9 @@ console.error("❌ Error details:", updateError.details)
     photoUrl: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("🔒 TicketService.addSecurityPhoto: Adding security photo")
-      console.log("   - Ticket ID:", ticketId)
-      console.log("   - Token:", token ? "present" : "missing")
+      /* console.log("🔒 TicketService.addSecurityPhoto: Adding security photo") */
+      /* console.log("   - Ticket ID:", ticketId) */
+      /* console.log("   - Token:", token ? "present" : "missing") */
 
       const { data, error } = await supabase.rpc("add_ticket_security_photo", {
         p_ticket_id: ticketId,
@@ -1260,7 +1260,7 @@ console.error("❌ Error details:", updateError.details)
         return { success: false, error: error.message }
       }
 
-      console.log("✅ Security photo added successfully")
+      /* console.log("✅ Security photo added successfully") */
       return { success: data }
     } catch (error) {
       console.error("❌ Error adding security photo:", error)
@@ -1534,7 +1534,7 @@ console.error("❌ Error details:", updateError.details)
     const fulfillmentId = fulfillment.id
     const existingTicketIds = fulfillment.ticketIds || []
 
-    console.log(`[ManualRecovery:${fulfillmentId}] Stage: starting — manual recovery initiated${existingTicketIds.length > 0 ? ` (resuming from previous attempt, ${existingTicketIds.length} tickets exist)` : ''}`)
+    /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: starting — manual recovery initiated${existingTicketIds.length > 0 ? ` (resuming from previous attempt, ${existingTicketIds.length} tickets exist)` : ''}`) */
 
     try {
       const event = await SupabaseService.getEventById(fulfillment.eventId)
@@ -1554,7 +1554,7 @@ console.error("❌ Error details:", updateError.details)
       //   b) fallback lookup by buyerEmail + eventId (for stranded records where ticketIds weren't saved)
       if (existingTicketIds.length > 0) {
         // Case a: Resume from stored ticket IDs
-        console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — ${existingTicketIds.length} tickets already exist, fetching from DB`)
+        /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — ${existingTicketIds.length} tickets already exist, fetching from DB`) */
         await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
           attemptCount: fulfillment.attemptCount,
         }, `Resuming recovery — ${existingTicketIds.length} tickets already created...`)
@@ -1575,17 +1575,17 @@ console.error("❌ Error details:", updateError.details)
         createdTicketIds = existingTicketIds.slice()
 
         if (createdTickets.length === 0) {
-          console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — no valid existing tickets found, will try fallback lookup`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — no valid existing tickets found, will try fallback lookup`) */
         } else {
           needsTicketCreation = false
-          console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — loaded ${createdTickets.length} existing tickets from DB`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: resume — loaded ${createdTickets.length} existing tickets from DB`) */
         }
       }
 
       // Case b: No stored ticket IDs, attempt fallback lookup by buyer email + event
       // Query tickets_api view because it has camelCase columns that match the Ticket model
       if (needsTicketCreation && fulfillment.buyerEmail && fulfillment.eventId) {
-        console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no stored ticket IDs, searching tickets_api by buyer email + event`)
+        /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no stored ticket IDs, searching tickets_api by buyer email + event`) */
         const { data: foundTickets, error: findError } = await supabase
           .from("tickets_api")
           .select("*")
@@ -1597,12 +1597,12 @@ console.error("❌ Error details:", updateError.details)
           const mapped = foundTickets.map(t => this.rowToTicket(t))
           // Log QR data URL availability for debugging
           for (const t of mapped) {
-            console.log(`[ManualRecovery:${fulfillmentId}] Ticket ${t.id}: qrCodeDataUrl=${t.qrCodeDataUrl ? t.qrCodeDataUrl.substring(0, 80) + '...' : 'MISSING'}, ticketRef=${t.ticketRef || 'MISSING'}`)
+            /* console.log(`[ManualRecovery:${fulfillmentId}] Ticket ${t.id}: qrCodeDataUrl=${t.qrCodeDataUrl ? t.qrCodeDataUrl.substring(0, 80) + '...' : 'MISSING'}, ticketRef=${t.ticketRef || 'MISSING'}`) */
           }
           createdTickets.push(...mapped)
           createdTicketIds.push(...mapped.map(t => t.id))
           needsTicketCreation = false
-          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — found ${mapped.length} existing tickets via tickets_api email+event lookup`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — found ${mapped.length} existing tickets via tickets_api email+event lookup`) */
 
           // Save these IDs to the fulfillment so next retry uses the stored IDs
           await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
@@ -1610,12 +1610,12 @@ console.error("❌ Error details:", updateError.details)
             ticketIds: createdTicketIds,
           }, `Found ${createdTicketIds.length} existing tickets, proceeding to email send...`)
         } else {
-          console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no existing tickets found by email+event, will create new ones`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: lookup — no existing tickets found by email+event, will create new ones`) */
         }
       }
 
       if (needsTicketCreation) {
-        console.log(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — starting (${ticketsToCreate} tickets)`)
+        /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: ticket-creation — starting (${ticketsToCreate} tickets)`) */
         await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
           attemptCount: fulfillment.attemptCount,
         }, "Creating tickets...")
@@ -1637,19 +1637,19 @@ console.error("❌ Error details:", updateError.details)
           )
           createdTickets.push(ticket)
           createdTicketIds.push(ticket.id)
-          console.log(`[ManualRecovery:${fulfillmentId}] Ticket created: ${ticket.id}`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Ticket created: ${ticket.id}`) */
         }
 
         // QR code was already uploaded within createSingleTicket (Step 7).
         // The qrCodeDataUrl is now the hosted R2 URL for use in the email, no re-upload needed.
-        console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-preparation — QR codes already uploaded during ticket creation`)
+        /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-preparation — QR codes already uploaded during ticket creation`) */
         await this.updateFulfillmentStatus(fulfillmentId, "fulfilling", {
           attemptCount: fulfillment.attemptCount + 1,
           ticketIds: createdTicketIds,
         }, `Created ${createdTicketIds.length} tickets, proceeding to email send...`)
       }
 
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails, sending in parallel with 120s timeout)`)
+      /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: email-send — starting (${createdTickets.length} emails, sending in parallel with 120s timeout)`) */
 
       // Pre-generate QR codes for any tickets that don't have one
       // (old recovery tickets may have null qrCodeDataUrl in the tickets_api table)
@@ -1660,7 +1660,7 @@ console.error("❌ Error details:", updateError.details)
             const qrResult = await this.generateSecureQRCode(event.id, event.date || new Date())
             ticket.qrCodeDataUrl = qrResult.qrCodeDataUrl
             ticket.qrCode = qrResult.qrCode
-            console.log(`[ManualRecovery:${fulfillmentId}] Generated fresh QR for ticket ${ticket.id}: ${qrResult.qrCode}`)
+            /* console.log(`[ManualRecovery:${fulfillmentId}] Generated fresh QR for ticket ${ticket.id}: ${qrResult.qrCode}`) */
           } catch (err) {
             console.warn(`[ManualRecovery:${fulfillmentId}] Could not generate QR for ticket ${ticket.id}:`, err)
           }
@@ -1733,7 +1733,7 @@ console.error("❌ Error details:", updateError.details)
       const emailErrors: string[] = []
       for (const result of emailResults) {
         if (result.status === "fulfilled") {
-          console.log(`[ManualRecovery:${fulfillmentId}] Email sent for ticket ${result.value.ticketId}`)
+          /* console.log(`[ManualRecovery:${fulfillmentId}] Email sent for ticket ${result.value.ticketId}`) */
         } else {
           const msg = result.reason instanceof Error ? result.reason.message : String(result.reason)
           emailErrors.push(msg)
@@ -1750,7 +1750,7 @@ console.error("❌ Error details:", updateError.details)
         return { success: false, ticketIds: createdTicketIds, error: errorMsg }
       }
 
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: fulfillment — completing (${createdTicketIds.length} tickets)`)
+      /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: fulfillment — completing (${createdTicketIds.length} tickets)`) */
 
       await this.updateFulfillmentStatus(fulfillmentId, "fulfilled", {
         ticketIds: createdTicketIds,
@@ -1759,7 +1759,7 @@ console.error("❌ Error details:", updateError.details)
         adminResolvedAt: new Date(),
       })
 
-      console.log(`[ManualRecovery:${fulfillmentId}] Stage: completed — success`)
+      /* console.log(`[ManualRecovery:${fulfillmentId}] Stage: completed — success`) */
       return { success: true, ticketIds: createdTicketIds }
 
     } catch (error) {
@@ -1816,7 +1816,7 @@ console.error("❌ Error details:", updateError.details)
         totalDeleted += count
       }
 
-      console.log(`[Cleanup] Deleted ${totalDeleted} old fulfillment records`)
+      /* console.log(`[Cleanup] Deleted ${totalDeleted} old fulfillment records`) */
       return { deleted: totalDeleted }
     } catch (error: any) {
       console.error("[Cleanup] Error cleaning up fulfillments:", error)

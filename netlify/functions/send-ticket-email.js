@@ -496,7 +496,7 @@ async function buildTicketPdf({
         bgImageEmbed = bgImg.isPng
           ? await pdfDoc.embedPng(bgImg.bytes)
           : await pdfDoc.embedJpg(bgImg.bytes);
-        console.log("PDF: Background image loaded and embedded");
+        /* console.log("PDF: Background image loaded and embedded"); */
       }
     } catch (error) {
       console.warn("PDF: Failed to load background image:", error.message);
@@ -813,7 +813,7 @@ exports.handler = async function (event) {
   });
 
   if (zeptoResult.ok) {
-    console.log("send-ticket-email: sent successfully via ZeptoMail");
+    /* console.log("send-ticket-email: sent successfully via ZeptoMail"); */
     return { statusCode: 200, body: JSON.stringify({ success: true, provider: "zeptomail" }) };
   }
 
@@ -842,7 +842,7 @@ exports.handler = async function (event) {
     };
   }
 
-  console.log("send-ticket-email: sent successfully via Resend (fallback)");
+  /* console.log("send-ticket-email: sent successfully via Resend (fallback)"); */
   return {
     statusCode: 200,
     body: JSON.stringify({ success: true, provider: "resend-fallback", id: resendResult.id }),

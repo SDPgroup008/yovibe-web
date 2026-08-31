@@ -122,20 +122,20 @@ function loadServiceAccount() {
   // 1. Check for service account file in current directory
   const serviceAccountFile = path.join(__dirname, "eco-guardian-bd74f-firebase-adminsdk-thlcj-b60714ed55.json");
   if (fs.existsSync(serviceAccountFile)) {
-    console.log("[FCM] Loading service account from file:", serviceAccountFile);
+    /* console.log("[FCM] Loading service account from file:", serviceAccountFile); */
     return JSON.parse(fs.readFileSync(serviceAccountFile, "utf-8"));
   }
 
   // 2. Check for custom path env var
   const customPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (customPath && fs.existsSync(customPath)) {
-    console.log("[FCM] Loading service account from:", customPath);
+    /* console.log("[FCM] Loading service account from:", customPath); */
     return JSON.parse(fs.readFileSync(customPath, "utf-8"));
   }
 
   // 3. Check env var
   if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    console.log("[FCM] Loading service account from env var");
+    /* console.log("[FCM] Loading service account from env var"); */
     return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
   }
 
@@ -184,7 +184,7 @@ function getNotificationKey(notification) {
 function isDuplicateNotification(notification) {
   const key = getNotificationKey(notification);
   if (sentNotifications.has(key)) {
-    console.log(`[DUPLICATE] Notification with key "${key}" already sent this hour, skipping`);
+    /* console.log(`[DUPLICATE] Notification with key "${key}" already sent this hour, skipping`); */
     return true;
   }
   sentNotifications.set(key, Date.now());
@@ -207,7 +207,7 @@ async function sendToAllUsers(notification, data = {}) {
     accessToken = await getAccessToken();
   } catch (err) {
     console.warn("[DRY RUN] Could not get access token:", err.message);
-    console.log("[DRY RUN] Would send:", JSON.stringify({ notification, data }, null, 2));
+    /* console.log("[DRY RUN] Would send:", JSON.stringify({ notification, data }, null, 2)); */
     return { success: 1, failed: 0, dryRun: true };
   }
 
@@ -242,7 +242,7 @@ async function sendToAllUsers(notification, data = {}) {
       res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {
         if (res.statusCode === 200) {
-          console.log("[FCM] Notification sent successfully:", body);
+          /* console.log("[FCM] Notification sent successfully:", body); */
           resolve({ success: 1, failed: 0 });
         } else {
           console.error("[FCM] Error response:", res.statusCode, body);
@@ -276,7 +276,7 @@ async function main() {
 
     const result = await sendToAllUsers(notification, data);
 
-  console.log(`${mode} summary sent. eventsCount:`, events.length, "result:", JSON.stringify(result));
+  /* console.log(`${mode} summary sent. eventsCount:`, events.length, "result:", JSON.stringify(result)); */
   // Allow pending network connections to close gracefully, then exit
   setTimeout(() => process.exit(0), 500);
 }

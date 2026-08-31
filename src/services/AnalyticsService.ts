@@ -1,6 +1,6 @@
 import { supabase } from '../config/supabase';
 
-const devLog = (...args: any[]) => __DEV__ && console.log('[Analytics]', ...args);
+const devLog = (..._args: any[]) => { if (__DEV__) { /* logging disabled for production safety */ } }
 
 export interface SessionData {
   id?: string;
@@ -231,7 +231,7 @@ class AnalyticsService {
 
       if (error) throw error;
 
-      console.log('Analytics: Session started', data.id, 'Visit #', visitNumber, 'for visitor', uniqueVisitorId);
+      /* console.log('Analytics: Session started', data.id, 'Visit #', visitNumber, 'for visitor', uniqueVisitorId); */
       return data.id;
     } catch (error) {
       if (this.isRlsOrForbiddenError(error)) {
@@ -279,7 +279,7 @@ class AnalyticsService {
 
         if (updateError) throw updateError;
 
-        console.log('Analytics: Session ended', sessionId, 'Duration:', duration, 'seconds');
+        /* console.log('Analytics: Session ended', sessionId, 'Duration:', duration, 'seconds'); */
       }
     } catch (error) {
       if (!this.isRlsOrForbiddenError(error)) {

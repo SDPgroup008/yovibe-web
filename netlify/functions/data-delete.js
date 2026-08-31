@@ -44,7 +44,7 @@ exports.handler = async (event) => {
     await admin.from('notification_tokens').delete().eq('user_id', authUser.id).catch(() => {});
     await admin.from('users').delete().eq('uid', authUser.id).catch(() => {});
 
-    console.log(`[DataDelete] Erasure processed for ${authUser.id}`);
+    /* console.log(`[DataDelete] Erasure processed for ${authUser.id}`); */
 
     return json(200, {
       success: true,

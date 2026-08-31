@@ -256,7 +256,7 @@ exports.handler = async (event) => {
     const { data: payout, error: payoutError } = await admin.from('payouts').insert(payoutRow).select('*').single();
     if (payoutError) throw payoutError;
 
-    console.log(`[Payout] ${payoutMethod} ${payoutStatus} for ${payableIds.length} tickets, UGX ${serverAmount}, id=${payout.id}`);
+    /* console.log(`[Payout] ${payoutMethod} ${payoutStatus} for ${payableIds.length} tickets, UGX ${serverAmount}, id=${payout.id}`); */
 
     return json(200, {
       success: true,

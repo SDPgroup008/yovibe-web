@@ -70,7 +70,7 @@ const MyTicketsScreen: React.FC = () => {
   // Load tickets on mount and when user changes
   useEffect(() => {
     if (user) {
-      console.log("📋 MyTicketsScreen: useEffect triggered, calling loadUserTickets")
+      /* console.log("📋 MyTicketsScreen: useEffect triggered, calling loadUserTickets") */
       loadUserTickets()
     } else {
       setLoading(false)

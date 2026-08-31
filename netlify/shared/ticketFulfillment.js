@@ -251,11 +251,11 @@ async function confirmPaymentVerified(method, verification) {
     const directFailed = !!direct && (direct.status === 'failed' || direct.status === 'invalid');
 
     if (viaCompleted) {
-      console.log(`[FulfillPayment] CONFIRMED via deployed verify function (attempt ${i + 1})`);
+      /* console.log(`[FulfillPayment] CONFIRMED via deployed verify function (attempt ${i + 1})`); */
       return { confirmed: true, verificationResult: via, source: 'via-function' };
     }
     if (directCompleted) {
-      console.log(`[FulfillPayment] CONFIRMED via direct provider call (attempt ${i + 1})`);
+      /* console.log(`[FulfillPayment] CONFIRMED via direct provider call (attempt ${i + 1})`); */
       return { confirmed: true, verificationResult: direct, source: 'direct' };
     }
 

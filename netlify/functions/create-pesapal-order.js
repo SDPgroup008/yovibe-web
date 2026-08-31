@@ -69,7 +69,7 @@ exports.handler = async (event) => {
     for (let attempt = 0; attempt <= 1; attempt++) {
       const currentToken = attempt === 0 ? token : await getPesapalToken();
 
-      console.log(`[PesaPalOrder] 📤 Submitting order (attempt ${attempt + 1})...`);
+      /* console.log(`[PesaPalOrder] 📤 Submitting order (attempt ${attempt + 1})...`); */
       const response = await fetch(`${apiUrl}/Transactions/SubmitOrderRequest`, {
         method: 'POST',
         headers: {
@@ -81,13 +81,13 @@ exports.handler = async (event) => {
       });
 
       if (response.status === 401 && attempt === 0) {
-        console.log('[PesaPalOrder] 🔑 Token expired, refreshing and retrying...');
+        /* console.log('[PesaPalOrder] 🔑 Token expired, refreshing and retrying...'); */
         invalidatePesapalToken();
         continue;
       }
 
       const responseText = await response.text();
-      console.log('[PesaPalOrder]    HTTP status:', response.status);
+      /* console.log('[PesaPalOrder]    HTTP status:', response.status); */
 
       if (!response.ok) {
         lastError = new Error(`PesaPal order error: ${response.status} — ${responseText.substring(0, 200)}`);

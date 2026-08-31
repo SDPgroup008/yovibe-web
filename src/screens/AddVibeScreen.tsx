@@ -198,7 +198,7 @@ const AddVibeScreen: React.FC = () => {
    * VibeAnalysisService.analyzeVibeImage should accept a data URL or object URL.
    */
   const analyzeVibe = async () => {
-    console.log('AddVibeScreen: analyzeVibe called', { hasImage: !!image })
+    /* console.log('AddVibeScreen: analyzeVibe called', { hasImage: !!image }) */
     if (!image) {
       Alert.alert("Error", "Please capture an image first")
       return
@@ -207,13 +207,13 @@ const AddVibeScreen: React.FC = () => {
     setAnalyzing(true)
     try {
       if (VibeMLService.modelReady) {
-        console.log('AddVibeScreen: Using ML model...')
+        /* console.log('AddVibeScreen: Using ML model...') */
         const { predictedClass, confidence } = await VibeMLService.predict(image)
         const result = VibeAnalysisService.formatMLResult(predictedClass, confidence)
-        console.log('AddVibeScreen: ML result:', result)
+        /* console.log('AddVibeScreen: ML result:', result) */
         setAnalysisResult(result)
       } else {
-        console.log('AddVibeScreen: ML not ready, using heuristic fallback...')
+        /* console.log('AddVibeScreen: ML not ready, using heuristic fallback...') */
         const result = await VibeAnalysisService.analyzeVibeImage(image)
         setAnalysisResult(result)
       }

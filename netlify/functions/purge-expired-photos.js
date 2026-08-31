@@ -78,7 +78,7 @@ exports.handler = async (event) => {
     }
 
     const deleted = await deleteKeys([...keysToDelete]);
-    console.log(`[PurgePhotos] Retention=${RETENTION_DAYS}d, candidates=${keysToDelete.size}, deleted=${deleted}`);
+    /* console.log(`[PurgePhotos] Retention=${RETENTION_DAYS}d, candidates=${keysToDelete.size}, deleted=${deleted}`); */
     return json(200, { ok: true, candidates: keysToDelete.size, deleted });
   } catch (error) {
     console.error('[PurgePhotos] Error:', error.message);

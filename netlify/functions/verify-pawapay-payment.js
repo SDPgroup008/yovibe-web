@@ -10,11 +10,11 @@ const { getAdminClient } = require('../shared/supabaseAdmin')
 const { markTicketsByPayment } = require('../shared/ticketFulfillment')
 
 exports.handler = async (event, context) => {
-  console.log("========================================")
-  console.log("🔍 PAWAPAY PAYMENT VERIFICATION (Netlify Functions)")
-  console.log("========================================")
-  console.log("📋 Event:", event.httpMethod)
-  console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET")
+  /* console.log("========================================") */
+  /* console.log("🔍 PAWAPAY PAYMENT VERIFICATION (Netlify Functions)") */
+  /* console.log("========================================") */
+  /* console.log("📋 Event:", event.httpMethod) */
+  /* console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET") */
 
   if (event.httpMethod !== "GET") {
     return {
@@ -33,10 +33,10 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log("📥 Query parameters:")
-    console.log("   - Deposit ID:", depositId)
+    /* console.log("📥 Query parameters:") */
+    /* console.log("   - Deposit ID:", depositId) */
 
-    console.log("📤 Calling PawaPay API to check deposit status...")
+    /* console.log("📤 Calling PawaPay API to check deposit status...") */
     const apiKey = getApiKey()
     
     const response = await fetch(`${PAWAPAY_BASE_URL}/deposits/${depositId}`, {
@@ -64,7 +64,7 @@ exports.handler = async (event, context) => {
     }
 
     const responseData = await response.json()
-    console.log("📥 PawaPay response:", JSON.stringify(responseData, null, 2))
+    /* console.log("📥 PawaPay response:", JSON.stringify(responseData, null, 2)) */
 
     // PawaPay wraps deposit data in a "data" property
     const depositData = responseData.data
@@ -82,14 +82,14 @@ exports.handler = async (event, context) => {
           status: "cancelled",
           refundStatus: null,
         })
-        console.log("📋 Failed-deposit reconciliation:", result)
+        /* console.log("📋 Failed-deposit reconciliation:", result) */
       } catch (reconErr) {
         console.warn("Failed-deposit reconciliation error:", reconErr.message)
       }
     }
 
-    console.log("✅ Verification complete - Status:", status)
-    console.log("========================================")
+    /* console.log("✅ Verification complete - Status:", status) */
+    /* console.log("========================================") */
 
     return {
       statusCode: 200,

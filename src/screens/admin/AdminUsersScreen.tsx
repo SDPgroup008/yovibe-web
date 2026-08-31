@@ -35,7 +35,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
     try {
       const visitors = await AnalyticsService.getAllUnauthenticatedVisitors()
       setUnauthenticatedVisitors(visitors)
-      console.log('AdminUsersScreen: Loaded', visitors.length, 'unauthenticated visitors')
+      /* console.log('AdminUsersScreen: Loaded', visitors.length, 'unauthenticated visitors') */
     } catch (error) {
       console.error('AdminUsersScreen: Error loading unauthenticated visitors:', error)
     }
@@ -44,9 +44,9 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const loadUsers = async () => {
     try {
       setLoading(true)
-      console.log("AdminUsersScreen: Loading users...")
+      /* console.log("AdminUsersScreen: Loading users...") */
       const allUsers = await SupabaseService.getAllUsers()
-      console.log("AdminUsersScreen: Loaded", allUsers.length, "users")
+      /* console.log("AdminUsersScreen: Loaded", allUsers.length, "users") */
       setUsers(allUsers)
     } catch (error) {
       console.error("AdminUsersScreen: Error loading users:", error)
@@ -79,10 +79,10 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const performDelete = async (userId: string) => {
     try {
       setLoading(true)
-      console.log("[AdminUsersScreen] Deleting user:", userId)
+      /* console.log("[AdminUsersScreen] Deleting user:", userId) */
       
       await SupabaseService.deleteUser(userId)
-      console.log("[AdminUsersScreen] User deleted successfully")
+      /* console.log("[AdminUsersScreen] User deleted successfully") */
       
       Alert.alert("Success", "User deleted successfully")
       loadUsers()

@@ -116,7 +116,7 @@ export async function handler() {
     FALLBACK_SUPABASE_ANON_KEY;
 
   try {
-    console.log(`[sitemap] Function version ${SITEMAP_FUNCTION_VERSION}`);
+    /* console.log(`[sitemap] Function version ${SITEMAP_FUNCTION_VERSION}`); */
 
     const [venues, events] = await Promise.all([
       fetchSupabaseRows({

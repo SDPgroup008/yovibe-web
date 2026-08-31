@@ -58,7 +58,7 @@ exports.handler = async (event) => {
     return ack({ message: 'Payout callback received (unparseable body)' });
   }
 
-  console.log('[PawaPayPayoutCallback] Received payout callback:', { payoutId, status, failureMessage });
+  /* console.log('[PawaPayPayoutCallback] Received payout callback:', { payoutId, status, failureMessage }); */
 
   if (!payoutId) {
     return ack({ message: 'Payout callback received without payoutId' });
@@ -87,9 +87,9 @@ exports.handler = async (event) => {
       };
       const ids = matched.map((r) => r.id);
       const result = await admin.from('payouts').update(update).in('id', ids);
-      console.log('[PawaPayPayoutCallback] Reconciliated payouts:', result.error || ids);
+      /* console.log('[PawaPayPayoutCallback] Reconciliated payouts:', result.error || ids); */
     } else {
-      console.log('[PawaPayPayoutCallback] No matching payout row for', payoutId, '(acknowledged)');
+      /* console.log('[PawaPayPayoutCallback] No matching payout row for', payoutId, '(acknowledged)'); */
     }
 
     return ack({ payoutId, status: normalized });

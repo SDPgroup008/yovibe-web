@@ -53,37 +53,37 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
   }
 
   const handleApprove = () => {
-    console.log("[AdminOwnershipRequestsScreen] handleApprove called")
-    console.log("[AdminOwnershipRequestsScreen] selectedRequest:", selectedRequest)
-    console.log("[AdminOwnershipRequestsScreen] currentUser:", currentUser)
+    /* console.log("[AdminOwnershipRequestsScreen] handleApprove called") */
+    /* console.log("[AdminOwnershipRequestsScreen] selectedRequest:", selectedRequest) */
+    /* console.log("[AdminOwnershipRequestsScreen] currentUser:", currentUser) */
     
     if (!selectedRequest || !currentUser) {
-      console.log("[AdminOwnershipRequestsScreen] ERROR: Missing selectedRequest or currentUser")
+      /* console.log("[AdminOwnershipRequestsScreen] ERROR: Missing selectedRequest or currentUser") */
       Alert.alert("Error", "Missing request or user data")
       return
     }
 
     // Skip confirmation, go directly to approval
-    console.log("[AdminOwnershipRequestsScreen] Starting approval directly...")
+    /* console.log("[AdminOwnershipRequestsScreen] Starting approval directly...") */
     performApproval()
   }
 
   const performApproval = async () => {
-    console.log("[AdminOwnershipRequestsScreen] performApproval started")
+    /* console.log("[AdminOwnershipRequestsScreen] performApproval started") */
     if (!selectedRequest || !currentUser) {
-      console.log("[AdminOwnershipRequestsScreen] ERROR: Missing data in performApproval")
+      /* console.log("[AdminOwnershipRequestsScreen] ERROR: Missing data in performApproval") */
       return
     }
     
     setProcessing(true)
-    console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.approveOwnershipRequest...")
+    /* console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.approveOwnershipRequest...") */
     try {
       await SupabaseService.approveOwnershipRequest(
         selectedRequest.id,
         currentUser.id,
         reviewNote
       )
-      console.log("[AdminOwnershipRequestsScreen] approveOwnershipRequest completed")
+      /* console.log("[AdminOwnershipRequestsScreen] approveOwnershipRequest completed") */
       setShowDetailModal(false)
       setReviewNote("")
       Alert.alert("Success", `You have approved ${selectedRequest.userName}'s request. They are now the owner of ${selectedRequest.venueName}.`)
@@ -97,35 +97,35 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
   }
 
   const handleReject = () => {
-    console.log("[AdminOwnershipRequestsScreen] handleReject called")
+    /* console.log("[AdminOwnershipRequestsScreen] handleReject called") */
     
     if (!selectedRequest || !currentUser) {
-      console.log("[AdminOwnershipRequestsScreen] ERROR: Missing selectedRequest or currentUser")
+      /* console.log("[AdminOwnershipRequestsScreen] ERROR: Missing selectedRequest or currentUser") */
       Alert.alert("Error", "Missing request or user data")
       return
     }
 
     // Skip confirmation, go directly to rejection
-    console.log("[AdminOwnershipRequestsScreen] Starting rejection directly...")
+    /* console.log("[AdminOwnershipRequestsScreen] Starting rejection directly...") */
     performReject()
   }
 
   const performReject = async () => {
-    console.log("[AdminOwnershipRequestsScreen] performReject started")
+    /* console.log("[AdminOwnershipRequestsScreen] performReject started") */
     if (!selectedRequest || !currentUser) {
-      console.log("[AdminOwnershipRequestsScreen] ERROR: Missing data in performReject")
+      /* console.log("[AdminOwnershipRequestsScreen] ERROR: Missing data in performReject") */
       return
     }
 
     setProcessing(true)
-    console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.rejectOwnershipRequest...")
+    /* console.log("[AdminOwnershipRequestsScreen] Calling SupabaseService.rejectOwnershipRequest...") */
     try {
       await SupabaseService.rejectOwnershipRequest(
         selectedRequest.id,
         currentUser.id,
         reviewNote
       )
-      console.log("[AdminOwnershipRequestsScreen] rejectOwnershipRequest completed")
+      /* console.log("[AdminOwnershipRequestsScreen] rejectOwnershipRequest completed") */
       setShowDetailModal(false)
       setReviewNote("")
       Alert.alert("Success", "Ownership request rejected")

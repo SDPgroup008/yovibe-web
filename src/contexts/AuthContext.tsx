@@ -97,16 +97,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    console.log("AuthContext: Setting up auth state listener");
+    /* console.log("AuthContext: Setting up auth state listener"); */
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        console.log("AuthContext: Auth state changed, event:", event, "session:", !!session);
+        /* console.log("AuthContext: Auth state changed, event:", event, "session:", !!session); */
         try {
           if (session?.user) {
             // Skip re-fetching when the profile for this exact UID is already loaded
             if (userRef.current && userRef.current.uid === session.user.id) {
-              console.log("AuthContext: Profile already loaded for this UID — skipping redundant fetch");
+              /* console.log("AuthContext: Profile already loaded for this UID — skipping redundant fetch"); */
               if (!initializedRef.current) initializedRef.current = true;
               setIsLoading(false);
               return;
@@ -114,7 +114,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             // Prevent overlapping concurrent fetches for the same UID
             if (profileFetchInFlightRef.current === session.user.id) {
-              console.log("AuthContext: Fetch already in flight for this UID — skipping duplicate request");
+              /* console.log("AuthContext: Fetch already in flight for this UID — skipping duplicate request"); */
               return;
             }
 
@@ -122,7 +122,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             try {
               // Authenticated: load profile and set user
-              console.log("AuthContext: User authenticated, loading profile for UID:", session.user.id);
+              /* console.log("AuthContext: User authenticated, loading profile for UID:", session.user.id); */
               // Use ensureUserProfile so that a missing row in public.users is automatically created.
               // This prevents the endless loading issue after signup or when resuming a session.
               const userProfile = await withTimeout(
@@ -130,7 +130,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
                 AUTH_PROFILE_TIMEOUT_MS,
                 `Auth profile resolution timed out after ${AUTH_PROFILE_TIMEOUT_MS}ms`
               );
-              console.log("AuthContext: User profile ensured/loaded:", userProfile?.email);
+              /* console.log("AuthContext: User profile ensured/loaded:", userProfile?.email); */
               setUser(userProfile);
             } catch (profileError) {
               console.error("AuthContext: Failed to ensure user profile:", profileError);
@@ -142,13 +142,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             }
           } else {
             // No session
-            console.log("AuthContext: No session (signed out)");
+            /* console.log("AuthContext: No session (signed out)"); */
             if (!initializedRef.current) {
               // First time: don't clear user state yet, just mark initialized.
-              console.log("AuthContext: No session on initial check — deferring clearing user until initialized.");
+              /* console.log("AuthContext: No session on initial check — deferring clearing user until initialized."); */
             } else {
               // After initial load, a null session means the user is signed out.
-              console.log("AuthContext: Session is null after initialization — clearing user.");
+              /* console.log("AuthContext: Session is null after initialization — clearing user."); */
               setUser(null);
             }
           }
@@ -212,12 +212,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
-    console.log("AuthContext: Starting sign in for:", email);
+    /* console.log("AuthContext: Starting sign in for:", email); */
     try {
       await SupabaseService.signIn(email, password);
-      console.log("AuthContext: Sign in successful");
+      /* console.log("AuthContext: Sign in successful"); */
       // onAuthStateChange will populate user - wait a moment for the listener to fire
-      console.log("AuthContext: Waiting for onAuthStateChange to fire...");
+      /* console.log("AuthContext: Waiting for onAuthStateChange to fire..."); */
     } catch (error) {
       console.error("AuthContext: Sign in failed:", error);
       throw error;

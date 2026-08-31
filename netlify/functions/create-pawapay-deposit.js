@@ -14,11 +14,11 @@ const generateUUID = () => {
 }
 
 exports.handler = async (event, context) => {
-  console.log("========================================")
-  console.log("💳 PAWAPAY DEPOSIT INITIATION (Netlify Functions)")
-  console.log("========================================")
-  console.log("📋 Event:", event.httpMethod)
-  console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET")
+  /* console.log("========================================") */
+  /* console.log("💳 PAWAPAY DEPOSIT INITIATION (Netlify Functions)") */
+  /* console.log("========================================") */
+  /* console.log("📋 Event:", event.httpMethod) */
+  /* console.log("🔑 API Key from env:", process.env.PAWAPAY_API_KEY ? "SET" : "NOT SET") */
 
   if (event.httpMethod !== "POST") {
     return {
@@ -31,11 +31,11 @@ exports.handler = async (event, context) => {
     const body = JSON.parse(event.body || "{}")
     const { amount, currency, phoneNumber, provider, buyerEmail, buyerName } = body
 
-    console.log("📥 Request body:")
-    console.log("   - Amount:", amount, currency)
-    console.log("   - Phone:", phoneNumber)
-    console.log("   - Provider:", provider)
-    console.log("   - Buyer:", buyerName, buyerEmail)
+    /* console.log("📥 Request body:") */
+    /* console.log("   - Amount:", amount, currency) */
+    /* console.log("   - Phone:", phoneNumber) */
+    /* console.log("   - Provider:", provider) */
+    /* console.log("   - Buyer:", buyerName, buyerEmail) */
 
     const depositId = generateUUID()
     const apiKey = getApiKey()
@@ -59,8 +59,8 @@ exports.handler = async (event, context) => {
       },
     }
 
-    console.log("📤 Calling PawaPay API...")
-    console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...")
+    /* console.log("📤 Calling PawaPay API...") */
+    /* console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...") */
     
     const response = await fetch(`${PAWAPAY_BASE_URL}/deposits`, {
       method: "POST",
@@ -72,7 +72,7 @@ exports.handler = async (event, context) => {
     })
 
     const data = await response.json()
-    console.log("📥 PawaPay response:", JSON.stringify(data, null, 2))
+    /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
 
     if (data.status === "REJECTED" || !response.ok) {
       return {
@@ -84,9 +84,9 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log("✅ Deposit initiated successfully")
-    console.log("   - Deposit ID:", data.depositId)
-    console.log("========================================")
+    /* console.log("✅ Deposit initiated successfully") */
+    /* console.log("   - Deposit ID:", data.depositId) */
+    /* console.log("========================================") */
 
     return {
       statusCode: 200,

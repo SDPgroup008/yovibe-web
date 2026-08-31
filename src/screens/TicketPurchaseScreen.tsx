@@ -119,7 +119,7 @@ const TicketPurchaseScreen: React.FC = () => {
 
   const openSeatMap = async (fee: any, personIndex?: number, mode?: "seat" | "table") => {
     const m = mode || "seat"
-    console.log(`[openSeatMap] Opening seat map for fee: ${fee.name}, mode: ${m}, personIndex: ${personIndex}`);
+    /* console.log(`[openSeatMap] Opening seat map for fee: ${fee.name}, mode: ${m}, personIndex: ${personIndex}`); */
     if (!fee.seatMap || fee.seatMap.type === "none") return
     setPickerMode(m)
     setSeatMapFee(fee)
@@ -359,15 +359,15 @@ const TicketPurchaseScreen: React.FC = () => {
         attempts++
         verificationResult = await PawaPayService.checkDepositStatus(depositId)
         status = (verificationResult.status || "").toUpperCase()
-        console.log(`   Attempt ${attempts}: Status = ${status}`)
+        /* console.log(`   Attempt ${attempts}: Status = ${status}`) */
         networkError = false
       } catch (err) {
-        console.log(`?? Network error attempt ${attempts}:`, err)
+        /* console.log(`?? Network error attempt ${attempts}:`, err) */
         networkError = true
       }
     }
     
-    console.log("? Final status:", status)
+    /* console.log("? Final status:", status) */
     const resultStatus = verificationResult ? (verificationResult.status || "").toUpperCase() : "PENDING"
     
     if (resultStatus === "COMPLETED") {
@@ -503,7 +503,7 @@ const TicketPurchaseScreen: React.FC = () => {
       let pendingRetries = 0
       while ((result.status === "pending" || result.status === "in_progress") && pendingRetries < 5) {
         pendingRetries++
-        console.log(`[FulfillPurchase] ${result.status} — auto-retrying (${pendingRetries}/5)...`)
+        /* console.log(`[FulfillPurchase] ${result.status} — auto-retrying (${pendingRetries}/5)...`) */
         await new Promise((resolve) => setTimeout(resolve, 2000))
         result = await TicketService.fulfillPurchase(fulfillPayload)
       }
@@ -791,7 +791,7 @@ const handleInstallmentPurchase = async () => {
   }
 
   const handlePurchase = async () => {
-    console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod)
+    /* console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod) */
     
     // Consolidated validation
     setFieldErrors({})
@@ -825,13 +825,13 @@ const handleInstallmentPurchase = async () => {
     }
     
     try {
-      console.log("[handlePurchase] Payment method:", paymentMethod)
+      /* console.log("[handlePurchase] Payment method:", paymentMethod) */
       if (paymentMethod === "mobile_money") {
-        console.log("[handlePurchase] Mobile Money flow - total:", total, "number:", mobileMoneyNumber)
+        /* console.log("[handlePurchase] Mobile Money flow - total:", total, "number:", mobileMoneyNumber) */
         // Handle mobile money payment via PawaPay
         const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
         
-        console.log("?? Initiating mobile money payment via PawaPay...")
+        /* console.log("?? Initiating mobile money payment via PawaPay...") */
         const depositResult = await PawaPayService.initiateDeposit(
           total,
           "UGX",
@@ -843,7 +843,7 @@ const handleInstallmentPurchase = async () => {
           throw new Error(depositResult.error || "Failed to initiate mobile money payment")
         }
 
-        console.log("? PawaPay deposit initiated:", depositResult.depositId)
+        /* console.log("? PawaPay deposit initiated:", depositResult.depositId) */
         
         const depositId = depositResult.depositId!
         setPaymentOrderId(depositId)
@@ -854,12 +854,12 @@ const handleInstallmentPurchase = async () => {
         await pollPaymentStatus(depositId, 0)
         return
       } else {
-        console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail)
+        /* console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail) */
         // Handle card/bank transfer via PesaPal
         const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
         const callbackUrl = typeof window !== "undefined" ? `${window.location.origin}/events/payment-callback` : ""
 
-        console.log("?? Submitting order to PesaPal...")
+        /* console.log("?? Submitting order to PesaPal...") */
         const orderResult = await PesaPalService.submitOrder(
           total,
           description,
@@ -875,8 +875,8 @@ const handleInstallmentPurchase = async () => {
           throw new Error(orderResult.error || "Failed to initialize payment")
         }
 
-        console.log("? PesaPal order created:", orderResult.orderId)
-        console.log("?? Payment URL:", orderResult.paymentUrl)
+        /* console.log("? PesaPal order created:", orderResult.orderId) */
+        /* console.log("?? Payment URL:", orderResult.paymentUrl) */
 
         const paymentUrl = orderResult.paymentUrl
         const orderId = orderResult.orderId!

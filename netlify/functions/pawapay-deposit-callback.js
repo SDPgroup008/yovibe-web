@@ -42,7 +42,7 @@ exports.handler = async (event) => {
   depositId = parsedBody.depositId || (event.queryStringParameters && event.queryStringParameters.depositId);
   status = String(parsedBody.status || (event.queryStringParameters && event.queryStringParameters.status) || '').toUpperCase();
 
-  console.log('[PawaPayCallback] Received deposit callback:', { depositId, status });
+  /* console.log('[PawaPayCallback] Received deposit callback:', { depositId, status }); */
 
   // Signature verification applies ONLY to real PawaPay POST callbacks. GET
   // requests are uptime-monitor probes (PawaPay never sends GET callbacks),
@@ -62,12 +62,12 @@ exports.handler = async (event) => {
   try {
     // 2. Re-query PawaPay for the authoritative status (don't trust the ping alone).
     const verification = await verifyPawaPayDeposit(depositId);
-    console.log('[PawaPayCallback] Verified status:', verification.status);
+    /* console.log('[PawaPayCallback] Verified status:', verification.status); */
 
     // 3. A deposit that never completed must not leave live tickets behind.
     if (verification.status === 'failed') {
       const result = await markTicketsByPayment(getAdminClient(), { depositId, status: 'cancelled', refundStatus: null });
-      console.log('[PawaPayCallback] Failed-deposit reconciliation:', result);
+      /* console.log('[PawaPayCallback] Failed-deposit reconciliation:', result); */
     }
 
     return ack({ depositId, status: verification.status });

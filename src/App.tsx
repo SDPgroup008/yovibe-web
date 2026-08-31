@@ -108,7 +108,7 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
       console.error("Failed to save token:", await res.text());
     } else {
       const result = await res.json();
-      console.log("[App] Token saved and subscribed to all-users:", result);
+      /* console.log("[App] Token saved and subscribed to all-users:", result); */
     }
   } catch (err) {
     console.error("Error calling Netlify function:", err);
@@ -147,7 +147,7 @@ function AppContent() {
     const registerServiceWorker = async () => {
       try {
         const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-        console.log("[PWA] Service worker registered:", registration.scope);
+        /* console.log("[PWA] Service worker registered:", registration.scope); */
 
         if (registration.waiting && mounted) {
           setWaitingServiceWorker(registration.waiting);
@@ -167,7 +167,7 @@ function AppContent() {
         });
 
         await navigator.serviceWorker.ready;
-        console.log("[PWA] Service worker is active and ready");
+        /* console.log("[PWA] Service worker is active and ready"); */
       } catch (err) {
         console.warn("[PWA] Service worker registration failed:", err);
       }
@@ -230,7 +230,7 @@ function AppContent() {
         try {
           const token = await getWebFcmToken();
           if (token) {
-            console.log("Web FCM token retrieved:", token);
+            /* console.log("Web FCM token retrieved:", token); */
             const userId = user?.uid || null;
             const userEmail = user?.email;
             const userName = user?.displayName || null;
@@ -250,8 +250,8 @@ function AppContent() {
     }
 
     const unsubscribe = onMessage(messaging, async (payload) => {
-      console.log("[iOS-NOTIF] Foreground notification received");
-      console.log("[iOS-NOTIF] Title:", payload.notification?.title);
+      /* console.log("[iOS-NOTIF] Foreground notification received"); */
+      /* console.log("[iOS-NOTIF] Title:", payload.notification?.title); */
 
       try {
         await NotificationService.processIncomingNotification(payload, user?.uid);
@@ -271,25 +271,25 @@ function AppContent() {
   // 🔔 Handle permission banner actions
   const handleAllowNotifications = async () => {
     setShowPermissionBanner(false);
-    console.log("[iOS-NOTIF] User tapped Allow - requesting permission...");
+    /* console.log("[iOS-NOTIF] User tapped Allow - requesting permission..."); */
     try {
       const granted = await requestNotificationPermission();
-      console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied');
+      /* console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied'); */
 
       if (granted) {
         try {
-          console.log("[iOS-NOTIF] Getting FCM token...");
+          /* console.log("[iOS-NOTIF] Getting FCM token..."); */
           const token = await getWebFcmToken();
-          console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO');
+          /* console.log("[iOS-NOTIF] Token received:", token ? 'YES' : 'NO'); */
 
           if (token) {
-            console.log("[iOS-NOTIF] FCM Token (first 20 chars):", token.substring(0, 20) + "...");
+            /* console.log("[iOS-NOTIF] FCM Token (first 20 chars):", token.substring(0, 20) + "..."); */
             const userId = user?.uid || null;
             const userEmail = user?.email;
             const userName = user?.displayName || undefined;
-            console.log("[iOS-NOTIF] Saving token to Firestore...");
+            /* console.log("[iOS-NOTIF] Saving token to Firestore..."); */
             await saveTokenToRepo(token, userId, userEmail, userName);
-            console.log("[iOS-NOTIF] Token saved successfully!");
+            /* console.log("[iOS-NOTIF] Token saved successfully!"); */
 
             await NotificationService.trackNewSubscription();
           } else {
@@ -308,7 +308,7 @@ function AppContent() {
 
   const handleBlockNotifications = () => {
     setShowPermissionBanner(false);
-    console.log("[iOS-NOTIF] User tapped Block");
+    /* console.log("[iOS-NOTIF] User tapped Block"); */
   };
 
   // Detect iOS (all browsers on iOS use WebKit, even Chrome)

@@ -80,11 +80,11 @@ class FirebaseService {
   }
 
   async signIn(email: string, password: string): Promise<void> {
-    console.log("FirebaseService.signIn: Starting sign in for", email);
+    /* console.log("FirebaseService.signIn: Starting sign in for", email); */
     try {
-      console.log("FirebaseService.signIn: Calling Firebase Auth signInWithEmailAndPassword");
+      /* console.log("FirebaseService.signIn: Calling Firebase Auth signInWithEmailAndPassword"); */
       const result = await signInWithEmailAndPassword(auth, email, password);
-      console.log("FirebaseService.signIn: Sign in successful, UID:", result.user.uid);
+      /* console.log("FirebaseService.signIn: Sign in successful, UID:", result.user.uid); */
     } catch (error) {
       console.error("FirebaseService.signIn: Error signing in:", error);
       throw error;
@@ -120,22 +120,22 @@ class FirebaseService {
 
   // User methods
   async getUserProfile(uid: string): Promise<User> {
-    console.log("FirebaseService.getUserProfile: Looking for user with UID:", uid);
+    /* console.log("FirebaseService.getUserProfile: Looking for user with UID:", uid); */
     try {
-      console.log("FirebaseService.getUserProfile: Querying Firestore for user profile");
+      /* console.log("FirebaseService.getUserProfile: Querying Firestore for user profile"); */
       const usersRef = collection(db, "YoVibe/data/users")
       const q = query(usersRef, where("uid", "==", uid))
       const querySnapshot = await getDocs(q)
-      console.log("FirebaseService.getUserProfile: Query returned", querySnapshot.size, "documents");
+      /* console.log("FirebaseService.getUserProfile: Query returned", querySnapshot.size, "documents"); */
 
       if (querySnapshot.empty) {
-        console.log("FirebaseService.getUserProfile: User profile NOT FOUND in Firestore");
+        /* console.log("FirebaseService.getUserProfile: User profile NOT FOUND in Firestore"); */
         throw new Error("User not found")
       }
 
       const userDoc = querySnapshot.docs[0]
       const userData = userDoc.data()
-      console.log("FirebaseService.getUserProfile: User profile found:", userData.email);
+      /* console.log("FirebaseService.getUserProfile: User profile found:", userData.email); */
 
       return {
         id: userDoc.id,
@@ -297,7 +297,7 @@ class FirebaseService {
         return this.getMockVenues()
       }
 
-      console.log("[DB Fetch] Loaded venues from Firebase:", venues.map(v => ({ id: v.id, slug: (v as any).slug, hasId: !!v.id, hasSlug: !!(v as any).slug })));
+      /* console.log("[DB Fetch] Loaded venues from Firebase:", venues.map(v => ({ id: v.id, slug: (v as any).slug, hasId: !!v.id, hasSlug: !!(v as any).slug }))); */
       return venues
     } catch (error) {
       // console.error("FirebaseService: Error getting venues:", error);
@@ -779,77 +779,77 @@ class FirebaseService {
 
   async approveOwnershipRequest(requestId: string, adminId: string, reviewNote?: string): Promise<void> {
     try {
-      console.log("[FirebaseService] Starting approveOwnershipRequest for requestId:", requestId)
-      console.log("[FirebaseService] AdminId:", adminId)
-      console.log("[FirebaseService] Review note:", reviewNote)
+      /* console.log("[FirebaseService] Starting approveOwnershipRequest for requestId:", requestId) */
+      /* console.log("[FirebaseService] AdminId:", adminId) */
+      /* console.log("[FirebaseService] Review note:", reviewNote) */
       
       const requestRef = doc(db, "YoVibe/data/ownershipRequests", requestId)
-      console.log("[FirebaseService] requestRef path:", requestRef.path)
+      /* console.log("[FirebaseService] requestRef path:", requestRef.path) */
       
       const requestDoc = await getDoc(requestRef)
-      console.log("[FirebaseService] requestDoc exists:", requestDoc.exists())
+      /* console.log("[FirebaseService] requestDoc exists:", requestDoc.exists()) */
       
       if (!requestDoc.exists()) {
         throw new Error("Request not found")
       }
       
       const requestData = requestDoc.data()
-      console.log("[FirebaseService] requestData:", requestData)
+      /* console.log("[FirebaseService] requestData:", requestData) */
       
       const userId = requestData.userId
       const venueId = requestData.venueId
-      console.log("[FirebaseService] userId:", userId, "venueId:", venueId)
+      /* console.log("[FirebaseService] userId:", userId, "venueId:", venueId) */
       
       // STEP 1: Update the user's userType to club_owner and link the venue
-      console.log("[FirebaseService] STEP 1: Getting user document for userId:", userId)
+      /* console.log("[FirebaseService] STEP 1: Getting user document for userId:", userId) */
       const userRef = doc(db, "YoVibe/data/users", userId)
-      console.log("[FirebaseService] userRef path:", userRef.path)
+      /* console.log("[FirebaseService] userRef path:", userRef.path) */
       const userDoc = await getDoc(userRef)
-      console.log("[FirebaseService] userDoc exists:", userDoc.exists())
+      /* console.log("[FirebaseService] userDoc exists:", userDoc.exists()) */
       
       if (userDoc.exists()) {
         const userData = userDoc.data()
-        console.log("[FirebaseService] Current userType:", userData.userType)
+        /* console.log("[FirebaseService] Current userType:", userData.userType) */
         
         // If user is not already a club_owner, upgrade them
         if (userData.userType !== "club_owner" && userData.userType !== "admin") {
-          console.log("[FirebaseService] STEP 1a: Upgrading user to club_owner...")
+          /* console.log("[FirebaseService] STEP 1a: Upgrading user to club_owner...") */
           await updateDoc(userRef, {
             userType: "club_owner",
             venueId: venueId,
           })
-          console.log("[FirebaseService] STEP 1a: User upgraded to club_owner")
+          /* console.log("[FirebaseService] STEP 1a: User upgraded to club_owner") */
         } else {
-          console.log("[FirebaseService] STEP 1b: User is already club_owner/admin, just linking venue...")
+          /* console.log("[FirebaseService] STEP 1b: User is already club_owner/admin, just linking venue...") */
           await updateDoc(userRef, {
             venueId: venueId,
           })
-          console.log("[FirebaseService] STEP 1b: Venue linked to user")
+          /* console.log("[FirebaseService] STEP 1b: Venue linked to user") */
         }
       } else {
-        console.log("[FirebaseService] WARNING: User document not found!")
+        /* console.log("[FirebaseService] WARNING: User document not found!") */
       }
       
       // STEP 2: Update the venue owner to the requester
-      console.log("[FirebaseService] STEP 2: Updating venue owner to userId:", userId)
+      /* console.log("[FirebaseService] STEP 2: Updating venue owner to userId:", userId) */
       const venueRef = doc(db, "YoVibe/data/venues", venueId)
-      console.log("[FirebaseService] venueRef path:", venueRef.path)
+      /* console.log("[FirebaseService] venueRef path:", venueRef.path) */
       await updateDoc(venueRef, {
         ownerId: userId,
       })
-      console.log("[FirebaseService] STEP 2: Venue owner updated to:", userId)
+      /* console.log("[FirebaseService] STEP 2: Venue owner updated to:", userId) */
       
       // STEP 3: Update the request status to approved
-      console.log("[FirebaseService] STEP 3: Updating request status to approved...")
+      /* console.log("[FirebaseService] STEP 3: Updating request status to approved...") */
       await updateDoc(requestRef, {
         status: "approved",
         reviewedAt: Timestamp.now(),
         reviewedBy: adminId,
         reviewNote: reviewNote || "",
       })
-      console.log("[FirebaseService] STEP 3: Request status updated to approved")
+      /* console.log("[FirebaseService] STEP 3: Request status updated to approved") */
       
-      console.log("[FirebaseService] approveOwnershipRequest completed successfully!")
+      /* console.log("[FirebaseService] approveOwnershipRequest completed successfully!") */
     } catch (error) {
       console.error("FirebaseService: Error approving ownership request:", error)
       throw error
@@ -965,7 +965,7 @@ class FirebaseService {
         })
       })
 
-      console.log("[DB Fetch] Loaded events from Firebase:", events.map(e => ({ id: e.id, slug: (e as any).slug, hasId: !!e.id, hasSlug: !!(e as any).slug })));
+      /* console.log("[DB Fetch] Loaded events from Firebase:", events.map(e => ({ id: e.id, slug: (e as any).slug, hasId: !!e.id, hasSlug: !!(e as any).slug }))); */
       // console.log("FirebaseService: Found", events.length, "events")
       return events.sort((a, b) => a.date.getTime() - b.date.getTime())
     } catch (error) {
@@ -1644,7 +1644,7 @@ class FirebaseService {
       const querySnapshot = await getDocs(q)
       
       if (querySnapshot.empty) {
-        console.log("FirebaseService: No ticket found with QR code:", qrCode)
+        /* console.log("FirebaseService: No ticket found with QR code:", qrCode) */
         return null
       }
       
@@ -1780,7 +1780,7 @@ class FirebaseService {
 
   async getTicketValidationsByEvent(eventId: string): Promise<any[]> {
     try {
-      console.log("FirebaseService.getTicketValidationsByEvent: Fetching validations for event:", eventId)
+      /* console.log("FirebaseService.getTicketValidationsByEvent: Fetching validations for event:", eventId) */
       const validationsRef = collection(db, "YoVibe/data/ticketValidations")
       const q = query(validationsRef, where("eventId", "==", eventId), orderBy("validatedAt", "desc"))
       const querySnapshot = await getDocs(q)
@@ -1800,7 +1800,7 @@ class FirebaseService {
         })
       })
       
-      console.log("FirebaseService.getTicketValidationsByEvent: Found", validations.length, "validations")
+      /* console.log("FirebaseService.getTicketValidationsByEvent: Found", validations.length, "validations") */
       return validations
     } catch (error) {
       console.error("FirebaseService: Error getting ticket validations by event:", error)
@@ -1811,12 +1811,12 @@ class FirebaseService {
   // Email record storage for tracking sent emails
   async saveEmailRecord(record: any): Promise<string> {
     try {
-      console.log("FirebaseService.saveEmailRecord: Saving email record:", record.type)
+      /* console.log("FirebaseService.saveEmailRecord: Saving email record:", record.type) */
       const emailRef = await addDoc(collection(db, "YoVibe/data/emailRecords"), {
         ...record,
         sentAt: record.sentAt ? Timestamp.fromDate(record.sentAt) : Timestamp.now(),
       })
-      console.log("FirebaseService.saveEmailRecord: Email record saved with ID:", emailRef.id)
+      /* console.log("FirebaseService.saveEmailRecord: Email record saved with ID:", emailRef.id) */
       return emailRef.id
     } catch (error) {
       console.error("FirebaseService: Error saving email record:", error)
@@ -1952,7 +1952,7 @@ class FirebaseService {
        })
 
        if (eventIds.length === 0) {
-         console.log("FirebaseService: No events found for organizer:", organizerId)
+         /* console.log("FirebaseService: No events found for organizer:", organizerId) */
          return []
        }
 
@@ -1997,7 +1997,7 @@ class FirebaseService {
        )
        const ticketsSnapshot = await getDocs(eligibleQuery)
        
-       console.log("FirebaseService.getEligibleTicketsForEvent: Found", ticketsSnapshot.size, "eligible tickets for event:", eventId)
+       /* console.log("FirebaseService.getEligibleTicketsForEvent: Found", ticketsSnapshot.size, "eligible tickets for event:", eventId) */
        
        const tickets: any[] = []
        ticketsSnapshot.forEach((doc) => {
@@ -2009,7 +2009,7 @@ class FirebaseService {
            eventStartTime: data.eventStartTime?.toDate(),
            scannedAt: data.scannedAt?.toDate(),
          }
-         console.log("FirebaseService.getEligibleTicketsForEvent: Ticket ID:", ticketData.id, "venueRevenue:", ticketData.venueRevenue)
+         /* console.log("FirebaseService.getEligibleTicketsForEvent: Ticket ID:", ticketData.id, "venueRevenue:", ticketData.venueRevenue) */
          tickets.push(ticketData)
        })
        

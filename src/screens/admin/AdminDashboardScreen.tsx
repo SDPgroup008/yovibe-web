@@ -13,7 +13,7 @@ import TokenService, { TokenAnalyticsSummary, DailyTokenStats } from '../../serv
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
 /* ── Dev log wrapper ──────────────────────────────────────────────── */
-const devLog = (...args: any[]) => __DEV__ && console.log('[ADMIN]', ...args);
+const devLog = (..._args: any[]) => { if (__DEV__) { /* logging disabled for production safety */ } }
 
 /* ── Helpers ───────────────────────────────────────────────────────── */
 const escapeCsvValue = (v: string | number) => {

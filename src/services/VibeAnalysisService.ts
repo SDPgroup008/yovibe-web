@@ -32,7 +32,7 @@ class VibeAnalysisService {
       overallAtmosphere: number
     }
   }> {
-    console.log('VibeAnalysisService.analyzeVibeImage called (heuristic path)')
+    /* console.log('VibeAnalysisService.analyzeVibeImage called (heuristic path)') */
     const { ratings, vibeRating } = await this.analyzeWithHeuristics(imageUri)
     return { vibeRating, analysisData: ratings }
   }
@@ -106,7 +106,7 @@ class VibeAnalysisService {
     const safeClass = Math.max(0, Math.min(predictedClass, CLASS_RATINGS.length - 1))
     const ratings = CLASS_RATINGS[safeClass]
     const vibeRating = computeVibeRating(ratings)
-    console.log(`ML: class=${safeClass}, confidence=${confidence.toFixed(2)}, rating=${vibeRating}`)
+    /* console.log(`ML: class=${safeClass}, confidence=${confidence.toFixed(2)}, rating=${vibeRating}`) */
     return {
       vibeRating: Math.min(5, Math.max(0, vibeRating)),
       analysisData: { ...ratings },

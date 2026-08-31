@@ -63,7 +63,7 @@ exports.handler = async (event, context) => {
     if (error) throw error;
     const fulfillments = (rows || []).filter((f) => f.status !== 'cancelled');
 
-    console.log('[StuckFulfillments] Candidates:', fulfillments.length);
+    /* console.log('[StuckFulfillments] Candidates:', fulfillments.length); */
 
     let processed = 0;
     let succeeded = 0;

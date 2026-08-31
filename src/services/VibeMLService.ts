@@ -109,27 +109,27 @@ class VibeMLService {
 
   private async doLoad(onProgress?: ProgressCallback): Promise<void> {
     onProgress?.(0)
-    console.log('[VibeMLService] Loading TensorFlow.js from CDN...')
+    /* console.log('[VibeMLService] Loading TensorFlow.js from CDN...') */
 
     try {
       const tf = await loadTFJSFromCDN()
       this.tf = tf
       onProgress?.(5)
-      console.log('[VibeMLService] TensorFlow.js loaded, backend:', this.tf?.getBackend())
+      /* console.log('[VibeMLService] TensorFlow.js loaded, backend:', this.tf?.getBackend()) */
 
       await this.tf.ready()
       onProgress?.(10)
-      console.log('[VibeMLService] tf.ready() done')
+      /* console.log('[VibeMLService] tf.ready() done') */
 
       // Verify model.json is accessible
-      console.log('[VibeMLService] Fetching model.json...')
+      /* console.log('[VibeMLService] Fetching model.json...') */
       const modelJsonResponse = await fetch('/vibe_model_tfjs/model.json')
       if (!modelJsonResponse.ok) {
         throw new Error(`Failed to fetch model.json: ${modelJsonResponse.status} ${modelJsonResponse.statusText}`)
       }
       const modelJson = await modelJsonResponse.json()
       const weightFiles = modelJson.weightsManifest?.[0]?.paths || []
-      console.log('[VibeMLService] model.json OK, weights:', weightFiles.length)
+      /* console.log('[VibeMLService] model.json OK, weights:', weightFiles.length) */
 
       for (const wf of weightFiles) {
         const fr = await fetch(`/vibe_model_tfjs/${wf}`, { method: 'HEAD' })
@@ -144,7 +144,7 @@ class VibeMLService {
         onProgress: (fraction: number) => {
           const pct = 10 + Math.round(fraction * 80)
           onProgress?.(pct)
-          console.log(`[VibeMLService] Load progress: ${pct}%`)
+          /* console.log(`[VibeMLService] Load progress: ${pct}%`) */
         },
       })
 
@@ -155,7 +155,7 @@ class VibeMLService {
       this.model = await Promise.race([loadPromise, timeoutPromise])
       this.loadState = 'ready'
       onProgress?.(100)
-      console.log('[VibeMLService] ✅ ML model loaded successfully')
+      /* console.log('[VibeMLService] ✅ ML model loaded successfully') */
     } catch (err: any) {
       this.model = null
       this.loadState = 'error'

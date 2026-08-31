@@ -292,7 +292,7 @@ const CityDropdown: React.FC<{
 }
 
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
-  console.log('[MapScreen.web] 🏗️ RENDER/MOUNT');
+  /* console.log('[MapScreen.web] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Map page
   const mapSeo = SCREEN_SEO.map;
   const isFocused = useIsFocused();
@@ -335,7 +335,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const initialisedRef = useRef(false);
   useEffect(() => {
     if (!initialisedRef.current && isCacheValid() && mapCache) {
-      console.log('[MapScreen.web] 💾 Hydrating from module-level cache, venue count:', mapCache.venues.length);
+      /* console.log('[MapScreen.web] 💾 Hydrating from module-level cache, venue count:', mapCache.venues.length); */
       setVenues(mapCache.venues);
       setVenueVibeRatings(mapCache.vibeRatings);
       setHasMore(false);
@@ -347,7 +347,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   // Restore scroll position when screen regains focus
   useEffect(() => {
-    console.log('[MapScreen.web] 👁️ focus effect - isFocused=', isFocused);
+    /* console.log('[MapScreen.web] 👁️ focus effect - isFocused=', isFocused); */
     if (isFocused) restorePosition();
   }, [isFocused]);
 
@@ -378,7 +378,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // ─── Load data only once (module-level guard) ──────────────────
   useEffect(() => {
     if (isCacheValid()) {
-      console.log('[MapScreen.web] ⏭️ Skipping initial load — cache is valid');
+      /* console.log('[MapScreen.web] ⏭️ Skipping initial load — cache is valid'); */
       if (!listenersSetup) {
         listenersSetup = true;
         setupVibeListeners();
@@ -689,7 +689,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   useEffect(() => {
     const withCoords = venues.filter((v) =>
       v.latitude != null || v.coordinates?.latitude != null).length
-    console.log(`[MapScreen.web] posting ${venues.length} venues to map (${withCoords} with coords)`)
+    /* console.log(`[MapScreen.web] posting ${venues.length} venues to map (${withCoords} with coords)`) */
     postToMap(mapVenuesPayload())
   }, [venues])
 

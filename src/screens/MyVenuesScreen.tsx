@@ -72,10 +72,10 @@ const MyVenuesScreen: React.FC = () => {
     
     try {
       setLoading(true)
-      console.log("[MyVenuesScreen] Deleting venue:", venueId)
+      /* console.log("[MyVenuesScreen] Deleting venue:", venueId) */
       
       await SupabaseService.deleteVenue(venueId)
-      console.log("[MyVenuesScreen] Venue deleted successfully")
+      /* console.log("[MyVenuesScreen] Venue deleted successfully") */
       
       Alert.alert("Success", "Venue deleted successfully")
       // Refresh the list

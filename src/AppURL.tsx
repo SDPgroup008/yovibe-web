@@ -62,9 +62,9 @@ const MainApp: React.FC = () => {
       if ("serviceWorker" in navigator) {
         try {
           const registration = await navigator.serviceWorker.register("/firebase-messaging-sw.js");
-          console.log("[iOS-NOTIF] Service worker registered:", registration.scope);
+          /* console.log("[iOS-NOTIF] Service worker registered:", registration.scope); */
           await navigator.serviceWorker.ready;
-          console.log("[iOS-NOTIF] Service worker is active and ready");
+          /* console.log("[iOS-NOTIF] Service worker is active and ready"); */
         } catch (err) {
           console.warn("[iOS-NOTIF] Service worker registration failed:", err);
         }
@@ -92,7 +92,7 @@ const MainApp: React.FC = () => {
         try {
           const token = await getWebFcmToken();
           if (token) {
-            console.log("Web FCM token retrieved:", token);
+            /* console.log("Web FCM token retrieved:", token); */
             const userId = user?.uid ?? undefined;
             const userEmail = user?.email;
             const userName = user?.displayName ?? undefined;
@@ -112,8 +112,8 @@ const MainApp: React.FC = () => {
     }
 
     const unsubscribe = onMessage(messaging, async (payload) => {
-      console.log("[iOS-NOTIF] Foreground notification received");
-      console.log("[iOS-NOTIF] Title:", payload.notification?.title);
+      /* console.log("[iOS-NOTIF] Foreground notification received"); */
+      /* console.log("[iOS-NOTIF] Title:", payload.notification?.title); */
 
       try {
         await NotificationService.processIncomingNotification(payload, user?.uid);
@@ -133,16 +133,16 @@ const MainApp: React.FC = () => {
   // Permission handlers (existing logic)
   const handleAllowNotifications = async () => {
     setShowPermissionBanner(false);
-    console.log("[iOS-NOTIF] User tapped Allow - requesting permission...");
+    /* console.log("[iOS-NOTIF] User tapped Allow - requesting permission..."); */
     try {
       const granted = await requestNotificationPermission();
-      console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied');
+      /* console.log("[iOS-NOTIF] Permission result:", granted ? 'granted' : 'denied'); */
 
       if (granted) {
         try {
           const token = await getWebFcmToken();
           if (token) {
-            console.log("[iOS-NOTIF] FCM Token received:", token.substring(0, 20) + "...");
+            /* console.log("[iOS-NOTIF] FCM Token received:", token.substring(0, 20) + "..."); */
             const userId = user?.uid ?? undefined;
             const userEmail = user?.email;
             const userName = user?.displayName ?? undefined;
@@ -160,7 +160,7 @@ const MainApp: React.FC = () => {
 
   const handleBlockNotifications = () => {
     setShowPermissionBanner(false);
-    console.log("[iOS-NOTIF] User tapped Block");
+    /* console.log("[iOS-NOTIF] User tapped Block"); */
   };
 
   return (

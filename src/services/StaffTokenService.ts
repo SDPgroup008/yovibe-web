@@ -49,7 +49,7 @@ const StaffTokenService = {
       return null
     }
 
-    console.log("[StaffTokenService] generating token as auth uid:", user.id, "for event:", eventSlug)
+    /* console.log("[StaffTokenService] generating token as auth uid:", user.id, "for event:", eventSlug) */
 
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
 

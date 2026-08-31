@@ -31,7 +31,7 @@ const isSmallDevice = width < 380;
 const isTablet = width >= 768;
 const isLargeScreen = width >= 1024;
 
-console.log("[v0] AddEventScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] AddEventScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 // Responsive helper function
 const responsiveSize = (small: number, medium: number, large: number) => {
@@ -357,12 +357,12 @@ const AddEventScreen: React.FC<any> = (props) => {
         
         const isR2Url = bgUrl.includes('.r2.') || bgUrl.includes('/ticket-designs/')
         if (isR2Url) {
-          console.log(`Fee background for ${fee.name} already has R2 URL`)
+          /* console.log(`Fee background for ${fee.name} already has R2 URL`) */
           return fee
         }
         
         try {
-          console.log(`Uploading fee background for ${fee.name} to R2...`)
+          /* console.log(`Uploading fee background for ${fee.name} to R2...`) */
           const contentTypeMatch = bgUrl.match(/^data:(image\/[a-z]+)/i)
           const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png'
           
@@ -376,7 +376,7 @@ const AddEventScreen: React.FC<any> = (props) => {
             body: bgUrl,
           })
           
-          console.log(`Fee background uploaded: ${result.url}`)
+          /* console.log(`Fee background uploaded: ${result.url}`) */
           return {
             ...fee,
             ticketDesign: {
@@ -402,12 +402,12 @@ const AddEventScreen: React.FC<any> = (props) => {
     const bgUrl = uploadedBackgroundUrl
     const isR2Url = bgUrl.includes('.r2.') || bgUrl.includes('/ticket-designs/')
     if (isR2Url) {
-      console.log("Event design background already has R2 URL")
+      /* console.log("Event design background already has R2 URL") */
       return bgUrl
     }
     
     try {
-      console.log("Uploading event ticket design background to R2...")
+      /* console.log("Uploading event ticket design background to R2...") */
       const contentTypeMatch = bgUrl.match(/^data:(image\/[a-z]+)/i)
       const contentType = contentTypeMatch ? contentTypeMatch[1] : 'image/png'
       
@@ -421,7 +421,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         body: bgUrl,
       })
       
-      console.log("Event design background uploaded:", result.url)
+      /* console.log("Event design background uploaded:", result.url) */
       return result.url
     } catch (error) {
       console.error("Error uploading event design background:", error)
@@ -639,7 +639,7 @@ const AddEventScreen: React.FC<any> = (props) => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0]
-        console.log("Image selected:", selectedImage.uri.substring(0, 50) + "...")
+        /* console.log("Image selected:", selectedImage.uri.substring(0, 50) + "...") */
         setImage(selectedImage.uri)
         setImageFile(selectedImage)
       }
@@ -685,14 +685,14 @@ const AddEventScreen: React.FC<any> = (props) => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0]
-        console.log("Fee background image selected:", selectedImage.uri.substring(0, 50) + "...")
+        /* console.log("Fee background image selected:", selectedImage.uri.substring(0, 50) + "...") */
         setNewFeeBackgroundFile(selectedImage)
         
         if (selectedImage.uri.startsWith('data:')) {
           setNewFeeUploadedBackgroundUrl(selectedImage.uri)
         } else {
           try {
-            console.log("Uploading fee background to R2...")
+            /* console.log("Uploading fee background to R2...") */
             const response = await fetch(selectedImage.uri)
             const blob = await response.blob()
             const reader = new FileReader()
@@ -708,7 +708,7 @@ const AddEventScreen: React.FC<any> = (props) => {
               contentType: 'image/png',
               body: dataUrl,
             })
-            console.log("Fee background uploaded to R2:", uploaded.url)
+            /* console.log("Fee background uploaded to R2:", uploaded.url) */
             setNewFeeUploadedBackgroundUrl(uploaded.url)
           } catch (uploadError) {
             console.warn("Failed to upload fee background to R2, storing data URL:", uploadError)
@@ -744,14 +744,14 @@ const AddEventScreen: React.FC<any> = (props) => {
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const selectedImage = result.assets[0]
-        console.log("Event background image selected:", selectedImage.uri.substring(0, 50) + "...")
+        /* console.log("Event background image selected:", selectedImage.uri.substring(0, 50) + "...") */
         setEventBackgroundFile(selectedImage)
         
         if (selectedImage.uri.startsWith('data:')) {
           setUploadedBackgroundUrl(selectedImage.uri)
         } else {
           try {
-            console.log("Uploading event background to R2...")
+            /* console.log("Uploading event background to R2...") */
             const response = await fetch(selectedImage.uri)
             const blob = await response.blob()
             const reader = new FileReader()
@@ -767,7 +767,7 @@ const AddEventScreen: React.FC<any> = (props) => {
               contentType: 'image/png',
               body: dataUrl,
             })
-            console.log("Event background uploaded to R2:", uploaded.url)
+            /* console.log("Event background uploaded to R2:", uploaded.url) */
             setUploadedBackgroundUrl(uploaded.url)
           } catch (uploadError) {
             console.warn("Failed to upload event background to R2, storing data URL:", uploadError)
@@ -886,11 +886,11 @@ const AddEventScreen: React.FC<any> = (props) => {
       let imageUrl = image || ""
       if (imageFile) {
         try {
-          console.log("Uploading event poster image...")
+          /* console.log("Uploading event poster image...") */
           const posterSource = imageFile.file || image
           if (posterSource) {
             imageUrl = await uploadPosterWithTimeout(posterSource)
-            console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...")
+            /* console.log("Image uploaded successfully:", imageUrl?.substring(0, 50) + "...") */
           } else {
             console.warn("imageFile is true but image URI is null; skipping upload")
           }
@@ -904,7 +904,7 @@ const AddEventScreen: React.FC<any> = (props) => {
       let processedEntryFees = entryFees
 
       if (entryFees.length > 0) {
-        console.log("Processing entry fees and uploading backgrounds...")
+        /* console.log("Processing entry fees and uploading backgrounds...") */
         try {
           processedEntryFees = await uploadFeeBackgroundsToR2(entryFees, `event-${Date.now()}`)
         } catch (error) {

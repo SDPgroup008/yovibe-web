@@ -28,7 +28,7 @@ const isSmallDevice = width < 380;
 const isTablet = width >= 768;
 const isLargeScreen = width >= 1024;
 
-console.log("[v0] AddVenueScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] AddVenueScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 // Responsive helper function
 const responsiveSize = (small: number, medium: number, large: number) => {

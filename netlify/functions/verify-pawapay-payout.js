@@ -7,10 +7,10 @@ const getApiKey = () => {
 }
 
 exports.handler = async (event, context) => {
-  console.log("========================================")
-  console.log("💰 PAWAPAY PAYOUT VERIFICATION (Netlify Functions)")
-  console.log("========================================")
-  console.log("📋 Event:", event.httpMethod)
+  /* console.log("========================================") */
+  /* console.log("💰 PAWAPAY PAYOUT VERIFICATION (Netlify Functions)") */
+  /* console.log("========================================") */
+  /* console.log("📋 Event:", event.httpMethod) */
 
   if (event.httpMethod !== "GET") {
     return {
@@ -29,10 +29,10 @@ exports.handler = async (event, context) => {
       }
     }
 
-    console.log("📥 Query parameters:")
-    console.log("   - Payout ID:", payoutId)
+    /* console.log("📥 Query parameters:") */
+    /* console.log("   - Payout ID:", payoutId) */
 
-    console.log("📤 Calling PawaPay API to check payout status...")
+    /* console.log("📤 Calling PawaPay API to check payout status...") */
     const apiKey = getApiKey()
     
     const response = await fetch(`${PAWAPAY_BASE_URL}/payouts/${payoutId}`, {
@@ -42,7 +42,7 @@ exports.handler = async (event, context) => {
     })
 
     if (response.status === 404) {
-      console.log("⚠️ Payout not found")
+      /* console.log("⚠️ Payout not found") */
       return {
         statusCode: 200,
         body: JSON.stringify({ status: "NOT_FOUND" }),
@@ -50,7 +50,7 @@ exports.handler = async (event, context) => {
     }
 
     if (!response.ok) {
-      console.log("⚠️ API error:", response.status)
+      /* console.log("⚠️ API error:", response.status) */
       return {
         statusCode: response.status,
         body: JSON.stringify({ status: "PENDING" }),
@@ -58,15 +58,15 @@ exports.handler = async (event, context) => {
     }
 
     const data = await response.json()
-    console.log("📥 PawaPay response:", JSON.stringify(data, null, 2))
+    /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
 
     const status = data.status === "COMPLETED" ? "completed"
       : data.status === "FAILED" ? "failed"
       : data.status === "ENQUEUED" ? "pending"
       : "pending"
 
-    console.log("✅ Verification complete - Status:", status)
-    console.log("========================================")
+    /* console.log("✅ Verification complete - Status:", status) */
+    /* console.log("========================================") */
 
     return {
       statusCode: 200,

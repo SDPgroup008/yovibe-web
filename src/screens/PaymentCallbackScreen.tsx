@@ -18,10 +18,10 @@ const PaymentCallbackScreen: React.FC = () => {
         const trackingId = urlParams.get("OrderTrackingId")
         const statusFromUrl = urlParams.get("pesapal_response_data")
 
-        console.log("💳 Payment callback received:")
-        console.log("   - Merchant Reference:", orderId)
-        console.log("   - Order Tracking ID:", trackingId)
-        console.log("   - Status from URL:", statusFromUrl)
+        /* console.log("💳 Payment callback received:") */
+        /* console.log("   - Merchant Reference:", orderId) */
+        /* console.log("   - Order Tracking ID:", trackingId) */
+        /* console.log("   - Status from URL:", statusFromUrl) */
 
         if (!orderId) {
           throw new Error("No order ID found in callback")

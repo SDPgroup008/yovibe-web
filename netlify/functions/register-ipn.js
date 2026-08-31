@@ -28,10 +28,10 @@ exports.handler = async (event) => {
 
     const ipnUrl = `${siteUrl}/.netlify/functions/pesapal-ipn`;
 
-    console.log('RegisterIPN: Starting');
-    console.log('  apiUrl:', apiUrl);
-    console.log('  ipnUrl:', ipnUrl);
-    console.log('  siteUrl:', siteUrl);
+    /* console.log('RegisterIPN: Starting'); */
+    /* console.log('  apiUrl:', apiUrl); */
+    /* console.log('  ipnUrl:', ipnUrl); */
+    /* console.log('  siteUrl:', siteUrl); */
 
     // Step 1: Get OAuth token (v3) - credentials in body, NO Authorization header
     const tokenResponse = await fetch(`${apiUrl}/Auth/RequestToken`, {
@@ -48,8 +48,8 @@ exports.handler = async (event) => {
     });
 
     const tokenText = await tokenResponse.text();
-    console.log('OAuth response status:', tokenResponse.status);
-    console.log('OAuth response body (truncated):', tokenText.substring(0, 200));
+    /* console.log('OAuth response status:', tokenResponse.status); */
+    /* console.log('OAuth response body (truncated):', tokenText.substring(0, 200)); */
 
     if (!tokenResponse.ok) {
       throw new Error(`PesaPal OAuth error: ${tokenResponse.status} - ${tokenText.substring(0, 200)}`);
@@ -68,7 +68,7 @@ exports.handler = async (event) => {
       ipn_notification_type: 'GET',
     };
 
-    console.log('RegisterIPN request payload:', JSON.stringify(ipnRequest));
+    /* console.log('RegisterIPN request payload:', JSON.stringify(ipnRequest)); */
 
     const response = await fetch(`${apiUrl}/URLSetup/RegisterIPN`, {
       method: 'POST',
@@ -81,8 +81,8 @@ exports.handler = async (event) => {
     });
 
     const responseText = await response.text();
-    console.log('RegisterIPN response status:', response.status);
-    console.log('RegisterIPN response body:', responseText);
+    /* console.log('RegisterIPN response status:', response.status); */
+    /* console.log('RegisterIPN response body:', responseText); */
 
     if (!response.ok) {
       throw new Error(`PesaPal IPN registration error: ${response.status} - ${responseText.substring(0, 200)}`);

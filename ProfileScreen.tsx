@@ -50,9 +50,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigation }) => {
         onPress: async () => {
           setLoading(true)
           try {
-            console.log("ProfileScreen: Starting sign out process")
+            /* console.log("ProfileScreen: Starting sign out process") */
             await signOut()
-            console.log("ProfileScreen: Sign out completed")
+            /* console.log("ProfileScreen: Sign out completed") */
             // The AuthContext will handle navigation
           } catch (error) {
             console.error("ProfileScreen: Sign out error:", error)

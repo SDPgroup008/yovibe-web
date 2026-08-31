@@ -38,7 +38,7 @@ exports.handler = async (event) => {
     ].map(csvEscape).join(','));
 
     const csv = [header.join(','), ...rows].join('\n');
-    console.log(`[PartnerExport] ${(tickets || []).length} purchaser rows exported for ${eventId} by ${profile.email}`);
+    /* console.log(`[PartnerExport] ${(tickets || []).length} purchaser rows exported for ${eventId} by ${profile.email}`); */
 
     return json(200, { success: true, eventId, count: (tickets || []).length, csv });
   } catch (error) {

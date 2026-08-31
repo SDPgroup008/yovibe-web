@@ -30,7 +30,7 @@ const TokenScannerScreen: React.FC<TokenScannerScreenProps> = (props) => {
   const { params } = useRouter()
 
   const token = props.token || (route.params?.token as string) || (params?.token as string)
-  console.log("[TokenScannerScreen] resolved token:", token)
+  /* console.log("[TokenScannerScreen] resolved token:", token) */
 
   const [loading, setLoading] = useState(true)
   const [tokenValid, setTokenValid] = useState(false)

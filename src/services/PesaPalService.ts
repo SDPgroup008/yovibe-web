@@ -91,22 +91,22 @@ export class PesaPalService {
     buyerFirstName?: string,
     buyerLastName?: string,
   ): Promise<{ iframeUrl: string; orderId: string; merchantReference: string; trackingId?: string }> {
-    console.log("========================================")
-    console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)")
-    console.log("========================================")
-    console.log("📋 PesaPalService.initializeCheckout: Starting checkout")
-    console.log("   - Amount:", amount, "UGX")
-    console.log("   - Description:", description)
-    console.log("   - Buyer Email:", buyerEmail)
-    console.log("   - Buyer Phone:", buyerPhone || "Not provided")
-    console.log("   - Buyer Name:", buyerName || "Not provided")
+    /* console.log("========================================") */
+    /* console.log("💳 PESAPAL CHECKOUT INITIALIZATION (Netlify Functions)") */
+    /* console.log("========================================") */
+    /* console.log("📋 PesaPalService.initializeCheckout: Starting checkout") */
+    /* console.log("   - Amount:", amount, "UGX") */
+    /* console.log("   - Description:", description) */
+    /* console.log("   - Buyer Email:", buyerEmail) */
+    /* console.log("   - Buyer Phone:", buyerPhone || "Not provided") */
+    /* console.log("   - Buyer Name:", buyerName || "Not provided") */
 
     const orderId = generateOrderId()
     const merchantReference = orderId
 
     try {
-      console.log("📤 Submitting order via Netlify Function...")
-      console.log("   - Function URL:", '/.netlify/functions/create-pesapal-order')
+      /* console.log("📤 Submitting order via Netlify Function...") */
+      /* console.log("   - Function URL:", '/.netlify/functions/create-pesapal-order') */
 
       const response = await fetch('/.netlify/functions/create-pesapal-order', {
         method: 'POST',
@@ -127,18 +127,18 @@ export class PesaPalService {
 
       const data = await response.json()
 
-      console.log("📥 Netlify Function response:")
-      console.log("   - Status Code:", response.status)
-      console.log("   - Response:", data)
+      /* console.log("📥 Netlify Function response:") */
+      /* console.log("   - Status Code:", response.status) */
+      /* console.log("   - Response:", data) */
 
       if (!response.ok) {
         throw new Error(data.error || `Failed to create order: ${response.status}`)
       }
 
       if (data.iframeUrl) {
-        console.log("✅ Checkout initialized successfully via Netlify Functions")
-        console.log("   - Tracking ID:", data.trackingId || "Not provided")
-        console.log("========================================")
+        /* console.log("✅ Checkout initialized successfully via Netlify Functions") */
+        /* console.log("   - Tracking ID:", data.trackingId || "Not provided") */
+        /* console.log("========================================") */
         return {
           iframeUrl: data.iframeUrl,
           orderId: data.orderId,
@@ -146,14 +146,14 @@ export class PesaPalService {
           trackingId: data.trackingId,
         }
       } else {
-        console.log("⚠️ No iframe URL in response, using fallback")
+        /* console.log("⚠️ No iframe URL in response, using fallback") */
         throw new Error("No iframe URL received")
       }
     } catch (error: any) {
       console.error("❌ Error initializing checkout:", error)
       console.error("   - Error name:", error.name)
       console.error("   - Error message:", error.message)
-      console.log("⚠️ Using fallback mock iframe URL for testing")
+      /* console.log("⚠️ Using fallback mock iframe URL for testing") */
       throw error
     }
   }
@@ -167,12 +167,12 @@ export class PesaPalService {
     amount?: number
     confirmationCode?: string
   }> {
-    console.log("========================================")
-    console.log("🔍 PESAPAL PAYMENT VERIFICATION (Netlify Functions)")
-    console.log("========================================")
-    console.log("📋 PesaPalService.verifyPayment: Checking payment status")
-    console.log("   - Merchant Reference:", orderId)
-    console.log("   - Order Tracking ID:", trackingId || "Not provided")
+    /* console.log("========================================") */
+    /* console.log("🔍 PESAPAL PAYMENT VERIFICATION (Netlify Functions)") */
+    /* console.log("========================================") */
+    /* console.log("📋 PesaPalService.verifyPayment: Checking payment status") */
+    /* console.log("   - Merchant Reference:", orderId) */
+    /* console.log("   - Order Tracking ID:", trackingId || "Not provided") */
 
     try {
       // Pass BOTH the order tracking id (authoritative for status) and the
@@ -182,7 +182,7 @@ export class PesaPalService {
       if (trackingId) params.set("orderTrackingId", trackingId)
       if (orderId) params.set("merchantReference", orderId)
       const query = params.toString()
-      console.log("📤 Querying Netlify Function for payment status...")
+      /* console.log("📤 Querying Netlify Function for payment status...") */
 
       const response = await fetch(`/.netlify/functions/verify-pesapal-payment?${query}`)
       const data = await response.json()
@@ -191,25 +191,25 @@ export class PesaPalService {
         throw new Error(data.error || `Failed to verify payment: ${response.status}`)
       }
 
-      console.log("📥 Netlify Function verification response:")
-      console.log("   - Status:", data.status)
-      console.log("   - Payment Method:", data.paymentMethod)
-      console.log("   - Transaction ID:", data.transactionId)
-      console.log("   - Amount:", data.amount)
+      /* console.log("📥 Netlify Function verification response:") */
+      /* console.log("   - Status:", data.status) */
+      /* console.log("   - Payment Method:", data.paymentMethod) */
+      /* console.log("   - Transaction ID:", data.transactionId) */
+      /* console.log("   - Amount:", data.amount) */
 
       const status = data.status === "completed" ? "completed" 
         : data.status === "failed" ? "failed" 
         : "pending"
 
       if (status === "completed") {
-        console.log("✅ Payment verified successfully!")
+        /* console.log("✅ Payment verified successfully!") */
       } else if (status === "failed") {
-        console.log("❌ Payment verification failed")
+        /* console.log("❌ Payment verification failed") */
       } else {
-        console.log("⏳ Payment still pending")
+        /* console.log("⏳ Payment still pending") */
       }
 
-      console.log("========================================")
+      /* console.log("========================================") */
 
       return {
         status,
@@ -274,15 +274,15 @@ export class PesaPalService {
     buyerFirstName?: string,
     buyerLastName?: string,
   ): Promise<{ success: boolean; paymentUrl?: string; orderId?: string; trackingId?: string; error?: string }> {
-    console.log("========================================")
-    console.log("📝 PESAPAL ORDER SUBMISSION")
-    console.log("========================================")
-    console.log("📋 Submitting order to PesaPal")
-    console.log("   - Amount:", amount)
-    console.log("   - Description:", description)
-    console.log("   - Email:", buyerEmail)
-    console.log("   - Phone:", buyerPhone || "Not provided")
-    console.log("   - Name:", buyerName || "Not provided")
+    /* console.log("========================================") */
+    /* console.log("📝 PESAPAL ORDER SUBMISSION") */
+    /* console.log("========================================") */
+    /* console.log("📋 Submitting order to PesaPal") */
+    /* console.log("   - Amount:", amount) */
+    /* console.log("   - Description:", description) */
+    /* console.log("   - Email:", buyerEmail) */
+    /* console.log("   - Phone:", buyerPhone || "Not provided") */
+    /* console.log("   - Name:", buyerName || "Not provided") */
 
     try {
       const checkout = await this.initializeCheckout(
@@ -296,10 +296,10 @@ export class PesaPalService {
         buyerLastName,
       )
 
-      console.log("✅ Order submitted successfully!")
-      console.log("   - Payment URL:", checkout.iframeUrl.substring(0, 50) + "...")
-      console.log("   - Order ID:", checkout.orderId)
-      console.log("========================================")
+      /* console.log("✅ Order submitted successfully!") */
+      /* console.log("   - Payment URL:", checkout.iframeUrl.substring(0, 50) + "...") */
+      /* console.log("   - Order ID:", checkout.orderId) */
+      /* console.log("========================================") */
 
       return {
         success: true,
@@ -331,24 +331,24 @@ export class PesaPalService {
       bankName?: string
     }
   ): Promise<{ success: boolean; payoutId?: string; transactionReference?: string; error?: string }> {
-    console.log("========================================")
-    console.log("💰 PESAPAL PAYOUT FLOW STARTED (Netlify Functions)")
-    console.log("========================================")
-    console.log("📋 PesaPalService.processPayout: Processing payout")
-    console.log("   - Organizer ID:", organizerId)
-    console.log("   - Amount:", amount, "UGX")
-    console.log("   - Method:", payoutMethod)
-    console.log("   - Recipient Name:", recipientDetails.name)
+    /* console.log("========================================") */
+    /* console.log("💰 PESAPAL PAYOUT FLOW STARTED (Netlify Functions)") */
+    /* console.log("========================================") */
+    /* console.log("📋 PesaPalService.processPayout: Processing payout") */
+    /* console.log("   - Organizer ID:", organizerId) */
+    /* console.log("   - Amount:", amount, "UGX") */
+    /* console.log("   - Method:", payoutMethod) */
+    /* console.log("   - Recipient Name:", recipientDetails.name) */
     
     if (payoutMethod === "mobile_money") {
-      console.log("   - Phone Number:", recipientDetails.phoneNumber)
+      /* console.log("   - Phone Number:", recipientDetails.phoneNumber) */
     } else {
-      console.log("   - Bank Name:", recipientDetails.bankName)
-      console.log("   - Account Number:", recipientDetails.accountNumber)
+      /* console.log("   - Bank Name:", recipientDetails.bankName) */
+      /* console.log("   - Account Number:", recipientDetails.accountNumber) */
     }
 
     try {
-      console.log("📤 Submitting payout request via Netlify Function...")
+      /* console.log("📤 Submitting payout request via Netlify Function...") */
 
       const response = await fetch('/.netlify/functions/process-pesapal-payout', {
         method: 'POST',
@@ -369,24 +369,24 @@ export class PesaPalService {
         throw new Error(data.error || `Failed to process payout: ${response.status}`)
       }
 
-      console.log("📥 Netlify Function payout response:")
-      console.log("   - Payout ID:", data.payoutId)
-      console.log("   - Transaction Ref:", data.transactionReference)
-      console.log("   - Status:", data.status)
+      /* console.log("📥 Netlify Function payout response:") */
+      /* console.log("   - Payout ID:", data.payoutId) */
+      /* console.log("   - Transaction Ref:", data.transactionReference) */
+      /* console.log("   - Status:", data.status) */
 
       if (data.success) {
-        console.log("✅ PesaPalService.processPayout: Payout processed successfully!")
-        console.log("========================================")
-        console.log("💰 PESAPAL PAYOUT COMPLETED")
-        console.log("========================================")
-        console.log("📋 Payout Details:")
-        console.log("   - Payout ID:", data.payoutId)
-        console.log("   - Amount:", amount, "UGX")
-        console.log("   - Method:", payoutMethod)
-        console.log("   - Recipient:", recipientDetails.name)
-        console.log("   - Transaction Ref:", data.transactionReference)
-        console.log("   - Status:", data.status)
-        console.log("========================================")
+        /* console.log("✅ PesaPalService.processPayout: Payout processed successfully!") */
+        /* console.log("========================================") */
+        /* console.log("💰 PESAPAL PAYOUT COMPLETED") */
+        /* console.log("========================================") */
+        /* console.log("📋 Payout Details:") */
+        /* console.log("   - Payout ID:", data.payoutId) */
+        /* console.log("   - Amount:", amount, "UGX") */
+        /* console.log("   - Method:", payoutMethod) */
+        /* console.log("   - Recipient:", recipientDetails.name) */
+        /* console.log("   - Transaction Ref:", data.transactionReference) */
+        /* console.log("   - Status:", data.status) */
+        /* console.log("========================================") */
         
         return {
           success: true,
@@ -410,8 +410,8 @@ export class PesaPalService {
     transactionReference?: string
     error?: string
   }> {
-    console.log("📋 PesaPalService.verifyPayoutStatus: Checking payout status")
-    console.log("   - Payout ID:", payoutId)
+    /* console.log("📋 PesaPalService.verifyPayoutStatus: Checking payout status") */
+    /* console.log("   - Payout ID:", payoutId) */
 
     // Payout status is verified by polling verify-pawapay-payout / the payout
     // callback; a client-side simulated status would be meaningless here.

@@ -7,10 +7,10 @@ export class EmailService {
     event: Event
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
-      console.log("📧 EmailService: Preparing to send ticket confirmation email")
-      console.log("📧 EmailService: Recipient email:", ticket.buyerEmail)
-      console.log("📧 EmailService: Ticket ID:", ticket.id)
-      console.log("📧 EmailService: Event name:", event.name)
+      /* console.log("📧 EmailService: Preparing to send ticket confirmation email") */
+      /* console.log("📧 EmailService: Recipient email:", ticket.buyerEmail) */
+      /* console.log("📧 EmailService: Ticket ID:", ticket.id) */
+      /* console.log("📧 EmailService: Event name:", event.name) */
 
       const emailData = {
         to: ticket.buyerEmail,
@@ -30,7 +30,7 @@ export class EmailService {
         },
       }
 
-      console.log("📧 EmailService: Email data prepared:", JSON.stringify(emailData, null, 2))
+      /* console.log("📧 EmailService: Email data prepared:", JSON.stringify(emailData, null, 2)) */
 
       // In production, this would call a backend API that handles email sending
       // For now, we'll simulate the email sending and store it in Firestore
@@ -52,9 +52,9 @@ export class EmailService {
       // Save email record to Firestore for tracking
       await this.saveEmailRecord(emailRecord)
 
-      console.log("📧 EmailService: ✅ Ticket confirmation email sent successfully")
-      console.log("📧 EmailService: Email record saved to database")
-      console.log("📧 EmailService: ==========================================")
+      /* console.log("📧 EmailService: ✅ Ticket confirmation email sent successfully") */
+      /* console.log("📧 EmailService: Email record saved to database") */
+      /* console.log("📧 EmailService: ==========================================") */
 
       return { success: true, messageId: `email_${Date.now()}_${Math.random().toString(36).substr(2, 9)}` }
     } catch (error) {
@@ -69,9 +69,9 @@ export class EmailService {
     status: "granted" | "denied"
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("📧 EmailService: Sending ticket validation notification")
-      console.log("📧 EmailService: Ticket ID:", ticket.id)
-      console.log("📧 EmailService: Validation status:", status)
+      /* console.log("📧 EmailService: Sending ticket validation notification") */
+      /* console.log("📧 EmailService: Ticket ID:", ticket.id) */
+      /* console.log("📧 EmailService: Validation status:", status) */
 
       const notificationData = {
         type: "ticket_validation",
@@ -89,7 +89,7 @@ export class EmailService {
         status: "sent",
       })
 
-      console.log("📧 EmailService: ✅ Validation notification sent")
+      /* console.log("📧 EmailService: ✅ Validation notification sent") */
       return { success: true }
     } catch (error) {
       console.error("📧 EmailService: Error sending validation notification:", error)
@@ -104,10 +104,10 @@ export class EmailService {
     payoutId: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      console.log("💰 EmailService: Sending payout notification")
-      console.log("💰 EmailService: Organizer email:", organizerEmail)
-      console.log("💰 EmailService: Payout amount:", amount)
-      console.log("💰 EmailService: Payout ID:", payoutId)
+      /* console.log("💰 EmailService: Sending payout notification") */
+      /* console.log("💰 EmailService: Organizer email:", organizerEmail) */
+      /* console.log("💰 EmailService: Payout amount:", amount) */
+      /* console.log("💰 EmailService: Payout ID:", payoutId) */
 
       const notificationData = {
         type: "payout_notification",
@@ -121,7 +121,7 @@ export class EmailService {
 
       await this.saveEmailRecord(notificationData)
 
-      console.log("💰 EmailService: ✅ Payout notification sent")
+      /* console.log("💰 EmailService: ✅ Payout notification sent") */
       return { success: true }
     } catch (error) {
       console.error("💰 EmailService: Error sending payout notification:", error)

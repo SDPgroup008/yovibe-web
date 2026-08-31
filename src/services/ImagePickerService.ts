@@ -56,7 +56,7 @@ class ImagePickerService {
 
         reader.onload = (e) => {
           const uri = e.target?.result as string
-          console.log("Image loaded successfully, size:", uri.length)
+          /* console.log("Image loaded successfully, size:", uri.length) */
           resolve({
             canceled: false,
             assets: [

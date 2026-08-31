@@ -19,7 +19,7 @@ export function initSentry() {
     tracesSampleRate: 0.1,
     environment: process.env.NODE_ENV || "production",
   })
-  console.log("[Sentry] Error tracking enabled")
+  /* console.log("[Sentry] Error tracking enabled") */
 }
 
 export default Sentry

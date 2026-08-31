@@ -92,17 +92,17 @@ const TodaysVibeScreen: React.FC = () => {
 
       // Load today's vibes
       const today = new Date()
-      console.log("Loading vibes for today:", today.toDateString())
+      /* console.log("Loading vibes for today:", today.toDateString()) */
       const todayVibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venueId, today)
       // Sort by uploadedAt in descending order (most recent first)
       const sortedTodayVibes = todayVibeImages.sort(
         (a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()
       )
-      console.log("Today's vibes loaded:", sortedTodayVibes.length)
+      /* console.log("Today's vibes loaded:", sortedTodayVibes.length) */
       setTodayVibes(sortedTodayVibes)
 
       // Load week's vibes
-      console.log("Loading week's vibes...")
+      /* console.log("Loading week's vibes...") */
       const weekData = await SupabaseService.getVibeImagesByVenueAndWeek(venueId)
       // Sort vibes within each day by uploadedAt in descending order
       const sortedWeekData = Object.fromEntries(
@@ -111,7 +111,7 @@ const TodaysVibeScreen: React.FC = () => {
           vibes.sort((a, b) => b.uploadedAt.getTime() - a.uploadedAt.getTime()),
         ])
       )
-      console.log("Week's vibes loaded:", Object.keys(sortedWeekData).length, "days")
+      /* console.log("Week's vibes loaded:", Object.keys(sortedWeekData).length, "days") */
       setWeekVibes(sortedWeekData)
     } catch (error) {
       console.error("Error loading vibe data:", error)

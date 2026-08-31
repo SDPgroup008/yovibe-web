@@ -44,7 +44,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const navigation = useCompatNavigation()
   const { data: cachedEvents, loading, refetch } = useCachedEvents()
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useEventsScroll()
-  console.log('[EventsScreen] 🏗️ RENDER/MOUNT');
+  /* console.log('[EventsScreen] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Events page
   const eventSeo = SCREEN_SEO.events;
   const seoUrl =
@@ -81,7 +81,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   // We keep this effect for potential future use when useIsFocused
   // properly tracks focus state.
   useEffect(() => {
-    console.log('[EventsScreen] 👁️ focus effect - isFocused=', isFocused);
+    /* console.log('[EventsScreen] 👁️ focus effect - isFocused=', isFocused); */
     if (isFocused) restorePosition();
   }, [isFocused]);
 

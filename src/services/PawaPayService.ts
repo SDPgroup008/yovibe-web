@@ -76,7 +76,7 @@ export class PawaPayService {
       })
 
       const data = await safeJson<any>(response)
-      console.log("PawaPay deposit response:", data)
+      /* console.log("PawaPay deposit response:", data) */
 
       if (!data.success && data.error) {
         return {
@@ -222,10 +222,10 @@ export class PawaPayService {
     error?: string
   }> {
     try {
-      console.log("📤 Calling Netlify function for payout...")
-      console.log("   - Amount:", amount, currency)
-      console.log("   - Phone:", phoneNumber)
-      console.log("   - Provider:", provider)
+      /* console.log("📤 Calling Netlify function for payout...") */
+      /* console.log("   - Amount:", amount, currency) */
+      /* console.log("   - Phone:", phoneNumber) */
+      /* console.log("   - Provider:", provider) */
 
       const response = await fetch("/.netlify/functions/create-pawapay-payout", {
         method: "POST",
@@ -241,7 +241,7 @@ export class PawaPayService {
       })
 
       const data = await safeJson<any>(response)
-      console.log("📥 Netlify function response:", data)
+      /* console.log("📥 Netlify function response:", data) */
 
       if (!data.success) {
         return {

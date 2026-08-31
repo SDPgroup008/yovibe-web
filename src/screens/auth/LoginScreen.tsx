@@ -27,7 +27,7 @@ const isSmallDevice = width < 380;
 const isTablet = width >= 768;
 const isLargeScreen = width >= 1024;
 
-console.log("[v0] LoginScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] LoginScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 // Responsive helper function for login screen
 const responsiveSize = (small: number, medium: number, large: number) => {
@@ -84,9 +84,9 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
     setErrors({})
     setLoading(true)
     try {
-      console.log("Login attempt with:", email)
+      /* console.log("Login attempt with:", email) */
       await signIn(email, password)
-      console.log("Login successful")
+      /* console.log("Login successful") */
 
       // Handle returnTo param (e.g. from ticket purchase screen login link)
       const returnTo = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('returnTo') : null
@@ -104,11 +104,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ navigation: propNavigation })
     } catch (error) {
       console.error("Login failed:", error)
       // Log the full error object to debug
-      console.log("Error details:", {
+      /* console.log("Error details:", {
         message: error instanceof Error ? error.message : String(error),
         code: (error as any).code,
         error: error,
-      })
+      }) */
       // Check for invalid credential errors (Firebase or generic)
       const errorCode = (error as any).code
       if (

@@ -34,7 +34,7 @@ const isSmallDevice = screenWidth < 380;
 const isTablet = screenWidth >= 768;
 const isLargeScreen = screenWidth >= 1024;
 
-console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 const EventDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -159,12 +159,12 @@ const EventDetailScreen: React.FC = () => {
 
        if (result.action === Share.sharedAction) {
          if (result.activityType) {
-           console.log(`Shared via ${result.activityType}`)
+           /* console.log(`Shared via ${result.activityType}`) */
          } else {
-           console.log("Shared successfully")
+           /* console.log("Shared successfully") */
          }
        } else if (result.action === Share.dismissedAction) {
-         console.log("Share dismissed")
+         /* console.log("Share dismissed") */
        }
      } catch (error) {
        console.error("Error sharing event:", error)
@@ -204,9 +204,9 @@ const EventDetailScreen: React.FC = () => {
      if (!event) return
      
      try {
-       console.log("[EventDetailScreen] Deleting event:", event.id)
+       /* console.log("[EventDetailScreen] Deleting event:", event.id) */
        await SupabaseService.deleteEvent(event.id)
-       console.log("[EventDetailScreen] Event deleted successfully")
+       /* console.log("[EventDetailScreen] Event deleted successfully") */
        Alert.alert("Success", "Event deleted successfully")
        navigation.goBack()
      } catch (error) {

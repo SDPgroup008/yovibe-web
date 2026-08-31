@@ -117,7 +117,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
         updateViaCache: "none",
       })
       .then((registration) => {
-        console.log("[SW] Registered successfully:", registration.scope)
+        /* console.log("[SW] Registered successfully:", registration.scope) */
 
         // Check for updates on page load
         registration.update()
@@ -128,7 +128,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
           if (newWorker) {
             newWorker.addEventListener("statechange", () => {
               if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
-                console.log("[SW] New version available — reload to update")
+                /* console.log("[SW] New version available — reload to update") */
               }
             })
           }
@@ -140,7 +140,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
 
     // Handle controller change (new SW took over)
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      console.log("[SW] New controller activated")
+      /* console.log("[SW] New controller activated") */
     })
   })
 }

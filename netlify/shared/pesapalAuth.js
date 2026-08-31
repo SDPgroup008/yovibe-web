@@ -20,7 +20,7 @@ let tokenExpiresAt = 0;
 async function getPesapalToken() {
   // Return cached token if still valid (30s buffer before actual expiry)
   if (cachedToken && Date.now() < tokenExpiresAt) {
-    console.log('[PesaPalAuth] ✅ Using cached token (expires at', new Date(tokenExpiresAt + 30000).toISOString(), ')');
+    /* console.log('[PesaPalAuth] ✅ Using cached token (expires at', new Date(tokenExpiresAt + 30000).toISOString(), ')'); */
     return cachedToken;
   }
 
@@ -36,9 +36,9 @@ async function getPesapalToken() {
   const isSandbox = apiUrl.includes('cybqa');
   const envLabel = isSandbox ? 'SANDBOX' : 'LIVE';
 
-  console.log('[PesaPalAuth] 🔑 Acquiring new token...');
-  console.log('[PesaPalAuth]    API URL:', apiUrl);
-  console.log('[PesaPalAuth]    Environment:', envLabel, isSandbox ? '(cybqa.pesapal.com)' : '(pay.pesapal.com)');
+  /* console.log('[PesaPalAuth] 🔑 Acquiring new token...'); */
+  /* console.log('[PesaPalAuth]    API URL:', apiUrl); */
+  /* console.log('[PesaPalAuth]    Environment:', envLabel, isSandbox ? '(cybqa.pesapal.com)' : '(pay.pesapal.com)'); */
 
   const response = await fetch(`${apiUrl}/Auth/RequestToken`, {
     method: 'POST',
@@ -53,7 +53,7 @@ async function getPesapalToken() {
   });
 
   const bodyText = await response.text();
-  console.log('[PesaPalAuth]    HTTP status:', response.status);
+  /* console.log('[PesaPalAuth]    HTTP status:', response.status); */
 
   if (!response.ok) {
     throw new Error(`PesaPal authentication failed: HTTP ${response.status} — ${bodyText.substring(0, 200)}`);
@@ -76,9 +76,9 @@ async function getPesapalToken() {
   cachedToken = json.token;
   tokenExpiresAt = expiresMs;
 
-  console.log(`[PesaPalAuth] ✅ Authenticated successfully`);
-  console.log(`[PesaPalAuth]    Token expires at:`, json.expiryDate || new Date(expiresMs + 30000).toISOString());
-  console.log(`[PesaPalAuth]    Environment: ${envLabel} (${isSandbox ? 'cybqa' : 'pay'}.pesapal.com)`);
+  /* console.log(`[PesaPalAuth] ✅ Authenticated successfully`); */
+  /* console.log(`[PesaPalAuth]    Token expires at:`, json.expiryDate || new Date(expiresMs + 30000).toISOString()); */
+  /* console.log(`[PesaPalAuth]    Environment: ${envLabel} (${isSandbox ? 'cybqa' : 'pay'}.pesapal.com)`); */
 
   return json.token;
 }
@@ -89,7 +89,7 @@ async function getPesapalToken() {
 function invalidatePesapalToken() {
   cachedToken = null;
   tokenExpiresAt = 0;
-  console.log('[PesaPalAuth] 🔄 Token invalidated — next call will re-authenticate');
+  /* console.log('[PesaPalAuth] 🔄 Token invalidated — next call will re-authenticate'); */
 }
 
 module.exports = { getPesapalToken, invalidatePesapalToken };

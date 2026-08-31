@@ -308,42 +308,42 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const confirmEventStatusChange = async () => {
     if (!event || !pendingEventAction) {
-      console.log("[EventStatus] ❌ Aborted: no event or no pending action")
+      /* console.log("[EventStatus] ❌ Aborted: no event or no pending action") */
       return
     }
-    console.log("[EventStatus] 🚀 Starting event status change...")
-    console.log("[EventStatus]   Event ID (slug):", event.id)
-    console.log("[EventStatus]   Event slug:", event.slug)
-    console.log("[EventStatus]   Current status:", event.eventStatus)
-    console.log("[EventStatus]   Target action:", pendingEventAction)
-    console.log("[EventStatus]   User ID:", user?.uid)
-    console.log("[EventStatus]   User type:", user?.userType)
+    /* console.log("[EventStatus] 🚀 Starting event status change...") */
+    /* console.log("[EventStatus]   Event ID (slug):", event.id) */
+    /* console.log("[EventStatus]   Event slug:", event.slug) */
+    /* console.log("[EventStatus]   Current status:", event.eventStatus) */
+    /* console.log("[EventStatus]   Target action:", pendingEventAction) */
+    /* console.log("[EventStatus]   User ID:", user?.uid) */
+    /* console.log("[EventStatus]   User type:", user?.userType) */
     if (pendingEventAction === "postponed" && !pendingEventDate.trim()) {
-      console.log("[EventStatus] ❌ Aborted: postponed but no date provided")
+      /* console.log("[EventStatus] ❌ Aborted: postponed but no date provided") */
       Alert.alert("Date Required", "Enter a new date for the postponed event"); return
     }
     setEventStatusUpdating(true)
     try {
       if (pendingEventAction === "cancelled") {
-        console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='cancelled'")
+        /* console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='cancelled'") */
         await SupabaseService.updateEvent(event.id, { eventStatus: "cancelled" } as any)
       } else {
         const newDate = new Date(pendingEventDate)
-        console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='postponed', postponedTo=", newDate.toISOString())
+        /* console.log("[EventStatus] ➡️ Calling SupabaseService.updateEvent with eventStatus='postponed', postponedTo=", newDate.toISOString()) */
         await SupabaseService.updateEvent(event.id, { eventStatus: "postponed", postponedTo: newDate } as any)
       }
-      console.log("[EventStatus] ✅ SupabaseService.updateEvent completed without error")
+      /* console.log("[EventStatus] ✅ SupabaseService.updateEvent completed without error") */
       setShowEventStatusModal(false)
       Alert.alert("Success", `Event ${pendingEventAction === "cancelled" ? "cancelled" : "postponed"} successfully`)
       setEvent(prev => prev ? { ...prev, eventStatus: pendingEventAction, postponedTo: pendingEventAction === "postponed" ? new Date(pendingEventDate) : prev.postponedTo } as any : prev)
-      console.log("[EventStatus] ✅ Local state updated:", pendingEventAction)
+      /* console.log("[EventStatus] ✅ Local state updated:", pendingEventAction) */
     } catch (error: any) {
-      console.log("[EventStatus] ❌ CAUGHT ERROR:", error.message)
-      console.log("[EventStatus] ❌ Error stack:", error.stack)
+      /* console.log("[EventStatus] ❌ CAUGHT ERROR:", error.message) */
+      /* console.log("[EventStatus] ❌ Error stack:", error.stack) */
       Alert.alert("Error", error.message || "Failed to update event status")
     } finally {
       setEventStatusUpdating(false)
-      console.log("[EventStatus] ✅ Done (setEventStatusUpdating=false)")
+      /* console.log("[EventStatus] ✅ Done (setEventStatusUpdating=false)") */
     }
   }
 
@@ -892,7 +892,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       if (emailError) throw emailError;
 
-      console.log("[PayoutOTP] OTP sent:", otp);
+      /* console.log("[PayoutOTP] OTP sent:", otp); */
       setOtpSent(true);
       setResendCooldown(60);
     } catch (err) {
@@ -937,7 +937,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       // Note: the OTP is NOT marked used here — the server-side payout function
       // (payout.js) verifies and consumes it authoritatively.
 
-      console.log("[PayoutOTP] OTP verified successfully!");
+      /* console.log("[PayoutOTP] OTP verified successfully!"); */
       await handlePayoutSubmit();
 
     } catch (err) {
@@ -950,77 +950,77 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const handlePayoutSubmit = async () => {
     setPayoutFieldErrors({})
-    console.log("[PayoutSubmit] 🚀 handlePayoutSubmit called")
-    console.log("[PayoutSubmit]    payoutTab:", payoutTab)
-    console.log("[PayoutSubmit]    user:", user?.id || "none")
+    /* console.log("[PayoutSubmit] 🚀 handlePayoutSubmit called") */
+    /* console.log("[PayoutSubmit]    payoutTab:", payoutTab) */
+    /* console.log("[PayoutSubmit]    user:", user?.id || "none") */
 
-    if (!user) { console.log("[PayoutSubmit] ❌ No user — aborting"); Alert.alert("Error", "Sign in required"); return }
+    if (!user) { /* console.log("[PayoutSubmit] ❌ No user — aborting"); */ Alert.alert("Error", "Sign in required"); return }
 
     // Validate based on tab
     if (payoutTab === "mobile_money") {
-      console.log("[PayoutSubmit] 📱 Mobile money validation — phone:", payoutPhone)
+      /* console.log("[PayoutSubmit] 📱 Mobile money validation — phone:", payoutPhone) */
       if (!payoutPhone || payoutPhone.length < 10) { setPayoutFieldErrors({payoutPhone:"Enter a valid mobile money number"}); Alert.alert("Error", "Enter a valid mobile money number"); return }
     } else {
-      console.log("[PayoutSubmit] 💳 Card validation — bankName:", bankName.trim(), "acct:", bankAccountNumber.trim(), "holder:", bankAccountName.trim())
-      if (!bankName.trim()) { setPayoutFieldErrors({bankName:"Enter bank name"}); console.log("[PayoutSubmit] ❌ Missing bank name"); Alert.alert("Error", "Enter bank name"); return }
-      if (!bankAccountNumber.trim()) { setPayoutFieldErrors({bankAccountNumber:"Enter account number"}); console.log("[PayoutSubmit] ❌ Missing account number"); Alert.alert("Error", "Enter account number"); return }
-      if (!bankAccountName.trim()) { setPayoutFieldErrors({bankAccountName:"Enter account name"}); console.log("[PayoutSubmit] ❌ Missing account name"); Alert.alert("Error", "Enter account name"); return }
+      /* console.log("[PayoutSubmit] 💳 Card validation — bankName:", bankName.trim(), "acct:", bankAccountNumber.trim(), "holder:", bankAccountName.trim()) */
+      if (!bankName.trim()) { setPayoutFieldErrors({bankName:"Enter bank name"}); /* console.log("[PayoutSubmit] ❌ Missing bank name"); */ Alert.alert("Error", "Enter bank name"); return }
+      if (!bankAccountNumber.trim()) { setPayoutFieldErrors({bankAccountNumber:"Enter account number"}); /* console.log("[PayoutSubmit] ❌ Missing account number"); */ Alert.alert("Error", "Enter account number"); return }
+      if (!bankAccountName.trim()) { setPayoutFieldErrors({bankAccountName:"Enter account name"}); /* console.log("[PayoutSubmit] ❌ Missing account name"); */ Alert.alert("Error", "Enter account name"); return }
     }
 
-    console.log("[PayoutSubmit] ✅ Validation passed")
-    console.log("[PayoutSubmit]    payoutSelections:", JSON.stringify(payoutSelections))
-    console.log("[PayoutSubmit]    payoutTicketTypes keys:", Object.keys(payoutTicketTypes))
-    console.log("[PayoutSubmit]    scannedPaymentMethods keys:", Object.keys(scannedPaymentMethods).length)
-    console.log("[PayoutSubmit]    eligiblePayoutTotal:", eligiblePayoutTotal)
+    /* console.log("[PayoutSubmit] ✅ Validation passed") */
+    /* console.log("[PayoutSubmit]    payoutSelections:", JSON.stringify(payoutSelections)) */
+    /* console.log("[PayoutSubmit]    payoutTicketTypes keys:", Object.keys(payoutTicketTypes)) */
+    /* console.log("[PayoutSubmit]    scannedPaymentMethods keys:", Object.keys(scannedPaymentMethods).length) */
+    /* console.log("[PayoutSubmit]    eligiblePayoutTotal:", eligiblePayoutTotal) */
 
     // Collect selected tickets filtered by payment method
     const selectedTicketIds: string[] = []
     let totalAmount = 0
     const targetMethod = payoutTab === "mobile_money" ? "mobile_money" : "credit_card"
-    console.log("[PayoutSubmit] 🎯 Target payment method:", targetMethod)
+    /* console.log("[PayoutSubmit] 🎯 Target payment method:", targetMethod) */
 
     for (const [type, count] of Object.entries(payoutSelections)) {
-      console.log(`[PayoutSubmit]    Processing type: ${type}, count: ${count}`)
+      /* console.log(`[PayoutSubmit]    Processing type: ${type}, count: ${count}`) */
       if (count > 0 && payoutTicketTypes[type]) {
         const data = payoutTicketTypes[type]
         const isTableType = data.isTable || false
         const tableSize = data.tableSize || 1
         const actualTicketCount = isTableType ? count * tableSize : count
         const allIds = data.scannedIds.slice(0, actualTicketCount)
-        console.log(`[PayoutSubmit]    → Type ${type}: allIds[0..${actualTicketCount}] = ${allIds.length} IDs`)
+        /* console.log(`[PayoutSubmit]    → Type ${type}: allIds[0..${actualTicketCount}] = ${allIds.length} IDs`) */
         
         // Filter by payment method
         const filteredIds = allIds.filter(id => {
           const pm = scannedPaymentMethods[id] || "mobile_money"
           const match = pm === targetMethod
-          if (!match) console.log(`[PayoutSubmit]    → Filtering OUT ticket ${id.slice(0,12)}... (pm=${pm}, target=${targetMethod})`)
+          if (!match) /* console.log(`[PayoutSubmit]    → Filtering OUT ticket ${id.slice(0,12)}... (pm=${pm}, target=${targetMethod})`) */
           return match
         })
-        console.log(`[PayoutSubmit]    → After filter: ${filteredIds.length} IDs match ${targetMethod}`)
+        /* console.log(`[PayoutSubmit]    → After filter: ${filteredIds.length} IDs match ${targetMethod}`) */
         if (filteredIds.length === 0) {
-          console.log(`[PayoutSubmit]    → ⚠️ No ${targetMethod} tickets for type ${type}, skipping`)
+          /* console.log(`[PayoutSubmit]    → ⚠️ No ${targetMethod} tickets for type ${type}, skipping`) */
           continue
         }
         selectedTicketIds.push(...filteredIds)
         const addedAmount = Math.round(count * (isTableType ? (data.price * tableSize) : (data.price || 0)) * 100) / 100
         totalAmount += addedAmount
-        console.log(`[PayoutSubmit]    → Added ${filteredIds.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`)
+        /* console.log(`[PayoutSubmit]    → Added ${filteredIds.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`) */
       } else {
-        console.log(`[PayoutSubmit]    → Skipping type ${type} (count=${count}, exists=${!!payoutTicketTypes[type]})`)
+        /* console.log(`[PayoutSubmit]    → Skipping type ${type} (count=${count}, exists=${!!payoutTicketTypes[type]})`) */
       }
     }
-    console.log("[PayoutSubmit] 📊 Final selected tickets:", selectedTicketIds.length, "totalAmount:", totalAmount)
+    /* console.log("[PayoutSubmit] 📊 Final selected tickets:", selectedTicketIds.length, "totalAmount:", totalAmount) */
 
     if (selectedTicketIds.length === 0) {
-      console.log(`[PayoutSubmit] ❌ No tickets matched ${targetMethod} — showing alert`)
+      /* console.log(`[PayoutSubmit] ❌ No tickets matched ${targetMethod} — showing alert`) */
       Alert.alert("Notice", `No ${payoutTab === "mobile_money" ? "mobile money" : "card"} tickets selected in your current selections. Try a different ticket type.`)
       return
     }
     totalAmount = Math.min(totalAmount, eligiblePayoutTotal)
-    console.log("[PayoutSubmit] 💰 Amount after cap:", totalAmount, "(eligibleTotal:", eligiblePayoutTotal, ")")
-    if (totalAmount <= 0) { console.log("[PayoutSubmit] ❌ Amount is zero after cap"); Alert.alert("Error", "Payout amount cannot be zero"); return }
+    /* console.log("[PayoutSubmit] 💰 Amount after cap:", totalAmount, "(eligibleTotal:", eligiblePayoutTotal, ")") */
+    if (totalAmount <= 0) { /* console.log("[PayoutSubmit] ❌ Amount is zero after cap"); */ Alert.alert("Error", "Payout amount cannot be zero"); return }
 
-    console.log("[PayoutSubmit] ✅ All checks passed, setting withdrawLoading = true")
+    /* console.log("[PayoutSubmit] ✅ All checks passed, setting withdrawLoading = true") */
     setWithdrawLoading(true)
     try {
       if (payoutTab === "mobile_money") {
@@ -1064,11 +1064,11 @@ const OrganiserDashboardScreen: React.FC = () => {
 
       } else {
         // ── Card: save payout request for admin processing with bank details ──
-        console.log("[PayoutSubmit] 💳 Starting Card payout flow...")
-        console.log("[PayoutSubmit]    Saving payout to DB with status: pending_admin_review")
-        console.log("[PayoutSubmit]    Bank:", bankName.trim(), "Acct:", bankAccountNumber.trim(), "Name:", bankAccountName.trim())
-        console.log("[PayoutSubmit]    Ticket IDs:", selectedTicketIds)
-        console.log("[PayoutSubmit]    Amount:", totalAmount)
+        /* console.log("[PayoutSubmit] 💳 Starting Card payout flow...") */
+        /* console.log("[PayoutSubmit]    Saving payout to DB with status: pending_admin_review") */
+        /* console.log("[PayoutSubmit]    Bank:", bankName.trim(), "Acct:", bankAccountNumber.trim(), "Name:", bankAccountName.trim()) */
+        /* console.log("[PayoutSubmit]    Ticket IDs:", selectedTicketIds) */
+        /* console.log("[PayoutSubmit]    Amount:", totalAmount) */
 
         const payoutId = await SupabaseService.savePayout({
           organizer_id: user.id,
@@ -1081,14 +1081,14 @@ const OrganiserDashboardScreen: React.FC = () => {
           recipient_phone_number: "",
           metadata: { bank_name: bankName.trim(), account_number: bankAccountNumber.trim() },
         })
-        console.log("[PayoutSubmit] ✅ Payout saved with ID:", payoutId)
+        /* console.log("[PayoutSubmit] ✅ Payout saved with ID:", payoutId) */
 
         // Mark tickets as pending review
-        console.log("[PayoutSubmit]    Marking", selectedTicketIds.length, "tickets as pending_review...")
+        /* console.log("[PayoutSubmit]    Marking", selectedTicketIds.length, "tickets as pending_review...") */
         for (const tid of selectedTicketIds) {
           try {
             await SupabaseService.updateTicket(tid, { payoutStatus: "pending_review", payoutEligible: false })
-            console.log(`[PayoutSubmit]    ✅ Ticket ${tid.slice(0,12)}... marked pending_review`)
+            /* console.log(`[PayoutSubmit]    ✅ Ticket ${tid.slice(0,12)}... marked pending_review`) */
           } catch (err) {
             console.error(`[PayoutSubmit]    ❌ Failed to update ticket ${tid.slice(0,12)}:`, err)
           }
@@ -1096,7 +1096,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
         // Create notification
         try {
-          console.log("[PayoutSubmit]    Creating notification for organizer...")
+          /* console.log("[PayoutSubmit]    Creating notification for organizer...") */
           const { supabase } = await import("../config/supabase")
           const notifResult = await supabase.from("notifications").insert([{
             user_id: user.id,
@@ -1108,19 +1108,19 @@ const OrganiserDashboardScreen: React.FC = () => {
             created_at: new Date().toISOString(),
           }])
           if (notifResult.error) throw notifResult.error
-          console.log("[PayoutSubmit] ✅ Notification created successfully")
+          /* console.log("[PayoutSubmit] ✅ Notification created successfully") */
         } catch (err) {
           console.error("[PayoutSubmit] ❌ Failed to send notification:", err)
         }
 
-        console.log("[PayoutSubmit] ✅ Card payout flow complete — showing success alert")
+        /* console.log("[PayoutSubmit] ✅ Card payout flow complete — showing success alert") */
       }
 
       setShowWithdrawModal(false)
       resetPayoutState()
       const reset: Record<string, number> = {}; Object.keys(payoutTicketTypes).forEach(k => { reset[k] = 0 }); setPayoutSelections(reset)
       // Reload ticket data so payoutTicketTypes reflects the updated payout_eligible/payout_status
-      console.log("[PayoutSubmit] 🔄 Reloading ticket data to sync payout eligibility...")
+      /* console.log("[PayoutSubmit] 🔄 Reloading ticket data to sync payout eligibility...") */
       try {
         const { data: updatedTickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId || "")
         if (updatedTickets) processTicketData(updatedTickets)
@@ -1132,7 +1132,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       console.error("[PayoutSubmit]    Error stack:", error?.stack?.substring(0, 300))
       Alert.alert("Error", error?.message || "Failed")
     } finally {
-      console.log("[PayoutSubmit] ✅ Done (withdrawLoading = false)")
+      /* console.log("[PayoutSubmit] ✅ Done (withdrawLoading = false)") */
       setWithdrawLoading(false)
     }
   }
@@ -1197,14 +1197,14 @@ const OrganiserDashboardScreen: React.FC = () => {
             <View style={styles.payoutTabRow}>
                 <TouchableOpacity
                   style={[styles.payoutTab, payoutTab === "mobile_money" && styles.payoutTabActive]}
-                  onPress={() => { console.log("[PayoutTab] 🔄 Switching to Mobile Money tab"); setPayoutTab("mobile_money"); setPayoutSelections({}); }}
+                  onPress={() => { /* console.log("[PayoutTab] 🔄 Switching to Mobile Money tab"); */ setPayoutTab("mobile_money"); setPayoutSelections({}); }}
                 >
                   <Ionicons name="phone-portrait" size={20} color={payoutTab === "mobile_money" ? "#00D4FF" : "#666"} />
                   <Text style={[styles.payoutTabText, payoutTab === "mobile_money" && styles.payoutTabTextActive]}>Mobile Money</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.payoutTab, payoutTab === "card" && styles.payoutTabActive]}
-                  onPress={() => { console.log("[PayoutTab] 🔄 Switching to Card tab"); setPayoutTab("card"); setPayoutSelections({}); }}
+                  onPress={() => { /* console.log("[PayoutTab] 🔄 Switching to Card tab"); */ setPayoutTab("card"); setPayoutSelections({}); }}
                 >
                 <Ionicons name="card" size={20} color={payoutTab === "card" ? "#00D4FF" : "#666"} />
                 <Text style={[styles.payoutTabText, payoutTab === "card" && styles.payoutTabTextActive]}>Card</Text>

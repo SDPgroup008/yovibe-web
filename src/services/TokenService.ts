@@ -137,7 +137,7 @@ class TokenService {
     errors: number;
   }> {
     if (this.migrationInProgress) {
-      console.log('[TokenService] Migration already in progress, skipping');
+      /* console.log('[TokenService] Migration already in progress, skipping'); */
       return { migrated: 0, total: 0, errors: 0 };
     }
 
@@ -146,7 +146,7 @@ class TokenService {
     let errors = 0;
 
     try {
-      console.log('[TokenService] Starting migration of legacy tokens...');
+      /* console.log('[TokenService] Starting migration of legacy tokens...'); */
       
       // Get all tokens from tokens.json
       const jsonTokens = await this.fetchTokens(true); // Force refresh to get latest
@@ -155,7 +155,7 @@ class TokenService {
       const firestoreTokens = await this.getTokensFromFirestore(undefined, 10000);
       const existingTokenSet = new Set(firestoreTokens.map(t => t.token));
       
-      console.log(`[TokenService] Found ${jsonTokens.length} tokens in JSON, ${existingTokenSet.size} in Firestore`);
+      /* console.log(`[TokenService] Found ${jsonTokens.length} tokens in JSON, ${existingTokenSet.size} in Firestore`); */
       
       // Migrate tokens that don't exist in Firestore
       for (const token of jsonTokens) {
@@ -178,7 +178,7 @@ class TokenService {
         }
       }
       
-      console.log(`[TokenService] Migration complete: ${migrated} tokens migrated, ${errors} errors`);
+      /* console.log(`[TokenService] Migration complete: ${migrated} tokens migrated, ${errors} errors`); */
       
       return { migrated, total: jsonTokens.length, errors };
     } catch (error) {
@@ -198,7 +198,7 @@ class TokenService {
     
     // Check cache
     if (!forceRefresh && tokenCache && (now - tokenCache.timestamp) < this.CACHE_DURATION) {
-      console.log('Using cached token data');
+      /* console.log('Using cached token data'); */
       return tokenCache.tokens;
     }
 
@@ -220,7 +220,7 @@ class TokenService {
         lastSyncTime: new Date().toISOString(),
       };
 
-      console.log(`Fetched ${tokens.length} tokens from server`);
+      /* console.log(`Fetched ${tokens.length} tokens from server`); */
       return tokens;
     } catch (error) {
       console.error('Error fetching tokens:', error);
@@ -490,7 +490,7 @@ class TokenService {
           if (userName) updateData.userName = userName;
           
           await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), updateData);
-          console.log("[TokenService] Updated existing token with user info:", existingToken.id);
+          /* console.log("[TokenService] Updated existing token with user info:", existingToken.id); */
         } else {
           // Just update last active
           await updateDoc(doc(db, TOKENS_COLLECTION, existingToken.id), {
@@ -523,7 +523,7 @@ class TokenService {
       if (finalUserName) tokenData.userName = finalUserName;
       
       const docRef = await addDoc(collection(db, TOKENS_COLLECTION), tokenData);
-      console.log("[TokenService] Saved new token to Firestore:", docRef.id);
+      /* console.log("[TokenService] Saved new token to Firestore:", docRef.id); */
       return docRef.id;
     } catch (error) {
       console.error("[TokenService] Error saving token to Firestore:", error);

@@ -95,7 +95,7 @@ const useResponsiveNav = () => {
 };
 
 // Log responsiveness initialization (only once at mount)
-console.log("[v0] Navigation responsive system ready");
+/* console.log("[v0] Navigation responsive system ready"); */
 
 //
 // Create the navigators

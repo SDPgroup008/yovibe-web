@@ -146,7 +146,7 @@
       markers[v.id] = m;
     });
 
-    console.log("[VenueMap] received", venues.length, "venues → placed", placed, "markers, skipped", skipped);
+    /* console.log("[VenueMap] received", venues.length, "venues → placed", placed, "markers, skipped", skipped); */
     if (placed === 0 && !manualFit && typeof map.fitBounds === "function" && hasLatLng === false) {
       map.setView([0.3476, 32.5825], 12);
     }

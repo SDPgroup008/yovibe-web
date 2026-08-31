@@ -72,7 +72,7 @@ export function resolveTicketDesign(event?: Event, ticket?: Ticket): TicketDesig
     template_id: null,
     background_url: null,
   }) as TicketDesignInput
-  console.log("[TicketDesign] resolveTicketDesign → source:", design.source, "background_url:", design.background_url ? "set" : "null")
+  /* console.log("[TicketDesign] resolveTicketDesign → source:", design.source, "background_url:", design.background_url ? "set" : "null") */
   return design
 }
 
@@ -298,7 +298,7 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   const colors = colorsFor(design)
   const W = computed.pageWidth
   const H = computed.pageHeight
-  console.log("[TicketRender] computed page:", W, "x", H, "| blocks:", computed.blocks.map((b: any) => `${b.id}@${b.x},${b.y}`).join(" | "))
+  /* console.log("[TicketRender] computed page:", W, "x", H, "| blocks:", computed.blocks.map((b: any) => `${b.id}@${b.x},${b.y}`).join(" | ")) */
   const isLandscape = computed.isLandscape
   const poster = block(computed, "poster")
   const title = block(computed, "title")
@@ -492,7 +492,7 @@ export function canonicalTicketHtml(ticket: Ticket, event?: Event) {
     pageW = design.dimensions?.width || 600
     pageH = design.dimensions?.height || 900
   }
-  console.log("[TicketRender] canonicalTicketHtml → page:", pageW, "x", pageH,
-    "source:", design.source, "dimensions:", JSON.stringify(design.dimensions))
+  /* console.log("[TicketRender] canonicalTicketHtml → page:", pageW, "x", pageH,
+    "source:", design.source, "dimensions:", JSON.stringify(design.dimensions)) */
   return `<!doctype html><html><head><meta charset="utf-8"><style>@page{size:${pageW}px ${pageH}px;margin:0}html,body{margin:0;padding:0;background:#111;overflow:hidden}svg{display:block;width:${pageW}px;height:${pageH}px}</style></head><body>${svg}</body></html>`
 }

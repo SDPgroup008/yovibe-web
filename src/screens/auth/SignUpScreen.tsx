@@ -24,7 +24,7 @@ const isSmallDevice = width < 380;
 const isTablet = width >= 768;
 const isLargeScreen = width >= 1024;
 
-console.log("[v0] SignUpScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] SignUpScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 // Responsive helper function for signup screen
 const responsiveSize = (small: number, medium: number, large: number) => {
@@ -79,14 +79,14 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
 
     setLoading(true)
     try {
-      console.log("Sign up attempt with:", email, "as", userType)
+      /* console.log("Sign up attempt with:", email, "as", userType) */
       await signUp(email, password, userType as "regular_user" | "club_owner" | "admin")
 
       // Check if user was signed in immediately (confirmation disabled or already confirmed)
       const { data: { session } } = await supabase.auth.getSession()
 
       if (session) {
-        console.log("Sign up successful - user is signed in")
+        /* console.log("Sign up successful - user is signed in") */
 
         // Handle redirect intent (e.g. user clicked Add Event / Add Venue while logged out)
         const redirectIntent = consumeRedirectIntent()
@@ -97,7 +97,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
         }
       } else {
         // Fallback: user might need to log in manually (rare now that confirmation is disabled)
-        console.log("Sign up successful but no active session")
+        /* console.log("Sign up successful but no active session") */
         Alert.alert(
           "Account Created",
           "Please log in with your new credentials to continue."

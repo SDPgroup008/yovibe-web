@@ -104,8 +104,8 @@ const VenueDetailScreen: React.FC = () => {
 
       try {
         setLoading(true)
-        console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId)
-        console.log("[VenueDetailScreen] User logged in:", !!user)
+        /* console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId) */
+        /* console.log("[VenueDetailScreen] User logged in:", !!user) */
 
         const [venueData, venueEvents] = await Promise.all([
           SupabaseService.getVenueById(venueId),
@@ -114,9 +114,9 @@ const VenueDetailScreen: React.FC = () => {
 
         if (venueData) {
           setVenue(venueData)
-          console.log("[VenueDetailScreen] Venue data loaded:", !!venueData)
+          /* console.log("[VenueDetailScreen] Venue data loaded:", !!venueData) */
 
-          console.log("[VenueDetailScreen] Events fetched:", venueEvents.length)
+          /* console.log("[VenueDetailScreen] Events fetched:", venueEvents.length) */
           setEvents(venueEvents)
 
           // Check if venue is a custom venue (tied to one event and owned by event creator)
@@ -128,7 +128,7 @@ const VenueDetailScreen: React.FC = () => {
 
           // Always set owner/admin flags when user is logged in (independent of venue data)
           if (user) {
-            console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id)
+            /* console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id) */
             setIsOwner(venueData.ownerId === user.id)
             setIsAdmin(user.userType === "admin")
 
@@ -265,16 +265,16 @@ const VenueDetailScreen: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId)
+      /* console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId) */
       
       const venueData = await SupabaseService.getVenueById(venueId)
       setVenue(venueData)
       
       // Fetch events regardless of user authentication (events are public data)
       if (venueData) {
-        console.log("[VenueDetailScreen] Refreshing events for venue:", venueId)
+        /* console.log("[VenueDetailScreen] Refreshing events for venue:", venueId) */
         const venueEvents = await SupabaseService.getEventsByVenue(venueId)
-        console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length)
+        /* console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length) */
         setEvents(venueEvents)
         
         if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
@@ -312,18 +312,18 @@ const VenueDetailScreen: React.FC = () => {
     
     try {
       setLoading(true)
-      console.log("[VenueDetailScreen] Deleting venue:", venueId)
+      /* console.log("[VenueDetailScreen] Deleting venue:", venueId) */
       
       // Delete all events associated with this venue
       const venueEvents = await SupabaseService.getEventsByVenue(venueId)
-      console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete")
+      /* console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete") */
       
       for (const event of venueEvents) {
         await SupabaseService.deleteEvent(event.id)
       }
       
       await SupabaseService.deleteVenue(venueId)
-      console.log("[VenueDetailScreen] Venue deleted successfully")
+      /* console.log("[VenueDetailScreen] Venue deleted successfully") */
       
       Alert.alert("Success", "Venue and associated events deleted successfully")
       navigation.goBack()
@@ -996,7 +996,7 @@ const isSmallDevice = width < 380;
 const isTablet = width >= 768;
 const isLargeScreen = width >= 1024;
 
-console.log("[v0] VenueDetailScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile");
+/* console.log("[v0] VenueDetailScreen responsiveness initialized - Screen width:", width, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
 // Responsive helper function
 const responsiveSize = (small: number, medium: number, large: number) => {

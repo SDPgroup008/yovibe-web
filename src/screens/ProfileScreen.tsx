@@ -113,7 +113,7 @@ const ProfileScreen: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    console.log("ProfileScreen: Sign Out button clicked");
+    /* console.log("ProfileScreen: Sign Out button clicked"); */
     const isWeb = Platform.OS === "web";
     const confirmed = isWeb
       ? window.confirm("Are you sure you want to sign out?")
@@ -133,28 +133,28 @@ const ProfileScreen: React.FC = () => {
         });
 
     if (!confirmed) {
-      console.log("ProfileScreen: Sign out cancelled");
+      /* console.log("ProfileScreen: Sign out cancelled"); */
       return;
     }
 
-    console.log("ProfileScreen: Starting sign out process");
+    /* console.log("ProfileScreen: Starting sign out process"); */
     setLoading(true);
     try {
       await signOut();
-      console.log("ProfileScreen: Sign out completed");
+      /* console.log("ProfileScreen: Sign out completed"); */
 
       // Redirect to login page after sign out
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
 
-      console.log("ProfileScreen: Redirected to login page");
+      /* console.log("ProfileScreen: Redirected to login page"); */
     } catch (error: any) {
       console.error("ProfileScreen: Sign out error:", error?.message ?? error);
       Alert.alert("Error", `Failed to sign out: ${error?.message ?? "Unknown error"}`);
     } finally {
       setLoading(false);
-      console.log("ProfileScreen: Loading reset to false");
+      /* console.log("ProfileScreen: Loading reset to false"); */
     }
   };
 

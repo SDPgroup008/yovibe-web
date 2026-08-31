@@ -43,7 +43,7 @@ exports.handler = async (event) => {
     // fall through — acknowledge without ids
   }
 
-  console.log('[PawaPayCheckoutCallback] Received checkout callback:', { checkoutId, status });
+  /* console.log('[PawaPayCheckoutCallback] Received checkout callback:', { checkoutId, status }); */
 
   // Checkouts are not used by the app — acknowledge and move on.
   return ack({ checkoutId, status: String(status || '').toUpperCase() });

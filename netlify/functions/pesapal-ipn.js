@@ -58,14 +58,14 @@ exports.handler = async (event) => {
     return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method Not Allowed' }) };
   }
 
-  console.log('[PesaPalIPN] Notification received:', { orderTrackingId, orderMerchantReference, notificationType });
+  /* console.log('[PesaPalIPN] Notification received:', { orderTrackingId, orderMerchantReference, notificationType }); */
 
   try {
     const admin = getAdminClient();
 
     // Verify the payment status server-side (don't trust the ping).
     const verification = await verifyPesapalPayment({ trackingId: orderTrackingId, orderId: orderMerchantReference });
-    console.log('[PesaPalIPN] Verified status:', verification.status, 'raw:', verification.rawStatus);
+    /* console.log('[PesaPalIPN] Verified status:', verification.status, 'raw:', verification.rawStatus); */
 
     // Reversal / failure reconciliation — automatically strike tickets whose
     // payment was reversed, cancelled, or failed after issuance.
@@ -81,7 +81,7 @@ exports.handler = async (event) => {
           status: target.status,
           refundStatus: target.refundStatus,
         });
-        console.log('[PesaPalIPN] Reversal reconciliation:', result);
+        /* console.log('[PesaPalIPN] Reversal reconciliation:', result); */
       }
     }
 

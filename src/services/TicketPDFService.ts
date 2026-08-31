@@ -473,7 +473,7 @@ export function generatePreviewHTML(
     eventStartTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     qrCodeDataUrl: FAKE_QR,
   }
-  console.log("[Preview] generatePreviewHTML → templateId:", templateId, "orientation:", orientation, "qrPosition:", sampleData?.qrPosition)
+  /* console.log("[Preview] generatePreviewHTML → templateId:", templateId, "orientation:", orientation, "qrPosition:", sampleData?.qrPosition) */
   return canonicalTicketHtml(previewTicket, previewEvent)
 
   /* Legacy preview retained below for editor compatibility history. */
