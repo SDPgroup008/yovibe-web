@@ -2,8 +2,8 @@ import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 // Initialize Supabase client
 // Hardcoded values as fallback for testing (will be overridden by .env.local if present)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uqukizjohackrcwrtefk.supabase.co';
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_';
+export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uqukizjohackrcwrtefk.supabase.co';
+export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_';
 
 let supabase: SupabaseClient;
 

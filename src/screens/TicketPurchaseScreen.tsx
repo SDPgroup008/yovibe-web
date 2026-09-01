@@ -168,7 +168,7 @@ const TicketPurchaseScreen: React.FC = () => {
       resourceType,
       resourceNumber,
       checkoutSessionIdRef.current,
-      10,
+      5,
     )
     if (!holdId) {
       Alert.alert("Already reserved", `That ${resourceType} is no longer available. Please choose another.`)
@@ -197,8 +197,23 @@ const TicketPurchaseScreen: React.FC = () => {
     await SupabaseService.releaseInventoryHolds(checkoutSessionIdRef.current, eventId)
   }
 
-  useEffect(() => () => {
-    void SupabaseService.releaseInventoryHolds(checkoutSessionIdRef.current, eventId)
+  useEffect(() => {
+    const releaseOnExit = () => {
+      SupabaseService.releaseInventoryHoldsOnExit(checkoutSessionIdRef.current, eventId)
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("pagehide", releaseOnExit)
+      window.addEventListener("beforeunload", releaseOnExit)
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("pagehide", releaseOnExit)
+        window.removeEventListener("beforeunload", releaseOnExit)
+      }
+      void SupabaseService.releaseInventoryHolds(checkoutSessionIdRef.current, eventId)
+    }
   }, [eventId])
 
   const previousTicketTypeRef = useRef<string | null>(null)

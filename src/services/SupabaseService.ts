@@ -1,5 +1,5 @@
 import "react-native-get-random-values"
-import { supabase } from "../config/supabase"
+import { supabase, supabaseAnonKey, supabaseUrl } from "../config/supabase"
 import { uploadToR2 } from "./R2Service"
 import { Dimensions } from "react-native"
 import type { User, UserType } from "../models/User"
@@ -2147,7 +2147,7 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
     resourceType: "seat" | "table",
     resourceNumber: number,
     sessionId: string,
-    ttlMinutes = 10,
+    ttlMinutes = 5,
   ): Promise<string | null> {
     try {
       const { data, error } = await supabase.rpc("acquire_inventory_hold", {
@@ -2190,8 +2190,26 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
     }
   }
 
+  releaseInventoryHoldsOnExit(sessionId: string, eventSlug?: string): void {
+    if (typeof window === "undefined" || typeof fetch !== "function") return
+
+    void fetch(`${supabaseUrl}/rest/v1/rpc/release_inventory_holds`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseAnonKey,
+        Authorization: `Bearer ${supabaseAnonKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_session_id: sessionId,
+        p_event_slug: eventSlug || null,
+      }),
+      keepalive: true,
+    }).catch(() => undefined)
+  }
+
   async acquireSeatHold(
-    eventSlug: string, feeType: string, seatNumber: number, sessionId: string, ttlMinutes = 10
+    eventSlug: string, feeType: string, seatNumber: number, sessionId: string, ttlMinutes = 5
   ): Promise<boolean> {
     try {
       const { data, error } = await supabase

@@ -11,20 +11,52 @@ function json(statusCode, body) {
 }
 
 exports.handler = async (event) => {
-  if (event?.httpMethod && event.httpMethod !== 'GET') return json(405, { error: 'Method Not Allowed' });
+  if (event?.httpMethod && event.httpMethod !== 'GET') {
+    console.warn('[EmailQueue] Rejected invocation method:', event.httpMethod);
+    return json(405, { error: 'Method Not Allowed' });
+  }
 
-  const admin = getAdminClient();
   const now = new Date().toISOString();
+  const configuredSupabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  let supabaseHost = 'not-configured';
+  try {
+    supabaseHost = configuredSupabaseUrl ? new URL(configuredSupabaseUrl).host : supabaseHost;
+  } catch {
+    supabaseHost = 'invalid-url';
+  }
+
+  console.log('[EmailQueue] Invocation started:', {
+    method: event?.httpMethod || null,
+    path: event?.path || null,
+    scheduledHeader: event?.headers?.['x-netlify-scheduled'] || event?.headers?.['X-Netlify-Scheduled'] || null,
+    supabaseHost,
+    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+    hasZeptoMailToken: Boolean(process.env.ZEPTOMAIL_TOKEN),
+    hasResendKey: Boolean(process.env.RESEND_API_KEY),
+    now,
+  });
 
   try {
+    const admin = getAdminClient();
     const startOfDay = new Date();
     startOfDay.setUTCHours(0, 0, 0, 0);
-    const { count: fallbackCount } = await admin
+    const fallbackResult = await admin
       .from('ticket_email_jobs')
       .select('id', { count: 'exact', head: true })
       .eq('provider', 'resend-fallback')
       .gte('updated_at', startOfDay.toISOString());
+    if (fallbackResult.error) {
+      console.warn('[EmailQueue] Fallback-count query error:', {
+        message: fallbackResult.error.message,
+        code: fallbackResult.error.code || null,
+      });
+    }
+    const fallbackCount = fallbackResult.count;
     const fallbackAllowed = (fallbackCount || 0) < 80;
+    console.log('[EmailQueue] Fallback policy:', {
+      fallbackCount: fallbackCount || 0,
+      fallbackAllowed,
+    });
 
     const [readyResult, expiredResult] = await Promise.all([
       admin
@@ -42,11 +74,21 @@ exports.handler = async (event) => {
         .order('created_at', { ascending: true })
         .limit(BATCH_SIZE),
     ]);
+    console.log('[EmailQueue] Queue query results:', {
+      readyRows: readyResult.data?.length || 0,
+      expiredSendingRows: expiredResult.data?.length || 0,
+      readyError: readyResult.error ? { message: readyResult.error.message, code: readyResult.error.code || null } : null,
+      expiredError: expiredResult.error ? { message: expiredResult.error.message, code: expiredResult.error.code || null } : null,
+    });
     if (readyResult.error) throw readyResult.error;
     if (expiredResult.error) throw expiredResult.error;
     const candidates = [...(readyResult.data || []), ...(expiredResult.data || [])]
       .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)))
       .slice(0, BATCH_SIZE);
+    console.log('[EmailQueue] Candidates selected:', {
+      count: candidates.length,
+      jobIds: candidates.map((candidate) => candidate.id),
+    });
 
     let sent = 0;
     let failed = 0;
@@ -70,13 +112,26 @@ exports.handler = async (event) => {
       }
       const { data: job, error: claimError } = await claimQuery.select('*').maybeSingle();
 
-      if (claimError) throw claimError;
+      if (claimError) {
+        console.error('[EmailQueue] Job claim error:', {
+          jobId: candidate.id,
+          message: claimError.message,
+          code: claimError.code || null,
+        });
+        throw claimError;
+      }
       if (!job) {
+        console.warn('[EmailQueue] Job was not claimable:', { jobId: candidate.id });
         locked++;
         continue;
       }
 
       try {
+        console.log('[EmailQueue] Sending claimed job:', {
+          jobId: job.id,
+          ticketId: job.ticket_id,
+          attempt: job.attempt_count,
+        });
         const result = await sendTicketEmail({ ...job.payload, allowResendFallback: fallbackAllowed });
         const provider = result?.provider || 'zeptomail';
         const providerMessageId = result?.id || null;
@@ -92,9 +147,15 @@ exports.handler = async (event) => {
           })
           .eq('id', job.id);
         if (sentError) throw sentError;
+        console.log('[EmailQueue] Job sent:', { jobId: job.id, provider });
         sent++;
       } catch (error) {
         const attempt = job.attempt_count || 1;
+        console.error('[EmailQueue] Job send failed:', {
+          jobId: job.id,
+          attempt,
+          message: error.message || String(error),
+        });
         const delayMinutes = Math.min(60, Math.max(1, 2 ** Math.min(attempt, 6)));
         await admin
           .from('ticket_email_jobs')
@@ -110,9 +171,18 @@ exports.handler = async (event) => {
       }
     }
 
+    console.log('[EmailQueue] Invocation completed:', {
+      candidates: candidates.length,
+      sent,
+      failed,
+      locked,
+    });
     return json(200, { ok: true, candidates: (candidates || []).length, sent, failed, locked });
   } catch (error) {
-    console.error('[EmailQueue] Error:', error.message);
+    console.error('[EmailQueue] Invocation error:', {
+      message: error.message || String(error),
+      code: error.code || null,
+    });
     return json(500, { ok: false, error: error.message });
   }
 };
