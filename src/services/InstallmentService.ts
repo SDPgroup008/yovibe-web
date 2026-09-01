@@ -208,7 +208,25 @@ export class InstallmentService {
     if (data.planComplete) {
       const updatedPlan = await this.getPlanById(planId)
       if (!updatedPlan) throw new Error("Updated installment plan not found")
-      const ticketIds = await this.fulfillTickets({ ...updatedPlan, reservationId: data.reservationId || updatedPlan.reservationId })
+      // Preserve the payment identifier from the just-verified charge even if
+      // the plan read races with the database JSONB update. Final fulfillment
+      // must verify the payment that actually completed the plan.
+      const completedInstallment = updatedPlan.installments.map((installment) =>
+        installment.index === installmentIndex
+          ? {
+              ...installment,
+              paymentMethod,
+              depositId: paymentMethod === "mobile_money" ? depositId : installment.depositId,
+              orderId: paymentMethod !== "mobile_money" ? (extra?.orderId || depositId) : installment.orderId,
+              trackingId: paymentMethod !== "mobile_money" ? (extra?.trackingId || installment.trackingId) : installment.trackingId,
+            }
+          : installment,
+      )
+      const ticketIds = await this.fulfillTickets({
+        ...updatedPlan,
+        installments: completedInstallment,
+        reservationId: data.reservationId || updatedPlan.reservationId,
+      })
       return { planComplete: true, ticketIds }
     }
 
