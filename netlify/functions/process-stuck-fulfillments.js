@@ -24,15 +24,16 @@ const {
   confirmPaymentVerified,
   loadEvent,
   insertTicketNotification,
-  sendTicketEmail,
+  enqueueTicketEmailJobs,
   createTicketServerSide,
   persistTicketRows,
   uploadImageDataUrl,
+  cleanupTicketAssets,
 } = require('../shared/ticketFulfillment');
 
 const MAX_ATTEMPTS = 5;
 const MAX_AGE_MINUTES = 5;
-const BATCH_SIZE = 10;
+const BATCH_SIZE = 25;
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -49,12 +50,18 @@ exports.handler = async (event, context) => {
   const cutoff = new Date(Date.now() - MAX_AGE_MINUTES * 60 * 1000).toISOString();
 
   try {
+    // Reclaim expired checkout holds and release installment inventory at the
+    // three-hour cutoff. This runs on the existing every-minute scheduler.
+    const { error: expiryError } = await admin.rpc('release_expired_inventory_reservations');
+    if (expiryError) console.warn('[StuckFulfillments] Inventory expiry sweep failed:', expiryError.message);
+
     // Fetch stuck fulfillments: not yet fulfilled, older than the cutoff,
     // and below the retry cap.
     const { data: rows, error } = await admin
       .from('pending_ticket_fulfillments')
       .select('*')
       .neq('status', 'fulfilled')
+      .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .lt('created_at', cutoff)
       .lte('attempt_count', MAX_ATTEMPTS - 1)
       .order('created_at', { ascending: true })
@@ -78,6 +85,7 @@ exports.handler = async (event, context) => {
       } catch (e) {
         failed++;
         console.warn(`[StuckFulfillments] Error on ${f.id}:`, e.message);
+        await bump(admin, f, 'fulfilling', e.message || 'Worker error');
       }
     }
 
@@ -89,6 +97,14 @@ exports.handler = async (event, context) => {
 };
 
 async function processOne(admin, f) {
+  const { data: claimed, error: claimError } = await admin.rpc('claim_ticket_fulfillment', {
+    p_id: f.id,
+    p_lease_seconds: 600,
+  });
+  if (claimError) throw claimError;
+  if (!claimed || claimed.length === 0) return 'locked';
+  f = claimed[0];
+
   // 1. Confirm the payment (deployed verify functions + direct API tiebreaker).
   const verifyMethod = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
   const confirmation = await confirmPaymentVerified(verifyMethod, {
@@ -109,6 +125,12 @@ async function processOne(admin, f) {
   // Payment is COMPLETED — fulfil.
   const existingIds = f.ticket_ids || [];
   if (existingIds.length > 0) {
+    const { data: existingTickets, error: existingError } = await admin
+      .from('tickets')
+      .select('*')
+      .in('id', existingIds);
+    if (existingError) throw existingError;
+    await enqueueTicketEmailJobs(admin, await loadEvent(admin, f.event_id), existingTickets || [], f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Tickets already created; marking fulfilled');
     return 'succeeded';
   }
@@ -131,7 +153,24 @@ async function processOne(admin, f) {
   const method = f.pawapay_deposit_id ? 'mobile_money' : ((payload && payload.payment && payload.payment.method) || 'credit_card');
   const sharedPaymentId = f.payment_id || (payload && payload.paymentId);
 
-  // Photo: hosted R2 URL from the payload, or re-upload the data URL once.
+  // Crash recovery for the narrow window after the ticket RPC commits but
+  // before ticket_ids is written to the fulfillment row.
+  const { data: paymentTickets, error: paymentTicketsError } = await admin
+    .from('tickets')
+    .select('*')
+    .eq('payment_id', sharedPaymentId)
+    .eq('event_slug', event.slug || f.event_id);
+  if (paymentTicketsError) throw paymentTicketsError;
+  if ((paymentTickets || []).length >= qty) {
+    const recoveredTickets = paymentTickets.slice(0, qty);
+    const recoveredIds = recoveredTickets.map((ticket) => ticket.id);
+    await admin.from('pending_ticket_fulfillments').update({ ticket_ids: recoveredIds }).eq('id', f.id);
+    await enqueueTicketEmailJobs(admin, event, recoveredTickets, f.buyer_email, f.id);
+    await bump(admin, f, 'fulfilled', 'Recovered tickets created before worker interruption');
+    return 'succeeded';
+  }
+
+  // Photo: hosted R2 URL from the payload, or re-upload a legacy data URL once.
   let photoUrl = null;
   if (payload && payload.buyerPhotoUrl) {
     photoUrl = payload.buyerPhotoUrl;
@@ -174,33 +213,35 @@ async function processOne(admin, f) {
   }
 
   // Persist the whole batch atomically (inventory checks included).
-  const createdIds = await persistTicketRows(admin, createdRows);
+  let createdIds;
+  try {
+    createdIds = await persistTicketRows(
+      admin,
+      createdRows,
+      payload && payload.inventoryHoldIds,
+      payload && payload.inventorySessionId,
+      payload && payload.installmentPlanId,
+    );
+  } catch (error) {
+    await cleanupTicketAssets(createdRows);
+    throw error;
+  }
+
+  // Persist ticket IDs immediately after the atomic insert. If the worker
+  // stops before email enqueue or status completion, the next retry resumes
+  // from these IDs instead of creating a duplicate ticket batch.
+  const { error: idsError } = await admin
+    .from('pending_ticket_fulfillments')
+    .update({ ticket_ids: createdIds, updated_at: new Date().toISOString() })
+    .eq('id', f.id);
+  if (idsError) throw idsError;
 
   for (const row of createdRows) {
     await insertTicketNotification(admin, event, row);
 
-    // Best-effort email with the hosted QR URL.
-    try {
-      await sendTicketEmail({
-        buyerEmail: f.buyer_email,
-        buyerName: row.buyer_name,
-        eventName: event.name,
-        ticketType: row.entry_fee_type,
-        venue: event.venue_name || '',
-        date: new Date(row.event_start_time).toISOString().split('T')[0],
-        time: event.time || '',
-        ticketRef: row.ticket_ref,
-        qrCodeDataUrl: row.qr_code_data_url,
-        photoUploadLink: row.photo_upload_token
-          ? `${process.env.SITE_URL || process.env.URL || 'https://yovibe.net'}/add-photo?ticket=${row.id}&token=${row.photo_upload_token}`
-          : undefined,
-        ticketDesign: undefined,
-        posterUrl: event.poster_image_url,
-      });
-    } catch (e) {
-      console.warn(`[StuckFulfillments] Email failed for ${row.id}:`, e.message);
-    }
   }
+
+  await enqueueTicketEmailJobs(admin, event, createdRows, f.buyer_email, f.id);
 
   await bump(admin, f, 'fulfilled', 'Fulfilled by scheduled retry');
   return 'succeeded';
@@ -211,10 +252,18 @@ async function bump(admin, f, status, note) {
     .from('pending_ticket_fulfillments')
     .update({
       status,
-      attempt_count: (f.attempt_count || 0) + 1,
+      attempt_count: f.attempt_count || 0,
       last_error: (note || '').substring(0, 500),
+      lease_expires_at: null,
+      processing_started_at: null,
+      next_retry_at: status === 'fulfilled'
+        ? null
+        : new Date(Date.now() + (status === 'failed' ? 15 : 1) * 60 * 1000).toISOString(),
+      completed_at: status === 'fulfilled' ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', f.id);
   if (error) console.warn(`[StuckFulfillments] Status update failed for ${f.id}:`, error.message);
 }
+
+module.exports.processOne = processOne;

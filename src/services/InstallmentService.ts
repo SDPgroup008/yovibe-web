@@ -18,7 +18,13 @@ import {
 const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
   ""
+
+function resolveFunctionUrl(functionName: string): string {
+  const base = FUNCTIONS_BASE_URL.replace(/\/$/, "")
+  return base ? `${base}/.netlify/functions/${functionName}` : `/.netlify/functions/${functionName}`
+}
 
 export class InstallmentService {
   // ─── Plan Creation ────────────────────────────────────────────────────────
@@ -69,6 +75,8 @@ export class InstallmentService {
       tableSize: number
       buyerPhotoUrl?: string
       seatNumber?: number
+      tableNumber?: number
+      checkoutHoldId?: string
     },
     paymentDetails: {
       method: "mobile_money" | "credit_card" | "bank_transfer"
@@ -96,6 +104,8 @@ export class InstallmentService {
       tableSize: buyerInfo.tableSize,
       buyerPhotoUrl: buyerInfo.buyerPhotoUrl,
       seatNumber: buyerInfo.seatNumber,
+      tableNumber: buyerInfo.tableNumber,
+      checkoutHoldId: buyerInfo.checkoutHoldId,
       paymentProvider: paymentDetails.provider,
       paymentNumber: paymentDetails.number,
       baseTotal: totalAmount - lateFee,
@@ -146,7 +156,11 @@ export class InstallmentService {
     if (!installment) throw new Error("Installment not found")
     if (installment.status === "paid") throw new Error("This installment is already paid")
 
-    // Check event hasn't passed
+    // Missed installments remain payable until the reservation release cutoff.
+    if (plan.reservationExpiresAt && new Date() >= plan.reservationExpiresAt) {
+      await this.updatePlanStatus(planId, "expired")
+      throw new Error("The reservation cutoff has passed. The seats/tables were released and this payment requires admin review.")
+    }
     if (plan.eventDate && new Date() > plan.eventDate) {
       await this.updatePlanStatus(planId, "expired")
       throw new Error("The event has already passed. This plan has been cancelled.")
@@ -168,44 +182,33 @@ export class InstallmentService {
     const plan = await this.getPlanById(planId)
     if (!plan) throw new Error("Plan not found")
 
-    // Mark this installment paid (keep the payment refs for server-side
-    // verification at final fulfillment).
-    const updatedInstallments = plan.installments.map((inst) =>
-      inst.index === installmentIndex
-        ? {
-            ...inst,
-            status: "paid" as const,
-            depositId,
-            paymentMethod,
-            paidAt: new Date(),
-            orderId: extra?.orderId,
-            trackingId: extra?.trackingId,
-          }
-        : inst
-    )
+    if (plan.status === "completed" && plan.ticketIds?.length) {
+      return { planComplete: true, ticketIds: plan.ticketIds }
+    }
 
-    const paidCount = updatedInstallments.filter((i) => i.status === "paid").length
-    const amountPaid = updatedInstallments
-      .filter((i) => i.status === "paid")
-      .reduce((sum, i) => sum + i.amount, 0)
+    const response = await fetch(resolveFunctionUrl("confirm-installment-payment"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        planId,
+        installmentIndex,
+        paymentMethod,
+        depositId: paymentMethod === "mobile_money" ? depositId : undefined,
+        orderId: paymentMethod !== "mobile_money" ? (extra?.orderId || depositId) : undefined,
+        trackingId: extra?.trackingId,
+        checkoutHoldId: installmentIndex === 0 ? plan.checkoutHoldId : undefined,
+      }),
+    })
+    const data = await response.json()
+    if (!response.ok || !data.success) throw new Error(data.error || "Installment payment could not be confirmed")
+    if (data.reservationStatus === "needs_review") {
+      throw new Error("Payment was received, but the selected seat/table could not be reserved. Please contact support for manual review.")
+    }
 
-    const isComplete = paidCount === plan.installments.length
-
-    const { error } = await supabase
-      .from("ticket_installment_plans")
-      .update({
-        installments: updatedInstallments,
-        installments_paid: paidCount,
-        amount_paid: amountPaid,
-        status: isComplete ? "completed" : "active",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", planId)
-
-    if (error) throw error
-
-    if (isComplete) {
-      const ticketIds = await this.fulfillTickets({ ...plan, installments: updatedInstallments })
+    if (data.planComplete) {
+      const updatedPlan = await this.getPlanById(planId)
+      if (!updatedPlan) throw new Error("Updated installment plan not found")
+      const ticketIds = await this.fulfillTickets({ ...updatedPlan, reservationId: data.reservationId || updatedPlan.reservationId })
       return { planComplete: true, ticketIds }
     }
 
@@ -243,8 +246,10 @@ export class InstallmentService {
       buyerPhone: plan.paymentNumber,
       buyerPhotoUrl: isRemotePhoto ? photo : undefined,
       buyerPhotoDataUrl: !isRemotePhoto && photo ? photo : undefined,
-      seatNumbers: plan.seatNumber != null ? [plan.seatNumber] : undefined,
-      tableNumbers: undefined,
+      seatNumbers: !plan.isTableEntry && plan.seatNumber != null ? Array(plan.quantity).fill(plan.seatNumber) : undefined,
+      tableNumbers: plan.isTableEntry && plan.tableNumber != null ? Array(plan.quantity).fill(plan.tableNumber) : undefined,
+      inventoryHoldIds: plan.reservationId ? [plan.reservationId] : undefined,
+      installmentPlanId: plan.id,
       payment: {
         method: lastMethod,
         provider: plan.paymentProvider,
@@ -254,8 +259,8 @@ export class InstallmentService {
       },
       verification: {
         depositId: isMM ? (lastInst.depositId || undefined) : undefined,
-        orderId: !isMM ? ((lastInst as any).orderId || lastInst.depositId || undefined) : undefined,
-        trackingId: !isMM ? ((lastInst as any).trackingId || undefined) : undefined,
+        orderId: !isMM ? (lastInst.orderId || lastInst.depositId || undefined) : undefined,
+        trackingId: !isMM ? (lastInst.trackingId || undefined) : undefined,
         pollStatus: "completed",
       },
     })
@@ -391,6 +396,11 @@ export class InstallmentService {
       table_size: plan.tableSize,
       buyer_photo_url: plan.buyerPhotoUrl,
       seat_number: plan.seatNumber,
+      table_number: plan.tableNumber,
+      checkout_hold_id: plan.checkoutHoldId,
+      reservation_id: plan.reservationId,
+      reservation_status: plan.reservationStatus || "none",
+      reservation_expires_at: plan.reservationExpiresAt?.toISOString(),
       payment_provider: plan.paymentProvider,
       payment_number: plan.paymentNumber,
       base_total: plan.baseTotal,
@@ -417,6 +427,8 @@ export class InstallmentService {
       depositId: i.depositId,
       paymentMethod: i.paymentMethod,
       paidAt: i.paidAt ? new Date(i.paidAt) : undefined,
+      orderId: i.orderId,
+      trackingId: i.trackingId,
     }))
 
     return {
@@ -437,6 +449,11 @@ export class InstallmentService {
       tableSize: row.table_size || 1,
       buyerPhotoUrl: row.buyer_photo_url,
       seatNumber: row.seat_number,
+      tableNumber: row.table_number,
+      checkoutHoldId: row.checkout_hold_id,
+      reservationId: row.reservation_id,
+      reservationStatus: row.reservation_status || "none",
+      reservationExpiresAt: row.reservation_expires_at ? new Date(row.reservation_expires_at) : undefined,
       paymentProvider: row.payment_provider,
       paymentNumber: row.payment_number,
       baseTotal: row.base_total,

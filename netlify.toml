@@ -37,8 +37,12 @@
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
 
 [functions."process-stuck-fulfillments"]
-  # Phase 1: automatic retry of stranded purchases every 5 minutes
-  schedule = "*/5 * * * *"
+  # Automatic retry/reconciliation of stranded purchases every minute.
+  schedule = "* * * * *"
+
+[functions."process-ticket-email-queue"]
+  # Deliver queued ticket emails independently from ticket creation.
+  schedule = "* * * * *"
 
 [functions."purge-expired-photos"]
   # Phase 4 (4.3): daily photo/QR retention purge at 04:00

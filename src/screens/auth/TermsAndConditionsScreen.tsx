@@ -510,7 +510,8 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (e) Subsequent installments are due on the dates specified in the installment schedule
-            provided at the time of purchase. All installments must be paid before the Event start time.
+            provided at the time of purchase. All installments must be paid before the reservation
+            release cutoff, which is three (3) hours before the Event start time.
           </Text>
           <Text style={styles.paragraph}>
             (f) The QR code for the Ticket is issued only after all installments have been paid in full.
@@ -518,9 +519,10 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (g) If an installment payment is missed, the purchaser may still complete payment of any
-            outstanding installment at any time before the Event start time. The Company reserves the
-            right to cancel the installment plan and void the Ticket(s) if payments are not completed
-            by the Event start time.
+            outstanding installment at any time before the reservation release cutoff, which is three
+            (3) hours before the Event start time. After that cutoff, unpaid reserved seats or tables
+            may be released for resale. The Company reserves the right to cancel the installment plan
+            and void the Ticket(s) if payments are not completed by the cutoff.
           </Text>
           <Text style={styles.paragraph}>
             (h) Refunds for installment plans are governed by Section 11.1(e)-(f) of these Terms.

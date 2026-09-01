@@ -357,6 +357,25 @@ function siteBaseUrl() {
   return process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
 }
 
+async function triggerFulfillmentWorker(fulfillmentId) {
+  if (!fulfillmentId) return false;
+  const secret = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  try {
+    const response = await fetch(`${siteBaseUrl()}/.netlify/functions/process-ticket-fulfillment-background`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Fulfillment-Worker-Secret': secret,
+      },
+      body: JSON.stringify({ fulfillmentId }),
+    });
+    return response.ok || response.status === 202;
+  } catch (error) {
+    console.warn(`[TicketFulfillment] Worker trigger failed for ${fulfillmentId}:`, error.message);
+    return false;
+  }
+}
+
 async function sendTicketEmail(emailPayload) {
   const response = await fetch(`${siteBaseUrl()}/.netlify/functions/send-ticket-email`, {
     method: 'POST',
@@ -368,6 +387,54 @@ async function sendTicketEmail(emailPayload) {
     throw new Error(`send-ticket-email failed: ${response.status} ${text.substring(0, 200)}`);
   }
   return response.json();
+}
+
+function buildTicketEmailPayload(event, ticket, payerEmail) {
+  const design = Array.isArray(event.entry_fees)
+    ? event.entry_fees.find((f) => f && f.name === ticket.entry_fee_type)
+    : null;
+  const deliveryEmail = ticket.delivery_email || payerEmail || ticket.buyer_email;
+  const eventStart = new Date(ticket.event_start_time);
+
+  return {
+    buyerEmail: deliveryEmail,
+    buyerName: ticket.buyer_name,
+    eventName: event.name,
+    ticketType: ticket.entry_fee_type,
+    venue: event.venue_name || '',
+    date: eventStart.toISOString().split('T')[0],
+    time: event.time || '',
+    ticketRef: ticket.ticket_ref,
+    qrCodeDataUrl: ticket.qr_code_data_url,
+    seatNumber: ticket.table_number != null ? undefined : (ticket.seat_number ?? undefined),
+    tableNumber: ticket.table_number ?? undefined,
+    tableGroupId: ticket.table_group_id,
+    photoUploadLink: !ticket.buyer_photo_url && ticket.photo_upload_token
+      ? `${siteBaseUrl()}/add-photo?ticket=${ticket.id}&token=${ticket.photo_upload_token}`
+      : undefined,
+    ticketDesign: design ? design.ticketDesign : undefined,
+    posterUrl: event.poster_image_url,
+  };
+}
+
+async function enqueueTicketEmailJobs(admin, event, tickets, payerEmail, fulfillmentId) {
+  if (!Array.isArray(tickets) || tickets.length === 0) return;
+
+  const jobs = tickets.map((ticket) => ({
+    ticket_id: ticket.id,
+    fulfillment_id: fulfillmentId || null,
+    idempotency_key: `ticket-confirmation:${ticket.id}`,
+    recipient_email: ticket.delivery_email || payerEmail || ticket.buyer_email || '',
+    payload: buildTicketEmailPayload(event, ticket, payerEmail),
+    status: 'pending',
+    next_retry_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }));
+
+  const { error } = await admin
+    .from('ticket_email_jobs')
+    .upsert(jobs, { onConflict: 'idempotency_key', ignoreDuplicates: true });
+  if (error) throw error;
 }
 
 // ─── Ticket creation (server-side, full fidelity) ───────────────────────────
@@ -510,18 +577,25 @@ async function createTicketServerSide(admin, {
  * Throws errors prefixed with SOLD_OUT / TABLE_TAKEN / SEAT_TAKEN / DUPLICATE
  * so callers can map them to buyer-facing messages.
  */
-async function persistTicketRows(admin, rows) {
+async function persistTicketRows(admin, rows, inventoryHoldIds, inventorySessionId, installmentPlanId) {
   if (!rows || rows.length === 0) return [];
-  const { data, error } = await admin.rpc('create_tickets_batch', {
+  const args = {
     p_event_slug: rows[0].event_slug,
     p_rows: rows,
-  });
+  };
+  if (inventoryHoldIds || inventorySessionId || installmentPlanId) {
+    args.p_hold_ids = inventoryHoldIds || null;
+    args.p_session_id = inventorySessionId || null;
+    args.p_installment_plan_id = installmentPlanId || null;
+  }
+  const { data, error } = await admin.rpc('create_tickets_batch', args);
   if (error) {
     const msg = String(error.message || '');
     let code = 'INVENTORY_ERROR';
     if (msg.includes('SOLD_OUT')) code = 'SOLD_OUT';
     else if (msg.includes('TABLE_TAKEN')) code = 'TABLE_TAKEN';
     else if (msg.includes('SEAT_TAKEN')) code = 'SEAT_TAKEN';
+    else if (msg.includes('HOLD_TAKEN')) code = 'HOLD_TAKEN';
     else if (msg.includes('duplicate key') || msg.includes('23505')) code = 'DUPLICATE';
     throw new Error(`${code}: ${msg}`);
   }
@@ -596,6 +670,9 @@ module.exports = {
   generateQrPngDataUrl,
   insertTicketNotification,
   sendTicketEmail,
+  triggerFulfillmentWorker,
+  buildTicketEmailPayload,
+  enqueueTicketEmailJobs,
   siteBaseUrl,
   createTicketServerSide,
   persistTicketRows,

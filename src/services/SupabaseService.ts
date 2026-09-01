@@ -2126,6 +2126,70 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
     }
   }
 
+  async getHeldTables(eventSlug: string, feeType: string, excludeSessionId?: string): Promise<number[]> {
+    try {
+      const { data, error } = await supabase.rpc("get_held_tables", {
+        p_event_slug: eventSlug,
+        p_fee_type: feeType,
+        p_exclude_session_id: excludeSessionId || null,
+      })
+      if (error) throw error
+      return (data || []).map((r: any) => r.table_number)
+    } catch (error) {
+      console.error("SupabaseService: Error getting held tables:", error)
+      return []
+    }
+  }
+
+  async acquireInventoryHold(
+    eventSlug: string,
+    feeType: string,
+    resourceType: "seat" | "table",
+    resourceNumber: number,
+    sessionId: string,
+    ttlMinutes = 10,
+  ): Promise<string | null> {
+    try {
+      const { data, error } = await supabase.rpc("acquire_inventory_hold", {
+        p_event_slug: eventSlug,
+        p_fee_type: feeType,
+        p_resource_type: resourceType,
+        p_resource_number: resourceNumber,
+        p_session_id: sessionId,
+        p_ttl_minutes: ttlMinutes,
+      })
+      if (error) throw error
+      return data || null
+    } catch (error) {
+      console.error("SupabaseService: Error acquiring inventory hold:", error)
+      return null
+    }
+  }
+
+  async releaseInventoryHold(holdId: string, sessionId: string): Promise<void> {
+    try {
+      const { error } = await supabase.rpc("release_inventory_hold", {
+        p_hold_id: holdId,
+        p_session_id: sessionId,
+      })
+      if (error) throw error
+    } catch (error) {
+      console.error("SupabaseService: Error releasing inventory hold:", error)
+    }
+  }
+
+  async releaseInventoryHolds(sessionId: string, eventSlug?: string): Promise<void> {
+    try {
+      const { error } = await supabase.rpc("release_inventory_holds", {
+        p_session_id: sessionId,
+        p_event_slug: eventSlug || null,
+      })
+      if (error) throw error
+    } catch (error) {
+      console.error("SupabaseService: Error releasing inventory holds:", error)
+    }
+  }
+
   async acquireSeatHold(
     eventSlug: string, feeType: string, seatNumber: number, sessionId: string, ttlMinutes = 10
   ): Promise<boolean> {

@@ -16,7 +16,7 @@
 
 const { getPesapalToken } = require('../shared/pesapalAuth');
 const { getAdminClient } = require('../shared/supabaseAdmin');
-const { verifyPesapalPayment, markTicketsByPayment } = require('../shared/ticketFulfillment');
+const { verifyPesapalPayment, markTicketsByPayment, triggerFulfillmentWorker } = require('../shared/ticketFulfillment');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -83,6 +83,15 @@ exports.handler = async (event) => {
         });
         /* console.log('[PesaPalIPN] Reversal reconciliation:', result); */
       }
+    }
+
+    if (verification.status === 'completed' && orderMerchantReference) {
+      const { data: fulfillment } = await admin
+        .from('pending_ticket_fulfillments')
+        .select('id')
+        .eq('payment_id', orderMerchantReference)
+        .maybeSingle();
+      if (fulfillment) await triggerFulfillmentWorker(fulfillment.id);
     }
 
     return ack({ orderTrackingId, verifiedStatus: verification.status });

@@ -13,7 +13,7 @@
 //  4. Always answer 200 fast (after verification) so PawaPay stops retrying.
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
-const { verifyPawaPayDeposit, markTicketsByPayment } = require('../shared/ticketFulfillment');
+const { verifyPawaPayDeposit, markTicketsByPayment, triggerFulfillmentWorker } = require('../shared/ticketFulfillment');
 const { verifyCallbackSignature } = require('../shared/pawapaySignatures');
 
 const headers = {
@@ -68,6 +68,16 @@ exports.handler = async (event) => {
     if (verification.status === 'failed') {
       const result = await markTicketsByPayment(getAdminClient(), { depositId, status: 'cancelled', refundStatus: null });
       /* console.log('[PawaPayCallback] Failed-deposit reconciliation:', result); */
+    }
+
+    if (verification.status === 'completed') {
+      const admin = getAdminClient();
+      const { data: fulfillment } = await admin
+        .from('pending_ticket_fulfillments')
+        .select('id')
+        .eq('pawapay_deposit_id', depositId)
+        .maybeSingle();
+      if (fulfillment) await triggerFulfillmentWorker(fulfillment.id);
     }
 
     return ack({ depositId, status: verification.status });

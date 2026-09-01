@@ -8,6 +8,8 @@ export interface Installment {
   depositId?: string
   paymentMethod?: "mobile_money" | "credit_card" | "bank_transfer"
   paidAt?: Date
+  orderId?: string
+  trackingId?: string
 }
 
 export interface InstallmentPlan {
@@ -29,6 +31,11 @@ export interface InstallmentPlan {
   tableSize: number
   buyerPhotoUrl?: string
   seatNumber?: number
+  tableNumber?: number
+  checkoutHoldId?: string
+  reservationId?: string
+  reservationStatus?: "none" | "active" | "converted" | "released" | "needs_review"
+  reservationExpiresAt?: Date
   paymentProvider?: string   // last used provider, for convenience
   paymentNumber?: string     // last used number
   // Financials

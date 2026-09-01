@@ -209,7 +209,24 @@ async function uploadToR2Browser(
   };
 
   if (typeof body === 'string') {
-    fileData = body.startsWith('data:') ? body.replace(/^data:[^;]+;base64,/, '') : body;
+    if (body.startsWith('data:')) {
+      fileData = body.replace(/^data:[^;]+;base64,/, '');
+    } else {
+      // Expo camera returns a local file URI. Resolve it to bytes before the
+      // upload request; sending the URI text would create a corrupt object.
+      try {
+        const sourceResponse = await fetch(body);
+        if (!sourceResponse.ok) throw new Error(`Could not read image URI (${sourceResponse.status})`);
+        const sourceBlob = await sourceResponse.blob();
+        const dataUrl = await blobToDataUrl(sourceBlob);
+        fileData = dataUrl.replace(/^data:[^;]+;base64,/, '');
+        if (!finalContentType || finalContentType === 'application/octet-stream') {
+          finalContentType = sourceBlob.type || 'image/jpeg';
+        }
+      } catch (error) {
+        throw new Error(`Could not prepare image for upload: ${(error as Error)?.message || error}`);
+      }
+    }
   } else if (body instanceof Blob) {
     const dataUrl = await blobToDataUrl(body);
     fileData = dataUrl.replace(/^data:[^;]+;base64,/, '');
@@ -367,6 +384,37 @@ export async function uploadBuyerPhoto(
   ticketId: string
 ): Promise<{ url: string; key: string }> {
   try {
+    if (!isServerSide) {
+      const sourceResponse = photoUri.startsWith("data:") ? await fetch(photoUri) : await fetch(photoUri);
+      if (!sourceResponse.ok) throw new Error(`Could not read photo (${sourceResponse.status})`);
+      const blob = await sourceResponse.blob();
+      if (blob.size > 10 * 1024 * 1024) throw new Error("Security photo exceeds the 10 MB limit");
+      const contentType = ["image/jpeg", "image/png", "image/webp"].includes(blob.type)
+        ? blob.type
+        : "image/jpeg";
+      const key = `buyer-photos/${ticketId}.jpg`;
+      try {
+        const response = await fetch(resolveFunctionUrl("presign-buyer-photo"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key, contentType }),
+        });
+        const signed = await response.json();
+        if (!response.ok || !signed.uploadUrl) throw new Error(signed.error || "Could not prepare photo upload");
+        const upload = await fetch(signed.uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": contentType },
+          body: blob,
+        });
+        if (!upload.ok) throw new Error(`R2 photo upload failed (${upload.status})`);
+        return { url: signed.publicUrl, key };
+      } catch (directError) {
+        // Keep the existing Netlify upload path as a compatibility fallback
+        // when the R2 bucket has not yet received its browser CORS policy.
+        console.warn("[R2Service] Direct photo upload unavailable; using legacy upload:", directError);
+        return await uploadToR2({ contentType, path: "buyer-photos", filename: `${ticketId}.jpg`, body: blob });
+      }
+    }
     return await uploadToR2({
       path: 'buyer-photos',
       filename: `${ticketId}.jpg`,

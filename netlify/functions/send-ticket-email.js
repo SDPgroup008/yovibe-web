@@ -10,7 +10,7 @@
 const { Resend } = require("resend");
 const { PDFDocument, rgb, StandardFonts } = require("pdf-lib");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
 
 const {
@@ -678,6 +678,7 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
 }
 
 async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
+  if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
   const { data, error } = await resend.emails.send({
     from: "YoVibe Tickets <tickets@yovibe.net>",
     to: [to],
@@ -701,8 +702,8 @@ exports.handler = async function (event) {
     return { statusCode: 405, body: JSON.stringify({ error: "Method not allowed" }) };
   }
 
-  if (!process.env.RESEND_API_KEY) {
-    console.error("send-ticket-email: RESEND_API_KEY is not set");
+  if (!ZEPTOMAIL_TOKEN && !process.env.RESEND_API_KEY) {
+    console.error("send-ticket-email: neither ZEPTOMAIL_TOKEN nor RESEND_API_KEY is set");
     return { statusCode: 500, body: JSON.stringify({ error: "Email service not configured" }) };
   }
 
@@ -728,6 +729,7 @@ exports.handler = async function (event) {
     ticketDesign,
     seatNumber,
     tableNumber,
+    allowResendFallback = true,
   } = payload;
 
   // Required fields — fail fast with a clear message rather than a vague 500 later
@@ -815,6 +817,13 @@ exports.handler = async function (event) {
   if (zeptoResult.ok) {
     /* console.log("send-ticket-email: sent successfully via ZeptoMail"); */
     return { statusCode: 200, body: JSON.stringify({ success: true, provider: "zeptomail" }) };
+  }
+
+  if (!allowResendFallback) {
+    return {
+      statusCode: 503,
+      body: JSON.stringify({ error: "Primary email provider unavailable; fallback daily limit protected", zeptoError: zeptoResult.error }),
+    };
   }
 
   console.warn("send-ticket-email: ZeptoMail failed, falling back to Resend:", zeptoResult.error);

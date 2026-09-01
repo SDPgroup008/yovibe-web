@@ -604,6 +604,9 @@ export class TicketService {
     buyerPhotoUrl?: string
     seatNumbers?: (number | null)[]
     tableNumbers?: (number | null)[]
+    inventoryHoldIds?: (string | null)[]
+    inventorySessionId?: string
+    installmentPlanId?: string
     payment: {
       method: "mobile_money" | "credit_card" | "bank_transfer"
       provider?: string
@@ -647,6 +650,26 @@ export class TicketService {
     } catch (error: any) {
       console.error("[TicketService] fulfillPurchase error:", error?.message || error)
       return { success: false, error: error?.message || "Network error during purchase finalization" }
+    }
+  }
+
+  static async getFulfillmentStatus(fulfillmentId: string): Promise<{
+    success: boolean
+    status?: string
+    fulfillmentId?: string
+    ticketIds?: string[]
+    tickets?: Array<{ id: string; ticketRef: string; qrCodeDataUrl: string }>
+    error?: string
+  }> {
+    try {
+      const response = await fetch(
+        `${resolveFunctionUrl("get-fulfillment-status")}?fulfillmentId=${encodeURIComponent(fulfillmentId)}`,
+      )
+      const data = await response.json()
+      if (!response.ok) return { success: false, status: data.status, error: data.error || "Unable to read fulfillment status" }
+      return data
+    } catch (error: any) {
+      return { success: false, status: "in_progress", error: error?.message || "Network error while checking fulfillment" }
     }
   }
 

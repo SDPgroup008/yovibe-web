@@ -332,15 +332,17 @@ const MyTicketsScreen: React.FC = () => {
             const total = plan.installments.length
             const progress = paidCount / total
             const isOverdue = next && new Date() > next.dueDate
-            const eventPassed = plan.eventDate && new Date() > plan.eventDate
+            const paymentCutoffPassed = plan.reservationExpiresAt
+              ? new Date() >= plan.reservationExpiresAt
+              : plan.eventDate && new Date() > plan.eventDate
 
             return (
               <View key={plan.id} style={styles.installmentCard}>
                 <View style={styles.installmentCardHeader}>
                   <Text style={styles.installmentCardEvent} numberOfLines={1}>{plan.eventName}</Text>
-                  <View style={[styles.installmentBadge, eventPassed && styles.installmentBadgeExpired]}>
+                  <View style={[styles.installmentBadge, paymentCutoffPassed && styles.installmentBadgeExpired]}>
                     <Text style={styles.installmentBadgeText}>
-                      {eventPassed ? "EXPIRED" : `${paidCount}/${total} PAID`}
+                      {paymentCutoffPassed ? "EXPIRED" : `${paidCount}/${total} PAID`}
                     </Text>
                   </View>
                 </View>
@@ -355,7 +357,7 @@ const MyTicketsScreen: React.FC = () => {
                   UGX {plan.amountPaid.toLocaleString()} of UGX {plan.totalAmount.toLocaleString()} paid
                 </Text>
 
-                {next && !eventPassed && (
+                {next && !paymentCutoffPassed && (
                   <>
                     <View style={styles.nextInstallmentRow}>
                       <Text style={[styles.nextInstallmentLabel, isOverdue && styles.overdueText]}>

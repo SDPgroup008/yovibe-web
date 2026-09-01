@@ -21,11 +21,6 @@ const {
   loadEvent,
   resolveEventStartTime,
   uploadImageDataUrl,
-  insertTicketNotification,
-  sendTicketEmail,
-  createTicketServerSide,
-  persistTicketRows,
-  cleanupTicketAssets,
 } = require('../shared/ticketFulfillment');
 
 const headers = {
@@ -72,6 +67,9 @@ exports.handler = async (event) => {
     buyerPhotoUrl,
     seatNumbers,
     tableNumbers,
+    inventoryHoldIds,
+    inventorySessionId,
+    installmentPlanId,
     payment,
     verification,
   } = payload;
@@ -183,8 +181,47 @@ exports.handler = async (event) => {
     }
 
     // ── Step 4: Claim the fulfillment row (concurrency lock via PK) ────────
-    const paymentId = method === 'mobile_money' ? verification.depositId : (verification.orderId || paymentIdFallback());
+    const paymentId = method === 'mobile_money' ? verification.depositId : (verification.orderId || paymentIdFallback(fulfillmentId));
+    const existingByPayment = await admin
+      .from('pending_ticket_fulfillments')
+      .select('id, status, ticket_ids')
+      .eq('payment_id', paymentId)
+      .maybeSingle();
+    if (existingByPayment.error && existingByPayment.error.code !== 'PGRST116') throw existingByPayment.error;
+    if (existingByPayment.data && existingByPayment.data.id !== fulfillmentId) {
+      const existingIds = existingByPayment.data.ticket_ids || [];
+      if (existingIds.length > 0) {
+        const { data: existingTickets } = await admin
+          .from('tickets')
+          .select('id, ticket_ref, qr_code_data_url')
+          .in('id', existingIds);
+        return ok({
+          success: true,
+          fulfillmentId: existingByPayment.data.id,
+          alreadyFulfilled: true,
+          ticketIds: existingIds,
+          tickets: (existingTickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: t.qr_code_data_url })),
+        });
+      }
+      await triggerFulfillmentWorker(existingByPayment.data.id);
+      return ok({
+        success: false,
+        status: 'in_progress',
+        fulfillmentId: existingByPayment.data.id,
+        message: 'Your payment is already queued for ticket finalization.',
+      });
+    }
     const tableGroupId = isTableEntry ? `YVG-${String(event.slug || event.id).slice(-6)}-${Date.now().toString().slice(-6)}` : undefined;
+    let resolvedPhotoUrl = buyerPhotoUrl || null;
+    if (!resolvedPhotoUrl && buyerPhotoDataUrl) {
+      try {
+        // Legacy clients may still send a data URL. Upload it before the queue
+        // row is persisted so Base64 never gets stored in Supabase.
+        resolvedPhotoUrl = await uploadImageDataUrl(buyerPhotoDataUrl, 'buyer-photos', `purchase_${fulfillmentId}`);
+      } catch (e) {
+        console.warn('[FulfillPurchase] Legacy photo upload failed; continuing without photo:', e.message);
+      }
+    }
     // Persist the FULL payload so the scheduled retry can rebuild full-fidelity
     // tickets (seats/tables/photo/payment) for a stranded purchase.
     const claimPayload = {
@@ -203,10 +240,13 @@ exports.handler = async (event) => {
       payerEmail,
       buyerId: buyerId || null,
       buyerPhone: buyerPhone || null,
-      buyerPhotoDataUrl: buyerPhotoDataUrl || null,
-      buyerPhotoUrl: buyerPhotoUrl || null,
+      buyerPhotoDataUrl: null,
+      buyerPhotoUrl: resolvedPhotoUrl,
       seatNumbers: seatNumbers || null,
       tableNumbers: tableNumbers || null,
+      inventoryHoldIds: Array.isArray(inventoryHoldIds) ? inventoryHoldIds : null,
+      inventorySessionId: inventorySessionId || null,
+      installmentPlanId: installmentPlanId || null,
       payment: { ...payment },
       paymentId,
       pesapalTransactionId: verificationResult.transactionId || null,
@@ -263,125 +303,13 @@ exports.handler = async (event) => {
       throw claim.error;
     }
 
-    // ── Step 5: Buyer security photo ────────────────────────────────────────
-    let photoUrl = null;
-    if (buyerPhotoUrl) {
-      // Already-hosted R2 URL (e.g. installment plans) — use as-is.
-      photoUrl = buyerPhotoUrl;
-    } else if (buyerPhotoDataUrl) {
-      try {
-        photoUrl = await uploadImageDataUrl(buyerPhotoDataUrl, 'buyer-photos', `purchase_${fulfillmentId}`);
-      } catch (e) {
-        console.warn('[FulfillPurchase] Photo upload failed (continuing without photo):', e.message);
-      }
-    }
-
-    // ── Step 6: Create the tickets server-side ─────────────────────────────
-    // createTicketServerSide builds the rows (QR, R2, pricing); they are NOT
-    // inserted individually — the whole batch is persisted atomically below.
-    const perTicketTotal = total / qty;
-    const createdRows = [];
-
-    for (let i = 0; i < qty; i++) {
-      const row = await createTicketServerSide(admin, {
-        event,
-        attendeeName: buyerNames[i] || buyerNames[0] || 'Attendee',
-        payerEmail,
-        buyerId,
-        deliveryEmail: deliveryEmails && deliveryEmails[i] ? deliveryEmails[i] : (buyerEmails[i] || payerEmail),
-        totalAmount: perTicketTotal,
-        unitPrice,
-        lateFeePercent,
-        isTableEntry: !!isTableEntry,
-        tableSize: isTableEntry ? tableSize : undefined,
-        tableGroupId,
-        tableTotalAmount: isTableEntry ? total : undefined,
-        seatNumber: seatNumbers && seatNumbers[i] != null ? seatNumbers[i] : undefined,
-        tableNumber: tableNumbers && tableNumbers[i] != null ? tableNumbers[i] : undefined,
-        buyerPhone,
-        sharedPaymentId: paymentId,
-        cardPaymentName: payment.cardName,
-        photoUrl,
-        payment: { ...payment, ticketType: ticketType || undefined },
-        pesapalTransactionId: verificationResult.transactionId,
-        pesapalConfirmationCode: verificationResult.confirmationCode,
-      });
-      createdRows.push(row);
-    }
-
-    // ── Step 6b: Atomic persistence with inventory checks (Phase 2.1) ───────
-    let ticketIds;
-    try {
-      ticketIds = await persistTicketRows(admin, createdRows);
-    } catch (err) {
-      // Remove the QR/photo objects we uploaded so nothing is orphaned.
-      await cleanupTicketAssets(createdRows);
-      const msg = String(err.message || '');
-      if (msg.startsWith('SOLD_OUT')) {
-        return error(409, { success: false, error: 'Tickets for this category are sold out.' });
-      }
-      if (msg.startsWith('TABLE_TAKEN')) {
-        return error(409, { success: false, error: 'That table was just taken — please pick another.' });
-      }
-      if (msg.startsWith('SEAT_TAKEN')) {
-        return error(409, { success: false, error: 'That seat was just taken — please pick another.' });
-      }
-      throw err;
-    }
-
-    for (const row of createdRows) {
-      // Notification to the event owner (best-effort, mirrors the client flow)
-      await insertTicketNotification(admin, event, row);
-    }
-
-    // ── Step 7: Mark fulfillment as fulfilled (persist before emails so a
-    //            crashed email step never re-creates tickets) ───────────────
-    const { error: fulfilledError } = await admin
-      .from('pending_ticket_fulfillments')
-      .update({ status: 'fulfilled', ticket_ids: ticketIds, updated_at: new Date().toISOString() })
-      .eq('id', fulfillmentId);
-    if (fulfilledError) throw fulfilledError;
-
-    // ── Step 8: Send ticket emails (best-effort; buyer can re-send later) ──
-    const emailPromises = createdRows.map((ticket) => {
-      const design =
-        event.entry_fees && event.entry_fees.find ? event.entry_fees.find((f) => f && f.name === ticket.entry_fee_type) : null;
-      const deliveryEmail = ticket.delivery_email || payerEmail;
-      const eventStart = new Date(ticket.event_start_time);
-      return sendTicketEmail({
-        buyerEmail: deliveryEmail,
-        buyerName: ticket.buyer_name,
-        eventName: event.name,
-        ticketType: ticket.entry_fee_type,
-        venue: event.venue_name || '',
-        date: eventStart.toISOString().split('T')[0],
-        time: event.time || '',
-        ticketRef: ticket.ticket_ref,
-        qrCodeDataUrl: ticket.qr_code_data_url,
-        seatNumber: ticket.table_number != null ? undefined : (ticket.seat_number ?? undefined),
-        tableNumber: ticket.table_number ?? undefined,
-        tableGroupId: ticket.table_group_id,
-        photoUploadLink: !ticket.buyer_photo_url && ticket.photo_upload_token
-          ? `${process.env.SITE_URL || process.env.URL || 'https://yovibe.net'}/add-photo?ticket=${ticket.id}&token=${ticket.photo_upload_token}`
-          : undefined,
-        ticketDesign: design ? design.ticketDesign : undefined,
-        posterUrl: event.poster_image_url,
-      });
-    });
-    const emailResults = await Promise.allSettled(emailPromises);
-    emailResults.forEach((res, i) => {
-      if (res.status === 'fulfilled') {
-        /* console.log(`[FulfillPurchase] Email sent for ticket ${createdRows[i].id}`); */
-      } else {
-        console.warn(`[FulfillPurchase] Email failed for ticket ${createdRows[i].id}:`, res.reason?.message || res.reason);
-      }
-    });
-
+    // ── Step 5: Queue server-side fulfillment ───────────────────────────────
+    await triggerFulfillmentWorker(fulfillmentId);
     return ok({
-      success: true,
+      success: false,
+      status: 'in_progress',
       fulfillmentId,
-      ticketIds,
-      tickets: createdRows.map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: t.qr_code_data_url })),
+      message: 'Payment confirmed. Your tickets are being finalized.',
     });
   } catch (err) {
     console.error('[FulfillPurchase] Error:', err.message);
@@ -403,6 +331,28 @@ exports.handler = async (event) => {
   }
 };
 
-function paymentIdFallback() {
-  return `YV-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+function paymentIdFallback(fulfillmentId) {
+  return `YV-${fulfillmentId}`;
+}
+
+async function triggerFulfillmentWorker(fulfillmentId) {
+  const base = process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
+  const secret = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  try {
+    const response = await fetch(`${base}/.netlify/functions/process-ticket-fulfillment-background`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Fulfillment-Worker-Secret': secret,
+      },
+      body: JSON.stringify({ fulfillmentId }),
+    });
+    // A background function normally returns 202. Treat an HTTP failure as a
+    // recoverable queue condition; the scheduled sweeper will process the row.
+    if (!response.ok && response.status !== 202) {
+      console.warn(`[FulfillPurchase] Worker trigger returned HTTP ${response.status}`);
+    }
+  } catch (error) {
+    console.warn('[FulfillPurchase] Worker trigger failed; scheduled retry will recover:', error.message);
+  }
 }

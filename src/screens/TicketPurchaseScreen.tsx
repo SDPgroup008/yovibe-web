@@ -23,6 +23,7 @@ import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+import { uploadBuyerPhoto } from "../services/R2Service"
 
 // ─── Design tokens (UI only) ─────────────────────────────────────────
 const SURFACE = "rgba(18, 18, 26, 0.72)"
@@ -76,6 +77,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const [pickerMode, setPickerMode] = useState<"seat" | "table">("seat")
   const [occupiedTables, setOccupiedTables] = useState<number[]>([])
   const [tableSeats, setTableSeats] = useState<(number | null)[]>([])
+  const [inventoryHoldIds, setInventoryHoldIds] = useState<(string | null)[]>([])
+  const checkoutSessionIdRef = useRef<string>(uuidv4())
   
   // Load event data
   useEffect(() => {
@@ -126,14 +129,20 @@ const TicketPurchaseScreen: React.FC = () => {
     setPickSeatIndex(personIndex ?? null)
 
     if (m === "table") {
-      const occupied = await SupabaseService.getOccupiedTables(eventId, fee.name)
-      setOccupiedTables(occupied)
+      const [occupied, held] = await Promise.all([
+        SupabaseService.getOccupiedTables(eventId, fee.name),
+        SupabaseService.getHeldTables(eventId, fee.name, checkoutSessionIdRef.current),
+      ])
+      setOccupiedTables([...new Set([...occupied, ...held])])
       setShowSeatMapModal(true)
       return
     }
 
-    const occupied = await SupabaseService.getOccupiedSeats(eventId, fee.name)
-    setOccupiedSeats(occupied)
+    const [occupied, held] = await Promise.all([
+      SupabaseService.getOccupiedSeats(eventId, fee.name),
+      SupabaseService.getHeldSeats(eventId, fee.name, checkoutSessionIdRef.current),
+    ])
+    setOccupiedSeats([...new Set([...occupied, ...held])])
     setShowSeatMapModal(true)
   }
   
@@ -145,6 +154,64 @@ const TicketPurchaseScreen: React.FC = () => {
   const isTableEntry = selectedEntryFee?.isTable ?? false
   const tableSize = selectedEntryFee?.tableSize ?? 1
   const actualTicketCount = isTableEntry ? quantity * tableSize : quantity
+
+  const selectInventoryResource = async (resourceNumber: number) => {
+    const selectionIndex = pickSeatIndex ?? 0
+    const resourceType = pickerMode
+    const rowStart = resourceType === "table" ? selectionIndex * tableSize : selectionIndex
+    const oldHoldId = inventoryHoldIds[rowStart]
+    if (oldHoldId) await SupabaseService.releaseInventoryHold(oldHoldId, checkoutSessionIdRef.current)
+
+    const holdId = await SupabaseService.acquireInventoryHold(
+      eventId,
+      seatMapFee?.name || selectedTicketTypeName,
+      resourceType,
+      resourceNumber,
+      checkoutSessionIdRef.current,
+      10,
+    )
+    if (!holdId) {
+      Alert.alert("Already reserved", `That ${resourceType} is no longer available. Please choose another.`)
+      await openSeatMap(seatMapFee || selectedEntryFee, pickSeatIndex ?? undefined, resourceType)
+      return
+    }
+
+    if (resourceType === "table") {
+      const nextTables = [...tableSeats]
+      nextTables[selectionIndex] = resourceNumber
+      setTableSeats(nextTables)
+    } else {
+      const nextSeats = [...perPersonSeats]
+      nextSeats[selectionIndex] = resourceNumber
+      setPerPersonSeats(nextSeats)
+    }
+
+    const nextHoldIds = [...inventoryHoldIds]
+    const count = resourceType === "table" ? tableSize : 1
+    for (let i = 0; i < count; i++) nextHoldIds[rowStart + i] = holdId
+    setInventoryHoldIds(nextHoldIds)
+    setShowSeatMapModal(false)
+  }
+
+  const releaseCheckoutHolds = async () => {
+    await SupabaseService.releaseInventoryHolds(checkoutSessionIdRef.current, eventId)
+  }
+
+  useEffect(() => () => {
+    void SupabaseService.releaseInventoryHolds(checkoutSessionIdRef.current, eventId)
+  }, [eventId])
+
+  const previousTicketTypeRef = useRef<string | null>(null)
+  useEffect(() => {
+    const nextType = selectedTicketType?.name || null
+    if (previousTicketTypeRef.current && previousTicketTypeRef.current !== nextType) {
+      void releaseCheckoutHolds()
+      setInventoryHoldIds([])
+      setPerPersonSeats([])
+      setTableSeats([])
+    }
+    previousTicketTypeRef.current = nextType
+  }, [selectedTicketType?.name])
 
   // Visitor info for unauthenticated users
   const [visitorName, setVisitorName] = useState("")
@@ -185,6 +252,16 @@ const TicketPurchaseScreen: React.FC = () => {
         newSeats.push(null)
       }
       return newSeats.slice(0, actualTicketCount)
+    })
+    setTableSeats(prev => {
+      const next = [...prev]
+      while (next.length < quantity) next.push(null)
+      return next.slice(0, quantity)
+    })
+    setInventoryHoldIds(prev => {
+      const next = [...prev]
+      while (next.length < actualTicketCount) next.push(null)
+      return next.slice(0, actualTicketCount)
     })
   }, [actualTicketCount])
   
@@ -348,14 +425,15 @@ const TicketPurchaseScreen: React.FC = () => {
 
   const pollPaymentStatus = async (depositId: string, startAttempts: number = 0) => {
     let attempts = startAttempts
-    const maxAttempts = 25
+    const maxAttempts = 10
     let status = "PENDING"
     let verificationResult: any = null
     let networkError = false
     
     while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
       try {
-        await new Promise(resolve => setTimeout(resolve, 2000))
+        const delayMs = Math.min(15000, 2000 * (2 ** Math.min(attempts, 3)))
+        await new Promise(resolve => setTimeout(resolve, delayMs))
         attempts++
         verificationResult = await PawaPayService.checkDepositStatus(depositId)
         status = (verificationResult.status || "").toUpperCase()
@@ -384,6 +462,7 @@ const TicketPurchaseScreen: React.FC = () => {
       const failMsg = verificationResult?.failureMessage || "Your mobile money payment was not completed."
       setPurchaseStatus("error")
       setStatusMessage(failMsg)
+      await releaseCheckoutHolds()
     } else {
       setStatusMessage(`Still pending. Check your mobile money PIN. Attempt ${attempts}/${maxAttempts}.`)
     }
@@ -395,7 +474,7 @@ const TicketPurchaseScreen: React.FC = () => {
   // merchant reference server-side until the processor reports COMPLETED.
   // Ticket creation is deliberately gated on that verified result.
   const pollPesapalStatus = async (merchantReference: string, trackingId?: string) => {
-    const maxAttempts = 60
+    const maxAttempts = 20
     setPesapalOrderRef(merchantReference)
     setPesapalTrackingId(trackingId || null)
     setCheckingPayment(true)
@@ -417,6 +496,7 @@ const TicketPurchaseScreen: React.FC = () => {
           return
         }
         if (verification.status === "failed") {
+          await releaseCheckoutHolds()
           setStatusMessage("PesaPal reported that the payment failed or was cancelled. You can retry verification or cancel.")
           return
         }
@@ -455,6 +535,22 @@ const TicketPurchaseScreen: React.FC = () => {
 
       const includePhoto = securityPhotoEnabled && photoCaptured
 
+      let hostedBuyerPhotoUrl: string | undefined
+      if (includePhoto && buyerPhotoUrl) {
+        if (/^https?:\/\//i.test(buyerPhotoUrl)) {
+          hostedBuyerPhotoUrl = buyerPhotoUrl
+        } else {
+          setStatusMessage("Uploading security photo...")
+          try {
+            hostedBuyerPhotoUrl = (await uploadBuyerPhoto(buyerPhotoUrl, `purchase_${fulfillmentId}`)).url
+          } catch (photoError: any) {
+            // Preserve the previous behavior: ticket fulfillment may continue
+            // without an optional photo if storage is temporarily unavailable.
+            console.warn("[TicketPurchase] Security photo upload failed:", photoError?.message || photoError)
+          }
+        }
+      }
+
       setProgressStep(1) // Saving ticket
       const fulfillPayload = {
         fulfillmentId,
@@ -470,11 +566,13 @@ const TicketPurchaseScreen: React.FC = () => {
         payerEmail,
         buyerId: user?.id ?? null,
         buyerPhone: (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
-        buyerPhotoDataUrl: includePhoto ? buyerPhotoUrl : undefined,
+        buyerPhotoUrl: hostedBuyerPhotoUrl,
         seatNumbers: isTableEntry ? undefined : perPersonSeats,
         tableNumbers: isTableEntry
           ? tableSeats.flatMap((t) => t != null ? Array(tableSize).fill(t) : [null]).slice(0, actualTicketCount)
           : undefined,
+        inventoryHoldIds: inventoryHoldIds,
+        inventorySessionId: checkoutSessionIdRef.current,
         payment: {
           method: paymentMethod || "mobile_money",
           provider: paymentMethod === "mobile_money" ? mobileMoneyProvider : undefined,
@@ -496,16 +594,29 @@ const TicketPurchaseScreen: React.FC = () => {
       }
 
       // The UI poll and the server's re-verification can briefly disagree while
-      // the processor propagates COMPLETED. Retry automatically (safe: the
-      // fulfillmentId makes every retry idempotent) before surfacing the
-      // pending banner — no manual "retry verification" needed.
+      // the processor propagates COMPLETED. Retry verification only while the
+      // payment itself is pending; once fulfillment is queued, poll the small
+      // status endpoint instead of resubmitting the full purchase payload.
       let result = await TicketService.fulfillPurchase(fulfillPayload)
       let pendingRetries = 0
-      while ((result.status === "pending" || result.status === "in_progress") && pendingRetries < 5) {
+      while (result.status === "pending" && pendingRetries < 5) {
         pendingRetries++
         /* console.log(`[FulfillPurchase] ${result.status} — auto-retrying (${pendingRetries}/5)...`) */
         await new Promise((resolve) => setTimeout(resolve, 2000))
         result = await TicketService.fulfillPurchase(fulfillPayload)
+      }
+
+      if (result.status === "in_progress") {
+        const queuedFulfillmentId = result.fulfillmentId || fulfillmentId
+        for (let attempt = 0; attempt < 20; attempt++) {
+          const waitMs = Math.min(15000, attempt < 2 ? 2000 : attempt < 5 ? 5000 : 10000)
+          await new Promise((resolve) => setTimeout(resolve, waitMs))
+          const statusResult = await TicketService.getFulfillmentStatus(queuedFulfillmentId)
+          if (statusResult.success || statusResult.status === "failed") {
+            result = statusResult
+            break
+          }
+        }
       }
 
       if (result.success) {
@@ -537,6 +648,7 @@ const TicketPurchaseScreen: React.FC = () => {
       setCheckingPayment(false)
       setPurchaseStatus("error")
       setStatusMessage(result.error || "We could not finalize your purchase. Please try again.")
+      await releaseCheckoutHolds()
       Alert.alert(
         "Purchase Not Completed",
         result.error || "We could not finalize your purchase. Please try again or contact support.",
@@ -548,6 +660,7 @@ const TicketPurchaseScreen: React.FC = () => {
       setCheckingPayment(false)
       setPurchaseStatus("error")
       setStatusMessage(error?.message || "Failed to finalize your purchase. Please try again.")
+      await releaseCheckoutHolds()
       Alert.alert(
         "Purchase Error",
         `We could not finalize your purchase. Reference: ${fulfillmentId}. If you paid, contact support with this reference.`,
@@ -683,7 +796,9 @@ const handleInstallmentPurchase = async () => {
           isTableEntry,
           tableSize,
           buyerPhotoUrl: photoCaptured ? buyerPhotoUrl : undefined,
-          seatNumber: isTableEntry ? (tableSeats[0] ?? undefined) : (perPersonSeats.filter(s => s != null)[0] ?? undefined),
+          seatNumber: !isTableEntry ? (perPersonSeats.filter(s => s != null)[0] ?? undefined) : undefined,
+          tableNumber: isTableEntry ? (tableSeats[0] ?? undefined) : undefined,
+          checkoutHoldId: inventoryHoldIds.find((id) => id != null) || undefined,
         },
         {
           method: (paymentMethod || "credit_card") as "mobile_money" | "credit_card" | "bank_transfer",
@@ -714,6 +829,7 @@ const handleInstallmentPurchase = async () => {
         void pollPesapalInstallmentStatus(result.planId, result.orderId || "", result.trackingId)
       }
     } catch (error: any) {
+      await releaseCheckoutHolds()
       setPurchaseStatus("error")
       setStatusMessage(error.message || "Failed to create installment plan")
     } finally {
@@ -727,11 +843,11 @@ const handleInstallmentPurchase = async () => {
     depositId: string
   ): Promise<boolean> => {
     let attempts = 0
-    const maxAttempts = 25
+    const maxAttempts = 10
     let status = "PENDING"
 
     while (attempts < maxAttempts && (status === "PENDING" || status === "PROCESSING")) {
-      await new Promise((r) => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, Math.min(15000, 2000 * (2 ** Math.min(attempts, 3)))))
       attempts++
       try {
         const result = await PawaPayService.checkDepositStatus(depositId)
@@ -778,12 +894,13 @@ const handleInstallmentPurchase = async () => {
         return
       }
       if (verification.status === "failed") {
+        await releaseCheckoutHolds()
         setCheckingPayment(false)
         setPurchaseStatus("error")
         setStatusMessage("PesaPal reported that the installment payment failed or was cancelled.")
         return
       }
-      await new Promise((resolve) => setTimeout(resolve, 3000))
+      await new Promise((resolve) => setTimeout(resolve, Math.min(15000, 2000 * (2 ** Math.min(attempt, 3)))))
     }
     setCheckingPayment(false)
     setPurchaseStatus("error")
@@ -898,6 +1015,7 @@ const handleInstallmentPurchase = async () => {
       }
     } catch (error: any) {
       console.error("Purchase error:", error)
+      await releaseCheckoutHolds()
       setCheckingPayment(false)
       const errorMessage = error?.message || "Failed to initialize payment. Please try again."
       setPurchaseStatus("error")
@@ -992,6 +1110,7 @@ const handleInstallmentPurchase = async () => {
             <TouchableOpacity
               style={styles.cancelPaymentButton}
               onPress={() => {
+                void releaseCheckoutHolds()
                 setCheckingPayment(false)
                 setPawaPayDepositId(null)
                 setPesapalOrderRef(null)
@@ -1568,7 +1687,7 @@ const handleInstallmentPurchase = async () => {
             <View style={styles.installmentNotice}>
               <Ionicons name="information-circle-outline" size={16} color="#F59E0B" />
               <Text style={styles.installmentNoticeText}>
-                QR code is sent after the final installment. Missed installments can be paid any time before the event date.
+                QR code is sent after the final installment. Missed installments can be paid any time until 3 hours before the event starts; unpaid reservations are then released.
               </Text>
             </View>
           </>
@@ -1817,10 +1936,7 @@ const handleInstallmentPurchase = async () => {
                       ]}
                       onPress={() => {
                         if (isDisabled) return
-                        const newTableSeats = [...tableSeats]
-                        newTableSeats[pickSeatIndex ?? 0] = tableNum
-                        setTableSeats(newTableSeats)
-                        setShowSeatMapModal(false)
+                        void selectInventoryResource(tableNum)
                       }} disabled={isDisabled}>
                       <Text style={[
                         seatMapStyles.numberedSeatLabel,
@@ -1857,10 +1973,7 @@ const handleInstallmentPurchase = async () => {
                               ]}
                               onPress={() => {
                                 if (isDisabled) return
-                                const newSeats = [...perPersonSeats]
-                                newSeats[pickSeatIndex ?? 0] = seatNum
-                                setPerPersonSeats(newSeats)
-                                setShowSeatMapModal(false)
+                                void selectInventoryResource(seatNum)
                               }} disabled={isDisabled}>
                               <Text style={[
                                 seatMapStyles.seatLabel,
@@ -1894,10 +2007,7 @@ const handleInstallmentPurchase = async () => {
                         ]}
                         onPress={() => {
                           if (isDisabled) return
-                          const newSeats = [...perPersonSeats]
-                          newSeats[pickSeatIndex ?? 0] = seatNum
-                          setPerPersonSeats(newSeats)
-                          setShowSeatMapModal(false)
+                          void selectInventoryResource(seatNum)
                         }} disabled={isDisabled}>
                         <Text style={[
                           seatMapStyles.numberedSeatLabel,
