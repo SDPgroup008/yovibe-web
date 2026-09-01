@@ -11,7 +11,9 @@ function json(statusCode, body) {
 }
 
 exports.handler = async (event) => {
-  if (event?.httpMethod && event.httpMethod !== 'GET') {
+  // Netlify's scheduled invocation and dashboard "Run now" action can use
+  // POST even though this function has no caller-supplied request payload.
+  if (event?.httpMethod && !['GET', 'POST'].includes(event.httpMethod)) {
     console.warn('[EmailQueue] Rejected invocation method:', event.httpMethod);
     return json(405, { error: 'Method Not Allowed' });
   }
