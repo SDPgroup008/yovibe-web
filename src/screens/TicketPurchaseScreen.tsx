@@ -804,6 +804,7 @@ const handleInstallmentPurchase = async () => {
           buyerId: user?.id,
           buyerEmail: buyerEmailFinal,
           buyerName: buyerNameFinal,
+          ticketType: selectedTicketTypeName,
           buyerNames: buyerNamesList,
           buyerEmails: buyerEmailsList,
           deliveryEmails,

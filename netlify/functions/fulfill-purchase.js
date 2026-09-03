@@ -86,7 +86,14 @@ exports.handler = async (event) => {
 
   const qty = Math.floor(Number(quantity) || 0);
   const total = Math.floor(Number(totalAmount) || 0);
+  const normalizedTableSize = Math.floor(Number(tableSize) || 0);
   if (qty <= 0 || total <= 0) return error(400, { success: false, error: 'Invalid quantity or amount' });
+  if (isTableEntry && normalizedTableSize <= 0) {
+    return error(400, { success: false, error: 'A valid table size is required' });
+  }
+  if (isTableEntry && qty % normalizedTableSize !== 0) {
+    return error(400, { success: false, error: 'Table attendee count must be a whole number of tables' });
+  }
   if (!Array.isArray(buyerNames) || buyerNames.length !== qty) {
     return error(400, { success: false, error: 'buyerNames must match quantity' });
   }
@@ -166,13 +173,18 @@ exports.handler = async (event) => {
     const sevenAm = new Date(startTime);
     sevenAm.setHours(7, 0, 0, 0);
     const isLatePurchase = new Date() >= sevenAm;
-    const expectedSubtotal = unitPrice * qty;
+    // Entry-fee amounts for table tiers are table totals, while qty is the
+    // number of attendee ticket rows. Convert rows back to billable tables
+    // before validating the amount (for example: UGX 2,000 / 5-person table
+    // with five attendees is one table, not UGX 10,000).
+    const billableUnits = isTableEntry ? Math.ceil(qty / normalizedTableSize) : qty;
+    const expectedSubtotal = unitPrice * billableUnits;
     const expectedLateFee = isLatePurchase ? Math.round(expectedSubtotal * lateFeePercent / 100) : 0;
     const expectedTotal = expectedSubtotal + expectedLateFee;
     if (Math.abs(expectedTotal - total) > 1) {
       console.warn(
         `[FulfillPurchase] Price mismatch — client=${total}, expected=${expectedTotal} ` +
-        `(fee="${ticketType}", unit=${unitPrice}, qty=${qty}, lateFee=${expectedLateFee})`
+        `(fee="${ticketType}", unit=${unitPrice}, qty=${qty}, billableUnits=${billableUnits}, lateFee=${expectedLateFee})`
       );
       return error(409, {
         success: false,
@@ -232,7 +244,7 @@ exports.handler = async (event) => {
       unitPrice,
       lateFeePercent,
       isTableEntry: !!isTableEntry,
-      tableSize: isTableEntry ? tableSize : null,
+      tableSize: isTableEntry ? normalizedTableSize : null,
       tableGroupId: tableGroupId || null,
       buyerNames,
       buyerEmails,

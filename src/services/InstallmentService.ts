@@ -67,6 +67,7 @@ export class InstallmentService {
       buyerId?: string
       buyerEmail: string
       buyerName: string
+      ticketType: string
       buyerNames: string[]
       buyerEmails: string[]
       deliveryEmails: string[]
@@ -94,7 +95,7 @@ export class InstallmentService {
       eventId: event.id,
       eventName: event.name,
       eventDate: event.date,
-      ticketType: event.entryFees?.[0]?.name || "Standard",
+      ticketType: buyerInfo.ticketType,
       quantity: buyerInfo.buyerNames.length,
       buyerNames: buyerInfo.buyerNames,
       buyerEmails: buyerInfo.buyerEmails,

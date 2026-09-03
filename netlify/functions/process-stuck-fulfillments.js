@@ -130,6 +130,7 @@ async function processOne(admin, f) {
       .select('*')
       .in('id', existingIds);
     if (existingError) throw existingError;
+    await persistInstallmentTicketIds(admin, f, existingIds);
     await enqueueTicketEmailJobs(admin, await loadEvent(admin, f.event_id), existingTickets || [], f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Tickets already created; marking fulfilled');
     return 'succeeded';
@@ -152,6 +153,15 @@ async function processOne(admin, f) {
   const perTicketTotal = total > 0 ? total / qty : 0;
   const method = f.pawapay_deposit_id ? 'mobile_money' : ((payload && payload.payment && payload.payment.method) || 'credit_card');
   const sharedPaymentId = f.payment_id || (payload && payload.paymentId);
+  const isTableEntry = !!(payload && payload.isTableEntry);
+  const tableSize = isTableEntry ? Math.max(1, Math.floor(Number(payload.tableSize) || 1)) : null;
+  const verifiedFeePrice = payload && payload.unitPrice != null ? Number(payload.unitPrice) : null;
+  // The verified event fee is a table total for table tiers. Ticket rows still
+  // store their per-attendee share, while table_total_amount stores the full
+  // table amount.
+  const rowUnitPrice = verifiedFeePrice != null && isTableEntry
+    ? verifiedFeePrice / tableSize
+    : verifiedFeePrice;
 
   // Crash recovery for the narrow window after the ticket RPC commits but
   // before ticket_ids is written to the fulfillment row.
@@ -165,6 +175,7 @@ async function processOne(admin, f) {
     const recoveredTickets = paymentTickets.slice(0, qty);
     const recoveredIds = recoveredTickets.map((ticket) => ticket.id);
     await admin.from('pending_ticket_fulfillments').update({ ticket_ids: recoveredIds }).eq('id', f.id);
+    await persistInstallmentTicketIds(admin, f, recoveredIds);
     await enqueueTicketEmailJobs(admin, event, recoveredTickets, f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Recovered tickets created before worker interruption');
     return 'succeeded';
@@ -193,10 +204,10 @@ async function processOne(admin, f) {
         || (payload && payload.buyerEmails && payload.buyerEmails[i])
         || (payload && payload.payerEmail) || f.buyer_email,
       totalAmount: perTicketTotal,
-      unitPrice: payload && payload.unitPrice,
+      unitPrice: rowUnitPrice,
       lateFeePercent: payload && payload.lateFeePercent,
-      isTableEntry: !!(payload && payload.isTableEntry),
-      tableSize: payload && payload.isTableEntry ? payload.tableSize : undefined,
+      isTableEntry,
+      tableSize: tableSize || undefined,
       tableGroupId: payload && payload.tableGroupId,
       tableTotalAmount: payload && payload.isTableEntry ? total : undefined,
       seatNumber: payload && payload.seatNumbers && payload.seatNumbers[i] != null ? payload.seatNumbers[i] : undefined,
@@ -235,6 +246,7 @@ async function processOne(admin, f) {
     .update({ ticket_ids: createdIds, updated_at: new Date().toISOString() })
     .eq('id', f.id);
   if (idsError) throw idsError;
+  await persistInstallmentTicketIds(admin, f, createdIds);
 
   for (const row of createdRows) {
     await insertTicketNotification(admin, event, row);
@@ -264,6 +276,17 @@ async function bump(admin, f, status, note) {
     })
     .eq('id', f.id);
   if (error) console.warn(`[StuckFulfillments] Status update failed for ${f.id}:`, error.message);
+}
+
+async function persistInstallmentTicketIds(admin, fulfillment, ticketIds) {
+  const planId = fulfillment?.payload?.installmentPlanId;
+  if (!planId || !Array.isArray(ticketIds) || ticketIds.length === 0) return;
+
+  const { error } = await admin
+    .from('ticket_installment_plans')
+    .update({ ticket_ids: ticketIds, updated_at: new Date().toISOString() })
+    .eq('id', planId);
+  if (error) throw error;
 }
 
 module.exports.processOne = processOne;
