@@ -181,10 +181,17 @@ async function verifyPawaPayDeposit(depositId) {
 
 function siteBase() { return getSiteUrl(); }
 
+function internalFunctionHeaders(extra = {}) {
+  return {
+    'X-Fulfillment-Worker-Secret': requiredEnv('FULFILLMENT_WORKER_SECRET'),
+    ...extra,
+  };
+}
+
 async function verifyPawaPayDepositViaFunction(depositId) {
   if (!depositId) return { status: 'invalid', reason: 'missing_deposit_id' };
   const url = `${siteBase()}/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: internalFunctionHeaders() });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.warn(`[VerifyViaFunction] verify-pawapay-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -200,7 +207,7 @@ async function verifyPesapalPaymentViaFunction({ trackingId, orderId }) {
   if (trackingId) params.set('orderTrackingId', trackingId);
   if (orderId) params.set('merchantReference', orderId);
   const url = `${siteBase()}/.netlify/functions/verify-pesapal-payment?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: internalFunctionHeaders() });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.warn(`[VerifyViaFunction] verify-pesapal-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -347,7 +354,7 @@ async function triggerFulfillmentWorker(fulfillmentId) {
 async function sendTicketEmail(emailPayload) {
   const response = await fetch(`${siteBaseUrl()}/.netlify/functions/send-ticket-email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: internalFunctionHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(emailPayload),
   });
   if (!response.ok) {

@@ -45,10 +45,28 @@ async function validCookie(value: string | null): Promise<boolean> {
   return mismatch === 0;
 }
 
+function timingSafeTextEqual(a: string, b: string): boolean {
+  const left = new TextEncoder().encode(a);
+  const right = new TextEncoder().encode(b);
+  if (left.length !== right.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < left.length; i += 1) mismatch |= left[i] ^ right[i];
+  return mismatch === 0;
+}
+
+function validInternalFunctionRequest(request: Request): boolean {
+  const expected = Deno.env.get('FULFILLMENT_WORKER_SECRET') || '';
+  const supplied = request.headers.get('x-fulfillment-worker-secret') || '';
+  return expected.length >= 32 && supplied.length > 0 && timingSafeTextEqual(supplied, expected);
+}
+
 export default async (request: Request, context: any) => {
   if ((Deno.env.get('APP_ENV') || '').toLowerCase() !== 'staging') return context.next();
   const url = new URL(request.url);
   if (EXEMPT_PATHS.has(url.pathname)) return context.next();
+  if (url.pathname.startsWith('/.netlify/functions/') && validInternalFunctionRequest(request)) {
+    return context.next();
+  }
   if (await validCookie(readCookie(request))) return context.next();
 
   if (url.pathname.startsWith('/.netlify/functions/')) {
