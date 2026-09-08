@@ -24,6 +24,28 @@ function failureDetails(data) {
   }
 }
 
+async function predictProvider(baseUrl, apiKey, phoneNumber) {
+  const response = await fetch(`${baseUrl}/predict-provider`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ phoneNumber }),
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok || !data.phoneNumber || !data.provider) {
+    const failure = failureDetails(data)
+    const error = new Error(failure.message || 'Unable to validate the mobile-money number')
+    error.statusCode = response.ok ? 422 : response.status
+    error.failureCode = failure.code
+    throw error
+  }
+  if (!['UG', 'UGA'].includes(String(data.country || '').toUpperCase()) || !UGANDA_PROVIDERS.has(data.provider)) {
+    const error = new Error('The mobile-money number is not supported for Uganda')
+    error.statusCode = 422
+    throw error
+  }
+  return data
+}
+
 exports.handler = async (event, context) => {
   /* console.log("========================================") */
   /* console.log("💳 PAWAPAY DEPOSIT INITIATION (Netlify Functions)") */
@@ -66,6 +88,8 @@ exports.handler = async (event, context) => {
 
     const depositId = crypto.randomUUID()
     const apiKey = getApiKey()
+    const baseUrl = getPawaPayBaseUrl()
+    const prediction = await predictProvider(baseUrl, apiKey, formattedPhone)
 
     const payload = {
       depositId,
@@ -74,8 +98,8 @@ exports.handler = async (event, context) => {
       payer: {
         type: "MMO",
         accountDetails: {
-          phoneNumber: formattedPhone,
-          provider,
+          phoneNumber: prediction.phoneNumber,
+          provider: prediction.provider,
         },
       },
     }
@@ -83,7 +107,7 @@ exports.handler = async (event, context) => {
     /* console.log("📤 Calling PawaPay API...") */
     /* console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...") */
     
-    const response = await fetch(`${getPawaPayBaseUrl()}/deposits`, {
+    const response = await fetch(`${baseUrl}/deposits`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -123,13 +147,14 @@ exports.handler = async (event, context) => {
   } catch (error) {
     console.error("❌ Error:", error)
     return {
-      statusCode: 500,
+      statusCode: error.statusCode || 500,
       body: JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        failureCode: error.failureCode || null,
       }),
     }
   }
 }
 
-module.exports = { handler: exports.handler, normalizeUgandanPhone, failureDetails }
+module.exports = { handler: exports.handler, normalizeUgandanPhone, failureDetails, predictProvider }

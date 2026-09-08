@@ -15,11 +15,17 @@ describe('pawaPay v2 integration', () => {
   });
 
   it('sends a normalized Uganda deposit to the versioned endpoint', async () => {
-    global.fetch = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({ depositId: '11111111-1111-4111-8111-111111111111', status: 'ACCEPTED' }),
-    });
+    global.fetch = jest.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ country: 'UGA', provider: 'AIRTEL_OAPI_UGA', phoneNumber: '256753456789' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({ depositId: '11111111-1111-4111-8111-111111111111', status: 'ACCEPTED' }),
+      });
     const { handler } = require('../../../netlify/functions/create-pawapay-deposit');
 
     const response = await handler({
@@ -28,8 +34,9 @@ describe('pawaPay v2 integration', () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    const [url, request] = global.fetch.mock.calls[0];
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(global.fetch.mock.calls[0][0]).toBe('https://api.sandbox.pawapay.io/v2/predict-provider');
+    const [url, request] = global.fetch.mock.calls[1];
     expect(url).toBe('https://api.sandbox.pawapay.io/v2/deposits');
     expect(JSON.parse(request.body)).toEqual(expect.objectContaining({
       amount: '1000',
