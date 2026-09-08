@@ -65,8 +65,12 @@ exports.handler = async (event, context) => {
     const responseData = await response.json()
     /* console.log("📥 PawaPay response:", JSON.stringify(responseData, null, 2)) */
 
+    if (responseData.status === 'NOT_FOUND') {
+      return { statusCode: 200, body: JSON.stringify({ status: 'NOT_FOUND' }) }
+    }
+
     // PawaPay wraps deposit data in a "data" property
-    const depositData = responseData.data
+    const depositData = responseData.data || responseData
 
     const status = depositData?.status === "COMPLETED" ? "completed"
       : depositData?.status === "FAILED" ? "failed"

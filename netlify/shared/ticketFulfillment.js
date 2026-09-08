@@ -155,6 +155,7 @@ async function verifyPawaPayDeposit(depositId) {
   if (!response.ok) throw new Error(`PawaPay verification error: ${response.status}`);
 
   const data = await response.json();
+  if (data.status === 'NOT_FOUND') return { status: 'failed', rawStatus: 'NOT_FOUND' };
   const deposit = data.data || data || {};
   const rawStatus = deposit.status || 'PENDING';
   const status =

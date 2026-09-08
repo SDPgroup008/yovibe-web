@@ -66,7 +66,12 @@ function assertPawaPayUrl(value) {
   if (isStaging() && url.hostname !== 'api.sandbox.pawapay.io') {
     throw new Error('Staging pawaPay requests must use api.sandbox.pawapay.io');
   }
-  return value.replace(/\/$/, '');
+  const path = url.pathname.replace(/\/+$/, '');
+  if (!path) url.pathname = '/v2';
+  else if (path !== '/v2') throw new Error('PAWAPAY_API_URL must use the /v2 API path');
+  url.search = '';
+  url.hash = '';
+  return url.toString().replace(/\/$/, '');
 }
 
 function assertR2Config(config) {

@@ -56,8 +56,14 @@ exports.handler = async (event, context) => {
       }
     }
 
-    const data = await response.json()
+    const responseData = await response.json()
     /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
+
+    if (responseData.status === 'NOT_FOUND') {
+      return { statusCode: 200, body: JSON.stringify({ status: 'NOT_FOUND' }) }
+    }
+
+    const data = responseData.data || responseData
 
     const status = data.status === "COMPLETED" ? "completed"
       : data.status === "FAILED" ? "failed"

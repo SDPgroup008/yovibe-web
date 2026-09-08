@@ -21,7 +21,9 @@ describe('staging fail-closed isolation', () => {
     expect(assertSupabaseUrl('https://staging-ref.supabase.co')).toContain('staging-ref');
     expect(assertSiteUrl('https://example-staging.netlify.app')).toContain('netlify.app');
     expect(assertPesapalUrl('https://cybqa.pesapal.com/pesapalv3/api')).toContain('cybqa');
-    expect(assertPawaPayUrl('https://api.sandbox.pawapay.io')).toContain('sandbox');
+    expect(assertPawaPayUrl('https://api.sandbox.pawapay.io')).toBe('https://api.sandbox.pawapay.io/v2');
+    expect(assertPawaPayUrl('https://api.sandbox.pawapay.io/v2')).toBe('https://api.sandbox.pawapay.io/v2');
+    expect(() => assertPawaPayUrl('https://api.sandbox.pawapay.io/v1')).toThrow(/\/v2/i);
   });
 
   test('stores payout OTPs as keyed hashes', () => {

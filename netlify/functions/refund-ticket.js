@@ -151,7 +151,6 @@ async function submitPawaPay(refund) {
       refundId: externalRefundId, depositId: refund.processor_reference,
       amount: String(refund.approved_amount), currency: refund.currency || 'UGX',
       clientReferenceId: refund.request_reference,
-      ...(process.env.PAWAPAY_REFUND_CALLBACK_URL ? { callbackUrl: process.env.PAWAPAY_REFUND_CALLBACK_URL } : {}),
       metadata: [{ orderId: refund.payment_reference || refund.request_reference }],
     }),
   });

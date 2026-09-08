@@ -1,3 +1,4 @@
+const crypto = require('crypto')
 const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig')
 
 const getPawaPayBaseUrl = () => assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'))
@@ -6,12 +7,21 @@ const getApiKey = () => {
   return requiredEnv('PAWAPAY_API_KEY')
 }
 
-const generateUUID = () => {
-  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    const v = c === "x" ? r : (r & 0x3) | 8
-    return v.toString(16)
-  })
+const UGANDA_PROVIDERS = new Set(['MTN_MOMO_UGA', 'AIRTEL_OAPI_UGA'])
+
+function normalizeUgandanPhone(value) {
+  let digits = String(value || '').replace(/\D/g, '')
+  if (digits.startsWith('0')) digits = `256${digits.slice(1)}`
+  else if (/^[7]\d{8}$/.test(digits)) digits = `256${digits}`
+  return /^256\d{9}$/.test(digits) ? digits : null
+}
+
+function failureDetails(data) {
+  const reason = data?.failureReason || data?.rejectionReason || {}
+  return {
+    code: reason.failureCode || reason.rejectionCode || data?.code || null,
+    message: reason.failureMessage || reason.rejectionMessage || data?.message || data?.error || 'Failed to initiate deposit',
+  }
 }
 
 exports.handler = async (event, context) => {
@@ -38,19 +48,29 @@ exports.handler = async (event, context) => {
     /* console.log("   - Provider:", provider) */
     /* console.log("   - Buyer:", buyerName, buyerEmail) */
 
-    const depositId = generateUUID()
-    const apiKey = getApiKey()
-
-    // Format phone number: remove leading 0 and add country code
-    let formattedPhone = phoneNumber
-    if (formattedPhone.startsWith("0")) {
-      formattedPhone = "256" + formattedPhone.substring(1)
+    const numericAmount = Number(amount)
+    const normalizedCurrency = String(currency || 'UGX').toUpperCase()
+    const formattedPhone = normalizeUgandanPhone(phoneNumber)
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || !Number.isInteger(numericAmount)) {
+      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Amount must be a positive whole number for UGX' }) }
     }
+    if (normalizedCurrency !== 'UGX') {
+      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Only UGX mobile-money deposits are supported' }) }
+    }
+    if (!formattedPhone) {
+      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Enter a valid Ugandan mobile-money number' }) }
+    }
+    if (!UGANDA_PROVIDERS.has(provider)) {
+      return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Unsupported Ugandan mobile-money provider' }) }
+    }
+
+    const depositId = crypto.randomUUID()
+    const apiKey = getApiKey()
 
     const payload = {
       depositId,
-      amount: amount.toString(),
-      currency: currency || "UGX",
+      amount: String(numericAmount),
+      currency: normalizedCurrency,
       payer: {
         type: "MMO",
         accountDetails: {
@@ -72,15 +92,17 @@ exports.handler = async (event, context) => {
       body: JSON.stringify(payload),
     })
 
-    const data = await response.json()
+    const data = await response.json().catch(() => ({}))
     /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
 
     if (data.status === "REJECTED" || !response.ok) {
+      const failure = failureDetails(data)
       return {
-        statusCode: response.status,
+        statusCode: response.ok ? 422 : response.status,
         body: JSON.stringify({
           success: false,
-          error: data.failureReason?.failureMessage || "Failed to initiate deposit",
+          error: failure.message,
+          failureCode: failure.code,
         }),
       }
     }
@@ -93,7 +115,7 @@ exports.handler = async (event, context) => {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
-        depositId: data.depositId,
+        depositId: data.depositId || depositId,
         status: data.status,
         nextStep: data.nextStep,
       }),
@@ -109,3 +131,5 @@ exports.handler = async (event, context) => {
     }
   }
 }
+
+module.exports = { handler: exports.handler, normalizeUgandanPhone, failureDetails }
