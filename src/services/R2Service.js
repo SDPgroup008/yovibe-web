@@ -12,9 +12,10 @@ exports.uploadTicketDesignBackground = uploadTicketDesignBackground;
 exports.uploadBatch = uploadBatch;
 const supabase_1 = require("../config/supabase");
 const isServerSide = typeof window === 'undefined';
-const PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
-const FUNCTIONS_BASE_URL = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
-    process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+const PUBLIC_URL = process.env.EXPO_PUBLIC_R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
+const FUNCTIONS_BASE_URL = process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+    process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+    process.env.EXPO_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     '';
 const UPLOAD_TIMEOUT_MS = 20000;

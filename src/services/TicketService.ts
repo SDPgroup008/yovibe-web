@@ -14,8 +14,9 @@ import { deriveTicketRef } from "../utils/ticketRef"
 import { publicSiteUrl } from "../config/runtime"
 
 const FUNCTIONS_BASE_URL =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   ""
 

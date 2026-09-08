@@ -3,7 +3,7 @@ export function publicSiteUrl(): string {
     return window.location.origin.replace(/\/$/, '');
   }
   const configured = String(
-    process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || ''
+    process.env.EXPO_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || ''
   ).trim();
   if (configured) {
     try { return new URL(configured).origin; }

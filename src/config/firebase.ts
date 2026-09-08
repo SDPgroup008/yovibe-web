@@ -4,28 +4,32 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging, isSupported, getToken } from "firebase/messaging";
 
-const firebaseEnabled = String(process.env.NEXT_PUBLIC_FIREBASE_ENABLED || 'true').toLowerCase() === 'true';
+const firebaseEnabled = String(
+  process.env.EXPO_PUBLIC_FIREBASE_ENABLED || process.env.NEXT_PUBLIC_FIREBASE_ENABLED || 'true'
+).toLowerCase() === 'true';
 const requiredFirebaseValues = [
-  process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  process.env.EXPO_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  process.env.EXPO_PUBLIC_FIREBASE_APP_ID || process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 ];
 
 export const hasFirebaseConfig = firebaseEnabled && requiredFirebaseValues.every(Boolean);
 export const notificationsEnabled =
-  String(process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED || 'true').toLowerCase() === 'true' && hasFirebaseConfig;
+  String(
+    process.env.EXPO_PUBLIC_NOTIFICATIONS_ENABLED || process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED || 'true'
+  ).toLowerCase() === 'true' && hasFirebaseConfig;
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID || process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID || process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 // Firebase is optional. Staging disables it explicitly while notifications are paused.
@@ -279,7 +283,7 @@ export async function getWebFcmToken(): Promise<string | null> {
         await new Promise(r => setTimeout(r, 1000));
       }
       try {
-        const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+        const vapidKey = process.env.EXPO_PUBLIC_FIREBASE_VAPID_KEY || process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
         if (!vapidKey) return null;
         const token = await getToken(messaging!, {
           vapidKey,

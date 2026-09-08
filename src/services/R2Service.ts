@@ -6,10 +6,11 @@ import { supabase } from '../config/supabase';
 
 const isServerSide = typeof window === 'undefined';
 
-const PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
+const PUBLIC_URL = process.env.EXPO_PUBLIC_R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
 const FUNCTIONS_BASE_URL =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   '';
 const UPLOAD_TIMEOUT_MS = 20000;

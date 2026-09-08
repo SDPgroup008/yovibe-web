@@ -3,8 +3,9 @@
 import { supabase } from "../config/supabase"
 
 const FUNCTIONS_BASE_URL =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL || ""
 
 function functionUrl(name: string) {
