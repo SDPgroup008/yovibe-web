@@ -2,10 +2,11 @@
 // In browser: calls Netlify function
 // In Node.js: uses AWS SDK directly
 
+import { supabase } from '../config/supabase';
+
 const isServerSide = typeof window === 'undefined';
 
-const BUCKET = process.env.R2_BUCKET_NAME || process.env.NEXT_PUBLIC_R2_BUCKET_NAME || 'yovibe';
-const PUBLIC_URL = process.env.R2_PUBLIC_URL || process.env.NEXT_PUBLIC_R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
+const PUBLIC_URL = process.env.NEXT_PUBLIC_R2_PUBLIC_URL || '';
 const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
@@ -97,7 +98,7 @@ function resolveFunctionUrl(functionName: string): string {
   if (!isServerSide && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     // In expo web dev, local server does not host Netlify functions by default.
     // Route to deployed function host unless an explicit base URL is provided.
-    return `https://yovibe.net/.netlify/functions/${functionName}`;
+    throw new Error(`Set NEXT_PUBLIC_FUNCTIONS_BASE_URL when using ${functionName} outside Netlify Dev.`);
   }
 
   return `/.netlify/functions/${functionName}`;
@@ -112,77 +113,12 @@ export async function uploadToR2(options: UploadOptions): Promise<{ url: string;
     const { contentType, path, filename, body } = options;
     const key = `${path}/${filename}`;
 
-    if (isServerSide) {
-      // Server-side: use AWS SDK directly
-      return await uploadToR2Server(key, body, contentType);
-    } else {
-      // Browser-side: call Netlify function
-      return await uploadToR2Browser(key, body, contentType, path, filename);
-    }
+    if (isServerSide) throw new Error('Use netlify/shared/r2.js for server-side storage');
+    return await uploadToR2Browser(key, body, contentType, path, filename);
   } catch (error) {
     console.error('[R2Service] Upload error:', error);
     throw error;
   }
-}
-
-/**
- * Server-side upload to R2 using AWS SDK
- */
-async function uploadToR2Server(
-  key: string,
-  body: Buffer | Blob | string,
-  contentType: string
-): Promise<{ url: string; key: string }> {
-  const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
-
-  const s3Client = new S3Client({
-    region: 'auto',
-    endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-    },
-    forcePathStyle: true,
-  });
-
-  let uploadBody: Buffer | Uint8Array | string;
-  if (typeof body === 'string') {
-    // Handle data URLs
-    if (body.startsWith('data:')) {
-      const base64Data = body.replace(/^data:[\w\/\-]+;base64,/, '');
-      uploadBody = Buffer.from(base64Data, 'base64');
-    } else {
-      uploadBody = body;
-    }
-  } else if (body instanceof Blob) {
-    const arrayBuffer = await body.arrayBuffer();
-    uploadBody = Buffer.from(arrayBuffer);
-  } else {
-    uploadBody = body;
-  }
-
-  // Correct the stored Content-Type from the real bytes so the object is never
-  // mislabeled (e.g. JPEG data declared as image/png).
-  let finalContentType = contentType;
-  if (uploadBody instanceof Uint8Array) {
-    const sniffed = sniffImageMime(new Uint8Array(uploadBody.buffer, uploadBody.byteOffset, uploadBody.byteLength));
-    if (sniffed && String(contentType || "").toLowerCase().startsWith("image/")) {
-      finalContentType = sniffed;
-    }
-  }
-
-  const command = new PutObjectCommand({
-    Bucket: BUCKET,
-    Key: key,
-    Body: uploadBody,
-    ContentType: finalContentType,
-    ACL: 'public-read',
-  });
-
-  await s3Client.send(command);
-  const url = `${PUBLIC_URL}/${key}`;
-
-  return { url, key };
 }
 
 /**
@@ -267,10 +203,13 @@ async function uploadToR2Browser(
 
   let response: Response;
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Organiser authentication is required to upload public assets');
     response = await fetch(resolveFunctionUrl('uploadR2'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
       },
       signal: controller.signal,
       body: JSON.stringify({
@@ -300,10 +239,10 @@ async function uploadToR2Browser(
     if (errorData.error?.includes('R2 storage not configured')) {
       throw new Error(
         'R2 storage is not configured. Please set up Cloudflare R2 credentials in your Netlify environment variables:\n' +
-        '- R2_ACCESS_KEY_ID\n' +
-        '- R2_SECRET_ACCESS_KEY\n' +
+        '- R2_PUBLIC_ACCESS_KEY_ID\n' +
+        '- R2_PUBLIC_SECRET_ACCESS_KEY\n' +
         '- R2_ACCOUNT_ID\n' +
-        '- R2_BUCKET_NAME\n' +
+        '- R2_PUBLIC_BUCKET_NAME\n' +
         '- R2_ENDPOINT\n' +
         '- R2_PUBLIC_URL\n\n' +
         'See: https://developers.cloudflare.com/r2/api/s3/tokens/'
@@ -321,38 +260,15 @@ async function uploadToR2Browser(
  * Delete file from R2
  */
 export async function deleteFromR2(key: string): Promise<void> {
-  if (!isServerSide) {
-    throw new Error('R2 delete operation only available on server side');
-  }
-
-  try {
-    const { S3Client, DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-
-    const s3Client = new S3Client({
-      region: 'auto',
-      endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-      },
-      forcePathStyle: true,
-    });
-
-    const command = new DeleteObjectCommand({
-      Bucket: BUCKET,
-      Key: key,
-    });
-    await s3Client.send(command);
-  } catch (error) {
-    console.error('[R2Service] Delete error:', error);
-    throw error;
-  }
+  void key;
+  throw new Error('R2 deletion is server-only; call an authorized server workflow');
 }
 
 /**
  * Get public URL for R2 key
  */
 export function getR2PublicUrl(key: string): string {
+  if (!PUBLIC_URL) throw new Error('NEXT_PUBLIC_R2_PUBLIC_URL is not configured');
   return `${PUBLIC_URL}/${key}`;
 }
 
@@ -381,7 +297,8 @@ export async function uploadQRCode(
  */
 export async function uploadBuyerPhoto(
   photoUri: string,
-  ticketId: string
+  ticketId: string,
+  photoUploadToken?: string,
 ): Promise<{ url: string; key: string }> {
   try {
     if (!isServerSide) {
@@ -397,7 +314,7 @@ export async function uploadBuyerPhoto(
         const response = await fetch(resolveFunctionUrl("presign-buyer-photo"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key, contentType }),
+          body: JSON.stringify({ key, contentType, ticketId, token: photoUploadToken }),
         });
         const signed = await response.json();
         if (!response.ok || !signed.uploadUrl) throw new Error(signed.error || "Could not prepare photo upload");
@@ -407,12 +324,9 @@ export async function uploadBuyerPhoto(
           body: blob,
         });
         if (!upload.ok) throw new Error(`R2 photo upload failed (${upload.status})`);
-        return { url: signed.publicUrl, key };
+        return { url: signed.photoReference, key };
       } catch (directError) {
-        // Keep the existing Netlify upload path as a compatibility fallback
-        // when the R2 bucket has not yet received its browser CORS policy.
-        console.warn("[R2Service] Direct photo upload unavailable; using legacy upload:", directError);
-        return await uploadToR2({ contentType, path: "buyer-photos", filename: `${ticketId}.jpg`, body: blob });
+        throw directError
       }
     }
     return await uploadToR2({

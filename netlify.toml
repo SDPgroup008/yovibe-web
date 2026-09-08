@@ -6,25 +6,16 @@
   package = "@netlify/plugin-functions-install-core"
 
 [build.environment]
-  # Non-secret defaults only. Secrets (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-  # PESAPAL_CONSUMER_KEY/SECRET, PESAPAL_NOTIFICATION_ID, PAWAPAY_API_KEY,
-  # QR_HMAC_SECRET, ...) live in Netlify environment variables.
-  R2_BUCKET_NAME = "yovibe"
-  R2_PUBLIC_URL = "https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev"
-  R2_ENDPOINT = "https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com"
-  # PesaPal API Configuration (production only)
-  PESAPAL_API_URL = "https://pay.pesapal.com/v3/api"
-  PESAPAL_BASE_URL = "https://pay.pesapal.com"
-  # Your Netlify site URL (needed for IPN callback). Set to your actual domain.
-  SITE_URL = "https://yovibe.net"
+  # External-service values are intentionally absent. Each Netlify project must
+  # provide explicit environment variables; missing configuration fails closed.
   # Secrets Scanning Configuration - Omit paths containing expected config values
   SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,src/services/PesaPalService.ts,src/services/PawaPayService.ts,sendNotifications.js,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,netlify/functions/create-pesapal-order.js,netlify/functions/verify-pesapal-payment.js,netlify/functions/process-pesapal-payout.js,netlify/functions/register-ipn.js,netlify/functions/pesapal-ipn.js,netlify/functions/create-pawapay-deposit.js,netlify/functions/verify-pawapay-payment.js,app.json,.gitignore,package.json,package-lock.json"
   # Omit environment variable keys that are public by design or appear in documentation
   # Firebase credentials are public (frontend config)
-  # R2_BUCKET_NAME is not a secret (appears in 70+ doc lines as example)
+  # Bucket names and provider URLs are not secrets.
   # R2_PUBLIC_URL, R2_ENDPOINT are URLs (not secrets)
   # FIREBASE_SERVICE_ACCOUNT is required for Firebase Admin operations
-  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,FIREBASE_PROJECT_ID,FIREBASE_API_KEY,FIREBASE_AUTH_DOMAIN,FIREBASE_STORAGE_BUCKET,FIREBASE_MESSAGING_SENDER_ID,FIREBASE_APP_ID,FIREBASE_MEASUREMENT_ID,R2_BUCKET_NAME,R2_PUBLIC_URL,R2_ENDPOINT,R2_ACCOUNT_ID,R2_ACCESS_KEY_ID,R2_SECRET_ACCESS_KEY,PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET,PESAPAL_API_URL,PESAPAL_BASE_URL,PESAPAL_NOTIFICATION_ID,PAWAPAY_API_KEY"
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,FIREBASE_PROJECT_ID,FIREBASE_API_KEY,FIREBASE_AUTH_DOMAIN,FIREBASE_STORAGE_BUCKET,FIREBASE_MESSAGING_SENDER_ID,FIREBASE_APP_ID,FIREBASE_MEASUREMENT_ID,R2_PRIVATE_BUCKET_NAME,R2_PUBLIC_BUCKET_NAME,R2_PUBLIC_URL,R2_ENDPOINT,PESAPAL_API_URL,PESAPAL_BASE_URL,PAWAPAY_API_URL,SITE_URL"
 
 [dev]
   command = "npm run start"
@@ -35,6 +26,10 @@
   # Use esbuild to bundle function dependencies (including firebase-admin)
   node_bundler = "esbuild"
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
+
+[[edge_functions]]
+  function = "staging-gate"
+  path = "/*"
 
 [functions."process-stuck-fulfillments"]
   # Automatic retry/reconciliation of stranded purchases every minute.
@@ -59,6 +54,13 @@
   [headers.values]
     Cache-Control = "public, max-age=0, must-revalidate"
     Service-Worker-Allowed = "/"
+
+[[headers]]
+  for = "/refund-request"
+  [headers.values]
+    Cache-Control = "no-store"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
 
 [[headers]]
   # Cache TensorFlow.js model files for 1 year
@@ -86,8 +88,6 @@
   to = "/index.html"
   status = 200
 
-[[prerender]]
-  crawl = true
   guess = true
   paths = [
     "/",

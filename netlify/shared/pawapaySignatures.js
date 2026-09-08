@@ -29,6 +29,7 @@
 // for the authoritative status, so ticket integrity does not depend on this).
 
 const crypto = require('crypto');
+const { requiredEnv, assertPawaPayUrl } = require('./runtimeConfig');
 
 const keyCache = new Map(); // keyId -> { key, fetchedAt }
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -126,9 +127,8 @@ async function getPawaPayPublicKey(keyId) {
   const cached = keyCache.get(keyId);
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached.key;
 
-  const apiKey = process.env.PAWAPAY_API_KEY;
-  if (!apiKey) throw new Error('PAWAPAY_API_KEY is not configured');
-  const base = process.env.PAWAPAY_API_URL || 'https://api.pawapay.io/v2';
+  const apiKey = requiredEnv('PAWAPAY_API_KEY');
+  const base = assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'));
 
   const response = await fetch(`${base}/public-key/http`, {
     headers: { Authorization: 'Bearer ' + apiKey, Accept: 'application/json' },

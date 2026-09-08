@@ -1,6 +1,6 @@
 import supabase from "../config/supabase"
 
-export type RefundReason = "event_cancelled" | "event_postponed" | "installments_incomplete" | "chargeback"
+export type RefundReason = "event_cancelled" | "event_postponed" | "installments_incomplete"
 
 async function call(body: Record<string, unknown>) {
   const { data } = await supabase.auth.getSession()

@@ -6,7 +6,7 @@ import { RouterProvider, routes } from './utils/routes';
 import { DesktopLayout, MobileLayout } from './components/Navigation';
 import PermissionBanner from './components/PermissionBanner';
 import NotificationBanner from './components/NotificationBanner';
-import { requestNotificationPermission, getWebFcmToken, messaging } from './config/firebase';
+import { requestNotificationPermission, getWebFcmToken, messaging, notificationsEnabled } from './config/firebase';
 import { onMessage } from 'firebase/messaging';
 import NotificationService from './services/NotificationService';
 import LoginScreen from './screens/auth/LoginScreen';
@@ -57,6 +57,7 @@ const MainApp: React.FC = () => {
 
   // Keep existing notification logic
   useEffect(() => {
+    if (!notificationsEnabled) return;
     // Service worker registration (existing logic)
     (async () => {
       if ("serviceWorker" in navigator) {
@@ -107,7 +108,7 @@ const MainApp: React.FC = () => {
 
   // Foreground notification listener (existing logic)
   useEffect(() => {
-    if (!messaging) {
+    if (!notificationsEnabled || !messaging) {
       return;
     }
 
@@ -166,7 +167,7 @@ const MainApp: React.FC = () => {
   return (
     <DesktopLayout>
       {/* Permission banner */}
-      {showPermissionBanner && (
+      {notificationsEnabled && showPermissionBanner && (
         <PermissionBanner
           onAllow={handleAllowNotifications}
           onBlock={handleBlockNotifications}
@@ -179,7 +180,7 @@ const MainApp: React.FC = () => {
       </RouterProvider>
 
       {/* Notification banner */}
-      {banner && (
+      {notificationsEnabled && banner && (
         <NotificationBanner
           title={banner.title}
           body={banner.body}

@@ -9,7 +9,8 @@ function ticketIsPayable(t) {
     t.payout_eligible === true &&
     (t.payout_status || 'pending') === 'pending' &&
     refundState === 'none' &&
-    (t.status === 'active' || t.status === 'used')
+    t.status === 'used' &&
+    t.is_scanned === true
   );
 }
 

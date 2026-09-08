@@ -19,7 +19,9 @@
     "test-meta": "node test-meta-server.js",
     "typecheck": "tsc --noEmit",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "staging:schema": "node scripts/generate-staging-schema.js",
+    "staging:scan": "node scripts/staging-safety-scan.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1046.0",
@@ -83,6 +85,9 @@
   },
   "jest": {
     "preset": "jest-expo",
+    "setupFiles": [
+      "<rootDir>/jest.setup.js"
+    ],
     "testPathIgnorePatterns": [
       "/node_modules/",
       "/netlify/"

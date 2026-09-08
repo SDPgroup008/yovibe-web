@@ -250,7 +250,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net',
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
         },
       });
       if (error) throw error;

@@ -1,11 +1,17 @@
 const crypto = require('crypto');
-const { getAdminClient, requireUser, json } = require('../shared/supabaseAdmin');
+const { requireUser, json } = require('../shared/supabaseAdmin');
 const { getPesapalToken, invalidatePesapalToken } = require('../shared/pesapalAuth');
-
-const PAWAPAY_BASE_URL = process.env.PAWAPAY_API_URL || 'https://api.pawapay.io/v2';
+const {
+  REFUND_REASONS,
+  buildRefundRow,
+  calculateRefundEligibility,
+  findActiveRefund,
+  normalizeEmail,
+  ticketBelongsToUser,
+} = require('../shared/refundPolicy');
+const { requiredEnv, assertPawaPayUrl, assertPesapalUrl } = require('../shared/runtimeConfig');
 
 function uuid() { return crypto.randomUUID(); }
-function reference() { return `RF-${Date.now()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`; }
 function amountNumber(value) { const n = Number(value); return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0; }
 function isAdmin(profile) { return profile?.user_type === 'admin'; }
 
@@ -97,65 +103,8 @@ async function updateTicketRefundState(admin, refund, phase) {
   }
 }
 
-async function calculateEligibility(admin, ticketId, reasonCode, requestedAmount, installmentPlanId) {
-  const { data: ticket, error: ticketError } = await admin.from('tickets').select('*').eq('id', ticketId).maybeSingle();
-  if (ticketError) throw ticketError;
-  if (!ticket) throw Object.assign(new Error('Ticket not found'), { statusCode: 404 });
-
-  let { data: event, error: eventError } = await admin.from('events').select('*').eq('slug', ticket.event_id || ticket.event_slug).maybeSingle();
-  if (!event && !eventError && ticket.event_id) {
-    const fallback = await admin.from('events').select('*').eq('id', ticket.event_id).maybeSingle();
-    event = fallback.data; eventError = fallback.error;
-  }
-  if (eventError) throw eventError;
-  if (!event) throw Object.assign(new Error('Event not found'), { statusCode: 404 });
-
-  if (['used', 'refunded'].includes(ticket.status)) {
-    throw Object.assign(new Error('Used or already refunded tickets are not eligible'), { statusCode: 409 });
-  }
-
-  const eventStatus = String(event.event_status || '').toLowerCase();
-  if (reasonCode === 'event_cancelled' && eventStatus !== 'cancelled') {
-    throw Object.assign(new Error('The event is not marked as cancelled'), { statusCode: 422 });
-  }
-  if (reasonCode === 'event_postponed' && eventStatus !== 'postponed') {
-    throw Object.assign(new Error('The event is not marked as postponed'), { statusCode: 422 });
-  }
-
-  let installmentPlan = null;
-  let amount = amountNumber(requestedAmount);
-  if (reasonCode === 'installments_incomplete') {
-    const planId = installmentPlanId || ticket.installment_plan_id;
-    let { data: plans, error: planError } = await admin.from('ticket_installment_plans')
-      .select('*').eq('id', planId || '').limit(1);
-    if (!plans?.length && !planError) {
-      const fallback = await admin.from('ticket_installment_plans').select('*')
-        .eq('buyer_email', ticket.buyer_email).eq('event_id', ticket.event_id)
-        .order('created_at', { ascending: false }).limit(1);
-      plans = fallback.data; planError = fallback.error;
-    }
-    if (planError) throw planError;
-    installmentPlan = plans?.[0] || null;
-    if (!installmentPlan || Number(installmentPlan.installments_paid) >= (installmentPlan.installments || []).length) {
-      throw Object.assign(new Error('This installment plan is complete or unavailable'), { statusCode: 422 });
-    }
-    if (new Date(event.date) > new Date()) {
-      throw Object.assign(new Error('Installment refunds are available only after the event ends'), { statusCode: 422 });
-    }
-    const paid = (installmentPlan.installments || []).filter((i) => i.status === 'paid');
-    const paidBeforeFees = paid.reduce((sum, i) => sum + Number(i.amount || 0), 0);
-    const paidServiceFees = paid.reduce((sum, i) => sum + Number(i.serviceFee ?? Math.round(Number(i.amount || 0) * 0.08)), 0);
-    amount = Math.floor(((paidBeforeFees + paidServiceFees) - paidServiceFees) * 2 / 5);
-  } else if (!amount) {
-    amount = Math.max(0, amountNumber(ticket.total_amount || ticket.base_price || 0) - amountNumber(ticket.gateway_fee || 0));
-  }
-
-  if (amount <= 0) throw Object.assign(new Error('Refund amount is zero'), { statusCode: 422 });
-  return { ticket, event, installmentPlan, amount };
-}
-
 async function submitPesaPal(refund) {
-  const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+  const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
   if (!refund.processor_confirmation_code) throw new Error('PesaPal confirmation code is missing');
 
   let lastError;
@@ -192,10 +141,10 @@ async function submitPesaPal(refund) {
 }
 
 async function submitPawaPay(refund) {
-  const token = process.env.PAWAPAY_API_KEY;
-  if (!token) throw new Error('PawaPay API key is not configured');
+  const token = requiredEnv('PAWAPAY_API_KEY');
+  const baseUrl = assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'));
   const externalRefundId = refund.external_refund_id || uuid();
-  const response = await fetch(`${PAWAPAY_BASE_URL}/refunds`, {
+  const response = await fetch(`${baseUrl}/refunds`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -241,25 +190,23 @@ exports.handler = async (event) => {
 
     if (action === 'request') {
       const reasonCode = body.reasonCode;
-      if (!['event_cancelled', 'event_postponed', 'installments_incomplete'].includes(reasonCode)) {
-        return json(422, { error: 'Refunds are only available for event cancellation, postponement, or incomplete installments after the event.' });
+      if (!Object.values(REFUND_REASONS).includes(reasonCode)) {
+        return json(422, { error: 'Refunds are available only for event cancellation, postponement, or incomplete installments after the event.' });
       }
-      const eligibility = await calculateEligibility(admin, body.ticketId, reasonCode, body.requestedAmount, body.installmentPlanId);
-      const idempotencyKey = body.idempotencyKey || `${authUser.id}:${body.ticketId}:${reasonCode}`;
-      const { data: existing } = await admin.from('refund_requests').select('*').eq('idempotency_key', idempotencyKey).maybeSingle();
-      if (existing) return json(409, { error: 'A refund request with the same details already exists', refund: existing });
-      const row = {
-        request_reference: reference(), buyer_id: authUser.id, buyer_email: authUser.email,
-        event_id: eligibility.ticket.event_id || eligibility.ticket.event_slug,
-        ticket_id: eligibility.ticket.id, ticket_ids: eligibility.installmentPlan?.ticket_ids || [eligibility.ticket.id],
-        installment_plan_id: eligibility.installmentPlan?.id || null,
-        payment_provider: eligibility.ticket.payment_provider || (eligibility.ticket.pawapay_deposit_id ? 'pawapay' : 'pesapal'),
-        payment_reference: eligibility.ticket.payment_reference || null,
-        processor_reference: eligibility.ticket.pawapay_deposit_id || eligibility.ticket.payment_id || null,
-        processor_confirmation_code: eligibility.ticket.pesapal_confirmation_code || null,
-        reason_code: reasonCode, requested_amount: eligibility.amount, currency: 'UGX',
-        idempotency_key: idempotencyKey, buyer_note: body.note || null,
-      };
+      const eligibility = await calculateRefundEligibility(admin, body.ticketId, reasonCode, body.requestedAmount, body.installmentPlanId);
+      if (!ticketBelongsToUser(eligibility.ticket, authUser, profile)) {
+        return json(403, { error: 'You are not authorized to request a refund for this ticket.' });
+      }
+      const existing = await findActiveRefund(admin, eligibility.ticket.id);
+      if (existing) return json(409, { error: 'An active refund request already exists for this ticket', refund: existing });
+      const idempotencyKey = `ticket-refund:${eligibility.ticket.id}`;
+      const row = buildRefundRow({
+        eligibility,
+        buyerId: eligibility.ticket.buyer_id || authUser.id,
+        buyerEmail: eligibility.ticket.buyer_email || normalizeEmail(authUser.email),
+        idempotencyKey,
+        note: body.note,
+      });
       const { data: refund, error } = await admin.from('refund_requests').insert(row).select('*').single();
       if (error) throw error;
       await addHistory(admin, refund.id, null, 'pending_admin_review', authUser.id, 'buyer', 'Refund request submitted');

@@ -2,6 +2,15 @@
 
 import { supabase } from "../config/supabase"
 
+const FUNCTIONS_BASE_URL =
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL || ""
+
+function functionUrl(name: string) {
+  return `${FUNCTIONS_BASE_URL.replace(/\/$/, "")}/.netlify/functions/${name}`
+}
+
 export interface StaffToken {
   id: string
   event_id: string
@@ -96,27 +105,20 @@ const StaffTokenService = {
     eventSlug?: string
     error?: string
   }> {
-    const { data, error } = await supabase
-      .from("event_staff_tokens")
-      .select("event_id, events(name, slug)")
-      .eq("token", token)
-      .gt("expires_at", new Date().toISOString())
-      .single()
-
-    if (error || !data) {
+    try {
+      const response = await fetch(functionUrl("validate-staff-token"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.valid) throw new Error(data.error || "Invalid scanner link")
+      return data
+    } catch (error) {
       return {
         valid: false,
-        error: "This link has expired or is invalid. Please ask the event organiser for a new scanning link.",
+        error: error instanceof Error ? error.message : "This link has expired or is invalid. Please ask the event organiser for a new scanning link.",
       }
-    }
-
-    const eventInfo = Array.isArray(data.events) ? data.events[0] : data.events
-
-    return {
-      valid: true,
-      eventId: data.event_id,
-      eventName: eventInfo?.name,
-      eventSlug: eventInfo?.slug,
     }
   },
 

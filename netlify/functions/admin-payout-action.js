@@ -53,7 +53,10 @@ exports.handler = async (event) => {
       if (payout.status !== "pending_admin_review") return json(409, { error: "Payout is not awaiting review" });
       const update = { status: "approved", admin_id: authUser.id, updated_at: now };
       if (body.approvedAmount !== undefined && body.approvedAmount !== null) {
-        update.approved_amount = money(body.approvedAmount);
+        if (Math.abs(money(body.approvedAmount) - money(payout.amount)) > 1) {
+          return json(422, { error: "A payout must match the server-calculated ticket proceeds" });
+        }
+        update.approved_amount = money(payout.amount);
       }
       const { data, error } = await admin
         .from("payouts")
@@ -78,6 +81,13 @@ exports.handler = async (event) => {
         .select("*")
         .single();
       if (error) throw error;
+      const ticketIds = Array.isArray(payout.ticket_ids) ? payout.ticket_ids : [];
+      if (ticketIds.length) {
+        await admin.from("tickets")
+          .update({ payout_status: "pending", payout_eligible: true })
+          .in("id", ticketIds).eq("payout_status", "pending_review")
+          .eq("status", "used").eq("is_scanned", true).eq("refund_status", "none");
+      }
       await sendPayoutNotification(admin, payout.organizer_id, "❌ Payout Rejected",
         `Your payout of UGX ${money(payout.amount).toLocaleString()} was rejected. Reason: ${note}`,
         payoutId, "rejected");
@@ -86,23 +96,38 @@ exports.handler = async (event) => {
 
     if (action === "complete") {
       if (payout.status !== "approved") return json(409, { error: "Payout must be approved before completing" });
-      const txnRef = body.transactionReference || `manual_${Date.now()}`;
-      const { data, error } = await admin
-        .from("payouts")
-        .update({
-          status: "completed",
-          admin_id: authUser.id,
-          transaction_reference: txnRef,
-          processed_date: now,
-          admin_note: body.notes || null,
-          updated_at: now,
-        })
-        .eq("id", payoutId)
-        .select("*")
-        .single();
+      if (payout.payout_method !== "bank_transfer") return json(422, { error: "Only card-funded bank payouts are submitted through PesaPal" });
+      const metadata = typeof payout.metadata === "string" ? JSON.parse(payout.metadata || "{}") : (payout.metadata || {});
+      if (!payout.recipient_name || !metadata.bank_name || !metadata.account_number) {
+        return json(422, { error: "Payout bank details are incomplete" });
+      }
+      const transactionReference = String(body.transactionReference || "").trim();
+      if (transactionReference.length < 6) {
+        return json(422, { error: "Enter the real PesaPal payout reference before completing" });
+      }
+      const { data, error } = await admin.from("payouts").update({
+        status: "completed",
+        admin_id: authUser.id,
+        transaction_reference: transactionReference,
+        processed_date: now,
+        admin_note: body.notes || "Card proceeds paid through PesaPal by admin",
+        metadata: { ...metadata, pesapal_reference: transactionReference },
+        updated_at: now,
+      }).eq("id", payoutId).eq("status", "approved").select("*").maybeSingle();
       if (error) throw error;
+      if (!data) return json(409, { error: "Payout is already being processed" });
+      const ticketIds = Array.isArray(payout.ticket_ids) ? payout.ticket_ids : [];
+      if (ticketIds.length) {
+        const { error: ticketError } = await admin.from("tickets")
+          .update({ payout_status: "paid", payout_eligible: false, payout_date: now })
+          .in("id", ticketIds).eq("payout_status", "pending_review");
+        if (ticketError) {
+          await admin.from("payouts").update({ admin_note: `Ticket reconciliation required: ${ticketError.message}` }).eq("id", payoutId);
+          throw ticketError;
+        }
+      }
       await sendPayoutNotification(admin, payout.organizer_id, "✅ Payout Completed",
-        `Your payout of UGX ${money(payout.amount).toLocaleString()} has been processed. Check your bank account.`,
+        `Your payout of UGX ${money(payout.amount).toLocaleString()} was processed through PesaPal.`,
         payoutId, "completed");
       return json(200, { payout: data });
     }

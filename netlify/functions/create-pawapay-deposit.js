@@ -1,8 +1,9 @@
-const PAWAPAY_BASE_URL = process.env.PAWAPAY_API_URL || "https://api.pawapay.io/v2"
+const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig')
+
+const getPawaPayBaseUrl = () => assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'))
 
 const getApiKey = () => {
-  if (!process.env.PAWAPAY_API_KEY) throw new Error("PAWAPAY_API_KEY is not configured")
-  return process.env.PAWAPAY_API_KEY
+  return requiredEnv('PAWAPAY_API_KEY')
 }
 
 const generateUUID = () => {
@@ -62,7 +63,7 @@ exports.handler = async (event, context) => {
     /* console.log("📤 Calling PawaPay API...") */
     /* console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...") */
     
-    const response = await fetch(`${PAWAPAY_BASE_URL}/deposits`, {
+    const response = await fetch(`${getPawaPayBaseUrl()}/deposits`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

@@ -1,6 +1,7 @@
 const { getPesapalToken } = require('../shared/pesapalAuth');
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { markTicketsByPayment } = require('../shared/ticketFulfillment');
+const { requiredEnv, assertPesapalUrl } = require('../shared/runtimeConfig');
 
 const STATUS_CODES = { 0: 'invalid', 1: 'completed', 2: 'failed', 3: 'reversed' };
 
@@ -21,7 +22,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+    const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
 
     let orderTrackingId;
     let orderId; // merchant reference (our order id = fulfillment payment_id)

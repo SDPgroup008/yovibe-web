@@ -417,6 +417,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   // Set up real-time vibe listeners (called once)
   const setupVibeListeners = async () => {
+    if (!db) return
     try {
       const venuesList = await SupabaseService.getVenues()
       for (const venue of venuesList) {

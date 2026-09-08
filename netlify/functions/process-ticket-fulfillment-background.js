@@ -3,6 +3,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { processOne } = require('./process-stuck-fulfillments');
+const { requiredEnv } = require('../shared/runtimeConfig');
 
 function json(statusCode, body) {
   return {
@@ -15,7 +16,7 @@ function json(statusCode, body) {
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
 
-  const expected = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const expected = requiredEnv('FULFILLMENT_WORKER_SECRET');
   const supplied = event.headers?.['x-fulfillment-worker-secret'] || event.headers?.['X-Fulfillment-Worker-Secret'] || '';
   if (!expected || supplied !== expected) return json(401, { error: 'Unauthorized' });
 

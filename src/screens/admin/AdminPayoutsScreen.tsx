@@ -23,6 +23,7 @@ export default function AdminPayoutsScreen() {
   const [detailModal, setDetailModal] = useState<any | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [rejectReason, setRejectReason] = useState("")
+  const [pesapalReference, setPesapalReference] = useState("")
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -75,10 +76,12 @@ export default function AdminPayoutsScreen() {
   }
 
   const handleComplete = async (payoutId: string) => {
+    if (pesapalReference.trim().length < 6) { Alert.alert("Reference Required", "Enter the real PesaPal payout reference"); return }
     setActionLoading(true)
     try {
-      await AdminPayoutService.complete(payoutId, `manual_${Date.now()}`)
+      await AdminPayoutService.complete(payoutId, pesapalReference.trim())
       setDetailModal(null)
+      setPesapalReference("")
       await load()
     } catch (e: any) {
       Alert.alert("Error", e.message)
@@ -89,7 +92,7 @@ export default function AdminPayoutsScreen() {
     const cfg = STATUS_CONFIG[item.status] || STATUS_CONFIG.pending_admin_review
     const metadata = typeof item.metadata === "string" ? JSON.parse(item.metadata || "{}") : (item.metadata || {})
     return (
-      <TouchableOpacity style={styles.card} onPress={() => { setDetailModal(item); setRejectReason("") }} activeOpacity={0.7}>
+      <TouchableOpacity style={styles.card} onPress={() => { setDetailModal(item); setRejectReason(""); setPesapalReference("") }} activeOpacity={0.7}>
         <View style={styles.cardHeader}>
           <Text style={styles.cardId}>{item.id?.slice(0, 8)}</Text>
           <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
@@ -138,9 +141,12 @@ export default function AdminPayoutsScreen() {
           </>
         )}
         {s === "approved" && (
-          <TouchableOpacity style={[styles.btn, styles.btnFull, { backgroundColor: "#10B981" }]} onPress={() => handleComplete(detailModal.id)} disabled={actionLoading}>
-            {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="checkmark-done-outline" size={18} color="#FFF" /><Text style={styles.btnText}>Mark as Completed</Text></>}
-          </TouchableOpacity>
+          <>
+            <TextInput style={styles.modalInput} value={pesapalReference} onChangeText={setPesapalReference} placeholder="PesaPal payout reference" placeholderTextColor="#666" />
+            <TouchableOpacity style={[styles.btn, styles.btnFull, { backgroundColor: "#10B981" }]} onPress={() => handleComplete(detailModal.id)} disabled={actionLoading || pesapalReference.trim().length < 6}>
+              {actionLoading ? <ActivityIndicator size="small" color="#FFF" /> : <><Ionicons name="checkmark-done-outline" size={18} color="#FFF" /><Text style={styles.btnText}>Confirm PesaPal Payout</Text></>}
+            </TouchableOpacity>
+          </>
         )}
       </View>
     )

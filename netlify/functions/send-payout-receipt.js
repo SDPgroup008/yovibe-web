@@ -7,28 +7,25 @@
 //RESEND_API_KEY
 
 const { Resend } = require("resend");
-const { createClient } = require("@supabase/supabase-js");
 const { buildPayoutReceiptPdf } = require("../shared/payoutReceiptPdf");
 const { renderReceiptHtml, renderReceiptText } = require("../shared/payoutReceiptEmail");
+const { requireUser } = require('../shared/supabaseAdmin');
+const { requiredEnv } = require('../shared/runtimeConfig');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
 const ZEPTOMAIL_TOKEN = process.env.ZEPTOMAIL_TOKEN;
 const CC_EMAIL = process.env.PAYOUT_CC || "reinolmartin0001@gmail.com";
-const FROM_EMAIL = process.env.PAYOUT_EMAIL_FROM || "YoVibe Payouts <payouts@yovibe.net>";
-
-const supabaseUrl = process.env.SUPABASE_URL || "https://uqukizjohackrcwrtefk.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
 
 const isValidEmail = (e) => typeof e === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 
 async function sendViaZeptoMail({ to, cc, subject, html, text, pdfBase64, filename }) {
   if (!ZEPTOMAIL_TOKEN) return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
+  const fromAddress = requiredEnv('PAYOUT_EMAIL_ADDRESS');
   const res = await fetch("https://api.zeptomail.com/v1.1/email", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: ZEPTOMAIL_TOKEN },
     body: JSON.stringify({
-      from: { address: "payouts@yovibe.net", name: "YoVibe Payouts" },
+      from: { address: fromAddress, name: "YoVibe Payouts" },
       to: [{ email_address: { address: to, name: "" } }],
       cc: [{ email_address: { address: cc } }],
       subject,
@@ -50,12 +47,11 @@ exports.handler = async (event) => {
   }
 
   try {
+    const { admin: supabase, authUser, profile } = await requireUser(event);
     const body = JSON.parse(event.body || "{}");
     const payoutId = body.payoutId;
-    const email = body.email;
 
     if (!payoutId) return { statusCode: 400, body: JSON.stringify({ error: "Missing payoutId" }) };
-    if (!isValidEmail(email)) return { statusCode: 400, body: JSON.stringify({ error: "Invalid email" }) };
 
     // Load the payout row (server-side, bypasses RLS).
     const { data: payout, error: fetchError } = await supabase
@@ -66,6 +62,12 @@ exports.handler = async (event) => {
     if (fetchError || !payout) {
       return { statusCode: 404, body: JSON.stringify({ error: "Payout not found" }) };
     }
+    const ownerIds = [authUser.id, profile?.uid, profile?.id].filter(Boolean).map(String);
+    if (profile?.user_type !== 'admin' && !ownerIds.includes(String(payout.organizer_id || ''))) {
+      return { statusCode: 403, body: JSON.stringify({ error: 'Not authorized for this payout' }) };
+    }
+    const email = authUser.email || profile?.email;
+    if (!isValidEmail(email)) return { statusCode: 422, body: JSON.stringify({ error: 'Your account has no valid receipt email' }) };
 
     // Only email completed payouts.
     const status = (payout.status || "").toLowerCase();
@@ -92,8 +94,9 @@ exports.handler = async (event) => {
     let sent = false;
     let sendError = null;
     try {
+      if (!resend) throw new Error('RESEND_API_KEY not configured');
       const res = await resend.emails.send({
-        from: FROM_EMAIL,
+        from: requiredEnv('PAYOUT_EMAIL_FROM'),
         to: [email],
         cc: [CC_EMAIL],
         subject,

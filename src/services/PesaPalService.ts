@@ -1,18 +1,5 @@
 import type { PaymentIntent } from "../models/Ticket"
-
-// PesaPal Configuration
-// NOTE: Actual API calls go through Netlify Functions which read credentials from environment variables.
-// The values below serve as documentation defaults. Override via environment variables deployed to Netlify:
-//   PESAPAL_CONSUMER_KEY  — Live consumer key from PesaPal
-//   PESAPAL_CONSUMER_SECRET — Live consumer secret from PesaPal
-//   PESAPAL_API_URL    — e.g. https://pay.pesapal.com/v3/api (default: production)
-//   PESAPAL_BASE_URL   — e.g. https://pay.pesapal.com (default: production)
-//   PESAPAL_NOTIFICATION_ID — Notification ID from PesaPal dashboard
-const PESAPAL_CONFIG = {
-  baseUrl: "https://pay.pesapal.com",
-  apiUrl: "https://pay.pesapal.com/v3/api",
-  sandbox: false,
-}
+import supabase from "../config/supabase"
 
 // Generate unique order ID
 const generateOrderId = (): string => {
@@ -350,10 +337,14 @@ export class PesaPalService {
     try {
       /* console.log("📤 Submitting payout request via Netlify Function...") */
 
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Admin sign-in required")
+
       const response = await fetch('/.netlify/functions/process-pesapal-payout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           organizerId,

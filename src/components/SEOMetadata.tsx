@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react"
 import { View, Text, StyleSheet } from "react-native"
+import { publicAssetUrl, publicSiteUrl } from "../config/runtime"
 
 // SEO Keywords for YoVibe - used across the app
 export const SEO_KEYWORDS = {
@@ -18,9 +19,9 @@ export const DEFAULT_SEO = {
   description:
     "Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.",
   keywords: SEO_KEYWORDS,
-  url: "https://yovibe.net",
+  url: publicSiteUrl(),
   siteName: "YoVibe",
-  image: "https://yovibe.net/assets/og-image.png",
+  image: publicAssetUrl("assets/og-image.png"),
   twitterHandle: "@yovibe",
   locale: "en_UG",
   region: "UG",
@@ -313,7 +314,7 @@ export const SEOMetadata: React.FC<SEOMetadataProps> = ({
         "organizer": {
           "@type": "Organization",
           "name": "YoVibe",
-          url: "https://yovibe.net",
+          url: publicSiteUrl(),
         },
       }
     } else if (type === "venue" && venueData) {

@@ -22,6 +22,13 @@ const {
   resolveEventStartTime,
   uploadImageDataUrl,
 } = require('../shared/ticketFulfillment');
+const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
+const { privateKeyFromReference, presignR2 } = require('../shared/r2');
+
+function accessibleQr(value) {
+  const key = privateKeyFromReference(value);
+  return key ? presignR2({ kind: 'private', method: 'GET', key, expiresSeconds: 300 }) : value;
+}
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -114,7 +121,7 @@ exports.handler = async (event) => {
         fulfillmentId,
         alreadyFulfilled: true,
         ticketIds: ids,
-        tickets: (tickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: t.qr_code_data_url })),
+        tickets: (tickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: accessibleQr(t.qr_code_data_url) })),
       });
     }
 
@@ -212,7 +219,7 @@ exports.handler = async (event) => {
           fulfillmentId: existingByPayment.data.id,
           alreadyFulfilled: true,
           ticketIds: existingIds,
-          tickets: (existingTickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: t.qr_code_data_url })),
+          tickets: (existingTickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: accessibleQr(t.qr_code_data_url) })),
         });
       }
       await triggerFulfillmentWorker(existingByPayment.data.id);
@@ -296,7 +303,7 @@ exports.handler = async (event) => {
           fulfillmentId,
           alreadyFulfilled: true,
           ticketIds: ids,
-          tickets: (tickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: t.qr_code_data_url })),
+          tickets: (tickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: accessibleQr(t.qr_code_data_url) })),
         });
       }
       const resume = await admin
@@ -348,8 +355,8 @@ function paymentIdFallback(fulfillmentId) {
 }
 
 async function triggerFulfillmentWorker(fulfillmentId) {
-  const base = process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
-  const secret = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const base = getSiteUrl();
+  const secret = requiredEnv('FULFILLMENT_WORKER_SECRET');
   try {
     const response = await fetch(`${base}/.netlify/functions/process-ticket-fulfillment-background`, {
       method: 'POST',

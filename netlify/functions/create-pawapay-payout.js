@@ -1,9 +1,10 @@
-const PAWAPAY_BASE_URL = "https://api.pawapay.io/v2"
+const { requireUser, json } = require('../shared/supabaseAdmin')
+const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig')
+const { otpMatches } = require('../shared/payoutOtp')
+const getPawaPayBaseUrl = () => assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'))
 
 const getApiKey = () => {
-  const key = process.env.PAWAPAY_API_KEY
-  if (!key) throw new Error("PAWAPAY_API_KEY is not configured")
-  return key
+  return requiredEnv('PAWAPAY_API_KEY')
 }
 
 const generateUUID = () => {
@@ -12,6 +13,38 @@ const generateUUID = () => {
     const v = c === "x" ? r : (r & 0x3) | 8
     return v.toString(16)
   })
+}
+
+async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, payoutId: requestedPayoutId }) {
+  if (!amount || !phoneNumber || !provider) {
+    const error = new Error("Missing required fields: amount, phoneNumber, provider")
+    error.statusCode = 400
+    throw error
+  }
+
+  const payoutId = requestedPayoutId || generateUUID()
+  const apiKey = getApiKey()
+  let formattedPhone = phoneNumber
+  if (formattedPhone.startsWith("0")) formattedPhone = "256" + formattedPhone.substring(1)
+  else if (formattedPhone.startsWith("+")) formattedPhone = formattedPhone.substring(1)
+
+  const response = await fetch(`${getPawaPayBaseUrl()}/payouts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
+    body: JSON.stringify({
+      payoutId,
+      amount: amount.toString(),
+      currency: currency || "UGX",
+      recipient: { type: "MMO", accountDetails: { phoneNumber: formattedPhone, provider } },
+    }),
+  })
+  const data = await response.json()
+  if (!response.ok || data.status === "REJECTED") {
+    const error = new Error(data.failureReason?.failureMessage || data.message || "Failed to initiate payout")
+    error.statusCode = response.status || 502
+    throw error
+  }
+  return { payoutId: data.payoutId || payoutId, status: data.status || "ENQUEUED" }
 }
 
 exports.handler = async (event, context) => {
@@ -29,76 +62,29 @@ exports.handler = async (event, context) => {
   }
 
   try {
+    const { admin, authUser, profile } = await requireUser(event)
+    if (!profile || profile.user_type !== "admin") return json(403, { success: false, error: "Admin access required" })
     const body = JSON.parse(event.body || "{}")
-    const { amount, currency, phoneNumber, provider } = body
+    const { amount, currency, phoneNumber, provider, payoutId, otpCode } = body
+    if (!otpCode) return json(400, { success: false, error: 'OTP code is required' })
+    const { data: otpRow, error: otpError } = await admin.from('payout_otps').select('*')
+      .eq('user_id', authUser.id).eq('used', false).gt('expires_at', new Date().toISOString())
+      .order('expires_at', { ascending: false }).limit(1).maybeSingle()
+    if (otpError) throw otpError
+    if (!otpRow || !otpMatches(authUser.id, otpCode, otpRow.otp)) {
+      return json(401, { success: false, error: 'Invalid or expired OTP code' })
+    }
+    const { data: consumed, error: consumeError } = await admin.from('payout_otps').update({ used: true })
+      .eq('id', otpRow.id).eq('used', false).select('id')
+    if (consumeError) throw consumeError
+    if (!consumed || consumed.length !== 1) return json(409, { success: false, error: 'OTP code has already been used' })
 
     /* console.log("📥 Request body:") */
     /* console.log("   - Amount:", amount, currency) */
     /* console.log("   - Phone:", phoneNumber) */
     /* console.log("   - Provider:", provider) */
 
-    if (!amount || !phoneNumber || !provider) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({
-          success: false,
-          error: "Missing required fields: amount, phoneNumber, provider",
-        }),
-      }
-    }
-
-    const payoutId = generateUUID()
-    const apiKey = getApiKey()
-
-    // Format phone number: remove leading 0 and add country code
-    let formattedPhone = phoneNumber
-    if (formattedPhone.startsWith("0")) {
-      formattedPhone = "256" + formattedPhone.substring(1)
-    } else if (formattedPhone.startsWith("+")) {
-      formattedPhone = formattedPhone.substring(1)
-    }
-
-    const payload = {
-      payoutId,
-      amount: amount.toString(),
-      currency: currency || "UGX",
-      recipient: {
-        type: "MMO",
-        accountDetails: {
-          phoneNumber: formattedPhone,
-          provider,
-        },
-      },
-    }
-
-    /* console.log("📤 Calling PawaPay Payout API...") */
-    /* console.log("📤 Payload:", JSON.stringify(payload, null, 2)) */
-    /* console.log("   - Using API key (first 20 chars):", apiKey.substring(0, 20) + "...") */
-
-    const response = await fetch(`${PAWAPAY_BASE_URL}/payouts`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + apiKey,
-      },
-      body: JSON.stringify(payload),
-    })
-
-    const data = await response.json()
-    /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
-    /* console.log("📥 Response status:", response.status) */
-
-    // PawaPay returns payoutId in the root (not nested)
-    if (!response.ok || data.status === "REJECTED") {
-      return {
-        statusCode: response.status,
-        body: JSON.stringify({
-          success: false,
-          error: data.failureReason?.failureMessage || data.message || "Failed to initiate payout",
-          status: data.status,
-        }),
-      }
-    }
+    const data = await submitPawaPayPayout({ amount, currency, phoneNumber, provider, payoutId })
 
     /* console.log("✅ Payout initiated successfully") */
     /* console.log("   - Payout ID:", data.payoutId || payoutId) */
@@ -108,14 +94,14 @@ exports.handler = async (event, context) => {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
-        payoutId: data.payoutId || payoutId,
-        status: data.status || "ENQUEUED",
+        payoutId: data.payoutId,
+        status: data.status,
       }),
     }
   } catch (error) {
     console.error("❌ Error:", error)
     return {
-      statusCode: 500,
+      statusCode: error.statusCode || 500,
       body: JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
@@ -123,3 +109,5 @@ exports.handler = async (event, context) => {
     }
   }
 }
+
+module.exports = { handler: exports.handler, submitPawaPayPayout }

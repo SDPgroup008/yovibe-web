@@ -22,7 +22,7 @@ import {
   limit,
   Timestamp,
 } from "firebase/firestore";
-import { db } from "../config/firebase";
+import { db, hasFirebaseConfig } from "../config/firebase";
 
 // Token record interface for detailed tracking
 export interface TokenRecord {
@@ -465,6 +465,7 @@ class TokenService {
     userEmail?: string,
     userName?: string
   ): Promise<string> {
+    if (!hasFirebaseConfig || !db) return '';
     try {
       const now = new Date();
       const isAuthenticated = userId !== null;
@@ -637,6 +638,7 @@ class TokenService {
     filter?: TokenFilterOptions,
     maxTokens?: number
   ): Promise<FirestoreToken[]> {
+    if (!hasFirebaseConfig || !db) return [];
     try {
       let q = collection(db, TOKENS_COLLECTION);
       const constraints: any[] = [];

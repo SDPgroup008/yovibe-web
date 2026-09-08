@@ -1,9 +1,8 @@
-const PAWAPAY_BASE_URL = "https://api.pawapay.io/v2"
+const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig')
+const getPawaPayBaseUrl = () => assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'))
 
 const getApiKey = () => {
-  const key = process.env.PAWAPAY_API_KEY
-  if (!key) throw new Error("PAWAPAY_API_KEY is not configured")
-  return key
+  return requiredEnv('PAWAPAY_API_KEY')
 }
 
 exports.handler = async (event, context) => {
@@ -35,7 +34,7 @@ exports.handler = async (event, context) => {
     /* console.log("📤 Calling PawaPay API to check payout status...") */
     const apiKey = getApiKey()
     
-    const response = await fetch(`${PAWAPAY_BASE_URL}/payouts/${payoutId}`, {
+    const response = await fetch(`${getPawaPayBaseUrl()}/payouts/${payoutId}`, {
       headers: {
         Authorization: "Bearer " + apiKey,
       },

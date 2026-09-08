@@ -11,6 +11,7 @@ import type { Event } from "../models/Event"
 import type { PendingFulfillment, CreateFulfillmentInput } from "../models/PendingFulfillment"
 import QRCode from "qrcode"
 import { deriveTicketRef } from "../utils/ticketRef"
+import { publicSiteUrl } from "../config/runtime"
 
 const FUNCTIONS_BASE_URL =
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
@@ -80,6 +81,20 @@ async function verifyTicketQr(qrText: string): Promise<QrVerifyResult> {
     )
     return { valid: false, format: "unknown", unreachable: true }
   }
+}
+
+async function scanTicketSecure(body: Record<string, unknown>): Promise<any> {
+  const { data: { session } } = await supabase.auth.getSession()
+  const headers: Record<string, string> = { "Content-Type": "application/json" }
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`
+  const response = await fetch(resolveFunctionUrl("scan-ticket"), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => ({ success: false, reason: "Invalid scanner response" }))
+  if (!response.ok && !payload.reason) payload.reason = "Ticket validation failed"
+  return payload
 }
 
 /**
@@ -677,6 +692,8 @@ export class TicketService {
     ticketId: string,
     validatorId: string,
     location?: string,
+    scanningEventId?: string,
+    staffToken?: string,
   ): Promise<{ 
     success: boolean; 
     reason?: string;
@@ -693,6 +710,16 @@ export class TicketService {
     tableNumber?: number;
   }> {
     try {
+      if (scanningEventId) {
+        return await scanTicketSecure({
+          action: "validate",
+          qrText: ticketId,
+          eventId: scanningEventId,
+          staffToken: staffToken || undefined,
+          location,
+        })
+      }
+
       /* console.log("========================================") */
       /* console.log("🔍 TICKET VALIDATION FLOW STARTED") */
       /* console.log("========================================") */
@@ -702,8 +729,6 @@ export class TicketService {
       // Step 0: Verify the QR payload server-side (HMAC secret never reaches
       // the client). Rejects forged signed QRs without a DB round-trip.
       let qrCodeValue = ticketId
-      let scanningEventId: string | undefined
-
       const verified = await verifyTicketQr(ticketId)
       if (verified.valid && verified.ticketId) {
         qrCodeValue = verified.ticketId
@@ -930,8 +955,21 @@ console.error("❌ Error details:", updateError.details)
     validatorId: string,
     location?: string,
     eventId?: string,
+    staffToken?: string,
+    qrText?: string,
   ): Promise<{ success: boolean; reason?: string }> {
     try {
+      if (eventId && qrText) {
+        return await scanTicketSecure({
+          action: "confirm-photo",
+          ticketId: ticketDocId,
+          qrText,
+          eventId,
+          staffToken: staffToken || undefined,
+          location,
+        })
+      }
+
       /* console.log("========================================") */
       /* console.log("✅ PHOTO VERIFICATION CONFIRMATION") */
       /* console.log("========================================") */
@@ -1454,7 +1492,7 @@ console.error("❌ Error details:", updateError.details)
         createdTicketIds.push(ticket.id)
       }
 
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : publicSiteUrl()
       // Get ticket design from first entry fee as fallback for bulk fulfillment
       const bulkTicketDesign = event.entryFees?.[0]?.ticketDesign
       await Promise.allSettled(createdTicketIds.map(ticketId =>

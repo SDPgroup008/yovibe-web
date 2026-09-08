@@ -1,8 +1,55 @@
 const { getPesapalToken, invalidatePesapalToken } = require('../shared/pesapalAuth');
+const { requireUser, json } = require('../shared/supabaseAdmin');
+const { requiredEnv, assertPesapalUrl, getSiteUrl } = require('../shared/runtimeConfig');
 
-// Production-only PesaPal endpoints. Sandbox (cybqa.pesapal.com) is intentionally
-// NOT used as a default; live payouts must never silently fall back to a simulation.
-const DEFAULT_API_URL = 'https://pay.pesapal.com/v3/api';
+async function submitPesaPalPayout({ organizerId, amount, payoutMethod, recipientDetails, merchantReference: requestedReference }) {
+  if (process.env.PESAPAL_DISBURSEMENT_API_ENABLED !== 'true') {
+    const error = new Error('Automated PesaPal disbursements are disabled; use the admin-reviewed payout workflow');
+    error.statusCode = 501;
+    throw error;
+  }
+  const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
+  if (!organizerId || !amount || !payoutMethod || !recipientDetails?.name) {
+    const error = new Error('Missing required fields: organizerId, amount, payoutMethod, recipientDetails.name');
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const token = await getPesapalToken();
+  const merchantReference = requestedReference || `PAYOUT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const disbursementRequest = {
+    oauth_token: token,
+    pesapal_merchant_reference: merchantReference,
+    currency: 'UGX',
+    amount,
+    description: `YoVibe Organizer Payout - ${organizerId}`,
+    payment_method: payoutMethod === 'mobile_money' ? 'MOBILE' : 'BANK',
+    recipient: {
+      name: recipientDetails.name,
+      phone_number: payoutMethod === 'mobile_money' ? recipientDetails.phoneNumber : undefined,
+      account_number: payoutMethod === 'bank_transfer' ? recipientDetails.accountNumber : undefined,
+      bank: payoutMethod === 'bank_transfer' ? recipientDetails.bankName : undefined,
+    },
+    callback_url: `${getSiteUrl()}/.netlify/functions/pesapal-payout-callback`,
+  };
+
+  const response = await fetch(`${apiUrl}/Transactions/SubmitDisbursement`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(disbursementRequest),
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`PesaPal API error: ${response.status} - ${errorText.substring(0, 200)}`);
+  }
+  const data = await response.json();
+  if (data.status !== 'SUCCESS' && data.status !== 'PENDING') throw new Error(data.error || 'Payout status unclear');
+  return {
+    payoutId: data.pesapal_transaction_tracking_id || data.order_id,
+    transactionReference: data.pesapal_merchant_reference || merchantReference,
+    status: data.status,
+  };
+}
 
 exports.handler = async (event) => {
   const headers = {
@@ -21,6 +68,8 @@ exports.handler = async (event) => {
   }
 
   try {
+    const { profile } = await requireUser(event);
+    if (!profile || profile.user_type !== 'admin') return json(403, { success: false, error: 'Admin access required' });
     const {
       organizerId,
       amount,
@@ -28,64 +77,15 @@ exports.handler = async (event) => {
       recipientDetails,
     } = JSON.parse(event.body);
 
-    const apiUrl = process.env.PESAPAL_API_URL || DEFAULT_API_URL;
-
-    if (!organizerId || !amount || !payoutMethod || !recipientDetails?.name) {
-      throw new Error('Missing required fields: organizerId, amount, payoutMethod, recipientDetails.name');
-    }
-
-    // Step 1: Get OAuth token via the shared cached module (same path as order creation)
-    const token = await getPesapalToken();
-
-    // Step 2: Submit disbursement
-    const disbursementRequest = {
-      oauth_token: token,
-      pesapal_merchant_reference: `PAYOUT_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      currency: 'UGX',
-      amount: amount,
-      description: `YoVibe Organizer Payout - ${organizerId}`,
-      payment_method: payoutMethod === 'mobile_money' ? 'MOBILE' : 'BANK',
-      recipient: {
-        name: recipientDetails.name,
-        phone_number: payoutMethod === 'mobile_money' ? recipientDetails.phoneNumber : undefined,
-        account_number: payoutMethod === 'bank_transfer' ? recipientDetails.accountNumber : undefined,
-        bank: payoutMethod === 'bank_transfer' ? recipientDetails.bankName : undefined,
-      },
-      callback_url: `${process.env.SITE_URL || 'https://yovibe.net'}/disbursementcallback`,
-    };
-
-    let response;
-    try {
-      response = await fetch(`${apiUrl}/Transactions/SubmitDisbursement`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(disbursementRequest),
-      });
-    } catch (fetchError) {
-      console.error('[PesaPalPayout] Disbursement request failed:', fetchError.message);
-      throw new Error(`PesaPal disbursement request failed: ${fetchError.message}`);
-    }
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[PesaPalPayout] Disbursement API error:', response.status, errorText);
-      throw new Error(`PesaPal API error: ${response.status} — ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await response.json();
-
+    const data = await submitPesaPalPayout({ organizerId, amount, payoutMethod, recipientDetails });
     if (data.status === 'SUCCESS' || data.status === 'PENDING') {
       return {
         statusCode: 200,
         headers,
         body: JSON.stringify({
           success: true,
-          payoutId: data.pesapal_transaction_tracking_id || data.order_id,
-          transactionReference: data.pesapal_merchant_reference,
+          payoutId: data.payoutId,
+          transactionReference: data.transactionReference,
           status: data.status,
         }),
       };
@@ -108,3 +108,5 @@ exports.handler = async (event) => {
     };
   }
 };
+
+module.exports = { handler: exports.handler, submitPesaPalPayout };

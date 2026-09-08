@@ -33,6 +33,7 @@ import StaffTokenService from "../services/StaffTokenService"
 import RefundService from "../services/RefundService"
 import { useAuth } from "../contexts/AuthContext"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+import { publicSiteUrl } from "../config/runtime"
 import type { Event } from "../models/Event"
 import type {
   VenuesStackParamList,
@@ -280,6 +281,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [showScannerModal, setShowScannerModal] = useState(false)
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
   const [pendingTicketDocId, setPendingTicketDocId] = useState<string | null>(null)
+  const [pendingQrText, setPendingQrText] = useState("")
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
 
@@ -391,7 +393,7 @@ const OrganiserDashboardScreen: React.FC = () => {
         const tokens = await StaffTokenService.getActiveTokensForEvent(event.slug)
         const newToken = tokens.find(t => t.id === result.tokenId)
         if (newToken) {
-          const link = `https://yovibe.net/scan/${newToken.token}`
+          const link = `${publicSiteUrl()}/scan/${newToken.token}`
           await copyToClipboard(link)
           setActiveTokens([newToken, ...activeTokens])
         }
@@ -679,13 +681,13 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (p1 !== p2) { setAdminOTPError("Numbers don't match"); return }
     setAdminOTPLoading(true); setAdminOTPError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setAdminOTPError("Session expired"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('user_id', sessionUser.id).eq('used', false)
-      const otp = Math.floor(100000 + Math.random() * 900000).toString()
-      await supabase.from('payout_otps').insert({ user_id: sessionUser.id, email: user.email, otp, expires_at: new Date(Date.now() + 90 * 1000) })
-      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', { body: { email: user.email, otp } })
-      if (emailError) throw emailError
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) { setAdminOTPError("Session expired"); return }
+      const response = await fetch('/.netlify/functions/request-payout-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to send code')
       setAdminOTPSent(true)
     } catch (err) { console.error(err); setAdminOTPError("Failed to send code") }
     finally { setAdminOTPLoading(false) }
@@ -695,16 +697,11 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (!adminOTPCode.trim()) { setAdminOTPError("Enter the code"); return }
     setAdminOTPLoading(true); setAdminOTPError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setAdminOTPError("Session expired"); return }
-      const { data: otpRow } = await supabase.from('payout_otps').select('*').eq('user_id', sessionUser.id).eq('otp', adminOTPCode.trim()).eq('used', false).single()
-      if (!otpRow || new Date(otpRow.expires_at) < new Date()) { setAdminOTPError("Invalid or expired code"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('id', otpRow.id)
       setAdminOTPLoading(false)
       setAdminWithdrawLoading(true)
       try {
         const intPhone = toInternationalPhone(adminPhone)
-        const payoutResult = await PawaPayService.initiatePayout(Math.round(adminNetAfterFee * 100) / 100, "UGX", intPhone, payoutProvider)
+        const payoutResult = await PawaPayService.initiatePayout(Math.round(adminNetAfterFee * 100) / 100, "UGX", intPhone, payoutProvider, adminOTPCode.trim())
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
         Alert.alert("✅ Payout Submitted!", `UGX ${adminNetAfterFee.toLocaleString()} sent to ${intPhone}\nPayout ID: ${payoutResult.payoutId}`)
         setShowAdminWithdrawModal(false)
@@ -759,9 +756,9 @@ const OrganiserDashboardScreen: React.FC = () => {
       { text: "Cancel", style: "cancel" },
       { text: "Validate", onPress: async () => {
         try {
-          const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance")
+          const result = await TicketService.validateTicket(ticketId, user.id, "Event Entrance", eventId)
           if (result.success && result.needsPhotoVerification && result.buyerPhotoUrl && result.ticketDocId) {
-            setPendingTicketDocId(result.ticketDocId); setBuyerPhotoUrl(result.buyerPhotoUrl); setBuyerName(result.buyerName || "Ticket Buyer"); setShowPhotoVerification(true); setValidating(false); return
+            setPendingTicketDocId(result.ticketDocId); setPendingQrText(ticketId); setBuyerPhotoUrl(result.buyerPhotoUrl); setBuyerName(result.buyerName || "Ticket Buyer"); setShowPhotoVerification(true); setValidating(false); return
           }
           Alert.alert(result.success ? "✅ Entry Granted" : "❌ Entry Denied", result.success ? "Ticket validated." : `Failed: ${result.reason}`)
           fetchScanLogs(); fetchTicketData()
@@ -776,12 +773,12 @@ const OrganiserDashboardScreen: React.FC = () => {
     setShowPhotoVerification(false); setValidating(true)
     try {
       if (confirmed) {
-        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user.id, "Event Entrance", eventId)
+        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user.id, "Event Entrance", eventId, undefined, pendingQrText)
         Alert.alert(r.success ? "✅ Entry Granted" : "❌ Entry Denied", r.success ? `Photo verified for ${buyerName}.` : r.reason || "Failed")
         fetchScanLogs(); fetchTicketData()
       } else { Alert.alert("❌ Entry Denied", "Photo mismatch.") }
     } catch { Alert.alert("Error", "Failed") }
-    finally { setPendingTicketDocId(null); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false) }
+    finally { setPendingTicketDocId(null); setPendingQrText(""); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false) }
   }
 
   const handleEditPayment = () => {
@@ -849,9 +846,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const handleSendOtp = async () => {
     if (!user?.email) return;
 
-    const phone1 = toInternationalPhone(payoutPhone);
-    const phone2 = toInternationalPhone(payoutPhoneConfirm);
-    if (phone1 !== phone2) {
+    if (payoutTab === "mobile_money" && toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm)) {
       setOtpError("Numbers don't match");
       return;
     }
@@ -860,44 +855,22 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpError("");
 
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
         setOtpError("Session expired. Please sign in again.");
         return;
       }
-      const authUserId = sessionUser.id; // ← use THIS, not user.id
-
-      await supabase
-        .from('payout_otps')
-        .update({ used: true })
-        .eq('user_id', authUserId)
-        .eq('used', false);
-
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-      const { error: dbError } = await supabase
-        .from('payout_otps')
-        .insert({
-          user_id: authUserId,
-          email: user.email,
-          otp: otp,
-          expires_at: new Date(Date.now() + 90 * 1000),
-        });
-
-      if (dbError) throw dbError;
-
-      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', {
-        body: { email: user.email, otp }
-      });
-
-      if (emailError) throw emailError;
-
-      /* console.log("[PayoutOTP] OTP sent:", otp); */
+      const response = await fetch("/.netlify/functions/request-payout-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || "Unable to send payout code")
       setOtpSent(true);
       setResendCooldown(60);
     } catch (err) {
       console.error(err);
-      setOtpError("Failed to send code. Please try again.");
+      setOtpError(err instanceof Error ? err.message : "Failed to send code. Please try again.");
     } finally {
       setOtpLoading(false);
     }
@@ -914,30 +887,13 @@ const OrganiserDashboardScreen: React.FC = () => {
     setOtpLoading(true);
 
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) {
         setOtpError("Session expired. Please sign in again.");
         return;
       }
-
-      const { data, error } = await supabase
-        .from('payout_otps')
-        .select('*')
-        .eq('user_id', sessionUser.id)  // ← fixed here too
-        .eq('otp', otpCode.trim())
-        .eq('used', false)
-        .gt('expires_at', new Date().toISOString())
-        .single();
-
-      if (error || !data) {
-        setOtpError("Code is incorrect or has expired. Please request a new one.");
-        return;
-      }
-
-      // Note: the OTP is NOT marked used here — the server-side payout function
-      // (payout.js) verifies and consumes it authoritatively.
-
-      /* console.log("[PayoutOTP] OTP verified successfully!"); */
+      // Verification and one-time consumption happen only inside payout.js;
+      // the browser never reads OTP rows or receives the stored HMAC.
       await handlePayoutSubmit();
 
     } catch (err) {
@@ -1023,98 +979,40 @@ const OrganiserDashboardScreen: React.FC = () => {
     /* console.log("[PayoutSubmit] ✅ All checks passed, setting withdrawLoading = true") */
     setWithdrawLoading(true)
     try {
-      if (payoutTab === "mobile_money") {
-        // ── Mobile Money: server-side payout (Phase 3) ──
-        // The server verifies the OTP, recomputes the amount, checks refund/
-        // payout eligibility, submits to PawaPay, marks tickets paid, persists
-        // the recipient to the event's payout_config, and records the payout.
-        const { data: { session } } = await supabase.auth.getSession()
-        const token = session?.access_token
-        if (!token) { Alert.alert("Session expired", "Please sign in again."); setWithdrawLoading(false); return }
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token
+      if (!token) { Alert.alert("Session expired", "Please sign in again."); return }
 
-        const intPhone = toInternationalPhone(payoutPhone)
-        const response = await fetch("/.netlify/functions/payout", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-          body: JSON.stringify({
-            action: "execute",
-            otpCode: otpCode.trim(),
-            ticketIds: selectedTicketIds,
-            amount: totalAmount,
-            payoutMethod: "mobile_money",
-            recipientDetails: { name: user.displayName || user.email || "", phoneNumber: intPhone, provider: payoutProvider },
-          }),
-        })
-        const data = await response.json()
-        if (!data.success) {
-          Alert.alert("Payout Failed", data.error || "Payout failed")
-          setWithdrawLoading(false)
-          return
-        }
-        if (data.payoutId) { try { SupabaseService.sendPayoutReceipt(data.payoutId, user.email || "") } catch {} }
-
-        const paidAmount = data.amount || totalAmount
-
-        // Update organizer wallet
-        await updateWalletAfterPayout(paidAmount)
-
-        setPayoutHistory(prev => [{ date: new Date().toLocaleDateString(), amount: `UGX ${paidAmount.toLocaleString()}`, status: "Completed" }, ...prev])
-        setEligiblePayoutTotal(prev => Math.max(0, prev - paidAmount))
-        Alert.alert("✅ Payout Submitted!", `UGX ${paidAmount.toLocaleString()} sent to ${intPhone}\nPayout ID: ${data.payoutId || ""}`)
-
-      } else {
-        // ── Card: save payout request for admin processing with bank details ──
-        /* console.log("[PayoutSubmit] 💳 Starting Card payout flow...") */
-        /* console.log("[PayoutSubmit]    Saving payout to DB with status: pending_admin_review") */
-        /* console.log("[PayoutSubmit]    Bank:", bankName.trim(), "Acct:", bankAccountNumber.trim(), "Name:", bankAccountName.trim()) */
-        /* console.log("[PayoutSubmit]    Ticket IDs:", selectedTicketIds) */
-        /* console.log("[PayoutSubmit]    Amount:", totalAmount) */
-
-        const payoutId = await SupabaseService.savePayout({
-          organizer_id: user.id,
-          ticket_ids: selectedTicketIds,
-          amount: totalAmount,
-          status: "pending_admin_review",
-          processed_date: new Date().toISOString(),
-          payout_method: "bank_transfer",
-          recipient_name: bankAccountName.trim(),
-          recipient_phone_number: "",
-          metadata: { bank_name: bankName.trim(), account_number: bankAccountNumber.trim() },
-        })
-        /* console.log("[PayoutSubmit] ✅ Payout saved with ID:", payoutId) */
-
-        // Mark tickets as pending review
-        /* console.log("[PayoutSubmit]    Marking", selectedTicketIds.length, "tickets as pending_review...") */
-        for (const tid of selectedTicketIds) {
-          try {
-            await SupabaseService.updateTicket(tid, { payoutStatus: "pending_review", payoutEligible: false })
-            /* console.log(`[PayoutSubmit]    ✅ Ticket ${tid.slice(0,12)}... marked pending_review`) */
-          } catch (err) {
-            console.error(`[PayoutSubmit]    ❌ Failed to update ticket ${tid.slice(0,12)}:`, err)
-          }
-        }
-
-        // Create notification
-        try {
-          /* console.log("[PayoutSubmit]    Creating notification for organizer...") */
-          const { supabase } = await import("../config/supabase")
-          const notifResult = await supabase.from("notifications").insert([{
-            user_id: user.id,
-            title: "🔄 Card Payout Requested",
-            body: `UGX ${totalAmount.toLocaleString()} card payout for ${selectedTicketIds.length} ticket(s) pending admin review. Bank: ${bankName.trim()}`,
-            type: "payout_request",
-            data: { payoutId, amount: totalAmount, status: "pending_admin_review" },
-            is_read: false,
-            created_at: new Date().toISOString(),
-          }])
-          if (notifResult.error) throw notifResult.error
-          /* console.log("[PayoutSubmit] ✅ Notification created successfully") */
-        } catch (err) {
-          console.error("[PayoutSubmit] ❌ Failed to send notification:", err)
-        }
-
-        /* console.log("[PayoutSubmit] ✅ Card payout flow complete — showing success alert") */
-      }
+      const isMobile = payoutTab === "mobile_money"
+      const intPhone = toInternationalPhone(payoutPhone)
+      const response = await fetch("/.netlify/functions/payout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          action: "execute",
+          otpCode: otpCode.trim(),
+          ticketIds: selectedTicketIds,
+          payoutMethod: isMobile ? "mobile_money" : "bank_transfer",
+          recipientDetails: isMobile
+            ? { name: user.displayName || user.email || "", phoneNumber: intPhone, provider: payoutProvider }
+            : { name: bankAccountName.trim(), bankName: bankName.trim(), accountNumber: bankAccountNumber.trim() },
+        }),
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) throw new Error(data.error || "Payout request failed")
+      const paidAmount = data.amount || totalAmount
+      setPayoutHistory(prev => [{
+        date: new Date().toLocaleDateString(),
+        amount: `UGX ${paidAmount.toLocaleString()}`,
+        status: isMobile ? "Processing" : "Pending Review",
+      }, ...prev])
+      setEligiblePayoutTotal(prev => Math.max(0, prev - paidAmount))
+      Alert.alert(
+        isMobile ? "✅ Payout Submitted" : "✅ Payout Request Submitted",
+        isMobile
+          ? `UGX ${paidAmount.toLocaleString()} is processing through PawaPay.\nRequest ID: ${data.payoutId || ""}`
+          : `UGX ${paidAmount.toLocaleString()} is pending admin review and PesaPal submission.`,
+      )
 
       setShowWithdrawModal(false)
       resetPayoutState()
@@ -1295,9 +1193,9 @@ const OrganiserDashboardScreen: React.FC = () => {
                 </View>
                 <View style={{ height: 12 }} />
                 <TouchableOpacity
-                  style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading) && styles.sendOtpBtnDisabled]}
+                  style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading || resendCooldown > 0) && styles.sendOtpBtnDisabled]}
                   onPress={handleSendOtp}
-                  disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading}
+                  disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading || resendCooldown > 0}
                 >
                   {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
                 </TouchableOpacity>
@@ -1352,6 +1250,31 @@ const OrganiserDashboardScreen: React.FC = () => {
                 onChangeText={(t) => { setBankAccountName(t); setPayoutFieldErrors(prev => { const n = {...prev}; delete n.bankAccountName; return n }) }}
               />
               {payoutFieldErrors.bankAccountName && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{payoutFieldErrors.bankAccountName}</Text>}
+              <View style={{ height: 16 }} />
+              <Text style={styles.phoneLabel}>🔐 Confirm Payout by Email</Text>
+              <TouchableOpacity
+                style={[styles.sendOtpBtn, otpLoading && styles.sendOtpBtnDisabled]}
+                onPress={handleSendOtp}
+                disabled={otpLoading || resendCooldown > 0}
+              >
+                {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
+              </TouchableOpacity>
+              {otpError ? <Text style={styles.otpErrorText}>{otpError}</Text> : null}
+              {otpSent && (
+                <>
+                  <Text style={styles.otpLabel}>Enter Code</Text>
+                  <TextInput
+                    style={styles.otpInput}
+                    placeholder="6-digit code"
+                    placeholderTextColor="#555"
+                    value={otpCode}
+                    onChangeText={setOtpCode}
+                    keyboardType="numeric"
+                    maxLength={6}
+                  />
+                </>
+              )}
+              {resendCooldown > 0 && <Text style={styles.resendText}>Resend available in {resendCooldown}s</Text>}
               <View style={{ height: 20 }} />
             </View>
           )}
@@ -1374,9 +1297,9 @@ const OrganiserDashboardScreen: React.FC = () => {
               <Text style={styles.netAmount}>UGX {Math.max(0, totalPayoutAmount - calculatePayoutFee(totalPayoutAmount, payoutProvider)).toLocaleString()}</Text>
             </View>
             <TouchableOpacity
-              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || (payoutTab === "mobile_money" && !otpSent)) && styles.payoutActionBtnDisabled]}
-              onPress={payoutTab === "mobile_money" ? handlePayoutWithOtpCheck : handlePayoutSubmit}
-              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || (payoutTab === "mobile_money" && !otpSent)}
+              style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent) && styles.payoutActionBtnDisabled]}
+              onPress={handlePayoutWithOtpCheck}
+              disabled={totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent}
             >
               {withdrawLoading ? (
                 <ActivityIndicator color="#FFF" />
@@ -1707,7 +1630,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                   <Text style={styles.tokenLabel}>{token.label || "Staff"}</Text>
                   <Text style={styles.tokenExpiry}>Expires: {formatTimeRemaining(token.expires_at)}</Text>
                 </View>
-                <TouchableOpacity onPress={() => copyToClipboard(`https://yovibe.net/scan/${token.token}`)}>
+                <TouchableOpacity onPress={() => copyToClipboard(`${publicSiteUrl()}/scan/${token.token}`)}>
                   <Ionicons name="link-outline" size={20} color={COLORS.primary} />
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => handleRevokeToken(token.id)}>

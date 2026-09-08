@@ -12,6 +12,7 @@ import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
+import { publicSiteUrl } from "../config/runtime";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -42,7 +43,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   const seoUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}${window.location.pathname}`
-      : "https://yovibe.net/venues";
+      : `${publicSiteUrl()}/venues`;
 
   // Get responsive values using hooks
   const gridColumns = useGridColumns();

@@ -32,36 +32,25 @@ export default function AddPhotoScreen() {
 
   const validateToken = async () => {
     try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("id, buyer_email, event_start_time, photo_upload_token, photo_upload_token_expires_at, buyer_photo_url")
-        .eq("id", ticketId)
-        .single()
-
-      if (error || !data) {
-        setState("invalid")
-        return
-      }
-
-      if (data.buyer_photo_url) {
+      const response = await fetch("/.netlify/functions/buyer-photo-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId, token }),
+      })
+      const data = await response.json()
+      if (data.status === "done") {
         setState("done")
         return
       }
-
-      const tokenValid = data.photo_upload_token === token
-      const notExpired = !data.photo_upload_token_expires_at || new Date(data.photo_upload_token_expires_at) > new Date()
-
-      if (!tokenValid) {
-        setState("invalid")
-        return
-      }
-
-      if (!notExpired) {
+      if (data.status === "expired" || response.status === 410) {
         setState("expired")
         return
       }
-
-      setTicket(data as any)
+      if (!response.ok || data.status !== "valid") {
+        setState("invalid")
+        return
+      }
+      setTicket({ id: data.ticketId } as any)
       setState("valid")
     } catch (error) {
       console.error("Token validation error:", error)
@@ -93,7 +82,7 @@ export default function AddPhotoScreen() {
       setState("uploading")
       const photoUri = result.assets[0].uri
 
-      const result2 = await uploadBuyerPhoto(photoUri, ticket.id)
+      const result2 = await uploadBuyerPhoto(photoUri, ticket.id, token || undefined)
 
       const { data, error } = await supabase.rpc("add_ticket_security_photo", {
         p_ticket_id: ticket.id,

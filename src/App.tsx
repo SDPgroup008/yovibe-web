@@ -21,7 +21,7 @@ try {
 }
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, messaging } from "./config/firebase";
+import { requestNotificationPermission, getWebFcmToken, messaging, notificationsEnabled } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
@@ -213,6 +213,7 @@ function AppContent() {
 
   // Notification permission + token flow
   useEffect(() => {
+    if (!notificationsEnabled) return;
     let currentPermission = "default";
     if (typeof Notification !== 'undefined' && Notification.permission) {
       currentPermission = Notification.permission;
@@ -245,7 +246,7 @@ function AppContent() {
 
   // 🔔 Listen for foreground notifications
   useEffect(() => {
-    if (!messaging) {
+    if (!notificationsEnabled || !messaging) {
       return;
     }
 
@@ -396,7 +397,7 @@ function AppContent() {
   return (
     <View style={{ flex: 1 }}>
       {/* Permission banner at the very top */}
-      {showPermissionBanner && (
+      {notificationsEnabled && showPermissionBanner && (
         <PermissionBanner
           onAllow={handleAllowNotifications}
           onBlock={handleBlockNotifications}
@@ -422,7 +423,7 @@ function AppContent() {
       </RouterProvider>
 
       {/* Temporary notification banner */}
-      {banner && (
+      {notificationsEnabled && banner && (
         <NotificationBanner
           title={banner.title}
           body={banner.body}

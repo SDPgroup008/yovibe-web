@@ -4,23 +4,43 @@ import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging, isSupported, getToken } from "firebase/messaging";
 
+const firebaseEnabled = String(process.env.NEXT_PUBLIC_FIREBASE_ENABLED || 'true').toLowerCase() === 'true';
+const requiredFirebaseValues = [
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+];
+
+export const hasFirebaseConfig = firebaseEnabled && requiredFirebaseValues.every(Boolean);
+export const notificationsEnabled =
+  String(process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED || 'true').toLowerCase() === 'true' && hasFirebaseConfig;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyBYNPWQj74P7EpmbVxX6ETVHEPayu2-UpE",
-  authDomain: "eco-guardian-bd74f.firebaseapp.com",
-  projectId: "eco-guardian-bd74f",
-  storageBucket: "eco-guardian-bd74f.appspot.com",
-  messagingSenderId: "917905910857",
-  appId: "1:917905910857:web:6a0a450f36d2cbb6912398",
-  measurementId: "G-8PRQWEZP8L"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Initialize Firebase only once
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Firebase is optional. Staging disables it explicitly while notifications are paused.
+const app: any = hasFirebaseConfig
+  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0])
+  : null;
 
 // Initialize services with error handling
-let auth, db, storage, messaging;
+let auth: any = null;
+let db: any = null;
+let storage: any = null;
+let messaging: any = null;
 
 try {
+  if (!app) throw new Error('Firebase disabled');
   auth = getAuth(app);
   setPersistence(auth, browserSessionPersistence);
 } catch (err) {
@@ -28,12 +48,14 @@ try {
 }
 
 try {
+  if (!app) throw new Error('Firebase disabled');
   db = getFirestore(app);
 } catch (err) {
   // console.error("Error initializing Firebase Firestore:", err);
 }
 
 try {
+  if (!app) throw new Error('Firebase disabled');
   storage = getStorage(app);
 } catch (err) {
   // console.error("Error initializing Firebase Storage:", err);
@@ -71,7 +93,7 @@ function getIOSVersion(): number | null {
 }
 
 async function initializeMessaging(): Promise<typeof messaging> {
-  if (typeof window === 'undefined') {
+  if (!notificationsEnabled || !app || typeof window === 'undefined') {
     // Server-side rendering - don't initialize
     return null;
   }
@@ -153,6 +175,7 @@ export async function ensureMessagingInitialized(): Promise<typeof messaging> {
 
 // --- Notification helpers ---
 export async function requestNotificationPermission(): Promise<boolean> {
+  if (!notificationsEnabled) return false;
   try {
     // Check if Notification API exists first (required for iOS Safari)
     if (typeof Notification === 'undefined' || !Notification.requestPermission) {
@@ -205,6 +228,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 }
 
 export async function getWebFcmToken(): Promise<string | null> {
+  if (!notificationsEnabled) return null;
   try {
     /* console.log("[iOS-NOTIF] getWebFcmToken called, messaging:", !!messaging); */
     // Ensure messaging is initialized
@@ -255,10 +279,10 @@ export async function getWebFcmToken(): Promise<string | null> {
         await new Promise(r => setTimeout(r, 1000));
       }
       try {
+        const vapidKey = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
+        if (!vapidKey) return null;
         const token = await getToken(messaging!, {
-          vapidKey:
-            process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY ||
-            "BD83GLw_GOOOYCBboNNyNvop26X_URchVjoAfavvU230_7IbQUl2JFCtRWe4RPhe3bfsMRF9KBEOHSStvfG7p7s",
+          vapidKey,
         });
         if (token) {
           /* console.log("[iOS-NOTIF] Token generated successfully: YES"); */
@@ -281,5 +305,3 @@ export async function getWebFcmToken(): Promise<string | null> {
 
 // Export Firebase services with null checks
 export { app, auth, db, storage, messaging };
-
-export const hasFirebaseConfig = true;

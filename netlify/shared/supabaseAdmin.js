@@ -1,11 +1,9 @@
 const { createClient } = require('@supabase/supabase-js');
-
-const FALLBACK_SUPABASE_URL = "https://uqukizjohackrcwrtefk.supabase.co";
+const { requiredEnv, assertSupabaseUrl, isStaging } = require('./runtimeConfig');
 
 function getAdminClient() {
-  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || FALLBACK_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY;
-  if (!url || !key) throw new Error('Supabase server credentials are not configured');
+  const url = assertSupabaseUrl(requiredEnv('SUPABASE_URL'));
+  const key = requiredEnv('SUPABASE_SECRET_KEY');
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
@@ -16,6 +14,13 @@ async function requireUser(event) {
   const admin = getAdminClient();
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) throw Object.assign(new Error('Invalid authentication token'), { statusCode: 401 });
+  if (isStaging()) {
+    const allowed = requiredEnv('STAGING_ALLOWED_EMAILS').split(',').map((email) => email.trim().toLowerCase()).filter(Boolean);
+    const email = String(data.user.email || '').trim().toLowerCase();
+    if (!email || !allowed.includes(email)) {
+      throw Object.assign(new Error('This account is not approved for staging certification'), { statusCode: 403 });
+    }
+  }
 
   // Match profiles the same way the app does (getUserProfileOrNull): the
   // `users` table keeps the auth id in `uid` (row `id` is a separate key), so

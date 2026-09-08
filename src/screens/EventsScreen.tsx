@@ -24,6 +24,7 @@ import { useAuth } from "../contexts/AuthContext";
 import type { Event } from "../models/Event";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { useEventsScroll } from "../hooks/useScrollPersistence";
+import { publicSiteUrl } from "../config/runtime";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -50,7 +51,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const seoUrl =
     typeof window !== "undefined"
       ? `${window.location.origin}${window.location.pathname}`
-      : "https://yovibe.net/events";
+      : `${publicSiteUrl()}/events`;
 
   // Get responsive values using hooks
   const gridColumns = useGridColumns();

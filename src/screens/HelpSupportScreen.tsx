@@ -3,6 +3,8 @@ import { useState } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ScrollView, Linking, TextInput, ActivityIndicator, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../contexts/AuthContext"
+import { useRouter } from "../utils/URLRouter"
+import { publicSiteUrl } from "../config/runtime"
 
 const SUPPORT_EMAIL = "reinolmartin0001@gmail.com"
 const PHONE_NUMBER = "+256764336256"
@@ -10,6 +12,7 @@ const WHATSAPP_NUMBER = "+256764336256"
 
 export default function HelpSupportScreen() {
   const { user } = useAuth()
+  const { navigate } = useRouter()
   const [activeTab, setActiveTab] = useState<"faq" | "contact" | "report">("faq")
   const [showContactForm, setShowContactForm] = useState(false)
   const [contactMessage, setContactMessage] = useState("")
@@ -31,9 +34,9 @@ export default function HelpSupportScreen() {
     { question: "How do I get notifications?", answer: "When you first open the app you'll be asked to allow notifications. These send you updates about events and venue vibes. Your notification history is under Profile → Notifications." },
     { question: "Can I edit my profile?", answer: "Yes. Go to Profile → 'Edit Profile' to change your display name, and tap your avatar photo to upload a new profile picture." },
     { question: "How do I view or resend my tickets?", answer: "Go to Profile → My Tickets. Tap a ticket to see its QR code and download it as a PDF. Use the 'Resend Ticket' link to have your tickets emailed to you again. Tickets show a status of Active, Used or Cancelled." },
-    { question: "How do I request a refund?", answer: "Open the ticket in Profile → My Tickets and tap 'Request refund'. Refunds are available only for a cancelled or postponed event, or an incomplete installment plan after the event date. An administrator reviews and processes every refund." },
+    { question: "How do I request a refund?", answer: "Open the ticket in Profile → My Tickets and tap 'Request refund'. Refunds are available only for a cancelled or postponed event, or an incomplete installment plan after the event date. Guest buyers can use the Guest Refund Request page for cancelled or postponed events; a secure 15-minute link is sent to the order email. An administrator reviews every request." },
     { question: "How do I delete my account?", answer: "Go to Profile → Settings → 'Delete Account' and type DELETE to confirm. This is permanent: all your data, tickets and events are deleted and you are signed out immediately." },
-    { question: "How do I scan tickets at my event?", answer: "As an organiser, open your event's Organiser Dashboard and use the Ticket Scanner to validate QR tickets at the door, or generate staff scan links (https://yovibe.net/scan/...) for your team. Scanned tickets are recorded in your scan log." },
+    { question: "How do I scan tickets at my event?", answer: `As an organiser, open your event's Organiser Dashboard and use the Ticket Scanner to validate QR tickets at the door, or generate staff scan links (${publicSiteUrl()}/scan/...) for your team. Scanned tickets are recorded in your scan log.` },
   ]
 
   const openEmailClient = async () => {
@@ -120,7 +123,12 @@ export default function HelpSupportScreen() {
         {activeTab === "contact" && (
           <View style={styles.tabContent}>
             <Text style={styles.sectionTitle}>Get in Touch</Text>
-            <Text style={styles.sectionSubtitle}>We're here to help</Text>
+            <Text style={styles.sectionSubtitle}>Email, telephone and WhatsApp support are always available</Text>
+            <TouchableOpacity style={styles.guestRefundButton} onPress={() => navigate('/refund-request')}>
+              <Ionicons name="return-down-back" size={20} color="#FFFFFF" />
+              <View style={{ flex: 1 }}><Text style={styles.guestRefundTitle}>Guest refund request</Text><Text style={styles.guestRefundText}>No YoVibe account required</Text></View>
+              <Ionicons name="chevron-forward" size={22} color="#FFFFFF" />
+            </TouchableOpacity>
             <ContactOption icon="mail" title="Email Support" desc="Send us an email with your inquiry" action={openEmailClient} />
             <ContactOption icon="call" title="Call Support" desc="Speak directly with our support team" action={openPhone} />
             <ContactOption icon="chatbubbles" title="Live WhatsApp Chat" desc="Chat with support team in real-time" action={openWhatsApp} />
@@ -237,6 +245,9 @@ const styles = StyleSheet.create({
   tabContent: { padding: 16 },
   sectionTitle: { fontSize: 22, fontWeight: "bold", color: "#FFFFFF", marginBottom: 8 },
   sectionSubtitle: { fontSize: 14, color: "#999999", marginBottom: 20 },
+  guestRefundButton: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#C62828", padding: 16, borderRadius: 8, marginBottom: 16 },
+  guestRefundTitle: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
+  guestRefundText: { color: "#FFD4D4", fontSize: 12, marginTop: 2 },
   faqItem: { backgroundColor: "#1E1E1E", borderRadius: 8, marginBottom: 12, overflow: "hidden" },
   faqQuestion: { padding: 16 },
   faqQuestionContent: { flexDirection: "row", alignItems: "center" },

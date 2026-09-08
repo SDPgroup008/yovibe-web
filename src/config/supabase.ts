@@ -1,32 +1,21 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
-// Initialize Supabase client
-// Hardcoded values as fallback for testing (will be overridden by .env.local if present)
-export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://uqukizjohackrcwrtefk.supabase.co';
-export const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_';
+export const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+export const supabaseAnonKey =
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  "";
 
-let supabase: SupabaseClient;
-
-if (supabaseUrl && supabaseAnonKey) {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-} else {
-  console.warn(
-    "⚠️ Supabase environment variables not configured. Supabase features will be unavailable. Check your .env.local file for NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY"
-  );
-  // Create a dummy client to prevent app crashes
-  supabase = createClient(
-    "https://placeholder.supabase.co",
-    "placeholder-key"
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY."
   );
 }
 
+const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+
 export const getSupabaseClient = (): SupabaseClient => {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.error(
-      "Supabase client called but environment variables are not configured"
-    );
-  }
-  return supabase as SupabaseClient;
+  return supabase;
 };
 
 export { supabase };

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <title>YoVibe Certification Access</title>
+  <style>
+    :root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#090b10;color:#f8fafc;font:16px system-ui,sans-serif}.card{width:min(92vw,420px);padding:32px;border:1px solid #263041;border-radius:18px;background:#111722;box-shadow:0 24px 80px #0008}h1{margin:0 0 8px;font-size:24px}p{color:#aab5c5;line-height:1.5}label{display:block;margin:24px 0 8px;font-weight:650}input,button{width:100%;min-height:48px;border-radius:10px;font:inherit}input{border:1px solid #3a465a;background:#080b11;color:#fff;padding:0 14px}button{margin-top:14px;border:0;background:#00d4ff;color:#001018;font-weight:800;cursor:pointer}.error{min-height:24px;color:#ff8d8d;margin-top:12px}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Certification environment</h1>
+    <p>This isolated site contains synthetic test data. Enter the staging access password supplied by the test coordinator.</p>
+    <form id="access-form">
+      <label for="password">Access password</label>
+      <input id="password" name="password" type="password" required autocomplete="current-password">
+      <button type="submit">Continue</button>
+      <div id="error" class="error" role="alert"></div>
+    </form>
+  </main>
+  <script>
+    document.getElementById('access-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const button = event.currentTarget.querySelector('button');
+      const error = document.getElementById('error');
+      button.disabled = true; error.textContent = '';
+      try {
+        const response = await fetch('/.netlify/functions/staging-access', {
+          method: 'POST', headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({password: document.getElementById('password').value}),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Access denied');
+        const next = new URLSearchParams(location.search).get('next') || '/';
+        location.assign(next.startsWith('/') && !next.startsWith('//') ? next : '/');
+      } catch (failure) { error.textContent = failure.message; button.disabled = false; }
+    });
+  </script>
+</body>
+</html>
