@@ -23,16 +23,29 @@ const CRITICAL_VARS = [
   'SITE_URL', 'REFUND_LINK_SECRET', 'PAYOUT_OTP_SECRET',
   'FULFILLMENT_WORKER_SECRET', 'STAGING_ACCESS_SECRET', 'STAGING_ACCESS_PASSWORD',
   'TICKET_EMAIL_FROM', 'PAYOUT_EMAIL_FROM',
-  'FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT',
 ];
+
+const FIREBASE_VARS = ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT'];
+
+const firebaseNotificationsDisabledForStaging = () => (
+  String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
+  && String(process.env.NEXT_PUBLIC_FIREBASE_ENABLED || '').trim().toLowerCase() === 'false'
+  && String(process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED || '').trim().toLowerCase() === 'false'
+);
 
 exports.handler = async (event) => {
   const env = {};
   let missing = [];
-  for (const key of CRITICAL_VARS) {
+  const firebaseDisabled = firebaseNotificationsDisabledForStaging();
+  const requiredVars = firebaseDisabled ? CRITICAL_VARS : [...CRITICAL_VARS, ...FIREBASE_VARS];
+  for (const key of requiredVars) {
     const present = Boolean(process.env[key] && !String(process.env[key]).includes('your_') && !String(process.env[key]).includes('placeholder'));
     env[key] = present ? 'SET' : 'MISSING_OR_PLACEHOLDER';
     if (!present) missing.push(key);
+  }
+  if (firebaseDisabled) {
+    env.FIREBASE_PROJECT_ID = 'DISABLED';
+    env.FIREBASE_SERVICE_ACCOUNT = 'DISABLED';
   }
   const hasEmailProvider = Boolean(process.env.RESEND_API_KEY || process.env.ZEPTOMAIL_TOKEN);
   env.EMAIL_PROVIDER = hasEmailProvider ? 'SET' : 'MISSING_OR_PLACEHOLDER';
