@@ -78,6 +78,12 @@
     Content-Type = "application/octet-stream"
 
 [[redirects]]
+  from = "/staging-diagnostics/pawapay-provider-config"
+  to = "/.netlify/functions/pawapay-active-config"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/sitemap.xml"
   to = "/.netlify/functions/sitemap"
   status = 200
