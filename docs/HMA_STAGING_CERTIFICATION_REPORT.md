@@ -73,7 +73,7 @@ The read-only rate-ladder runner (`npm run test:staging-rate-ladder`) stops at t
 ### Isolation
 
 - Staging Netlify project is Git-backed from `stagging` only and published at the staging domain.
-- Dependency-hardening staging deploy was verified ready from commit `248693dc4` (`Harden staging dependencies and update readiness`).
+- Final certification deploy was verified ready from commit `37fe96081` (`Add staging capacity runbook`); the preceding harness deploy `c81fdd1ed` was also ready.
 - Production deploy remained unchanged during testing: deploy `6a9918e0e981470008699ca5`, commit `94d3c6686171a44cfd4035a2a7a8226820abc47a`.
 - No production database, R2 object, payment, payout, email, domain, or deployment mutation was performed.
 
