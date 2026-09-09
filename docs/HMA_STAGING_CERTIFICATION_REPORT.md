@@ -34,13 +34,14 @@ Overall readiness: **89%** (unweighted mean of the ten section scores; rounded f
 
 - 9 Jest suites, 34 tests: all passed.
 - TypeScript typecheck: passed.
-- Staging safety scan: passed across 287 repository files; no production identifiers or committed secrets found.
+- Staging safety scan: passed across 291 repository files; no production identifiers or committed secrets found.
 - Security probe: 11/11 passed. Expected results included staging edge redirect 302, protected functions 401, unsigned pawaPay callbacks 401, and private R2 anonymous access denied (400 from the unsigned S3 request).
 - Guest checkout: one approved UGX 500 MTN sandbox purchase; payment and ticket fulfillment completed. The guest's authenticated ticket list remained empty, which is expected for an unauthenticated buyer; email delivery is the delivery channel and must be confirmed by the buyer or provider logs.
 - Guest security photo: failed on the pre-fix deployment; fixed and covered by PNG/JPEG/WebP and oversize regression tests. A live post-fix photo purchase was intentionally not repeated because only one payment was authorized.
 - Refunds: scheduled-event guest request returned the generic anti-enumeration response; policy and incomplete-installment tests passed. The assessment run initiated no live refund; the operator subsequently confirmed the cancelled/postponed and incomplete-installment flows.
 - Operator confirmation: release-blocker items 1–4 (staff scan/payout, both payout rails, refunds/incomplete-installment refunds, and email delivery) were subsequently tested successfully in staging.
 - Expo modernization: SDK 57.0.21, React Native 0.86.3, React 19.2.3, compatible Expo modules, Jest Expo 57, and TypeScript 6 are aligned; six SDK-compatibility type errors were corrected.
+- Netlify install isolation: `.npmrc` enables the tested legacy peer resolver for the staging build; this only affects dependency installation on `stagging` and does not alter production.
 
 ### Performance (staging only, read-only)
 
