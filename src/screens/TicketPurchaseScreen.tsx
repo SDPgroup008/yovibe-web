@@ -1819,20 +1819,29 @@ const handleInstallmentPurchase = async () => {
       {/* Guest-only explicit consent — authenticated users already agreed to the
           Terms & Conditions during signup, so the checkbox gates only guests. */}
       {!user && (
-        <TouchableOpacity style={styles.termsRow} onPress={() => setAcceptedTerms(prev => !prev)} activeOpacity={0.7}>
-          <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
-            {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-          </View>
+        <View style={styles.termsRow}>
+          <TouchableOpacity
+            accessibilityRole="checkbox"
+            accessibilityLabel="Accept Terms and Conditions"
+            accessibilityState={{ checked: acceptedTerms }}
+            onPress={() => setAcceptedTerms(prev => !prev)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+              {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </View>
+          </TouchableOpacity>
           <Text style={styles.termsText}>
             I agree to the{" "}
             <Text
               style={styles.termsLink}
-              onPress={(e) => { e?.stopPropagation?.(); (navigation as any).navigate("TermsAndConditions") }}
+              accessibilityRole="link"
+              onPress={() => (navigation as any).navigate("TermsAndConditions")}
             >
               Terms &amp; Conditions
             </Text>
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
 
       <TouchableOpacity
