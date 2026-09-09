@@ -23,7 +23,7 @@ import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
-import { uploadBuyerPhoto } from "../services/R2Service"
+import { blobToDataURL } from "../utils/expoHelpers"
 
 // ─── Design tokens (UI only) ─────────────────────────────────────────
 const SURFACE = "rgba(18, 18, 26, 0.72)"
@@ -551,13 +551,23 @@ const TicketPurchaseScreen: React.FC = () => {
       const includePhoto = securityPhotoEnabled && photoCaptured
 
       let hostedBuyerPhotoUrl: string | undefined
+      let buyerPhotoDataUrl: string | undefined
       if (includePhoto && buyerPhotoUrl) {
-        if (/^https?:\/\//i.test(buyerPhotoUrl)) {
+        if (/^r2-private:\/\//i.test(buyerPhotoUrl)) {
           hostedBuyerPhotoUrl = buyerPhotoUrl
         } else {
           setStatusMessage("Uploading security photo...")
           try {
-            hostedBuyerPhotoUrl = (await uploadBuyerPhoto(buyerPhotoUrl, `purchase_${fulfillmentId}`)).url
+            const photoResponse = await fetch(buyerPhotoUrl)
+            if (!photoResponse.ok) throw new Error(`Could not read security photo (${photoResponse.status})`)
+            const photoBlob = await photoResponse.blob()
+            if (photoBlob.size > 4 * 1024 * 1024) {
+              throw new Error("Security photo exceeds the 4 MB checkout limit")
+            }
+            if (!["image/jpeg", "image/png", "image/webp"].includes(photoBlob.type)) {
+              throw new Error("Security photo must be JPEG, PNG, or WebP")
+            }
+            buyerPhotoDataUrl = await blobToDataURL(photoBlob)
           } catch (photoError: any) {
             // Preserve the previous behavior: ticket fulfillment may continue
             // without an optional photo if storage is temporarily unavailable.
@@ -581,6 +591,7 @@ const TicketPurchaseScreen: React.FC = () => {
         payerEmail,
         buyerId: user?.id ?? null,
         buyerPhone: (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
+        buyerPhotoDataUrl,
         buyerPhotoUrl: hostedBuyerPhotoUrl,
         seatNumbers: isTableEntry ? undefined : perPersonSeats,
         tableNumbers: isTableEntry

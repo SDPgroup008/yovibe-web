@@ -299,11 +299,15 @@ async function generateQrPngDataUrl(signedUrl) {
 // Upload a base64/data-URL image to R2. Returns the public URL or null.
 async function uploadImageDataUrl(dataUrl, pathPrefix, filenameBase) {
   if (!dataUrl) return null;
-  const match = /^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i.exec(String(dataUrl));
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i.exec(String(dataUrl));
   if (!match) return null;
-  const mime = match[1].toLowerCase() === 'image/png' ? 'image/png' : 'image/jpeg';
-  const ext = mime === 'image/png' ? 'png' : 'jpg';
+  const sourceMime = match[1].toLowerCase();
+  const mime = sourceMime === 'image/png' ? 'image/png' : sourceMime === 'image/webp' ? 'image/webp' : 'image/jpeg';
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
   const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length === 0 || bytes.length > 4 * 1024 * 1024) {
+    throw new Error('Security photo must be between 1 byte and 4 MB');
+  }
   const key = `${pathPrefix}/${filenameBase}.${ext}`;
   return uploadToR2(key, bytes, mime, 'private');
 }
