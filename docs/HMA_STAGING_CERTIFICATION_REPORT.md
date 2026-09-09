@@ -20,7 +20,7 @@ The single approved UGX 500 MTN sandbox guest purchase completed payment verific
 | Settlement and remittance (Clause 7, amended to after-scan) | 95% | Operator confirmed organiser OTP payout, pawaPay mobile-money payout, and admin-assisted PesaPal card payout. Scan-gated eligibility and idempotent callback protections remain covered by tests; retain processor reconciliation evidence for the HMA file. |
 | Refunds, cancellations, chargebacks (Clause 8) | 95% | Operator confirmed the cancellation/postponement refund flow, guest authorization, and incomplete-installment behavior. Terms restrict refunds to cancellation/postponement and the endpoint uses anti-enumeration responses; retain one processor callback/reconciliation record. |
 | Fraud prevention, QR, security photos, scanning (Clause 9) | 94% | Operator confirmed staff-link scanning and the guest security-photo flow. Signed QR/staff-token controls, private-R2 denial, generic-upload denial, and duplicate-scan protections pass automated tests. |
-| Platform condition and reliability (Clause 10) | 90% | Build (with the staging heap setting), typecheck, 34 regression tests, staging guard, and read-only load/stress/spike probes pass. The dependency hardening resolves the cached production audit to 0 advisories. Browser-render stress still hit the 180-second harness ceiling during the 10-client stage, so dedicated capacity testing remains required. |
+| Platform condition and reliability (Clause 10) | 90% | Web export succeeds with the required Node heap, typecheck, 34 regression tests, staging guard, and read-only load/stress/spike probes pass. The dependency hardening resolves the cached production audit to 0 advisories. Browser-render stress still hit the 180-second harness ceiling during the 10-client stage, so dedicated capacity testing remains required. |
 | Customer support (Clause 11) | 98% | UptimeRobot is connected; email, WhatsApp, and always-available telephone support were confirmed by the operator. Add an HMA escalation rota and response-time evidence. |
 | Branding, marketing, termination and governance (Clauses 12, 18, 22-23) | 82% | Operational controls and runbooks exist; HMA logo/artwork approval, termination checklist, notice register, and signed amendment are still governance deliverables. |
 | Confidentiality and data protection (Clauses 13-14) | 78% | Private R2 separation, expiring references, access controls, and staging isolation are implemented. Complete the HMA data-sharing/retention record, breach contacts, and Uganda Data Protection Act processor/controller documentation. |
@@ -58,6 +58,7 @@ These are certification probes, not a guarantee of peak public-event capacity. R
 ### Isolation
 
 - Staging Netlify project is Git-backed from `stagging` only and published at the staging domain.
+- Latest staging deploy is ready from commit `248693dc4` (`Harden staging dependencies and update readiness`).
 - Production deploy remained unchanged during testing: deploy `6a9918e0e981470008699ca5`, commit `94d3c6686171a44cfd4035a2a7a8226820abc47a`.
 - No production database, R2 object, payment, payout, email, domain, or deployment mutation was performed.
 
