@@ -779,6 +779,28 @@ const updateBuyerName = (index: number, name: string) => {
     }
   }
 
+  const handleChoosePhoto = async () => {
+    try {
+      setLoading(true)
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      })
+
+      if (!result.canceled && result.assets[0]) {
+        setBuyerPhotoUrl(result.assets[0].uri)
+        setPhotoCaptured(true)
+        Alert.alert("Success", "Photo selected successfully!")
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to select photo")
+    } finally {
+      setLoading(false)
+    }
+  }
+
 const handleInstallmentPurchase = async () => {
     setFieldErrors({})
     const errs = validatePurchaseForm()
@@ -1546,6 +1568,18 @@ const handleInstallmentPurchase = async () => {
                     {photoCaptured ? "Photo Captured" : "Capture Photo"}
                   </Text>
                 </TouchableOpacity>
+                {Platform.OS === "web" && (
+                  <TouchableOpacity
+                    style={[styles.photoButton, photoCaptured && styles.photoButtonCaptured, { marginTop: 10 }]}
+                    onPress={handleChoosePhoto}
+                    disabled={loading}
+                  >
+                    <Ionicons name={photoCaptured ? "checkmark-circle" : "image-outline"} size={24} color="#FFFFFF" />
+                    <Text style={styles.photoButtonText}>
+                      {photoCaptured ? "Choose a Different Photo" : "Choose Photo"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </>
