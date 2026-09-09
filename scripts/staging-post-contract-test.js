@@ -27,21 +27,28 @@ const contracts = [
 async function run(contract) {
   const url = new URL(contract.path, ORIGIN);
   if (url.origin !== ORIGIN) throw new Error(`Unsafe target rejected: ${url.origin}`);
-  const response = await fetch(url, {
-    method: 'POST',
-    redirect: 'manual',
-    headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
-    body: JSON.stringify(contract.body),
-  });
-  const text = await response.text();
-  return {
-    name: contract.name,
-    path: contract.path,
-    status: response.status,
-    expected: contract.statuses,
-    passed: contract.statuses.includes(response.status),
-    bodyPreview: text.slice(0, 160),
-  };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      redirect: 'manual',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': USER_AGENT },
+      body: JSON.stringify(contract.body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    return {
+      name: contract.name,
+      path: contract.path,
+      status: response.status,
+      expected: contract.statuses,
+      passed: contract.statuses.includes(response.status),
+      bodyPreview: text.slice(0, 160),
+    };
+  } catch (error) {
+    return { name: contract.name, path: contract.path, status: 0, expected: contract.statuses, passed: false, error: error.name || 'RequestError' };
+  } finally { clearTimeout(timer); }
 }
 
 async function main() {

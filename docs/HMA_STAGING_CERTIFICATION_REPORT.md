@@ -68,7 +68,7 @@ POST endpoints are covered without creating financial or business records:
 
 These tests validate request contracts, idempotency, duplicate handling, and client/provider behavior. A real sandbox payment or payout remains separately approved because it creates an external transaction and may send SMS or email.
 
-The read-only rate-ladder runner (`npm run test:staging-rate-ladder`) stops at the first threshold breach. A 5 req/s, 5-second staging run had 0 request failures but p95 3.25 s and p99 3.27 s, so it stopped before higher rates. This indicates cold-start or platform queue latency, not a correctness failure.
+The read-only rate-ladder runner (`npm run test:staging-rate-ladder`) stops at the first threshold breach. A 5 req/s, 5-second staging run had 0 request failures but p95 3.25 s and p99 3.27 s, so it stopped before higher rates. This indicates cold-start or platform queue latency, not a correctness failure. The staging-only tuning procedure, attribution checklist, and two-consecutive-pass release gate are documented in [`docs/STAGING_CAPACITY_TUNING_RUNBOOK.md`](STAGING_CAPACITY_TUNING_RUNBOOK.md).
 
 ### Isolation
 
