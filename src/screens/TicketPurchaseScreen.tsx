@@ -547,6 +547,7 @@ const TicketPurchaseScreen: React.FC = () => {
         : buyerEmailsList
 
       const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
+      setDeliveryEmail(deliveryEmails[0] || payerEmail)
 
       const includePhoto = securityPhotoEnabled && photoCaptured
 

@@ -21,7 +21,9 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "staging:schema": "node scripts/generate-staging-schema.js",
-    "staging:scan": "node scripts/staging-safety-scan.js"
+    "staging:scan": "node scripts/staging-safety-scan.js",
+    "test:staging-security": "node scripts/staging-security-probe.js",
+    "test:staging-performance": "node scripts/staging-performance-test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1046.0",
