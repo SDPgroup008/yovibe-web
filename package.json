@@ -66,7 +66,7 @@
     "react-native-web": "~0.19.13",
     "resend": "6.26.0",
     "stream-browserify": "^3.0.0",
-    "uuid": "^9.0.1"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
     "@babel/core": "^7.23.9",
@@ -96,5 +96,10 @@
       "/netlify/"
     ]
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "@xmldom/xmldom": "0.8.14",
+    "tar": "7.5.22",
+    "undici": "6.28.0"
+  }
 }
