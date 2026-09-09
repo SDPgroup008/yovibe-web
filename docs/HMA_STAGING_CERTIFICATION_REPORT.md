@@ -58,7 +58,7 @@ These are certification probes, not a guarantee of peak public-event capacity. R
 ### Isolation
 
 - Staging Netlify project is Git-backed from `stagging` only and published at the staging domain.
-- Latest staging deploy is ready from commit `248693dc4` (`Harden staging dependencies and update readiness`).
+- Dependency-hardening staging deploy was verified ready from commit `248693dc4` (`Harden staging dependencies and update readiness`).
 - Production deploy remained unchanged during testing: deploy `6a9918e0e981470008699ca5`, commit `94d3c6686171a44cfd4035a2a7a8226820abc47a`.
 - No production database, R2 object, payment, payout, email, domain, or deployment mutation was performed.
 
