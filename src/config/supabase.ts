@@ -13,7 +13,7 @@ export const supabaseAnonKey =
 
 if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error(
-    "Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY before building."
+    "Supabase is not configured. Set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY (or the NEXT_PUBLIC_* equivalents) before starting or building."
   );
 }
 
