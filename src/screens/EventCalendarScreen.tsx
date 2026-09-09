@@ -546,7 +546,7 @@ const styles = StyleSheet.create({
     resizeMode: "cover",
   },
   eventTimeOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     justifyContent: "center",
     alignItems: "center",

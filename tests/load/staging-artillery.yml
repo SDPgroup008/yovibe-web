@@ -1,0 +1,38 @@
+config:
+  target: "https://yovibe-stagging.netlify.app"
+  http:
+    timeout: 15
+    maxSockets: 100
+  phases:
+    - name: warmup
+      duration: 30
+      arrivalRate: 2
+    - name: sustained
+      duration: 120
+      arrivalRate: 5
+      rampTo: 15
+    - name: spike
+      duration: 20
+      arrivalRate: 40
+  plugins:
+    expect: {}
+  ensure:
+    maxErrorRate: 1
+    p95: 3000
+    p99: 5000
+
+scenarios:
+  - name: public-event-gate
+    flow:
+      - get:
+          url: "/events"
+          followRedirect: false
+          expect:
+            - statusCode: 302
+  - name: health-contract
+    flow:
+      - get:
+          url: "/.netlify/functions/health"
+          expect:
+            - statusCode: 503
+            - contentType: json

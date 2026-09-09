@@ -189,7 +189,7 @@ const payoutSliderStyles = StyleSheet.create({
 // =============================================================================
 // Helper to assign step positions
 // =============================================================================
-const assignSteps = (steps: JSX.Element[], max: number, value: number, trackWidth: number) => {
+const assignSteps = (steps: React.ReactElement[], max: number, value: number, trackWidth: number) => {
   return Array.from({ length: max + 1 }).map((_, i) => {
     const left = max > 0 ? (i / max) * trackWidth : 0
     return (

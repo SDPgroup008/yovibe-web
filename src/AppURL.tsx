@@ -195,7 +195,7 @@ const MainApp: React.FC = () => {
 export default function App() {
   return (
     <AuthProvider>
-      <StatusBar style="light" backgroundColor="#121212" />
+      <StatusBar style="light" />
       <AuthFlow />
     </AuthProvider>
   );

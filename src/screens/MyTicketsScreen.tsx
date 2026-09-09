@@ -627,7 +627,7 @@ const MyTicketsScreen: React.FC = () => {
               )}
               <Image
                 source={selectedTicketSvg ? { uri: svgDataUri(selectedTicketSvg) } : undefined}
-                style={{ ...StyleSheet.absoluteFillObject }}
+                style={{ ...StyleSheet.absoluteFill }}
                 resizeMode="contain"
                 accessibilityLabel="Organizer-designed ticket"
               />

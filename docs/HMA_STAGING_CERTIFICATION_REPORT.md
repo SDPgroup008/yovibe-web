@@ -7,7 +7,7 @@ Assessment basis: HMA Ticket Sales Partnership Agreement (12 pages), scored agai
 
 ## Executive decision
 
-Current readiness is **90%**. This is a staging certification result, not a production go-live approval. Items 1–4 from the previous release-blocker list are now operator-confirmed as working. The remaining release conditions are the intentionally retained staging password, final HMA governance/amendment work, and a dedicated production-scale capacity run.
+Current readiness is **89%**. This is a staging certification result, not a production go-live approval. Items 1–4 from the previous release-blocker list are now operator-confirmed as working, and the Expo/React Native modernization is complete on `stagging`. The remaining release conditions are the intentionally retained staging password, the HMA governance/amendment work, and capacity tuning after the high-rate Artillery run recorded timeouts.
 
 The single approved UGX 500 MTN sandbox guest purchase completed payment verification, server-side ticket fulfillment, and guest navigation. The selected security photo did not attach in that run because the deployed client used a post-ticket upload token before a ticket existed. That path is now fixed in `c808e9617` (server-side data-URL upload to private R2, 4 MB/type validation, and regression coverage). No second payment was attempted by this assessment; subsequent staging certification of the flow was operator-confirmed.
 
@@ -20,13 +20,13 @@ The single approved UGX 500 MTN sandbox guest purchase completed payment verific
 | Settlement and remittance (Clause 7, amended to after-scan) | 95% | Operator confirmed organiser OTP payout, pawaPay mobile-money payout, and admin-assisted PesaPal card payout. Scan-gated eligibility and idempotent callback protections remain covered by tests; retain processor reconciliation evidence for the HMA file. |
 | Refunds, cancellations, chargebacks (Clause 8) | 95% | Operator confirmed the cancellation/postponement refund flow, guest authorization, and incomplete-installment behavior. Terms restrict refunds to cancellation/postponement and the endpoint uses anti-enumeration responses; retain one processor callback/reconciliation record. |
 | Fraud prevention, QR, security photos, scanning (Clause 9) | 94% | Operator confirmed staff-link scanning and the guest security-photo flow. Signed QR/staff-token controls, private-R2 denial, generic-upload denial, and duplicate-scan protections pass automated tests. |
-| Platform condition and reliability (Clause 10) | 90% | Web export succeeds with the required Node heap, typecheck, 34 regression tests, staging guard, and read-only load/stress/spike probes pass. The dependency hardening resolves the cached production audit to 0 advisories. Browser-render stress still hit the 180-second harness ceiling during the 10-client stage, so dedicated capacity testing remains required. |
+| Platform condition and reliability (Clause 10) | 84% | Expo SDK 57/React Native 0.86.3 modernization, web export, typecheck, 34 regression tests, staging guard, and read-only probes pass. The cached production audit reports 0 advisories. Artillery completed 2,060 requests with 2,030 responses and 30 socket timeouts (1.46%), exceeding the 1% error threshold; capacity tuning and a credentialed browser run remain required. |
 | Customer support (Clause 11) | 98% | UptimeRobot is connected; email, WhatsApp, and always-available telephone support were confirmed by the operator. Add an HMA escalation rota and response-time evidence. |
 | Branding, marketing, termination and governance (Clauses 12, 18, 22-23) | 82% | Operational controls and runbooks exist; HMA logo/artwork approval, termination checklist, notice register, and signed amendment are still governance deliverables. |
 | Confidentiality and data protection (Clauses 13-14) | 78% | Private R2 separation, expiring references, access controls, and staging isolation are implemented. Complete the HMA data-sharing/retention record, breach contacts, and Uganda Data Protection Act processor/controller documentation. |
 | Reporting, audit, warranties and risk allocation (Clauses 7.5-7.6, 10, 15-17, 19-21) | 75% | Sales/reconciliation structures and operational documentation exist. Produce a signed HMA settlement report template, audit export, incident evidence pack, and final commercial amendment. |
 
-Overall readiness: **90%** (unweighted mean of the ten section scores; rounded from 89.7%).
+Overall readiness: **89%** (unweighted mean of the ten section scores; rounded from 89.1%).
 
 ## Test results
 
@@ -40,6 +40,7 @@ Overall readiness: **90%** (unweighted mean of the ten section scores; rounded f
 - Guest security photo: failed on the pre-fix deployment; fixed and covered by PNG/JPEG/WebP and oversize regression tests. A live post-fix photo purchase was intentionally not repeated because only one payment was authorized.
 - Refunds: scheduled-event guest request returned the generic anti-enumeration response; policy and incomplete-installment tests passed. The assessment run initiated no live refund; the operator subsequently confirmed the cancelled/postponed and incomplete-installment flows.
 - Operator confirmation: release-blocker items 1–4 (staff scan/payout, both payout rails, refunds/incomplete-installment refunds, and email delivery) were subsequently tested successfully in staging.
+- Expo modernization: SDK 57.0.21, React Native 0.86.3, React 19.2.3, compatible Expo modules, Jest Expo 57, and TypeScript 6 are aligned; six SDK-compatibility type errors were corrected.
 
 ### Performance (staging only, read-only)
 
@@ -55,6 +56,8 @@ The HTTP harness is hard-coded to the staging hostname and only calls `GET /even
 
 These are certification probes, not a guarantee of peak public-event capacity. Repeat with a dedicated k6/Artillery runner and agreed traffic model before the HMA sale opens.
 
+The dedicated Artillery profile (`tests/load/staging-artillery.yml`) ran warm-up, sustained ramp, and spike phases against only `/events` and `/health`. It completed 2,030 of 2,060 requests successfully; 30 requests timed out or reset, producing a measured 1.46% failure rate. p95 was approximately 1.30 seconds and p99 approximately 1.83 seconds for completed responses. The run is a useful staging capacity signal but does not yet meet the configured 1% error budget.
+
 ### Isolation
 
 - Staging Netlify project is Git-backed from `stagging` only and published at the staging domain.
@@ -68,9 +71,10 @@ These are certification probes, not a guarantee of peak public-event capacity. R
 2. **Closed by operator confirmation:** pawaPay mobile-money payout and admin-assisted PesaPal card payout, including callback/idempotency checks.
 3. **Closed by operator confirmation:** cancelled/postponed guest refunds and incomplete-installment refunds; retain processor reconciliation evidence.
 4. **Closed by operator confirmation:** ticket email delivery.
-5. **Completed on `stagging`:** direct UUID upgraded to 11.1.1; patched overrides pin `undici` 6.28.0, `tar` 7.5.22, and `@xmldom/xmldom` 0.8.14. `npm audit --offline --omit=dev` now reports 0 advisories. Keep a scheduled online audit and plan the Expo/React Native major upgrade separately.
-6. Replace the intentionally short staging password with a unique 16+ byte value before any external staging access. The current value was preserved at the operator's request and is why health reports 503.
-7. Finalize and sign the written HMA amendment covering 15% commission, after-scan settlement, refund eligibility/time window, data sharing, support escalation, and termination/notice controls.
+5. **Completed on `stagging`:** Expo/React Native modernization and dependency hardening are installed and tested. Keep a scheduled online audit and review the temporary overrides during future Expo upgrades.
+6. **Capacity follow-up:** Artillery’s high-rate phase exceeded the 1% timeout budget (1.46%). Tune Netlify/function/database capacity or reduce the launch traffic model, then rerun with a credentialed browser journey and agreed HMA thresholds.
+7. Replace the intentionally short staging password with a unique 16+ byte value before any external staging access. The current value was preserved at the operator's request and is why health reports 503.
+8. Finalize and sign the written HMA amendment covering 15% commission, after-scan settlement, refund eligibility/time window, data sharing, support escalation, and termination/notice controls.
 
 ## Reproducible commands
 

@@ -12,6 +12,7 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "noImplicitAny": false,
+    "ignoreDeprecations": "6.0",
     "outDir": "dist",
     "types": [
       "react",

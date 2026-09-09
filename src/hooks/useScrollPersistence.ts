@@ -15,7 +15,7 @@ interface UseScrollPersistenceOptions {
 export function useScrollPersistence(options: UseScrollPersistenceOptions) {
   const { screenId, enabled = true, saveDelay = 100 } = options;
   const scrollRef = useRef<any>(null);
-  const saveTimeoutRef = useRef<NodeJS.Timeout>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const isRestoredRef = useRef(false);
   const pendingRestoreRef = useRef<{ x: number; y: number } | null>(null);
   const retryCountRef = useRef(0);
