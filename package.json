@@ -24,7 +24,10 @@
     "staging:scan": "node scripts/staging-safety-scan.js",
     "test:staging-security": "node scripts/staging-security-probe.js",
     "test:staging-performance": "node scripts/staging-performance-test.js",
-    "test:staging-capacity": "node scripts/run-staging-capacity.js"
+    "test:staging-capacity": "node scripts/run-staging-capacity.js",
+    "test:staging-post-contract": "node scripts/staging-post-contract-test.js",
+    "test:staging-mocked-post": "node scripts/staging-mocked-provider-test.js",
+    "test:staging-rate-ladder": "node scripts/staging-rate-ladder.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1046.0",

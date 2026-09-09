@@ -34,7 +34,7 @@ Overall readiness: **89%** (unweighted mean of the ten section scores; rounded f
 
 - 9 Jest suites, 34 tests: all passed.
 - TypeScript typecheck: passed.
-- Staging safety scan: passed across 291 repository files; no production identifiers or committed secrets found.
+- Staging safety scan: passed across 294 repository files; no production identifiers or committed secrets found.
 - Security probe: 11/11 passed. Expected results included staging edge redirect 302, protected functions 401, unsigned pawaPay callbacks 401, and private R2 anonymous access denied (400 from the unsigned S3 request).
 - Guest checkout: one approved UGX 500 MTN sandbox purchase; payment and ticket fulfillment completed. The guest's authenticated ticket list remained empty, which is expected for an unauthenticated buyer; email delivery is the delivery channel and must be confirmed by the buyer or provider logs.
 - Guest security photo: failed on the pre-fix deployment; fixed and covered by PNG/JPEG/WebP and oversize regression tests. A live post-fix photo purchase was intentionally not repeated because only one payment was authorized.
@@ -59,6 +59,17 @@ These are certification probes, not a guarantee of peak public-event capacity. R
 
 The dedicated Artillery profile (`tests/load/staging-artillery.yml`) ran warm-up, sustained ramp, and spike phases against only `/events` and `/health`. It completed 2,030 of 2,060 requests successfully; 30 requests timed out or reset, producing a measured 1.46% failure rate. p95 was approximately 1.30 seconds and p99 approximately 1.83 seconds for completed responses. The run is a useful staging capacity signal but does not yet meet the configured 1% error budget.
 
+### POST endpoint certification and provider doubles
+
+POST endpoints are covered without creating financial or business records:
+
+- `npm run test:staging-post-contract` sends invalid, empty, unsigned, or staging-gated payloads to payment initiation, fulfillment, refund, scan, photo, upload, and callback functions. All 13/13 contracts passed; no payment, payout, refund, ticket, scan, or photo mutation was attempted.
+- `npm run test:staging-mocked-post` runs warmup, sustained, stress, and spike traffic against a local in-memory provider double. 1,640/1,640 requests passed (0% failures); p99 was 247 ms warmup, 38 ms sustained, 108 ms stress, and 364 ms spike. The duplicate-scan invariant returned 200 then 409 for a replayed synthetic ticket.
+
+These tests validate request contracts, idempotency, duplicate handling, and client/provider behavior. A real sandbox payment or payout remains separately approved because it creates an external transaction and may send SMS or email.
+
+The read-only rate-ladder runner (`npm run test:staging-rate-ladder`) stops at the first threshold breach. A 5 req/s, 5-second staging run had 0 request failures but p95 3.25 s and p99 3.27 s, so it stopped before higher rates. This indicates cold-start or platform queue latency, not a correctness failure.
+
 ### Isolation
 
 - Staging Netlify project is Git-backed from `stagging` only and published at the staging domain.
@@ -73,7 +84,7 @@ The dedicated Artillery profile (`tests/load/staging-artillery.yml`) ran warm-up
 3. **Closed by operator confirmation:** cancelled/postponed guest refunds and incomplete-installment refunds; retain processor reconciliation evidence.
 4. **Closed by operator confirmation:** ticket email delivery.
 5. **Completed on `stagging`:** Expo/React Native modernization and dependency hardening are installed and tested. Keep a scheduled online audit and review the temporary overrides during future Expo upgrades.
-6. **Capacity follow-up:** Artillery’s high-rate phase exceeded the 1% timeout budget (1.46%). Tune Netlify/function/database capacity or reduce the launch traffic model, then rerun with a credentialed browser journey and agreed HMA thresholds.
+6. **Capacity follow-up:** Artillery’s high-rate phase exceeded the 1% timeout budget (1.46%), and the rate ladder observed p95 3.25 s at 5 req/s. Use the ladder to find the knee, then inspect Netlify function duration/concurrency, Supabase query latency/connection usage, and provider response times. Apply only staging changes first: cache public reads, add missing indexes, reduce cold-start work, queue non-critical email/photo processing, and use bounded retries with 429 back-pressure. Rerun until failure rate is ≤1% and p95/p99 meet the agreed thresholds; if the knee is below the HMA traffic forecast, lower burst size or add Netlify/Supabase capacity before launch.
 7. Replace the intentionally short staging password with a unique 16+ byte value before any external staging access. The current value was preserved at the operator's request and is why health reports 503.
 8. Finalize and sign the written HMA amendment covering 15% commission, after-scan settlement, refund eligibility/time window, data sharing, support escalation, and termination/notice controls.
 
@@ -85,6 +96,9 @@ npm run typecheck
 npm run staging:scan
 npm run test:staging-security
 npm run test:staging-performance
+npm run test:staging-post-contract
+npm run test:staging-mocked-post
+STAGING_RATE_DURATION_SECONDS=10 npm run test:staging-rate-ladder
 ```
 
-The performance and security scripts refuse non-staging hosts and do not call payment, payout, refund, or scan mutation endpoints.
+The performance, rate-ladder, and security scripts refuse non-staging hosts. POST contract checks use invalid/unsigned payloads only; the provider-double test is local and in-memory. None of these commands calls a real payment, payout, refund, or scan mutation path.
