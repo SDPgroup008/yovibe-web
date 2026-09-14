@@ -469,6 +469,11 @@ class SupabaseService {
 
       if (!data) return null;
 
+      console.info("[Programs][Supabase] venue:read", {
+        venueSlug: slug,
+        weeklyPrograms: data.weekly_programs || {},
+      });
+
       return {
         id: data.id,
         slug: data.slug,
@@ -509,6 +514,11 @@ class SupabaseService {
       if (error) throw error;
 
       if (!data) return null;
+
+      console.info("[Programs][Supabase] venue:read", {
+        venueSlug,
+        weeklyPrograms: data.weekly_programs || {},
+      });
 
       return {
         id: data.id,
@@ -656,16 +666,25 @@ class SupabaseService {
 
   async updateVenuePrograms(venueId: string, programs: Record<string, string>): Promise<void> {
     try {
-      const { error } = await supabase
+      console.info("[Programs][Supabase] venue:update:start", { venueId, programs });
+      const { data, error } = await supabase
         .from("venues")
         .update({ weekly_programs: programs })
-        .eq("slug", venueId);
+        .eq("slug", venueId)
+        .select("slug, weekly_programs")
+        .maybeSingle();
 
       if (error) throw error;
 
+      console.info("[Programs][Supabase] venue:update:success", {
+        venueId,
+        updated: Boolean(data),
+        weeklyPrograms: data?.weekly_programs || {},
+      });
+
       /* console.log("SupabaseService: Venue programs updated"); */
     } catch (error) {
-      console.error("SupabaseService: Error updating venue programs:", error);
+      console.error("[Programs][Supabase] venue:update:error", { venueId, programs, error });
       throw error;
     }
   }

@@ -53,11 +53,18 @@ const ManageProgramsScreen: React.FC = () => {
       }
 
       try {
+        console.info("[Programs][Manage] load:start", { venueId })
         const venue = await SupabaseService.getVenueById(venueId)
         if (!venue) throw new Error("Venue not found")
-        if (active) setPrograms(normalizePrograms(venue.weeklyPrograms))
+        const normalized = normalizePrograms(venue.weeklyPrograms)
+        console.info("[Programs][Manage] load:success", {
+          venueId,
+          weeklyPrograms: venue.weeklyPrograms || {},
+          normalizedPrograms: normalized,
+        })
+        if (active) setPrograms(normalized)
       } catch (error) {
-        console.error("Error loading venue programs:", error)
+        console.error("[Programs][Manage] load:error", { venueId, error })
         if (active) setLoadError(true)
       } finally {
         if (active) setLoadingPrograms(false)
@@ -89,13 +96,15 @@ const ManageProgramsScreen: React.FC = () => {
       return result
     }, {})
 
+    console.info("[Programs][Manage] save:attempt", { venueId, programs: cleanedPrograms })
     setLoading(true)
     try {
       await SupabaseService.updateVenuePrograms(venueId, cleanedPrograms)
+      console.info("[Programs][Manage] save:success", { venueId, programs: cleanedPrograms })
       Alert.alert("Success", "Weekly programs updated successfully")
       navigation.goBack()
     } catch (error) {
-      console.error("Error updating programs:", error)
+      console.error("[Programs][Manage] save:error", { venueId, programs: cleanedPrograms, error })
       Alert.alert("Error", "Failed to update weekly programs")
     } finally {
       setLoading(false)
