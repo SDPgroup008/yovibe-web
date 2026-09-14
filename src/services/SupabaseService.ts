@@ -682,6 +682,10 @@ class SupabaseService {
         weeklyPrograms: data?.weekly_programs || {},
       });
 
+      if (!data) {
+        throw new Error("No venue was updated. Check the venue slug and authenticated owner permissions.");
+      }
+
       /* console.log("SupabaseService: Venue programs updated"); */
     } catch (error) {
       console.error("[Programs][Supabase] venue:update:error", { venueId, programs, error });

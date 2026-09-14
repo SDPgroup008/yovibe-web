@@ -22,8 +22,10 @@ function normalizePrograms(value: unknown): Record<string, string> {
   }
   if (!source || typeof source !== "object" || Array.isArray(source)) return {}
 
+  const entries = Object.entries(source as Record<string, unknown>)
   return DAYS_OF_WEEK.reduce<Record<string, string>>((result, day) => {
-    const valueForDay = (source as Record<string, unknown>)[day]
+    const matchingEntry = entries.find(([key]) => key.trim().toLowerCase() === day.toLowerCase())
+    const valueForDay = matchingEntry?.[1]
     if (typeof valueForDay === "string") result[day] = valueForDay
     return result
   }, {})
