@@ -1134,7 +1134,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .select("*")
         .eq("venue_id", venueSlug)
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       if (!data) return null;

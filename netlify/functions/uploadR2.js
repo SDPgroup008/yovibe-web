@@ -5,7 +5,15 @@ const { getSiteUrl } = require('../shared/runtimeConfig');
 const MAX_BYTES = 10 * 1024 * 1024;
 const PATH_SEGMENT_RE = /^[a-z0-9][a-z0-9-]*$/i;
 const FILENAME_RE = /^[a-zA-Z0-9._-]{1,120}$/;
-const PUBLIC_ROOTS = new Set(['events', 'venues', 'vibes', 'vibeimages', 'ticket-designs']);
+const PUBLIC_ROOTS = new Set([
+  'events',
+  'venues',
+  'vibes',
+  'vibeimages',
+  'ticket-designs',
+  'program-posters',
+  'venue-gallery',
+]);
 
 function corsHeaders(event) {
   const configuredOrigin = new URL(getSiteUrl()).origin;
