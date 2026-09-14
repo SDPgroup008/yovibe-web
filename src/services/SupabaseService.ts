@@ -3,7 +3,8 @@ import { supabase, supabaseAnonKey, supabaseUrl } from "../config/supabase"
 import { uploadToR2 } from "./R2Service"
 import { Dimensions } from "react-native"
 import type { User, UserType } from "../models/User"
-import type { Venue } from "../models/Venue"
+import type { Venue, WeeklyProgramValue } from "../models/Venue"
+import type { VenueGalleryItem } from "../models/VenueGalleryItem"
 import type { Event } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
 import type { VenueOwnershipRequest } from "../models/VenueOwnershipRequest"
@@ -664,7 +665,7 @@ class SupabaseService {
     }
   }
 
-  async updateVenuePrograms(venueId: string, programs: Record<string, string>): Promise<void> {
+  async updateVenuePrograms(venueId: string, programs: Record<string, WeeklyProgramValue>): Promise<void> {
     try {
       console.info("[Programs][Supabase] venue:update:start", { venueId, programs });
       const { data, error } = await supabase
@@ -690,6 +691,55 @@ class SupabaseService {
     } catch (error) {
       console.error("[Programs][Supabase] venue:update:error", { venueId, programs, error });
       throw error;
+    }
+  }
+
+  async getVenueGallery(venueSlug: string): Promise<VenueGalleryItem[]> {
+    try {
+      const { data, error } = await supabase
+        .from("venue_gallery")
+        .select("id, venue_slug, image_url, title, description, display_order, created_by, created_at")
+        .eq("venue_slug", venueSlug)
+        .order("display_order", { ascending: true })
+        .order("created_at", { ascending: false })
+
+      if (error) throw error
+      return (data || []).map((row: any) => ({
+        id: row.id,
+        venueSlug: row.venue_slug,
+        imageUrl: row.image_url,
+        title: row.title,
+        description: row.description || undefined,
+        displayOrder: Number(row.display_order || 0),
+        createdBy: row.created_by,
+        createdAt: new Date(row.created_at),
+      }))
+    } catch (error) {
+      console.error("SupabaseService: Error getting venue gallery:", error)
+      throw error
+    }
+  }
+
+  async addVenueGalleryItem(item: Omit<VenueGalleryItem, "id" | "createdAt">): Promise<string> {
+    try {
+      const { data, error } = await supabase
+        .from("venue_gallery")
+        .insert({
+          venue_slug: item.venueSlug,
+          image_url: item.imageUrl,
+          title: item.title,
+          description: item.description || null,
+          display_order: item.displayOrder || 0,
+          created_by: item.createdBy,
+        })
+        .select("id")
+        .single()
+
+      if (error) throw error
+      return data.id
+    } catch (error) {
+      console.error("SupabaseService: Error adding venue gallery item:", error)
+      throw error
     }
   }
 
@@ -1476,6 +1526,20 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       console.error("SupabaseService: Error uploading vibe image:", error);
       throw error;
     }
+  }
+
+  async uploadProgramPoster(imageUri: string, venueSlug: string): Promise<string> {
+    if (!imageUri) throw new Error("No poster provided")
+    const filename = `program-${venueSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`
+    const result = await uploadToR2({ path: "program-posters", filename, contentType: "image/jpeg", body: imageUri })
+    return result.url
+  }
+
+  async uploadVenueGalleryImage(imageUri: string, venueSlug: string): Promise<string> {
+    if (!imageUri) throw new Error("No gallery image provided")
+    const filename = `gallery-${venueSlug}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`
+    const result = await uploadToR2({ path: "venue-gallery", filename, contentType: "image/jpeg", body: imageUri })
+    return result.url
   }
 
   // ============ Additional Missing Methods ============

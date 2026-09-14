@@ -44,6 +44,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AddVenue': () => navigate('/profile/add-venue'),
         'MyVenues': () => navigate('/profile/my-venues'),
         'ManagePrograms': (params) => navigate(`/venues/${params?.venueId}/programs`),
+        'ManageVenueGallery': (params) => navigate(`/venues/${params?.venueId}/gallery`),
         'TodaysVibe': (params) => navigate(`/venues/${params?.venueId}/vibe`),
         'AddVibe': (params) => navigate(`/profile/add-vibe/${params?.venueId}`),
         'AdminDashboard': () => navigate('/profile/admin/dashboard'),
