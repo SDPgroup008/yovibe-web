@@ -213,8 +213,9 @@ const VenueDetailScreen: React.FC = () => {
       },
       (error) => {
         console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
-        setVibeRating(0.0) // Default to 0.0 on error
-        setCurrentVibeImage(null)
+        // Supabase is the canonical source for public vibe images/ratings.
+        // A legacy Firebase listener failure (common for guests) must not
+        // erase the value already loaded from Supabase.
       }
     )
 
