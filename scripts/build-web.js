@@ -13,6 +13,20 @@ for (const [name, value] of Object.entries(process.env)) {
   if (!process.env[expoName]) process.env[expoName] = value;
 }
 
+// The existing production Netlify project stores Firebase's browser-safe
+// configuration under FIREBASE_* names. Mirror only those public fields into
+// the Expo/NEXT namespaces; never expose FIREBASE_SERVICE_ACCOUNT.
+for (const suffix of [
+  'API_KEY', 'AUTH_DOMAIN', 'PROJECT_ID', 'STORAGE_BUCKET',
+  'MESSAGING_SENDER_ID', 'APP_ID', 'MEASUREMENT_ID', 'VAPID_KEY',
+]) {
+  const source = `FIREBASE_${suffix}`;
+  const nextName = `NEXT_PUBLIC_FIREBASE_${suffix}`;
+  const expoName = `EXPO_PUBLIC_FIREBASE_${suffix}`;
+  if (!process.env[nextName] && process.env[source]) process.env[nextName] = process.env[source];
+  if (!process.env[expoName] && process.env[source]) process.env[expoName] = process.env[source];
+}
+
 if (String(process.env.APP_ENV || '').toLowerCase() === 'staging') {
   // Never allow repository-local production .env files into a staging bundle.
   process.env.EXPO_NO_DOTENV = '1';

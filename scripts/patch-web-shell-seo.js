@@ -80,7 +80,8 @@ if (fs.existsSync(messagingWorkerPath)) {
       __FIREBASE_MEASUREMENT_ID__: 'NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID',
     };
     for (const [placeholder, envName] of Object.entries(firebaseVariables)) {
-      const value = process.env[envName];
+      const legacyName = envName.replace('NEXT_PUBLIC_', '');
+      const value = process.env[envName] || process.env[legacyName];
       if (!value) throw new Error(`${envName} is required to configure the messaging worker`);
       worker = worker.replaceAll(placeholder, value);
     }
