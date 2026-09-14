@@ -132,6 +132,10 @@ const VenueDetailScreen: React.FC = () => {
         ])
 
         if (venueData) {
+          console.info("[Programs][VenueDetail] venue:loaded", {
+            venueId,
+            weeklyPrograms: venueData.weeklyPrograms || {},
+          })
           setVenue(venueData)
           /* console.log("[VenueDetailScreen] Venue data loaded:", !!venueData) */
 
@@ -411,6 +415,14 @@ const VenueDetailScreen: React.FC = () => {
     () => Object.entries(venue?.weeklyPrograms || {}).filter(([, program]) => String(program || "").trim().length > 0),
     [venue?.weeklyPrograms]
   )
+
+  useEffect(() => {
+    console.info("[Programs][VenueDetail] display:computed", {
+      venueId,
+      rawPrograms: venue?.weeklyPrograms || {},
+      visiblePrograms,
+    })
+  }, [venueId, venue?.weeklyPrograms, visiblePrograms])
 
   // Header menu is now handled within the screen content since we don't use React Navigation headers
 
