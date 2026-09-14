@@ -13,6 +13,31 @@ for (const [name, value] of Object.entries(process.env)) {
   if (!process.env[expoName]) process.env[expoName] = value;
 }
 
+// Some Netlify deployments keep the browser-safe Supabase values under their
+// server/function names. Mirror only the URL and publishable/anon key aliases
+// into Expo's public namespace; never map SUPABASE_SECRET_KEY or service-role
+// credentials into the client bundle.
+const supabasePublicAliases = {
+  EXPO_PUBLIC_SUPABASE_URL: ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_URL'],
+  EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY: [
+    'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+    'SUPABASE_PUBLISHABLE_KEY',
+    'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+    'SUPABASE_ANON_KEY',
+  ],
+};
+for (const [target, candidates] of Object.entries(supabasePublicAliases)) {
+  if (process.env[target]) continue;
+  const source = candidates.find((name) => process.env[name]);
+  if (source) process.env[target] = process.env[source];
+}
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_URL) {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
+}
+if (!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY && process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY) {
+  process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+}
+
 // The existing production Netlify project stores Firebase's browser-safe
 // configuration under FIREBASE_* names. Mirror only those public fields into
 // the Expo/NEXT namespaces; never expose FIREBASE_SERVICE_ACCOUNT.
