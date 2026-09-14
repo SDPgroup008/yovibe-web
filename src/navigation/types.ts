@@ -24,7 +24,8 @@ export type VenuesStackParamList = {
   VenueDetail: { venueId: string }
   AddEvent: { venueId: string; venueName: string }
   EventDetail: { eventId: string }
-  ManagePrograms: { venueId: string; weeklyPrograms: Record<string, string> }
+  ManagePrograms: { venueId: string; weeklyPrograms: Record<string, unknown> }
+  ManageVenueGallery: { venueId: string }
   TodaysVibe: { venueId: string; venueName: string }
   TicketContactScreen: { ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }> }
   TicketPurchase: { event: Event }

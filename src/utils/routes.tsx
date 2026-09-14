@@ -17,6 +17,7 @@ import AddEventScreen from '../screens/AddEventScreen';
 import AddVenueScreen from '../screens/AddVenueScreen';
 import MyVenuesScreen from '../screens/MyVenuesScreen';
 import ManageProgramsScreen from '../screens/ManageProgramsScreen';
+import ManageVenueGalleryScreen from '../screens/ManageVenueGalleryScreen';
 import AddVibeScreen from '../screens/AddVibeScreen';
 import TodaysVibeScreen from '../screens/TodaysVibeScreen';
 import TicketContactScreen from '../screens/TicketContactScreen';
@@ -153,6 +154,10 @@ export const routes: RouteDefinition[] = [
   {
     path: '/venues/:venueId/programs',
     component: withCompatNavigation(ManageProgramsScreen)
+  },
+  {
+    path: '/venues/:venueId/gallery',
+    component: withCompatNavigation(ManageVenueGalleryScreen)
   },
   {
     path: '/venues/:venueId/vibe',

@@ -1,3 +1,10 @@
+export interface WeeklyProgramDetails {
+  description: string
+  posterUrl?: string
+}
+
+export type WeeklyProgramValue = string | WeeklyProgramDetails
+
 export interface Venue {
   id: string
   slug?: string
@@ -12,7 +19,7 @@ export interface Venue {
   longitude: number
   phoneNumber?: string
   coordinates?: { latitude: number; longitude: number }
-  weeklyPrograms?: Record<string, string>
+  weeklyPrograms?: Record<string, WeeklyProgramValue>
   ownerId: string
   createdAt: Date
   venueType?: "nightlife" | "recreation"

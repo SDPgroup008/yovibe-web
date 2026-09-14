@@ -14,6 +14,7 @@ import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
+import type { VenueGalleryItem } from "../models/VenueGalleryItem"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { SEOMetadata } from "../components/SEOMetadata"
@@ -37,6 +38,7 @@ const VenueDetailScreen: React.FC = () => {
 
   const [venue, setVenue] = useState<Venue | null>(null)
   const [events, setEvents] = useState<Event[]>([])
+  const [venueGallery, setVenueGallery] = useState<VenueGalleryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
@@ -126,9 +128,13 @@ const VenueDetailScreen: React.FC = () => {
         /* console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId) */
         /* console.log("[VenueDetailScreen] User logged in:", !!user) */
 
-        const [venueData, venueEvents] = await Promise.all([
+        const [venueData, venueEvents, galleryData] = await Promise.all([
           SupabaseService.getVenueById(venueId),
           SupabaseService.getEventsByVenue(venueId),
+          SupabaseService.getVenueGallery(venueId).catch((galleryError) => {
+            console.warn("[Gallery][VenueDetail] load:unavailable", { venueId, error: galleryError })
+            return [] as VenueGalleryItem[]
+          }),
         ])
 
         if (venueData) {
@@ -137,6 +143,7 @@ const VenueDetailScreen: React.FC = () => {
             weeklyPrograms: venueData.weeklyPrograms || {},
           })
           setVenue(venueData)
+          setVenueGallery(galleryData)
           /* console.log("[VenueDetailScreen] Venue data loaded:", !!venueData) */
 
           /* console.log("[VenueDetailScreen] Events fetched:", venueEvents.length) */
@@ -293,12 +300,14 @@ const VenueDetailScreen: React.FC = () => {
       // Fetch events regardless of user authentication (events are public data)
       if (venueData) {
         /* console.log("[VenueDetailScreen] Refreshing events for venue:", venueId) */
-        const [venueEvents, vibeImages] = await Promise.all([
+        const [venueEvents, vibeImages, galleryData] = await Promise.all([
           SupabaseService.getEventsByVenue(venueId),
           SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date()),
+          SupabaseService.getVenueGallery(venueId).catch(() => [] as VenueGalleryItem[]),
         ])
         /* console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length) */
         setEvents(venueEvents)
+        setVenueGallery(galleryData)
         applyLatestVibe(vibeImages)
         
         if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
@@ -322,6 +331,10 @@ const VenueDetailScreen: React.FC = () => {
 
   const handleManagePrograms = () => {
     (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
+  }
+
+  const handleManageGallery = () => {
+    (navigation as any).navigate("ManageVenueGallery", { venueId })
   }
 
   const handleAddEvent = () => {
@@ -412,7 +425,11 @@ const VenueDetailScreen: React.FC = () => {
 
   const showOwnButton = user && !isOwner && !isAdmin && !isCustomVenue && !existingRequestStatus
   const visiblePrograms = useMemo(
-    () => Object.entries(venue?.weeklyPrograms || {}).filter(([, program]) => String(program || "").trim().length > 0),
+    () => Object.entries(venue?.weeklyPrograms || {}).map(([day, value]) => {
+      if (typeof value === "string") return { day, description: value.trim(), posterUrl: undefined as string | undefined }
+      const details = value && typeof value === "object" ? value as { description?: string; posterUrl?: string } : {}
+      return { day, description: details.description?.trim() || "", posterUrl: details.posterUrl }
+    }).filter((program) => program.description.length > 0 || Boolean(program.posterUrl)),
     [venue?.weeklyPrograms]
   )
 
@@ -421,6 +438,7 @@ const VenueDetailScreen: React.FC = () => {
       venueId,
       rawPrograms: venue?.weeklyPrograms || {},
       visiblePrograms,
+      galleryCount: venueGallery.length,
     })
   }, [venueId, venue?.weeklyPrograms, visiblePrograms])
 
@@ -602,13 +620,22 @@ const VenueDetailScreen: React.FC = () => {
               <>
                 <Text style={styles.sectionTitle}>Weekly Program</Text>
                 <View style={styles.programContainer}>
-                  {visiblePrograms.map(([day, program]) => (
-                    <View key={day} style={styles.programItem}>
-                      <Text style={styles.programDay}>{day}</Text>
-                      <Text style={styles.programDescription}>{program}</Text>
+                  {visiblePrograms.map((program) => (
+                    <View key={program.day} style={styles.programItem}>
+                      {program.posterUrl ? <Image source={{ uri: program.posterUrl }} style={styles.programPoster} /> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                      <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                     </View>
                   ))}
                 </View>
+              </>
+            )}
+
+            {venueGallery.length > 0 && (
+              <>
+                <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Venue Gallery</Text><Text style={styles.sectionEyebrow}>{venueGallery.length} {venueGallery.length === 1 ? "moment" : "moments"}</Text></View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryScroller}>
+                  {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
+                </ScrollView>
               </>
             )}
           </View>
@@ -623,6 +650,10 @@ const VenueDetailScreen: React.FC = () => {
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
                       <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Manage Programs</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3", marginTop: 10 }]} onPress={handleManageGallery}>
+                      <Ionicons name="images-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.actionButtonText}>Manage Gallery</Text>
                     </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent, marginTop: 10 }]} onPress={handleAddEvent}>
                       <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
@@ -799,6 +830,10 @@ const VenueDetailScreen: React.FC = () => {
                     <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Manage Programs</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3" }]} onPress={handleManageGallery}>
+                    <Ionicons name="images-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Manage Gallery</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleAddEvent}>
                     <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Add Event</Text>
@@ -864,13 +899,22 @@ const VenueDetailScreen: React.FC = () => {
               <>
                 <Text style={styles.sectionTitle}>Weekly Program</Text>
                 <View style={styles.programContainer}>
-                  {visiblePrograms.map(([day, program]) => (
-                  <View key={day} style={styles.programItem}>
-                    <Text style={styles.programDay}>{day}</Text>
-                    <Text style={styles.programDescription}>{program}</Text>
+                  {visiblePrograms.map((program) => (
+                  <View key={program.day} style={styles.programItem}>
+                    {program.posterUrl ? <Image source={{ uri: program.posterUrl }} style={styles.programPoster} /> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                    <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                   </View>
                 ))}
               </View>
+            </>
+          )}
+
+          {venueGallery.length > 0 && (
+            <>
+              <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Venue Gallery</Text><Text style={styles.sectionEyebrow}>{venueGallery.length} {venueGallery.length === 1 ? "moment" : "moments"}</Text></View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryScroller}>
+                {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
+              </ScrollView>
             </>
           )}
 
@@ -1147,20 +1191,87 @@ const styles = StyleSheet.create({
   },
   programItem: {
     flexDirection: "row" as const,
-    paddingVertical: responsiveSize(6, 8, 12),
-    borderBottomWidth: 1,
-    borderBottomColor: "#333",
+    alignItems: "center",
+    backgroundColor: "#101D2E",
+    borderRadius: responsiveSize(10, 13, 16),
+    padding: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(8, 10, 12),
+    borderWidth: 1,
+    borderColor: "#203752",
+    overflow: "hidden",
+  },
+  programPoster: {
+    width: responsiveSize(72, 92, 116),
+    height: responsiveSize(58, 72, 88),
+    borderRadius: responsiveSize(7, 9, 12),
+    backgroundColor: "#0A1626",
+    marginRight: responsiveSize(10, 12, 14),
+  },
+  programDayRail: {
+    width: responsiveSize(38, 46, 54),
+    height: responsiveSize(58, 72, 88),
+    borderRadius: responsiveSize(7, 9, 12),
+    backgroundColor: "rgba(116,247,255,0.1)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: responsiveSize(10, 12, 14),
+  },
+  programCopy: {
+    flex: 1,
   },
   programDay: {
-    width: responsiveSize(80, 100, 120),
+    width: "auto",
     fontSize: responsiveSize(14, 15, 16),
     fontWeight: "bold",
-    color: "#FFFFFF",
+    color: "#74F7FF",
+    marginBottom: 3,
   },
   programDescription: {
     flex: 1,
     fontSize: responsiveSize(13, 15, 16),
-    color: "#DDDDDD",
+    color: "#F7FAFC",
+    lineHeight: responsiveSize(18, 20, 23),
+  },
+  sectionHeadingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sectionEyebrow: {
+    color: "#718096",
+    fontSize: responsiveSize(11, 12, 13),
+    marginTop: responsiveSize(12, 16, 20),
+  },
+  galleryScroller: {
+    marginVertical: responsiveSize(6, 8, 12),
+  },
+  galleryCard: {
+    width: responsiveSize(190, 230, 280),
+    backgroundColor: "#101D2E",
+    borderRadius: responsiveSize(10, 13, 16),
+    borderWidth: 1,
+    borderColor: "#2B3D5A",
+    overflow: "hidden",
+    marginRight: responsiveSize(10, 12, 16),
+  },
+  galleryImage: {
+    width: "100%",
+    height: responsiveSize(120, 145, 175),
+    backgroundColor: "#0A1626",
+  },
+  galleryCardCopy: {
+    padding: responsiveSize(9, 11, 13),
+  },
+  galleryTitle: {
+    color: "#F7FAFC",
+    fontSize: responsiveSize(13, 14, 16),
+    fontWeight: "700",
+  },
+  galleryDescription: {
+    color: "#9FB3C8",
+    fontSize: responsiveSize(11, 12, 13),
+    lineHeight: responsiveSize(15, 17, 19),
+    marginTop: 4,
   },
   eventCard: {
     flexDirection: "row",

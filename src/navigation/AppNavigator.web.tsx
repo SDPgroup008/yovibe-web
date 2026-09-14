@@ -25,6 +25,7 @@ import AddVenueScreen from "../screens/AddVenueScreen"
 import AddEventScreen from "../screens/AddEventScreen"
 import MyVenuesScreen from "../screens/MyVenuesScreen"
 import ManageProgramsScreen from "../screens/ManageProgramsScreen"
+import ManageVenueGalleryScreen from "../screens/ManageVenueGalleryScreen"
 import AddVibeScreen from "../screens/AddVibeScreen"
 import TodaysVibeScreen from "../screens/TodaysVibeScreen"
 import TicketContactScreen from "../screens/TicketContactScreen"
@@ -248,6 +249,11 @@ export const VenuesStackNavigator = () => {
         name="ManagePrograms"
         component={ManageProgramsScreenWrapper}
         options={{ title: "Weekly Programs" }}
+      />
+      <VenuesStack.Screen
+        name="ManageVenueGallery"
+        component={ManageVenueGalleryScreen}
+        options={{ title: "Venue Gallery" }}
       />
       <VenuesStack.Screen name="TodaysVibe" component={TodaysVibeScreenWrapper} options={{ title: "Today's Vibe" }} />
       <VenuesStack.Screen
