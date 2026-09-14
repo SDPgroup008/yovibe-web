@@ -131,7 +131,14 @@ const TodaysVibeScreen: React.FC = () => {
   }
 
   const formatDay = (dateString: string) => {
-    const date = new Date(dateString)
+    // Supabase groups the week by local YYYY-MM-DD keys. Constructing the
+    // date from numeric parts avoids UTC-midnight timezone shifts; retain
+    // support for the legacy Firebase date-string format as a fallback.
+    const isoParts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateString)
+    const date = isoParts
+      ? new Date(Number(isoParts[1]), Number(isoParts[2]) - 1, Number(isoParts[3]))
+      : new Date(dateString)
+    if (Number.isNaN(date.getTime())) return "Date unavailable"
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
@@ -266,7 +273,15 @@ const TodaysVibeScreen: React.FC = () => {
           ) : (
             <FlatList
               key="week-days"
-              data={Object.entries(weekVibes).sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())}
+              data={Object.entries(weekVibes).sort(([a], [b]) => {
+                const parseDay = (value: string) => {
+                  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+                  return parts
+                    ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])).getTime()
+                    : new Date(value).getTime()
+                }
+                return parseDay(b) - parseDay(a)
+              })}
               renderItem={renderWeekDay}
               keyExtractor={([day]) => day}
               contentContainerStyle={styles.weekList}
