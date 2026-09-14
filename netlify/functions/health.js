@@ -31,6 +31,7 @@ const LEGACY_PUBLIC_R2_ALIASES = {
   R2_PUBLIC_ACCESS_KEY_ID: 'R2_ACCESS_KEY_ID',
   R2_PUBLIC_SECRET_ACCESS_KEY: 'R2_SECRET_ACCESS_KEY',
 };
+const SUPABASE_SECRET_ALIASES = ['SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY'];
 
 const firebaseNotificationsDisabledForStaging = () => (
   String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
@@ -47,7 +48,9 @@ exports.handler = async (event) => {
     const legacyAlias = String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
       ? null
       : LEGACY_PUBLIC_R2_ALIASES[key];
-    const candidate = process.env[key] || (legacyAlias ? process.env[legacyAlias] : '');
+    const candidate = key === 'SUPABASE_SECRET_KEY'
+      ? SUPABASE_SECRET_ALIASES.map((name) => process.env[name]).find(Boolean)
+      : process.env[key] || (legacyAlias ? process.env[legacyAlias] : '');
     const present = Boolean(candidate && !String(candidate).includes('your_') && !String(candidate).includes('placeholder'));
     env[key] = present ? 'SET' : 'MISSING_OR_PLACEHOLDER';
     if (!present) missing.push(key);

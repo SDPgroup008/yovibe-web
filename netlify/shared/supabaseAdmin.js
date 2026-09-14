@@ -3,7 +3,11 @@ const { requiredEnv, assertSupabaseUrl, isStaging } = require('./runtimeConfig')
 
 function getAdminClient() {
   const url = assertSupabaseUrl(requiredEnv('SUPABASE_URL'));
-  const key = requiredEnv('SUPABASE_SECRET_KEY');
+  // Production historically names this credential SUPABASE_SERVICE_ROLE_KEY
+  // (and some deployments use SUPABASE_SERVICE_KEY). Keep the canonical
+  // SUPABASE_SECRET_KEY name first for staging, while accepting those existing
+  // server-only aliases without exposing any credential to the client.
+  const key = requiredEnv('SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SERVICE_KEY');
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
