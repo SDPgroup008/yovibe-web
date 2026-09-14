@@ -244,7 +244,10 @@ async function uploadToR2Browser(key, body, contentType, path, filename) {
                 '- R2_PUBLIC_URL\n\n' +
                 'See: https://developers.cloudflare.com/r2/api/s3/tokens/');
         }
-        throw new Error(`Upload failed: ${errorData.error || response.statusText}`);
+        const serverMessage = typeof (errorData === null || errorData === void 0 ? void 0 : errorData.error) === 'string'
+            ? errorData.error.trim()
+            : '';
+        throw new Error(serverMessage ? `Upload failed: ${serverMessage}` : `Upload failed (HTTP ${response.status})`);
     }
     const result = await response.json();
     return { url: result.url, key };

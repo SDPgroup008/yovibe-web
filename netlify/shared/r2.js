@@ -6,19 +6,35 @@ const {
   GetObjectCommand,
   ListObjectsV2Command,
 } = require('@aws-sdk/client-s3');
-const { requiredEnv, assertR2Config } = require('./runtimeConfig');
+const { requiredEnv, assertR2Config, isStaging } = require('./runtimeConfig');
 
 const PRIVATE_REFERENCE_PREFIX = 'r2-private://';
 
+// The isolated staging setup uses explicit public/private credentials. The
+// original production site predates that split and stores its public bucket
+// credentials under the legacy R2_* names. Keep that deployment working while
+// refusing the legacy fallback in staging, where it could accidentally point
+// at production storage. Private assets never use the legacy fallback.
+function requiredR2Env(primary, legacy) {
+  if (process.env[primary]) return requiredEnv(primary);
+  if (!isStaging() && legacy && process.env[legacy]) return requiredEnv(legacy);
+  return requiredEnv(primary);
+}
+
 function getR2Config(kind) {
   if (!['public', 'private'].includes(kind)) throw new Error('R2 kind must be public or private');
-  const prefix = kind === 'public' ? 'R2_PUBLIC' : 'R2_PRIVATE';
   return assertR2Config({
     kind,
     endpoint: requiredEnv('R2_ENDPOINT'),
-    bucket: requiredEnv(`${prefix}_BUCKET_NAME`),
-    accessKeyId: requiredEnv(`${prefix}_ACCESS_KEY_ID`),
-    secretAccessKey: requiredEnv(`${prefix}_SECRET_ACCESS_KEY`),
+    bucket: kind === 'public'
+      ? requiredR2Env('R2_PUBLIC_BUCKET_NAME', 'R2_BUCKET_NAME')
+      : requiredEnv('R2_PRIVATE_BUCKET_NAME'),
+    accessKeyId: kind === 'public'
+      ? requiredR2Env('R2_PUBLIC_ACCESS_KEY_ID', 'R2_ACCESS_KEY_ID')
+      : requiredEnv('R2_PRIVATE_ACCESS_KEY_ID'),
+    secretAccessKey: kind === 'public'
+      ? requiredR2Env('R2_PUBLIC_SECRET_ACCESS_KEY', 'R2_SECRET_ACCESS_KEY')
+      : requiredEnv('R2_PRIVATE_SECRET_ACCESS_KEY'),
     publicUrl: kind === 'public' ? requiredEnv('R2_PUBLIC_URL').replace(/\/$/, '') : null,
   });
 }

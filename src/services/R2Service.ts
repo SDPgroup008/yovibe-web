@@ -250,7 +250,8 @@ async function uploadToR2Browser(
       );
     }
 
-    throw new Error(`Upload failed: ${errorData.error || response.statusText}`);
+    const serverMessage = typeof errorData?.error === 'string' ? errorData.error.trim() : '';
+    throw new Error(serverMessage ? `Upload failed: ${serverMessage}` : `Upload failed (HTTP ${response.status})`);
   }
 
   const result = await response.json();

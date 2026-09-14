@@ -26,6 +26,11 @@ const CRITICAL_VARS = [
 ];
 
 const FIREBASE_VARS = ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT'];
+const LEGACY_PUBLIC_R2_ALIASES = {
+  R2_PUBLIC_BUCKET_NAME: 'R2_BUCKET_NAME',
+  R2_PUBLIC_ACCESS_KEY_ID: 'R2_ACCESS_KEY_ID',
+  R2_PUBLIC_SECRET_ACCESS_KEY: 'R2_SECRET_ACCESS_KEY',
+};
 
 const firebaseNotificationsDisabledForStaging = () => (
   String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
@@ -39,7 +44,11 @@ exports.handler = async (event) => {
   const firebaseDisabled = firebaseNotificationsDisabledForStaging();
   const requiredVars = firebaseDisabled ? CRITICAL_VARS : [...CRITICAL_VARS, ...FIREBASE_VARS];
   for (const key of requiredVars) {
-    const present = Boolean(process.env[key] && !String(process.env[key]).includes('your_') && !String(process.env[key]).includes('placeholder'));
+    const legacyAlias = String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
+      ? null
+      : LEGACY_PUBLIC_R2_ALIASES[key];
+    const candidate = process.env[key] || (legacyAlias ? process.env[legacyAlias] : '');
+    const present = Boolean(candidate && !String(candidate).includes('your_') && !String(candidate).includes('placeholder'));
     env[key] = present ? 'SET' : 'MISSING_OR_PLACEHOLDER';
     if (!present) missing.push(key);
   }
