@@ -43,6 +43,7 @@ import SettingsScreen from '../screens/SettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
 import TokenScannerScreen from '../screens/auth/TokenScannerScreen';
+import GuestRefundScreen from '../screens/GuestRefundScreen';
 
 // Import compatibility wrapper
 import { withCompatNavigation } from './compatNavigation';
@@ -89,6 +90,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/scan/:token',
     component: withCompatNavigation(TokenScannerScreen),
+    exact: true
+  },
+  {
+    path: '/refund-request',
+    component: GuestRefundScreen,
     exact: true
   },
 

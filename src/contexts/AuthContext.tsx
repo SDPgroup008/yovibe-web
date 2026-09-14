@@ -59,7 +59,10 @@ interface AuthProviderProps {
 }
 
 const REDIRECT_INTENT_KEY = "yovibe_redirect_intent_v1";
-const AUTH_PROFILE_TIMEOUT_MS = 1500;
+// Allow normal mobile and concurrent-page latency without falsely degrading an
+// authenticated user into guest state. Supabase requests can legitimately take
+// more than 1.5 seconds during a cold start or a bounded load test.
+const AUTH_PROFILE_TIMEOUT_MS = 8000;
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -250,7 +253,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net',
+          redirectTo: typeof window !== 'undefined' ? window.location.origin : undefined,
         },
       });
       if (error) throw error;

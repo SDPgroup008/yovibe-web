@@ -1,9 +1,8 @@
-const PAWAPAY_BASE_URL = process.env.PAWAPAY_API_URL || "https://api.pawapay.io/v2"
+const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig')
+const getPawaPayBaseUrl = () => assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'))
 
 const getApiKey = () => {
-  const key = process.env.PAWAPAY_API_KEY
-  if (!key) throw new Error("PAWAPAY_API_KEY is not configured")
-  return key
+  return requiredEnv('PAWAPAY_API_KEY')
 }
 
 const { getAdminClient } = require('../shared/supabaseAdmin')
@@ -39,7 +38,7 @@ exports.handler = async (event, context) => {
     /* console.log("📤 Calling PawaPay API to check deposit status...") */
     const apiKey = getApiKey()
     
-    const response = await fetch(`${PAWAPAY_BASE_URL}/deposits/${depositId}`, {
+    const response = await fetch(`${getPawaPayBaseUrl()}/deposits/${depositId}`, {
       headers: {
         Authorization: "Bearer " + apiKey,
       },
@@ -66,8 +65,12 @@ exports.handler = async (event, context) => {
     const responseData = await response.json()
     /* console.log("📥 PawaPay response:", JSON.stringify(responseData, null, 2)) */
 
+    if (responseData.status === 'NOT_FOUND') {
+      return { statusCode: 200, body: JSON.stringify({ status: 'NOT_FOUND' }) }
+    }
+
     // PawaPay wraps deposit data in a "data" property
-    const depositData = responseData.data
+    const depositData = responseData.data || responseData
 
     const status = depositData?.status === "COMPLETED" ? "completed"
       : depositData?.status === "FAILED" ? "failed"

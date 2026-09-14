@@ -4,6 +4,7 @@ import type React from "react"
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking, Platform } from "react-native"
 import { useCompatNavigation } from "../../utils/compatNavigation"
 import { Ionicons } from "@expo/vector-icons"
+import { publicSiteUrl } from "../../config/runtime"
 
 const TermsAndConditionsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -24,7 +25,7 @@ const TermsAndConditionsScreen: React.FC = () => {
       <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
         <View style={styles.card}>
           <Text style={styles.title}>YoVibe Terms and Conditions</Text>
-          <Text style={styles.lastUpdated}>Last Updated: August 10, 2026</Text>
+          <Text style={styles.lastUpdated}>Last Updated: September 7, 2026</Text>
 
           <Text style={styles.sectionTitle}>1. INTRODUCTION AND ACCEPTANCE OF TERMS</Text>
           <Text style={styles.paragraph}>
@@ -802,7 +803,9 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             (d) Refund requests submitted by Users are subject to administrative review. The review
             workflow includes:
-              (i) Submission of refund request with supporting reason;
+              (i) Submission of refund request with supporting reason. Account holders must use a Ticket
+              assigned to their Account. Guest purchasers must verify control of the purchase email using
+              a short-lived secure link sent by the Platform;
               (ii) Review by an Administrator who may approve, reject, or request additional information;
               (iii) If approved, manual execution of the refund through the payment provider by an
               Administrator;
@@ -1427,7 +1430,7 @@ const TermsAndConditionsScreen: React.FC = () => {
           <Text style={styles.paragraph}>
             YoVibe Support{'\n'}
             Email: support@yovibe.net{'\n'}
-            Website: https://yovibe.net{'\n'}
+            Website: {publicSiteUrl()}{'\n'}
             Jurisdiction: Republic of Uganda
           </Text>
 

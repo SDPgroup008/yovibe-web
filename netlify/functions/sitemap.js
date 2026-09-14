@@ -1,6 +1,4 @@
-const DEFAULT_SITE_URL = "https://yovibe.net";
-const FALLBACK_SUPABASE_URL = "https://uqukizjohackrcwrtefk.supabase.co";
-const FALLBACK_SUPABASE_ANON_KEY = "sb_publishable_P69Y2IRwywqDIjo6hXhwjw_EwbJ-qB_";
+const { requiredEnv, assertSupabaseUrl, getSiteUrl } = require('../shared/runtimeConfig');
 const PAGE_SIZE = 1000;
 const SITEMAP_FUNCTION_VERSION = "2026-05-30-2";
 
@@ -82,7 +80,6 @@ const fetchSupabaseRows = async ({ supabaseUrl, supabaseAnonKey, table, select, 
       method: "GET",
       headers: {
         apikey: supabaseAnonKey,
-        Authorization: `Bearer ${supabaseAnonKey}`,
         Accept: "application/json",
       },
     });
@@ -105,15 +102,9 @@ const fetchSupabaseRows = async ({ supabaseUrl, supabaseAnonKey, table, select, 
 };
 
 export async function handler() {
-  const siteUrl = (process.env.SITE_URL || DEFAULT_SITE_URL).replace(/\/$/, "");
-  const supabaseUrl =
-    process.env.NEXT_PUBLIC_SUPABASE_URL ||
-    process.env.SUPABASE_URL ||
-    FALLBACK_SUPABASE_URL;
-  const supabaseAnonKey =
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    FALLBACK_SUPABASE_ANON_KEY;
+  const siteUrl = getSiteUrl();
+  const supabaseUrl = assertSupabaseUrl(requiredEnv('SUPABASE_URL', 'NEXT_PUBLIC_SUPABASE_URL'));
+  const supabaseAnonKey = requiredEnv('SUPABASE_PUBLISHABLE_KEY', 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', 'SUPABASE_ANON_KEY');
 
   try {
     /* console.log(`[sitemap] Function version ${SITEMAP_FUNCTION_VERSION}`); */

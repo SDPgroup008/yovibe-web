@@ -8,28 +8,17 @@
  *
  * Environment variables required (set in Netlify):
  *   SUPABASE_URL              - Supabase project URL
- *   SUPABASE_SERVICE_KEY      - Supabase service role key
+ *   SUPABASE_SECRET_KEY       - Supabase secret key
  *   FIREBASE_SERVICE_ACCOUNT  - Full service account JSON string
  *   GOOGLE_APPLICATION_CREDENTIALS - Path to service account JSON file (alternative)
  */
 
-const { createClient } = require("@supabase/supabase-js");
 const https = require("https");
-const path = require("path");
-const fs = require("fs");
 const { GoogleAuth } = require("google-auth-library");
+const { getAdminClient } = require('../shared/supabaseAdmin');
+const { requiredEnv } = require('../shared/runtimeConfig');
 
-const FCM_PROJECT_ID = "eco-guardian-bd74f";
-
-let supabaseClient = null;
-
-function getSupabase() {
-  if (supabaseClient) return supabaseClient;
-  const supabaseUrl = process.env.SUPABASE_URL || "https://uqukizjohackrcwrtefk.supabase.co";
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || "";
-  supabaseClient = createClient(supabaseUrl, supabaseKey);
-  return supabaseClient;
-}
+const getFcmProjectId = () => requiredEnv('FIREBASE_PROJECT_ID');
 
 /**
  * Load the service account credentials.
@@ -42,13 +31,7 @@ function loadServiceAccount() {
     } catch { /* fall through */ }
   }
 
-  // 2. Check for file in project root
-  const saFile = path.join(__dirname, "..", "..", "eco-guardian-bd74f-firebase-adminsdk-thlcj-b60714ed55.json");
-  if (fs.existsSync(saFile)) {
-    return JSON.parse(fs.readFileSync(saFile, "utf-8"));
-  }
-
-  return null;
+  throw new Error('FIREBASE_SERVICE_ACCOUNT is not configured');
 }
 
 let cachedAccessToken = null;
@@ -88,7 +71,7 @@ async function subscribeTokenToTopic(token) {
     return { successCount: 0, failureCount: 0, skipped: true };
   }
 
-  const fcmProject = FCM_PROJECT_ID;
+  const fcmProject = getFcmProjectId();
 
   return new Promise((resolve) => {
     const postData = JSON.stringify({
@@ -145,7 +128,7 @@ export async function handler(event) {
       return { statusCode: 400, body: "Missing token" };
     }
 
-    const supabase = getSupabase();
+    const supabase = getAdminClient();
     const now = new Date().toISOString();
     const isAuthenticated = userId !== null && userId !== undefined;
 

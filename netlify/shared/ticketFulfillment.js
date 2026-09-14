@@ -13,17 +13,17 @@
 const crypto = require('crypto');
 const QRCode = require('qrcode');
 const { v4: uuidv4 } = require('uuid');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getAdminClient } = require('./supabaseAdmin');
+const { requiredEnv, assertPesapalUrl, assertPawaPayUrl, getSiteUrl } = require('./runtimeConfig');
+const { uploadObject, deleteObject, privateKeyFromReference } = require('./r2');
 
 const APP_COMMISSION_RATE = 0.15;
-const QR_HOST = 'https://yovibe.net';
 
 // ─── QR signing ─────────────────────────────────────────────────────────────
 
 function getQrSecret() {
-  const secret = process.env.QR_HMAC_SECRET;
-  if (!secret) throw new Error('QR_HMAC_SECRET is not configured');
+  const secret = requiredEnv('QR_HMAC_SECRET');
+  if (Buffer.byteLength(secret, 'utf8') < 32) throw new Error('QR_HMAC_SECRET must be at least 32 bytes');
   return secret;
 }
 
@@ -35,7 +35,7 @@ function signQrPayload(ticketId) {
   const issuedAt = Date.now();
   const signature = hmacSign(ticketId, issuedAt);
   return {
-    url: `${QR_HOST}/t/${ticketId}?s=${signature}&ts=${issuedAt}`,
+    url: `${getSiteUrl()}/t/${ticketId}?s=${signature}&ts=${issuedAt}`,
     signature,
     issuedAt,
   };
@@ -109,7 +109,7 @@ function calculateGatewayFee(method, total) {
 
 async function verifyPesapalPayment({ trackingId, orderId }) {
   const { getPesapalToken } = require('./pesapalAuth');
-  const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
+  const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
   const id = trackingId || orderId;
   if (!id) return { status: 'invalid', reason: 'missing_payment_id' };
 
@@ -145,9 +145,8 @@ async function verifyPesapalPayment({ trackingId, orderId }) {
 
 async function verifyPawaPayDeposit(depositId) {
   if (!depositId) return { status: 'invalid', reason: 'missing_deposit_id' };
-  const apiKey = process.env.PAWAPAY_API_KEY;
-  if (!apiKey) throw new Error('PAWAPAY_API_KEY is not configured');
-  const base = process.env.PAWAPAY_API_URL || 'https://api.pawapay.io/v2';
+  const apiKey = requiredEnv('PAWAPAY_API_KEY');
+  const base = assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'));
 
   const response = await fetch(`${base}/deposits/${depositId}`, {
     headers: { Authorization: 'Bearer ' + apiKey },
@@ -156,6 +155,7 @@ async function verifyPawaPayDeposit(depositId) {
   if (!response.ok) throw new Error(`PawaPay verification error: ${response.status}`);
 
   const data = await response.json();
+  if (data.status === 'NOT_FOUND') return { status: 'failed', rawStatus: 'NOT_FOUND' };
   const deposit = data.data || data || {};
   const rawStatus = deposit.status || 'PENDING';
   const status =
@@ -179,18 +179,19 @@ async function verifyPawaPayDeposit(depositId) {
 // MUST agree with what the buyer's screen saw, so these route through the SAME
 // deployed functions instead of a parallel implementation that can drift.
 
-function siteBase() {
-  // Prefer the explicit production domain. `process.env.URL` (the netlify.app
-  // default alias) is deliberately NOT used: internal function→function calls
-  // must hit the SAME deployment as the browser, and the netlify.app alias can
-  // resolve to a stale bundle on branch/alias deploys.
-  return process.env.SITE_URL || 'https://yovibe.net';
+function siteBase() { return getSiteUrl(); }
+
+function internalFunctionHeaders(extra = {}) {
+  return {
+    'X-Fulfillment-Worker-Secret': requiredEnv('FULFILLMENT_WORKER_SECRET'),
+    ...extra,
+  };
 }
 
 async function verifyPawaPayDepositViaFunction(depositId) {
   if (!depositId) return { status: 'invalid', reason: 'missing_deposit_id' };
   const url = `${siteBase()}/.netlify/functions/verify-pawapay-payment?depositId=${encodeURIComponent(depositId)}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: internalFunctionHeaders() });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.warn(`[VerifyViaFunction] verify-pawapay-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -206,7 +207,7 @@ async function verifyPesapalPaymentViaFunction({ trackingId, orderId }) {
   if (trackingId) params.set('orderTrackingId', trackingId);
   if (orderId) params.set('merchantReference', orderId);
   const url = `${siteBase()}/.netlify/functions/verify-pesapal-payment?${params.toString()}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: internalFunctionHeaders() });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.warn(`[VerifyViaFunction] verify-pesapal-payment HTTP ${res.status}: ${text.slice(0, 200)}`);
@@ -282,34 +283,8 @@ async function confirmPaymentVerified(method, verification) {
 
 // ─── R2 uploads ─────────────────────────────────────────────────────────────
 
-function getR2Client() {
-  return new S3Client({
-    region: 'auto',
-    endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-    },
-    forcePathStyle: true,
-  });
-}
-
-async function uploadToR2(key, body, contentType) {
-  if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
-    throw new Error('R2 credentials not configured');
-  }
-  const s3 = getR2Client();
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME || 'yovibe',
-      Key: key,
-      Body: body,
-      ContentType: contentType,
-      ACL: 'public-read',
-    })
-  );
-  const publicUrl = process.env.R2_PUBLIC_URL || 'https://pub-9790a44a83ab4a5e92acd4f1904afbbe.r2.dev';
-  return `${publicUrl}/${key}`;
+async function uploadToR2(key, body, contentType, kind = 'private') {
+  return uploadObject(kind, { key, body, contentType });
 }
 
 async function generateQrPngDataUrl(signedUrl) {
@@ -324,13 +299,17 @@ async function generateQrPngDataUrl(signedUrl) {
 // Upload a base64/data-URL image to R2. Returns the public URL or null.
 async function uploadImageDataUrl(dataUrl, pathPrefix, filenameBase) {
   if (!dataUrl) return null;
-  const match = /^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i.exec(String(dataUrl));
+  const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i.exec(String(dataUrl));
   if (!match) return null;
-  const mime = match[1].toLowerCase() === 'image/png' ? 'image/png' : 'image/jpeg';
-  const ext = mime === 'image/png' ? 'png' : 'jpg';
+  const sourceMime = match[1].toLowerCase();
+  const mime = sourceMime === 'image/png' ? 'image/png' : sourceMime === 'image/webp' ? 'image/webp' : 'image/jpeg';
+  const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : 'jpg';
   const bytes = Buffer.from(match[2], 'base64');
+  if (bytes.length === 0 || bytes.length > 4 * 1024 * 1024) {
+    throw new Error('Security photo must be between 1 byte and 4 MB');
+  }
   const key = `${pathPrefix}/${filenameBase}.${ext}`;
-  return uploadToR2(key, bytes, mime);
+  return uploadToR2(key, bytes, mime, 'private');
 }
 
 // ─── Notification (replicates NotificationService.notifyTicketPurchase) ─────
@@ -354,12 +333,12 @@ async function insertTicketNotification(admin, event, ticket) {
 // ─── Email delivery (reuses send-ticket-email, the canonical sender) ────────
 
 function siteBaseUrl() {
-  return process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
+  return getSiteUrl();
 }
 
 async function triggerFulfillmentWorker(fulfillmentId) {
   if (!fulfillmentId) return false;
-  const secret = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const secret = requiredEnv('FULFILLMENT_WORKER_SECRET');
   try {
     const response = await fetch(`${siteBaseUrl()}/.netlify/functions/process-ticket-fulfillment-background`, {
       method: 'POST',
@@ -379,7 +358,7 @@ async function triggerFulfillmentWorker(fulfillmentId) {
 async function sendTicketEmail(emailPayload) {
   const response = await fetch(`${siteBaseUrl()}/.netlify/functions/send-ticket-email`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: internalFunctionHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(emailPayload),
   });
   if (!response.ok) {
@@ -495,7 +474,8 @@ async function createTicketServerSide(admin, {
   const qrUrl = await uploadToR2(
     `qr-codes/${id}.png`,
     Buffer.from(qrPng.split(',')[1] || '', 'base64'),
-    'image/png'
+    'image/png',
+    'private'
   );
 
   const photoUploadToken = uuidv4();
@@ -609,23 +589,13 @@ async function persistTicketRows(admin, rows, inventoryHoldIds, inventorySession
 async function cleanupTicketAssets(rows) {
   try {
     if (!rows || rows.length === 0) return;
-    if (!process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) return;
-    const s3 = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME || 'yovibe';
     const keys = [];
     for (const r of rows) {
       if (r && r.id) keys.push(`qr-codes/${r.id}.png`);
-      if (r && r.buyer_photo_url && String(r.buyer_photo_url).includes('/buyer-photos/')) {
-        try {
-          keys.push(decodeURIComponent(new URL(String(r.buyer_photo_url)).pathname.slice(1)));
-        } catch {
-          // ignore malformed URL
-        }
-      }
+      const photoKey = privateKeyFromReference(r && r.buyer_photo_url);
+      if (photoKey && photoKey.startsWith('buyer-photos/')) keys.push(photoKey);
     }
-    await Promise.allSettled(
-      keys.map((key) => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })))
-    );
+    await Promise.allSettled(keys.map((key) => deleteObject('private', key)));
   } catch (e) {
     console.warn('[TicketFulfillment] asset cleanup failed:', e.message);
   }

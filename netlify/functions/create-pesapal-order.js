@@ -1,4 +1,5 @@
 const { getPesapalToken, invalidatePesapalToken } = require('../shared/pesapalAuth');
+const { requiredEnv, assertPesapalUrl, assertSiteUrl } = require('../shared/runtimeConfig');
 
 exports.handler = async (event) => {
   const headers = {
@@ -18,8 +19,9 @@ exports.handler = async (event) => {
 
   try {
     const { amount, description, buyerEmail, buyerPhone, callbackUrl, buyerName, buyerFirstName, buyerLastName } = JSON.parse(event.body);
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
-    const baseUrl = process.env.PESAPAL_BASE_URL || 'https://pay.pesapal.com';
+    const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
+    const baseUrl = assertPesapalUrl(requiredEnv('PESAPAL_BASE_URL'));
+    const expectedSite = assertSiteUrl(requiredEnv('SITE_URL'));
 
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
@@ -29,15 +31,16 @@ exports.handler = async (event) => {
     if (!description || !buyerEmail || !callbackUrl) {
       throw new Error('Missing required fields: description, buyerEmail, callbackUrl');
     }
+    const callback = new URL(callbackUrl);
+    if (callback.origin !== new URL(expectedSite).origin) {
+      throw new Error('Payment callback URL must use the configured staging site');
+    }
 
     // Generate unique order ID (max 50 chars)
     const random = Math.random().toString(36).substring(2, 11);
     const orderId = `YV-${Date.now()}-${random}`.substring(0, 50);
 
-    const notificationId = process.env.PESAPAL_NOTIFICATION_ID;
-    if (!notificationId) {
-      throw new Error('PesaPal notification_id not configured. Set PESAPAL_NOTIFICATION_ID environment variable.');
-    }
+    const notificationId = requiredEnv('PESAPAL_NOTIFICATION_ID');
 
     // Step 1: Get OAuth token via shared module
     const token = await getPesapalToken();

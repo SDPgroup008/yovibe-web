@@ -16,8 +16,9 @@ import {
 } from "../models/InstallmentPlan"
 
 const FUNCTIONS_BASE_URL =
-  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   ""
 

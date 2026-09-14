@@ -18,7 +18,7 @@
 //   GET /.netlify/functions/geocode-venues?limit=500
 //
 // Env vars (set in Netlify dashboard):
-//   SUPABASE_SERVICE_ROLE_KEY  (required — secret, never in the frontend)
+//   SUPABASE_SECRET_KEY  (required — secret, never in the frontend)
 //   SUPABASE_URL               (optional; falls back to the YoVibe URL)
 //   GEOCODE_ADMIN_SECRET       (optional; requires ?token= or x-admin-token header)
 //
@@ -26,11 +26,9 @@
 //   dryRun=1   — report what would be geocoded, do NOT write anything
 //   limit=N    — cap how many venues this invocation processes
 
-const { createClient } = require("@supabase/supabase-js");
-
-const FALLBACK_SUPABASE_URL = "https://uqukizjohackrcwrtefk.supabase.co";
+const { getAdminClient } = require('../shared/supabaseAdmin');
+const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const USER_AGENT = "YoVibeVenueGeocoder/1.0 (https://yovibe.net)";
 const THROTTLE_MS = 1150; // Nominatim allows ~1 request/second
 const DEFAULT_SYNC_LIMIT = 4; // keeps a synchronous run inside the ~10s timeout
 const MAX_SYNC_LIMIT = 8;
@@ -59,7 +57,7 @@ async function geocodeVenue(venue) {
     let response;
     try {
       response = await fetch(`${NOMINATIM_URL}?${params.toString()}`, {
-        headers: { "User-Agent": USER_AGENT, Referer: "https://yovibe.net/" },
+        headers: { "User-Agent": `YoVibeVenueGeocoder/1.0 (${getSiteUrl()})`, Referer: `${getSiteUrl()}/` },
       });
     } catch {
       continue; // network error — try the next query variant
@@ -80,8 +78,7 @@ async function geocodeVenue(venue) {
 }
 
 function adminTokenOk(event) {
-  const secret = process.env.GEOCODE_ADMIN_SECRET;
-  if (!secret) return true;
+  const secret = requiredEnv('GEOCODE_ADMIN_SECRET');
   const query = new URLSearchParams((event.rawUrl || event.url || "").split("?")[1] || "");
   const fromQuery = query.get("token");
   const fromHeader = (event.headers && event.headers["x-admin-token"]) || "";
@@ -108,13 +105,7 @@ exports.handler = async (event) => {
     ? Math.min(requestedLimit, isBackground ? BACKGROUND_LIMIT : MAX_SYNC_LIMIT)
     : (isBackground ? BACKGROUND_LIMIT : DEFAULT_SYNC_LIMIT);
 
-  const supabaseUrl = process.env.SUPABASE_URL || FALLBACK_SUPABASE_URL;
-  const supabaseKey =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.SUPABASE_SERVICE_KEY ||
-    process.env.SUPABASE_ANON_KEY ||
-    "";
-  const admin = createClient(supabaseUrl, supabaseKey);
+  const admin = getAdminClient();
 
   try {
     // The `geocode_failed` column only exists after the migration is applied.

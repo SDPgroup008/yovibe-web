@@ -25,8 +25,7 @@ import { useRouter } from "../utils/URLRouter"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 
 import TicketService from "../services/TicketService"
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore"
-import { db } from "../config/firebase"
+import { publicSiteUrl } from "../config/runtime"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -141,7 +140,7 @@ const EventDetailScreen: React.FC = () => {
 
      try {
        // Generate the event detail URL for deep linking
-       const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net'
+       const baseUrl = typeof window !== 'undefined' ? window.location.origin : publicSiteUrl()
        const eventUrl = `${baseUrl}/events/${event.id}`
 
        // Check if we're in development and provide helpful message
@@ -231,7 +230,7 @@ const EventDetailScreen: React.FC = () => {
     if (!event) return
 
     // Generate the event URL for deep linking
-    const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://yovibe.net'
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : publicSiteUrl()
     const eventUrl = `${baseUrl}/events/${event.id}`
 
     // Normalize the price to a clean numeric string for schema.org Offer.price
@@ -289,7 +288,7 @@ const EventDetailScreen: React.FC = () => {
       "organizer": {
         "@type": "Organization",
         "name": "YoVibe",
-        "url": "https://yovibe.net"
+        "url": publicSiteUrl()
       }
     }
 

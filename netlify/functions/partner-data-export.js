@@ -3,7 +3,8 @@
 // Phase 4 (4.1): auditable export of purchaser personal data for one event,
 // for sharing with the event's Organizer / authorised sales partners (HMA /
 // NWA per the agreement, Cl. 14.2). Admin only, restricted to the data needed
-// for event administration: name, email, phone, ticket refs, security photo.
+// for event administration: name, email, phone, ticket refs, and whether the
+// private security photo is present. Private object references are not exported.
 //
 // POST { eventId } → CSV string + row count.
 
@@ -31,9 +32,9 @@ exports.handler = async (event) => {
       .eq('event_slug', eventId);
     if (error) throw error;
 
-    const header = ['buyer_name', 'buyer_email', 'buyer_phone', 'ticket_ref', 'entry_fee_type', 'status', 'security_photo_url', 'purchase_date'];
+    const header = ['buyer_name', 'buyer_email', 'buyer_phone', 'ticket_ref', 'entry_fee_type', 'status', 'security_photo_available', 'purchase_date'];
     const rows = (tickets || []).map((t) => [
-      t.buyer_name, t.buyer_email, t.buyer_phone, t.ticket_ref, t.entry_fee_type, t.status, t.buyer_photo_url,
+      t.buyer_name, t.buyer_email, t.buyer_phone, t.ticket_ref, t.entry_fee_type, t.status, Boolean(t.buyer_photo_url),
       t.created_at ? new Date(t.created_at).toISOString().split('T')[0] : '',
     ].map(csvEscape).join(','));
 

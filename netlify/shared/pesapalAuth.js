@@ -5,6 +5,7 @@
 
 let cachedToken = null;
 let tokenExpiresAt = 0;
+const { requiredEnv, assertPesapalUrl } = require('./runtimeConfig');
 
 /**
  * Acquire (or return cached) PesaPal OAuth token.
@@ -12,7 +13,7 @@ let tokenExpiresAt = 0;
  * Console output when successfully authenticated with LIVE credentials:
  *   [PesaPalAuth] ✅ Authenticated successfully
  *   [PesaPalAuth]    Token expires at: 2026-07-27T15:28:00.000Z
- *   [PesaPalAuth]    Environment: LIVE (pay.pesapal.com)
+ *   [PesaPalAuth]    Environment: configured explicitly
  *
  * Console output when sandbox credentials are detected:
  *   [PesaPalAuth] ⚠️ Using SANDBOX environment (cybqa.pesapal.com)
@@ -24,13 +25,9 @@ async function getPesapalToken() {
     return cachedToken;
   }
 
-  const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
-  const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-  const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
-
-  if (!consumerKey || !consumerSecret) {
-    throw new Error('PesaPal credentials not configured. Set PESAPAL_CONSUMER_KEY and PESAPAL_CONSUMER_SECRET.');
-  }
+  const consumerKey = requiredEnv('PESAPAL_CONSUMER_KEY');
+  const consumerSecret = requiredEnv('PESAPAL_CONSUMER_SECRET');
+  const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
 
   // Detect environment for logging
   const isSandbox = apiUrl.includes('cybqa');
@@ -38,7 +35,7 @@ async function getPesapalToken() {
 
   /* console.log('[PesaPalAuth] 🔑 Acquiring new token...'); */
   /* console.log('[PesaPalAuth]    API URL:', apiUrl); */
-  /* console.log('[PesaPalAuth]    Environment:', envLabel, isSandbox ? '(cybqa.pesapal.com)' : '(pay.pesapal.com)'); */
+  /* console.log('[PesaPalAuth]    Environment:', envLabel); */
 
   const response = await fetch(`${apiUrl}/Auth/RequestToken`, {
     method: 'POST',

@@ -1,4 +1,5 @@
 const BUFFER_BROWSER = Buffer.from ? Buffer : { from: (string) => global.Buffer.from(string) };
+const { requiredEnv, assertPesapalUrl, getSiteUrl } = require('../shared/runtimeConfig');
 
 exports.handler = async (event) => {
   const headers = {
@@ -17,14 +18,10 @@ exports.handler = async (event) => {
   }
 
   try {
-    const consumerKey = process.env.PESAPAL_CONSUMER_KEY;
-    const consumerSecret = process.env.PESAPAL_CONSUMER_SECRET;
-    const apiUrl = process.env.PESAPAL_API_URL || 'https://pay.pesapal.com/v3/api';
-    const siteUrl = process.env.SITE_URL || 'https://yovibe.net';
-
-    if (!consumerKey || !consumerSecret) {
-      throw new Error('PesaPal credentials not configured');
-    }
+    const consumerKey = requiredEnv('PESAPAL_CONSUMER_KEY');
+    const consumerSecret = requiredEnv('PESAPAL_CONSUMER_SECRET');
+    const apiUrl = assertPesapalUrl(requiredEnv('PESAPAL_API_URL'));
+    const siteUrl = getSiteUrl();
 
     const ipnUrl = `${siteUrl}/.netlify/functions/pesapal-ipn`;
 

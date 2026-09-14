@@ -14,12 +14,14 @@ type TicketScannerScreenProps = {
   eventId?: string
   eventName?: string
   isTokenAuth?: boolean
+  staffToken?: string
 }
 
 const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
   eventId: propEventId,
   eventName: propEventName,
-  isTokenAuth = false
+  isTokenAuth = false,
+  staffToken,
 }) => {
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
@@ -42,6 +44,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
   // Photo verification state
   const [showPhotoVerification, setShowPhotoVerification] = useState(false)
   const [pendingTicketDocId, setPendingTicketDocId] = useState<string | null>(null)
+  const [pendingQrText, setPendingQrText] = useState<string>("")
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
 
@@ -173,7 +176,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
 
     try {
       setValidating(true)
-      const result = await TicketService.validateTicket(qrCodeData, user?.id || "", eventName || "Event Entrance")
+      const result = await TicketService.validateTicket(qrCodeData, user?.id || "", eventName || "Event Entrance", eventId, staffToken)
       
       const ticketRef = result.ticketRef || qrCodeData.substring(0, 12) + "..."
       const feeType = result.entryFeeType || "—"
@@ -205,6 +208,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
         }
         if (result.needsPhotoVerification && result.buyerPhotoUrl && result.ticketDocId) {
           setPendingTicketDocId(result.ticketDocId)
+          setPendingQrText(qrCodeData)
           setBuyerPhotoUrl(result.buyerPhotoUrl)
           setBuyerName(result.buyerName || "Ticket Buyer")
           setShowPhotoVerification(true)
@@ -221,7 +225,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
     } finally {
       setValidating(false)
     }
-  }, [user, isTokenAuth, eventName, stopCamera])
+  }, [user, isTokenAuth, eventName, eventId, staffToken, stopCamera])
 
   const handlePhotoConfirm = useCallback(async (confirmed: boolean) => {
     if ((!user && !isTokenAuth) || !pendingTicketDocId) { setShowPhotoVerification(false); return }
@@ -229,7 +233,7 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
     setValidating(true)
     try {
       if (confirmed) {
-        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user?.id || "", eventName || "Event Entrance", eventId)
+        const r = await TicketService.confirmTicketUsage(pendingTicketDocId, user?.id || "", eventName || "Event Entrance", eventId, staffToken, pendingQrText)
         if (r.success) Alert.alert("✅ Entry Granted", `Photo verified for ${buyerName}.`, [{ text: "OK" }])
         else Alert.alert("❌ Entry Denied", r.reason || "Failed to confirm", [{ text: "OK" }])
       } else {
@@ -238,9 +242,9 @@ const TicketScannerScreen: React.FC<TicketScannerScreenProps> = ({
     } catch (e: any) {
       Alert.alert("Error", "Failed to process photo verification")
     } finally {
-      setPendingTicketDocId(null); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false)
+      setPendingTicketDocId(null); setPendingQrText(""); setBuyerPhotoUrl(""); setBuyerName(""); setValidating(false)
     }
-  }, [user, isTokenAuth, eventName, eventId, buyerName])
+  }, [user, isTokenAuth, eventName, eventId, staffToken, pendingQrText, buyerName])
 
   return (
     <View style={styles.container}>

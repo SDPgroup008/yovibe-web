@@ -35,15 +35,13 @@ function normalizeStatus(status) {
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
+  if (event.httpMethod !== 'POST') return ack({ message: 'Payout callback endpoint is healthy' });
 
-  // Signature verification applies ONLY to real PawaPay POST callbacks. GET
-  // requests are uptime-monitor probes (PawaPay never sends GET callbacks).
-  if (event.httpMethod === 'POST') {
-    const signatureResult = await verifyCallbackSignature(event);
-    if (!signatureResult.ok) {
-      console.warn('[PawaPayPayoutCallback] Signature verification failed:', signatureResult.error);
-      return { statusCode: 401, headers, body: JSON.stringify({ error: signatureResult.error }) };
-    }
+  const signatureResult = await verifyCallbackSignature(event);
+  if (!signatureResult.ok || !signatureResult.verified) {
+    const error = signatureResult.error || 'Signed PawaPay payout callbacks must be enabled';
+    console.warn('[PawaPayPayoutCallback] Signature verification failed:', error);
+    return { statusCode: 401, headers, body: JSON.stringify({ error }) };
   }
 
   let payoutId;
@@ -72,22 +70,40 @@ exports.handler = async (event) => {
     // stored PawaPay payout id in metadata.
     const { data: matched } = await admin
       .from('payouts')
-      .select('id')
+      .select('id, ticket_ids, metadata')
       .or(`transaction_reference.eq.${payoutId},metadata->>pawapay_payout_id.eq.${payoutId}`)
       .limit(5);
 
     if (matched && matched.length > 0) {
-      const update = {
-        status: normalized === 'completed' ? 'completed'
-          : normalized === 'failed' ? 'failed'
-          : 'processing',
-        processed_date: normalized === 'completed' ? new Date().toISOString() : undefined,
-        metadata: { pawapay_payout_id: payoutId, pawapay_status: status, failure_message: failureMessage || null },
-        updated_at: new Date().toISOString(),
-      };
-      const ids = matched.map((r) => r.id);
-      const result = await admin.from('payouts').update(update).in('id', ids);
-      /* console.log('[PawaPayPayoutCallback] Reconciliated payouts:', result.error || ids); */
+      const now = new Date().toISOString();
+      for (const payout of matched) {
+        const update = {
+          status: normalized === 'completed' ? 'completed'
+            : normalized === 'failed' ? 'failed'
+            : 'processing',
+          processed_date: normalized === 'completed' ? now : null,
+          metadata: {
+            ...(payout.metadata && typeof payout.metadata === 'object' ? payout.metadata : {}),
+            pawapay_payout_id: payoutId,
+            pawapay_status: status,
+            failure_message: failureMessage || null,
+          },
+          updated_at: now,
+        };
+        await admin.from('payouts').update(update).eq('id', payout.id);
+
+        const ticketIds = Array.isArray(payout.ticket_ids) ? payout.ticket_ids : [];
+        if (ticketIds.length && normalized === 'completed') {
+          await admin.from('tickets')
+            .update({ payout_status: 'paid', payout_eligible: false, payout_date: now })
+            .in('id', ticketIds).eq('payout_status', 'processing');
+        } else if (ticketIds.length && normalized === 'failed') {
+          await admin.from('tickets')
+            .update({ payout_status: 'pending', payout_eligible: true })
+            .in('id', ticketIds).eq('payout_status', 'processing')
+            .eq('status', 'used').eq('is_scanned', true).eq('refund_status', 'none');
+        }
+      }
     } else {
       /* console.log('[PawaPayPayoutCallback] No matching payout row for', payoutId, '(acknowledged)'); */
     }

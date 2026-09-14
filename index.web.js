@@ -7,6 +7,8 @@
   
   // Check if meta tags already exist
   if (document.getElementById('seo-meta-tags')) return;
+  const runtimeOrigin = window.location.origin.replace(/\/$/, '');
+  const isStagingHost = window.location.hostname.endsWith('.netlify.app');
   
   const metaTags = [
     { charset: 'utf-8' },
@@ -16,22 +18,22 @@
     { name: 'description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
     { name: 'keywords', content: 'yovibe, yo vibe, events, tickets, buy tickets, venues, parties, concerts, Uganda, Kampala, Entebbe, Jinja' },
     { property: 'og:type', content: 'website' },
-    { property: 'og:url', content: 'https://yovibe.net/' },
+    { property: 'og:url', content: `${runtimeOrigin}/` },
     { property: 'og:title', content: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda' },
     { property: 'og:description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
-    { property: 'og:image', content: 'https://yovibe.net/assets/og-image.png' },
+    { property: 'og:image', content: `${runtimeOrigin}/assets/og-image.png` },
     { property: 'og:image:width', content: '1200' },
     { property: 'og:image:height', content: '630' },
     { property: 'og:site_name', content: 'YoVibe' },
     { property: 'og:locale', content: 'en_UG' },
     { name: 'twitter:card', content: 'summary_large_image' },
-    { name: 'twitter:url', content: 'https://yovibe.net/' },
+    { name: 'twitter:url', content: `${runtimeOrigin}/` },
     { name: 'twitter:title', content: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda' },
     { name: 'twitter:description', content: 'Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.' },
-    { name: 'twitter:image', content: 'https://yovibe.net/assets/og-image.png' },
+    { name: 'twitter:image', content: `${runtimeOrigin}/assets/og-image.png` },
     { name: 'twitter:site', content: '@yovibe' },
     { name: 'twitter:creator', content: '@yovibe' },
-    { name: 'robots', content: 'index, follow' },
+    { name: 'robots', content: isStagingHost ? 'noindex, nofollow, noarchive' : 'index, follow' },
     { name: 'author', content: 'YoVibe' },
     { name: 'geo.region', content: 'UG' },
     { name: 'geo.placename', content: 'Kampala' }

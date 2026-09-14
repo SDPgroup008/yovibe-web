@@ -1,5 +1,7 @@
 "use client"
 
+import { publicSiteUrl } from "../config/runtime"
+
 import type React from "react"
 import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { View, Text, StyleSheet, Image, ScrollView, TouchableOpacity, Alert, Linking, RefreshControl, Dimensions, TextInput, Modal, KeyboardAvoidingView, Platform, ActivityIndicator } from "react-native"
@@ -165,6 +167,7 @@ const VenueDetailScreen: React.FC = () => {
     loadVenueAndEvents()
 
     // Set up real-time listener for vibe ratings
+    if (!db) return
     const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -239,7 +242,7 @@ const VenueDetailScreen: React.FC = () => {
       "organizer": {
         "@type": "Organization",
         "name": "YoVibe",
-        "url": "https://yovibe.net"
+        "url": publicSiteUrl()
       }
     }
     

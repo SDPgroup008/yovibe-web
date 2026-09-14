@@ -1772,6 +1772,23 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
       };
 
       const tickets = (data || []).map(mapRow);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        await Promise.all(tickets.map(async (ticket: any) => {
+          if (typeof ticket.qrCodeDataUrl !== 'string' || !ticket.qrCodeDataUrl.startsWith('r2-private://')) return;
+          try {
+            const response = await fetch('/.netlify/functions/ticket-private-asset', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+              body: JSON.stringify({ ticketId: ticket.id, asset: 'qr' }),
+            });
+            const payload = await response.json();
+            if (response.ok && payload.url) ticket.qrCodeDataUrl = payload.url;
+          } catch (error) {
+            console.warn('Unable to load private QR asset:', error);
+          }
+        }));
+      }
 
       const getTime = (ticket: any): number => {
         const candidate =
@@ -1903,10 +1920,12 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
   async sendPayoutReceipt(payoutId: string, email: string): Promise<void> {
     if (!payoutId) return;
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
       await fetch(`/.netlify/functions/send-payout-receipt`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ payoutId, email }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.access_token}` },
+        body: JSON.stringify({ payoutId }),
       });
     } catch (error) {
       console.error("SupabaseService: sendPayoutReceipt error:", error);

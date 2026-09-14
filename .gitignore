@@ -125,6 +125,9 @@ temp/
 *.sln
 *.sw?
 *.md
+!docs/HMA_OPERATIONAL_CONTROLS.md
+!docs/operations-runbook.md
+!staging/*.md
 
 # Firebase
 .firebase/
@@ -197,3 +200,6 @@ netlify/functions/package.json
 supabase/migrations/
 supabase/functions/
 supabase/
+
+
+yovibe-schema-catalog.csv

@@ -7,23 +7,20 @@
 // function to sign a ticket QR at creation time and to verify a QR at scan
 // time, so a forged QR cannot be produced from the web bundle.
 //
-// Format: https://yovibe.net/t/{ticketId}?s={base64url-hmac-sha256}&ts={issuedAt}
+// Format: {SITE_URL}/t/{ticketId}?s={base64url-hmac-sha256}&ts={issuedAt}
 //
 // Endpoints:
 //   POST { action: "sign",   ticketId } -> { ok, url, signature, issuedAt }
 //   POST { action: "verify", qrText   } -> { ok, valid, ticketId?, format?, reason? }
-//        format: "signed" (a yovibe.net/t/ URL was detected)
+//        format: "signed" (a SITE_URL/t/ URL was detected)
 //                "unknown" (not a signed-URL QR — caller rejects it)
 
 const crypto = require('crypto');
-
-const QR_HOST = 'https://yovibe.net';
+const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
 
 function getSecret() {
-  const secret = process.env.QR_HMAC_SECRET;
-  if (!secret) {
-    throw new Error('QR_HMAC_SECRET is not configured');
-  }
+  const secret = requiredEnv('QR_HMAC_SECRET');
+  if (Buffer.byteLength(secret, 'utf8') < 32) throw new Error('QR_HMAC_SECRET must be at least 32 bytes');
   return secret;
 }
 
@@ -45,7 +42,7 @@ function sign(ticketId) {
   const issuedAt = Date.now();
   const signature = hmacSign(ticketId, issuedAt, getSecret());
   return {
-    url: `${QR_HOST}/t/${ticketId}?s=${signature}&ts=${issuedAt}`,
+    url: `${getSiteUrl()}/t/${ticketId}?s=${signature}&ts=${issuedAt}`,
     signature,
     issuedAt,
   };
@@ -57,6 +54,10 @@ function verify(qrText) {
     parsed = new URL(String(qrText));
   } catch {
     return { format: 'unknown', valid: false };
+  }
+
+  if (parsed.origin !== new URL(getSiteUrl()).origin) {
+    return { format: 'signed', valid: false, reason: 'wrong_ticket_host' };
   }
 
   const match = parsed.pathname.match(/^\/t\/(.+)$/);
@@ -106,11 +107,9 @@ exports.handler = async (event) => {
     const action = body.action;
 
     if (action === 'sign') {
-      const ticketId = typeof body.ticketId === 'string' ? body.ticketId.trim() : '';
-      if (!ticketId || ticketId.length > 128) {
-        return { statusCode: 400, headers, body: JSON.stringify({ ok: false, error: 'Invalid ticketId' }) };
-      }
-      return { statusCode: 200, headers, body: JSON.stringify({ ok: true, ...sign(ticketId) }) };
+      // Ticket signing is performed inside the trusted fulfillment process.
+      // A public signer would let anyone mint a valid QR for a known ticket id.
+      return { statusCode: 403, headers, body: JSON.stringify({ ok: false, error: 'Ticket signing is not public' }) };
     }
 
     if (action === 'verify') {
@@ -131,3 +130,5 @@ exports.handler = async (event) => {
     };
   }
 };
+
+module.exports = { handler: exports.handler, verify, sign };

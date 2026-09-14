@@ -23,7 +23,7 @@ import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
-import { uploadBuyerPhoto } from "../services/R2Service"
+import { blobToDataURL } from "../utils/expoHelpers"
 
 // ─── Design tokens (UI only) ─────────────────────────────────────────
 const SURFACE = "rgba(18, 18, 26, 0.72)"
@@ -547,17 +547,28 @@ const TicketPurchaseScreen: React.FC = () => {
         : buyerEmailsList
 
       const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
+      setDeliveryEmail(deliveryEmails[0] || payerEmail)
 
       const includePhoto = securityPhotoEnabled && photoCaptured
 
       let hostedBuyerPhotoUrl: string | undefined
+      let buyerPhotoDataUrl: string | undefined
       if (includePhoto && buyerPhotoUrl) {
-        if (/^https?:\/\//i.test(buyerPhotoUrl)) {
+        if (/^r2-private:\/\//i.test(buyerPhotoUrl)) {
           hostedBuyerPhotoUrl = buyerPhotoUrl
         } else {
           setStatusMessage("Uploading security photo...")
           try {
-            hostedBuyerPhotoUrl = (await uploadBuyerPhoto(buyerPhotoUrl, `purchase_${fulfillmentId}`)).url
+            const photoResponse = await fetch(buyerPhotoUrl)
+            if (!photoResponse.ok) throw new Error(`Could not read security photo (${photoResponse.status})`)
+            const photoBlob = await photoResponse.blob()
+            if (photoBlob.size > 4 * 1024 * 1024) {
+              throw new Error("Security photo exceeds the 4 MB checkout limit")
+            }
+            if (!["image/jpeg", "image/png", "image/webp"].includes(photoBlob.type)) {
+              throw new Error("Security photo must be JPEG, PNG, or WebP")
+            }
+            buyerPhotoDataUrl = await blobToDataURL(photoBlob)
           } catch (photoError: any) {
             // Preserve the previous behavior: ticket fulfillment may continue
             // without an optional photo if storage is temporarily unavailable.
@@ -581,6 +592,7 @@ const TicketPurchaseScreen: React.FC = () => {
         payerEmail,
         buyerId: user?.id ?? null,
         buyerPhone: (paymentMethod === "credit_card" ? cardPhone : mobileMoneyNumber) || undefined,
+        buyerPhotoDataUrl,
         buyerPhotoUrl: hostedBuyerPhotoUrl,
         seatNumbers: isTableEntry ? undefined : perPersonSeats,
         tableNumbers: isTableEntry
@@ -774,6 +786,28 @@ const updateBuyerName = (index: number, name: string) => {
       }
     } catch (error) {
       Alert.alert("Error", "Failed to capture photo")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleChoosePhoto = async () => {
+    try {
+      setLoading(true)
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      })
+
+      if (!result.canceled && result.assets[0]) {
+        setBuyerPhotoUrl(result.assets[0].uri)
+        setPhotoCaptured(true)
+        Alert.alert("Success", "Photo selected successfully!")
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to select photo")
     } finally {
       setLoading(false)
     }
@@ -1546,6 +1580,18 @@ const handleInstallmentPurchase = async () => {
                     {photoCaptured ? "Photo Captured" : "Capture Photo"}
                   </Text>
                 </TouchableOpacity>
+                {Platform.OS === "web" && (
+                  <TouchableOpacity
+                    style={[styles.photoButton, photoCaptured && styles.photoButtonCaptured, { marginTop: 10 }]}
+                    onPress={handleChoosePhoto}
+                    disabled={loading}
+                  >
+                    <Ionicons name={photoCaptured ? "checkmark-circle" : "image-outline"} size={24} color="#FFFFFF" />
+                    <Text style={styles.photoButtonText}>
+                      {photoCaptured ? "Choose a Different Photo" : "Choose Photo"}
+                    </Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </>
@@ -1785,20 +1831,29 @@ const handleInstallmentPurchase = async () => {
       {/* Guest-only explicit consent — authenticated users already agreed to the
           Terms & Conditions during signup, so the checkbox gates only guests. */}
       {!user && (
-        <TouchableOpacity style={styles.termsRow} onPress={() => setAcceptedTerms(prev => !prev)} activeOpacity={0.7}>
-          <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
-            {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
-          </View>
+        <View style={styles.termsRow}>
+          <TouchableOpacity
+            accessibilityRole="checkbox"
+            accessibilityLabel="Accept Terms and Conditions"
+            accessibilityState={{ checked: acceptedTerms }}
+            onPress={() => setAcceptedTerms(prev => !prev)}
+            activeOpacity={0.7}
+          >
+            <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+              {acceptedTerms && <Ionicons name="checkmark" size={14} color="#FFFFFF" />}
+            </View>
+          </TouchableOpacity>
           <Text style={styles.termsText}>
             I agree to the{" "}
             <Text
               style={styles.termsLink}
-              onPress={(e) => { e?.stopPropagation?.(); (navigation as any).navigate("TermsAndConditions") }}
+              accessibilityRole="link"
+              onPress={() => (navigation as any).navigate("TermsAndConditions")}
             >
               Terms &amp; Conditions
             </Text>
           </Text>
-        </TouchableOpacity>
+        </View>
       )}
 
       <TouchableOpacity

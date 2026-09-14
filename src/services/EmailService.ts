@@ -132,6 +132,8 @@ export class EmailService {
   private static async saveEmailRecord(record: Record<string, unknown>): Promise<void> {
     // Import FirebaseService dynamically to avoid circular dependencies
     try {
+      const { hasFirebaseConfig } = await import("../config/firebase")
+      if (!hasFirebaseConfig) return
       const { default: FirebaseService } = await import("./FirebaseService")
       await FirebaseService.saveEmailRecord(record)
     } catch (error) {

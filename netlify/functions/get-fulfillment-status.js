@@ -2,6 +2,12 @@
 // credential; sensitive queue payloads are never returned.
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
+const { privateKeyFromReference, presignR2 } = require('../shared/r2');
+
+function accessibleQr(value) {
+  const key = privateKeyFromReference(value);
+  return key ? presignR2({ kind: 'private', method: 'GET', key, expiresSeconds: 300 }) : value;
+}
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -46,7 +52,7 @@ exports.handler = async (event) => {
         tickets: (tickets || []).map((ticket) => ({
           id: ticket.id,
           ticketRef: ticket.ticket_ref,
-          qrCodeDataUrl: ticket.qr_code_data_url,
+          qrCodeDataUrl: accessibleQr(ticket.qr_code_data_url),
         })),
       });
     }

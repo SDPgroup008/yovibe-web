@@ -99,6 +99,7 @@ const TokenScannerScreen: React.FC<TokenScannerScreenProps> = (props) => {
         eventId={eventId}
         eventName={eventName}
         isTokenAuth={true}
+        staffToken={token}
       />
     )
   }

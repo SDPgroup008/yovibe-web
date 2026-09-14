@@ -8,30 +8,14 @@
 //
 // Schedule: daily at 04:00 (see netlify.toml).
 
-const { S3Client, DeleteObjectCommand, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 const { getAdminClient } = require('../shared/supabaseAdmin');
+const { deleteObject, listObjects, privateKeyFromReference } = require('../shared/r2');
 
 const RETENTION_DAYS = Number(process.env.PURGE_RETENTION_DAYS || 30);
 
-function getR2Client() {
-  return new S3Client({
-    region: 'auto',
-    endpoint: process.env.R2_ENDPOINT || 'https://fa2758d1964bd534d143d8716fd37928.r2.cloudflarestorage.com',
-    credentials: {
-      accessKeyId: process.env.R2_ACCESS_KEY_ID || '',
-      secretAccessKey: process.env.R2_SECRET_ACCESS_KEY || '',
-    },
-    forcePathStyle: true,
-  });
-}
-
 async function deleteKeys(keys) {
   if (!keys.length) return 0;
-  const s3 = getR2Client();
-  const bucket = process.env.R2_BUCKET_NAME || 'yovibe';
-  const results = await Promise.allSettled(
-    keys.map((key) => s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: key })))
-  );
+  const results = await Promise.allSettled(keys.map((key) => deleteObject('private', key)));
   return results.filter((r) => r.status === 'fulfilled').length;
 }
 
@@ -65,10 +49,8 @@ exports.handler = async (event) => {
     // 3. Also sweep orphaned buyer-photos/qr-codes objects older than retention
     //    (best-effort, capped).
     if (keysToDelete.size < 8000) {
-      const s3 = getR2Client();
-      const bucket = process.env.R2_BUCKET_NAME || 'yovibe';
       for (const prefix of ['buyer-photos/', 'qr-codes/']) {
-        const listed = await s3.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: 5000 }));
+        const listed = await listObjects('private', { Prefix: prefix, MaxKeys: 5000 });
         for (const obj of listed.Contents || []) {
           if (obj.LastModified && obj.LastModified < new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000)) {
             keysToDelete.add(obj.Key);
@@ -87,20 +69,10 @@ exports.handler = async (event) => {
 };
 
 function addAssetKeys(set, ticket) {
-  const photo = ticket.buyer_photo_url && String(ticket.buyer_photo_url).includes('/buyer-photos/')
-    ? decodePath(ticket.buyer_photo_url) : null;
-  const qr = ticket.qr_code_data_url && String(ticket.qr_code_data_url).includes('/qr-codes/')
-    ? decodePath(ticket.qr_code_data_url) : null;
+  const photo = privateKeyFromReference(ticket.buyer_photo_url);
+  const qr = privateKeyFromReference(ticket.qr_code_data_url);
   if (photo) set.add(photo);
   if (qr) set.add(qr);
-}
-
-function decodePath(url) {
-  try {
-    return decodeURIComponent(new URL(url).pathname.slice(1));
-  } catch {
-    return null;
-  }
 }
 
 function json(statusCode, body) {

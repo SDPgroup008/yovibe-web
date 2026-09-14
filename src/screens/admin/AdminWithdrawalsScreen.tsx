@@ -152,13 +152,13 @@ export default function AdminWithdrawalsScreen() {
     if (netAfterFee <= 0) { setOtpError("Net withdrawal amount is zero"); return }
     setOtpLoading(true); setOtpError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setOtpError("Session expired"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('user_id', sessionUser.id).eq('used', false)
-      const otp = Math.floor(100000 + Math.random() * 900000).toString()
-      await supabase.from('payout_otps').insert({ user_id: sessionUser.id, email: user.email, otp, expires_at: new Date(Date.now() + 90 * 1000) })
-      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', { body: { email: user.email, otp } })
-      if (emailError) throw emailError
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) { setOtpError("Session expired"); return }
+      const response = await fetch('/.netlify/functions/request-payout-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to send code')
       setOtpSent(true)
     } catch (err) { console.error(err); setOtpError("Failed to send code") }
     finally { setOtpLoading(false) }
@@ -168,12 +168,6 @@ export default function AdminWithdrawalsScreen() {
     if (!otpCode.trim()) { setOtpError("Enter the code"); return }
     setOtpLoading(true); setOtpError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setOtpError("Session expired"); return }
-      // Client-side sanity check only — the server verifies and consumes the OTP.
-      const { data: otpRow } = await supabase.from('payout_otps')
-        .select('*').eq('user_id', sessionUser.id).eq('otp', otpCode.trim()).eq('used', false).gt('expires_at', new Date().toISOString()).single()
-      if (!otpRow) { setOtpError("Code is incorrect or expired"); return }
       setOtpLoading(false)
       setWithdrawLoading(true)
 
@@ -237,13 +231,13 @@ export default function AdminWithdrawalsScreen() {
     if (manualNetAfterFee <= 0) { setManualOtpError("Net withdrawal amount is zero"); return }
     setManualOtpLoading(true); setManualOtpError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setManualOtpError("Session expired"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('user_id', sessionUser.id).eq('used', false)
-      const otp = Math.floor(100000 + Math.random() * 900000).toString()
-      await supabase.from('payout_otps').insert({ user_id: sessionUser.id, email: user.email, otp, expires_at: new Date(Date.now() + 90 * 1000) })
-      const { error: emailError } = await supabase.functions.invoke('send-payout-otp', { body: { email: user.email, otp } })
-      if (emailError) throw emailError
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) { setManualOtpError("Session expired"); return }
+      const response = await fetch('/.netlify/functions/request-payout-otp', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Unable to send code')
       setManualOtpSent(true)
     } catch (err) { console.error(err); setManualOtpError("Failed to send code") }
     finally { setManualOtpLoading(false) }
@@ -253,17 +247,11 @@ export default function AdminWithdrawalsScreen() {
     if (!manualOtpCode.trim()) { setManualOtpError("Enter the code"); return }
     setManualOtpLoading(true); setManualOtpError("")
     try {
-      const { data: { user: sessionUser } } = await supabase.auth.getUser()
-      if (!sessionUser) { setManualOtpError("Session expired"); return }
-      const { data: otpRow } = await supabase.from('payout_otps')
-        .select('*').eq('user_id', sessionUser.id).eq('otp', manualOtpCode.trim()).eq('used', false).gt('expires_at', new Date().toISOString()).single()
-      if (!otpRow) { setManualOtpError("Code is incorrect or expired"); return }
-      await supabase.from('payout_otps').update({ used: true }).eq('id', otpRow.id)
       setManualOtpLoading(false)
       setManualWithdrawLoading(true)
       try {
         const intPhone = toInternationalPhone(manualPhone)
-        const payoutResult = await PawaPayService.initiatePayout(Math.round(manualNetAfterFee * 100) / 100, "UGX", intPhone, manualProvider)
+        const payoutResult = await PawaPayService.initiatePayout(Math.round(manualNetAfterFee * 100) / 100, "UGX", intPhone, manualProvider, manualOtpCode.trim())
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
 
         try {

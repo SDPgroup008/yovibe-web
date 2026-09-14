@@ -1,5 +1,6 @@
 // Notification Service for sending alerts and updates
 import { supabase } from "../config/supabase"
+import { publicSiteUrl } from "../config/runtime"
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { AppNotification, NotificationAnalytics, DailyNotificationStats, NotificationUserInteraction, NotificationDetailedAnalytics } from "../models/Notification"
@@ -339,7 +340,7 @@ export class NotificationService {
     eventName: string,
   ): Promise<void> {
     try {
-      const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://yovibe.net"
+      const baseUrl = typeof window !== "undefined" ? window.location.origin : publicSiteUrl()
       const photoUrl = `${baseUrl}/add-photo?ticket=${ticketId}`
 
       await this.saveNotification({

@@ -236,13 +236,13 @@ try {
   importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
 
   firebase.initializeApp({
-    apiKey: "AIzaSyBYNPWQj74P7EpmbVxX6ETVHEPayu2-UpE",
-    authDomain: "eco-guardian-bd74f.firebaseapp.com",
-    projectId: "eco-guardian-bd74f",
-    storageBucket: "eco-guardian-bd74f.appspot.com",
-    messagingSenderId: "917905910857",
-    appId: "1:917905910857:web:6a0a450f36d2cbb6912398",
-    measurementId: "G-8PRQWEZP8L",
+    apiKey: "__FIREBASE_API_KEY__",
+    authDomain: "__FIREBASE_AUTH_DOMAIN__",
+    projectId: "__FIREBASE_PROJECT_ID__",
+    storageBucket: "__FIREBASE_STORAGE_BUCKET__",
+    messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+    appId: "__FIREBASE_APP_ID__",
+    measurementId: "__FIREBASE_MEASUREMENT_ID__",
   });
 
   const messaging = firebase.messaging();

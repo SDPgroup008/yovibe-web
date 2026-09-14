@@ -18,6 +18,8 @@ const {
   computePdfPositions,
 } = require("./ticketLayoutEngine");
 const { renderTicketPdf } = require("../shared/ticketPdfArtwork");
+const { requiredEnv, getSiteUrl } = require("../shared/runtimeConfig");
+const { privateKeyFromReference, getObject } = require("../shared/r2");
 
 // Basic email format check — not exhaustive, just catches obvious bad input
 function isValidEmail(email) {
@@ -49,6 +51,8 @@ function buildTicketEmailHtml({
   ticketDesign,
 }) {
   const greetingName = buyerName ? escapeHtml(buyerName) : "there";
+  const siteUrl = getSiteUrl();
+  const refundRequestUrl = `${siteUrl}/refund-request`;
   
   // Extract template id for color scheme
   const templateId = ticketDesign?.source === "template" ? ticketDesign.template_id : null;
@@ -251,7 +255,7 @@ function buildTicketEmailHtml({
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; margin-top:24px;">
       <tr>
         <td align="center" style="font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;">
-          <a href="https://yovibe.net/t/${escapeHtml(ticketRef)}" class="yovibe-cta" style="display:inline-block; background:${colors.accent}; color:#000; text-decoration:none; padding:14px 32px; border-radius:10px; font-size:15px; font-weight:700;">&#127932;&nbsp; View Your Ticket</a>
+          <a href="${siteUrl}/t/${escapeHtml(ticketRef)}" class="yovibe-cta" style="display:inline-block; background:${colors.accent}; color:#000; text-decoration:none; padding:14px 32px; border-radius:10px; font-size:15px; font-weight:700;">&#127932;&nbsp; View Your Ticket</a>
         </td>
       </tr>
     </table>`;
@@ -307,7 +311,8 @@ function buildTicketEmailHtml({
       <tr>
         <td align="center" style="padding:16px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif;" class="yovibe-bg-dark">
           <p style="margin:0 0 6px; font-size:11px; color:#6b6b6b;">This ticket is verified and secured by YoVibe</p>
-          <p style="margin:0; font-size:11px; color:#6b6b6b;">Questions? Contact <a href="mailto:support@yovibe.net" style="color:${colors.accent}; text-decoration:none;">support@yovibe.net</a></p>
+          <p style="margin:0 0 6px; font-size:11px; color:#6b6b6b;">Questions? Contact <a href="mailto:support@yovibe.net" style="color:${colors.accent}; text-decoration:none;">support@yovibe.net</a></p>
+          <p style="margin:0; font-size:11px; color:#6b6b6b;">Cancelled or postponed event? <a href="${escapeHtml(refundRequestUrl)}" style="color:${colors.accent}; text-decoration:none;">Request a refund</a></p>
         </td>
       </tr>
     </table>`;
@@ -371,6 +376,15 @@ function buildTicketEmailHtml({
 // declared mime type or from the URL's file extension / response content-type.
 async function loadQrImageBytes(qrCodeInput) {
   if (!qrCodeInput) return null;
+
+  const privateKey = privateKeyFromReference(qrCodeInput);
+  if (privateKey) {
+    const object = await getObject('private', privateKey);
+    const bytes = object.Body?.transformToByteArray
+      ? Buffer.from(await object.Body.transformToByteArray())
+      : Buffer.from(await object.Body.transformToString('base64'), 'base64');
+    return { isPng: String(object.ContentType || '').includes('png') || privateKey.endsWith('.png'), bytes };
+  }
 
   // Case 1: inline base64 data URL
   const dataUrlMatch = /^data:(image\/(png|jpeg|jpg));base64,(.+)$/i.exec(qrCodeInput);
@@ -645,7 +659,7 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
   }
 
   const body = {
-    from: { address: "tickets@yovibe.net", name: "YoVibe Tickets" },
+    from: { address: requiredEnv('TICKET_EMAIL_ADDRESS'), name: "YoVibe Tickets" },
     to: [{ email_address: { address: to } }],
     subject,
     htmlbody: html,
@@ -679,8 +693,9 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
 
 async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
   if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
+  const from = requiredEnv('TICKET_EMAIL_FROM');
   const { data, error } = await resend.emails.send({
-    from: "YoVibe Tickets <tickets@yovibe.net>",
+    from,
     to: [to],
     subject,
     html,
@@ -797,7 +812,8 @@ exports.handler = async function (event) {
     '',
     'Present this QR code at the event entrance.',
     '',
-    `View your ticket: https://yovibe.net/t/${ticketRef}`,
+    `View your ticket: ${getSiteUrl()}/t/${ticketRef}`,
+    `Refund request (cancelled or postponed events only): ${getSiteUrl()}/refund-request`,
     '',
     'This ticket is verified and secured by YoVibe.',
   ].filter(Boolean).join('\n');

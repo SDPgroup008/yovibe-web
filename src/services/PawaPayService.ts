@@ -1,6 +1,5 @@
 import type { PaymentIntent } from "../models/Ticket"
-
-const PAWAPAY_BASE_URL = process.env.NEXT_PUBLIC_PAWAPAY_API_URL || "https://api.pawapay.net"
+import supabase from "../config/supabase"
 
 const PAWAPAY_PROVIDERS: Record<string, string[]> = {
   UG: ["MTN_MOMO_UGA", "AIRTEL_OAPI_UGA"],
@@ -147,36 +146,11 @@ export class PawaPayService {
     sanitizedPhoneNumber?: string
     error?: string
   }> {
-    try {
-      const response = await fetch(`${PAWAPAY_BASE_URL}/toolkit/predict-provider`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ phoneNumber }),
-      })
-
-      const data = await safeJson<any>(response)
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: data.message || "Failed to predict provider",
-        }
-      }
-
-      return {
-        success: true,
-        country: data.country,
-        provider: data.provider,
-        sanitizedPhoneNumber: data.phoneNumber,
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || "Network error",
-      }
-    }
+    const sanitized = String(phoneNumber || '').replace(/\D/g, '').replace(/^0/, '256')
+    if (!/^256\d{9}$/.test(sanitized)) return { success: false, error: 'Enter a valid Ugandan phone number' }
+    const localPrefix = sanitized.slice(3, 6)
+    const provider = ['075', '074', '070'].includes(localPrefix) ? 'AIRTEL_OAPI_UGA' : 'MTN_MOMO_UGA'
+    return { success: true, country: 'UG', provider, sanitizedPhoneNumber: sanitized }
   }
 
   static async getActiveConfiguration(country: string): Promise<{
@@ -184,37 +158,16 @@ export class PawaPayService {
     providers?: any[]
     error?: string
   }> {
-    try {
-      const response = await fetch(
-        `${PAWAPAY_BASE_URL}/toolkit/active-conf?country=${country}&operationType=DEPOSIT`
-      )
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: "Failed to fetch configuration",
-        }
-      }
-
-      const data = await safeJson<any>(response)
-
-      return {
-        success: true,
-        providers: data.countries?.[0]?.providers || [],
-      }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.message || "Network error",
-      }
-    }
+    const providers = PAWAPAY_PROVIDERS[String(country || '').toUpperCase()]
+    return providers ? { success: true, providers } : { success: false, error: 'Country is not supported' }
   }
 
   static async initiatePayout(
     amount: number,
     currency: string,
     phoneNumber: string,
-    provider: string
+    provider: string,
+    otpCode: string
   ): Promise<{
     success: boolean
     payoutId?: string
@@ -227,16 +180,21 @@ export class PawaPayService {
       /* console.log("   - Phone:", phoneNumber) */
       /* console.log("   - Provider:", provider) */
 
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Admin sign-in required")
+
       const response = await fetch("/.netlify/functions/create-pawapay-payout", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
           amount,
           currency,
           phoneNumber,
           provider,
+          otpCode,
         }),
       })
 

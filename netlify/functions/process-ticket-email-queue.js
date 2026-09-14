@@ -32,7 +32,7 @@ exports.handler = async (event) => {
     path: event?.path || null,
     scheduledHeader: event?.headers?.['x-netlify-scheduled'] || event?.headers?.['X-Netlify-Scheduled'] || null,
     supabaseHost,
-    hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY),
+    hasSecretKey: Boolean(process.env.SUPABASE_SECRET_KEY),
     hasZeptoMailToken: Boolean(process.env.ZEPTOMAIL_TOKEN),
     hasResendKey: Boolean(process.env.RESEND_API_KEY),
     now,

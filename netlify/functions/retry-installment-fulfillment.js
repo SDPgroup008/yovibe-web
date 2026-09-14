@@ -4,6 +4,7 @@
 // inventory locking, ticket creation, and idempotency remain centralized.
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
+const { getSiteUrl, requiredEnv } = require('../shared/runtimeConfig');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -34,7 +35,7 @@ exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
   if (event.httpMethod !== 'POST') return reply(405, { success: false, error: 'Method Not Allowed' });
 
-  const expectedSecret = process.env.FULFILLMENT_WORKER_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const expectedSecret = requiredEnv('FULFILLMENT_WORKER_SECRET');
   if (!expectedSecret || suppliedSecret(event) !== expectedSecret) {
     return reply(401, { success: false, error: 'Unauthorized' });
   }
@@ -92,7 +93,7 @@ exports.handler = async (event) => {
     const tableSize = Math.max(1, Math.floor(Number(plan.table_size) || 1));
     const isTableEntry = plan.is_table_entry === true;
     const photo = plan.buyer_photo_url || '';
-    const siteUrl = process.env.SITE_URL || process.env.URL || 'https://yovibe.net';
+    const siteUrl = getSiteUrl();
     const fulfillmentPayload = {
       // The plan UUID is deterministic, making this retry idempotent.
       fulfillmentId: plan.id,
@@ -108,7 +109,7 @@ exports.handler = async (event) => {
       payerEmail: plan.payer_email || plan.buyer_email,
       buyerId: plan.buyer_id,
       buyerPhone: plan.payment_number,
-      buyerPhotoUrl: /^https?:\/\//.test(photo) ? photo : undefined,
+      buyerPhotoUrl: /^(https?:\/\/|r2-private:\/\/)/.test(photo) ? photo : undefined,
       buyerPhotoDataUrl: /^data:image\//.test(photo) ? photo : undefined,
       seatNumbers: !isTableEntry && plan.seat_number != null ? Array(qty).fill(plan.seat_number) : undefined,
       tableNumbers: isTableEntry && plan.table_number != null ? Array(qty).fill(plan.table_number) : undefined,
