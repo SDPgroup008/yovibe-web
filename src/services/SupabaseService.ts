@@ -1502,10 +1502,16 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
   async getVibeImagesByVenueAndWeek(venueId: string): Promise<Record<string, VibeImage[]>> {
     try {
+      const endDate = new Date();
+      const startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 7);
+
       const { data, error } = await supabase
         .from("vibe_images")
         .select("*")
         .eq("venue_slug", venueId)
+        .gte("uploaded_at", startDate.toISOString())
+        .lte("uploaded_at", endDate.toISOString())
         .order("uploaded_at", { ascending: false })
         .limit(100);
 
@@ -1515,11 +1521,19 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       (data || []).forEach((doc) => {
         const date = new Date(doc.uploaded_at);
-        const weekKey = `${date.getFullYear()}-W${this.getWeekNumber(date)}`;
+        if (Number.isNaN(date.getTime())) return;
+        // Use a sortable, unambiguous local calendar date. The UI can render
+        // this as Today/Yesterday or a localized date without parsing a
+        // non-standard "YYYY-W##" string.
+        const dateKey = [
+          date.getFullYear(),
+          String(date.getMonth() + 1).padStart(2, "0"),
+          String(date.getDate()).padStart(2, "0"),
+        ].join("-");
 
-        if (!grouped[weekKey]) grouped[weekKey] = [];
+        if (!grouped[dateKey]) grouped[dateKey] = [];
 
-        grouped[weekKey].push({
+        grouped[dateKey].push({
           id: doc.id,
           venueId: doc.venue_slug,
           imageUrl: doc.image_url,
@@ -1534,12 +1548,6 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       console.error("SupabaseService: Error getting vibe images by week:", error);
       return {};
     }
-  }
-
-  private getWeekNumber(date: Date): number {
-    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
-    const pastDaysOfYear = (date.getTime() - firstDayOfYear.getTime()) / 86400000;
-    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
   }
 
   async addVibeImage(vibeImageData: Omit<VibeImage, "id">): Promise<string> {

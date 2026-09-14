@@ -13,6 +13,7 @@ import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/f
 import { db } from "../config/firebase"
 import type { Venue } from "../models/Venue"
 import type { Event } from "../models/Event"
+import type { VibeImage } from "../models/VibeImage"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { SEOMetadata } from "../components/SEOMetadata"
@@ -53,6 +54,22 @@ const VenueDetailScreen: React.FC = () => {
   const [submittingRequest, setSubmittingRequest] = useState(false)
   const [existingRequestStatus, setExistingRequestStatus] = useState<string | null>(null)
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+
+  // Vibe images are public venue content; keep this independent from the
+  // authenticated ownership-request path so guests see the current vibe too.
+  const applyLatestVibe = useCallback((vibeImages: VibeImage[]) => {
+    if (vibeImages.length === 0) {
+      setVibeRating(0.0)
+      setCurrentVibeImage(null)
+      return
+    }
+
+    const latestVibe = vibeImages.reduce((latest, image) => (
+      image.uploadedAt > latest.uploadedAt ? image : latest
+    ))
+    setVibeRating(latestVibe.vibeRating || 0.0)
+    setCurrentVibeImage(latestVibe.imageUrl)
+  }, [])
 
   // Filter events to show only current and upcoming events
   const upcomingEvents = useMemo(() => {
@@ -128,7 +145,10 @@ const VenueDetailScreen: React.FC = () => {
             setIsCustomVenue(false)
           }
 
-          // Always set owner/admin flags when user is logged in (independent of venue data)
+          // Vibes are public and must load for authenticated and guest visitors.
+          const vibeImagesPromise = SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date())
+
+          // Ownership requests and role flags remain authenticated-only.
           if (user) {
             /* console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id) */
             setIsOwner(venueData.ownerId === user.id)
@@ -136,23 +156,15 @@ const VenueDetailScreen: React.FC = () => {
 
             const [existingRequest, vibeImages] = await Promise.all([
               SupabaseService.getUserOwnershipRequest(venueId, user.id),
-              SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date()),
+              vibeImagesPromise,
             ])
 
             if (existingRequest) {
               setExistingRequestStatus(existingRequest.status)
             }
-
-            if (vibeImages.length > 0) {
-              const latestVibe = vibeImages.reduce((latest, image) => {
-                return image.uploadedAt > latest.uploadedAt ? image : latest
-              })
-              setVibeRating(latestVibe.vibeRating || 0.0)
-              setCurrentVibeImage(latestVibe.imageUrl)
-            } else {
-              setVibeRating(0.0)
-              setCurrentVibeImage(null)
-            }
+            applyLatestVibe(vibeImages)
+          } else {
+            applyLatestVibe(await vibeImagesPromise)
           }
         }
       } catch (error) {
@@ -210,7 +222,7 @@ const VenueDetailScreen: React.FC = () => {
     return () => {
       unsubscribeVibe()
     }
-  }, [venueId, user, isValidVenueId])
+  }, [venueId, user, isValidVenueId, applyLatestVibe])
 
   // Inject JSON-LD structured data for SEO
   useEffect(() => {
@@ -276,9 +288,13 @@ const VenueDetailScreen: React.FC = () => {
       // Fetch events regardless of user authentication (events are public data)
       if (venueData) {
         /* console.log("[VenueDetailScreen] Refreshing events for venue:", venueId) */
-        const venueEvents = await SupabaseService.getEventsByVenue(venueId)
+        const [venueEvents, vibeImages] = await Promise.all([
+          SupabaseService.getEventsByVenue(venueId),
+          SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date()),
+        ])
         /* console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length) */
         setEvents(venueEvents)
+        applyLatestVibe(vibeImages)
         
         if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
           setIsCustomVenue(true)
@@ -297,7 +313,7 @@ const VenueDetailScreen: React.FC = () => {
     } finally {
       setRefreshing(false)
     }
-  }, [venueId, user])
+  }, [venueId, user, applyLatestVibe])
 
   const handleManagePrograms = () => {
     (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
