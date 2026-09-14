@@ -9,8 +9,11 @@ const description =
   "Buy event tickets in Uganda on YoVibe. Discover events, concerts, parties, and venues in Kampala, Entebbe, Jinja and many other parts of Uganda.";
 const keywords =
   "yovibe, yo vibe, vibe, uganda events, kampala nightlife, entebbe venues, mukono events, jinja events, ugandan artists, concerts, parties";
-const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || '').replace(/\/$/, '');
-if (!siteUrl) throw new Error('NEXT_PUBLIC_SITE_URL is required to patch the web shell');
+// Netlify production already supplies SITE_URL for server functions. Accept
+// that same value for the static shell so promotion does not require copying
+// or changing production environment variables.
+const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || process.env.SITE_URL || '').replace(/\/$/, '');
+if (!siteUrl) throw new Error('SITE_URL or NEXT_PUBLIC_SITE_URL is required to patch the web shell');
 const canonicalUrl = `${siteUrl}/`;
 const ogImage = `${siteUrl}/assets/og-image.png`;
 const robots = String(process.env.APP_ENV || '').toLowerCase() === 'staging'
