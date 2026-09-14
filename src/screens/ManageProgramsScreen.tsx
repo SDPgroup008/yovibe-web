@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
@@ -11,6 +11,24 @@ import SupabaseService from "../services/SupabaseService"
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
+function normalizePrograms(value: unknown): Record<string, string> {
+  let source = value
+  if (typeof source === "string") {
+    try {
+      source = JSON.parse(source)
+    } catch {
+      source = {}
+    }
+  }
+  if (!source || typeof source !== "object" || Array.isArray(source)) return {}
+
+  return DAYS_OF_WEEK.reduce<Record<string, string>>((result, day) => {
+    const valueForDay = (source as Record<string, unknown>)[day]
+    if (typeof valueForDay === "string") result[day] = valueForDay
+    return result
+  }, {})
+}
+
 const ManageProgramsScreen: React.FC = () => {
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
@@ -18,10 +36,37 @@ const ManageProgramsScreen: React.FC = () => {
   // Extract venueId from current path: /venues/:venueId/programs
   const pathParts = currentPath.split('/').filter(Boolean)
   const venueId = pathParts[1] // venues/:venueId/programs
-  const weeklyPrograms = {} // We'll need to fetch this from the venue data
-  const [programs, setPrograms] = useState<Record<string, string>>(weeklyPrograms)
+  const [programs, setPrograms] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [loadingPrograms, setLoadingPrograms] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    const loadPrograms = async () => {
+      if (!venueId) {
+        if (active) {
+          setLoadError(true)
+          setLoadingPrograms(false)
+        }
+        return
+      }
+
+      try {
+        const venue = await SupabaseService.getVenueById(venueId)
+        if (!venue) throw new Error("Venue not found")
+        if (active) setPrograms(normalizePrograms(venue.weeklyPrograms))
+      } catch (error) {
+        console.error("Error loading venue programs:", error)
+        if (active) setLoadError(true)
+      } finally {
+        if (active) setLoadingPrograms(false)
+      }
+    }
+
+    loadPrograms()
+    return () => { active = false }
+  }, [venueId])
 
   const handleProgramChange = (day: string, program: string) => {
     setPrograms((prev) => ({
@@ -31,18 +76,22 @@ const ManageProgramsScreen: React.FC = () => {
   }
 
   const handleSave = async () => {
-    setFieldErrors({})
-    const emptyDays = DAYS_OF_WEEK.filter(day => !programs[day]?.trim())
-    if (emptyDays.length > 0) {
-      const errs: Record<string, string> = {}
-      emptyDays.forEach(day => { errs[day] = "Please enter a program for this day" })
-      setFieldErrors(errs)
-      Alert.alert("Missing Programs", `Please fill in programs for ${emptyDays.length} day(s): ${emptyDays.join(", ")}`)
+    if (loadError) {
+      Alert.alert("Unable to load programs", "Please return to the venue and try again.")
       return
     }
+
+    // Blank days are optional. Persist only non-empty entries so the venue
+    // details screen shows the days that actually have a program.
+    const cleanedPrograms = DAYS_OF_WEEK.reduce<Record<string, string>>((result, day) => {
+      const program = programs[day]?.trim()
+      if (program) result[day] = program
+      return result
+    }, {})
+
     setLoading(true)
     try {
-      await SupabaseService.updateVenuePrograms(venueId, programs)
+      await SupabaseService.updateVenuePrograms(venueId, cleanedPrograms)
       Alert.alert("Success", "Weekly programs updated successfully")
       navigation.goBack()
     } catch (error) {
@@ -66,23 +115,22 @@ const ManageProgramsScreen: React.FC = () => {
         <View key={day} style={styles.dayContainer}>
           <Text style={styles.dayLabel}>{day}</Text>
           <TextInput
-            style={[styles.programInput, fieldErrors[day] && styles.inputError]}
+            style={styles.programInput}
             value={programs[day] || ""}
-            onChangeText={(text) => { handleProgramChange(day, text); if (fieldErrors[day]) setFieldErrors(prev => { const n = {...prev}; delete n[day]; return n }) }}
+            onChangeText={(text) => handleProgramChange(day, text)}
             placeholder={`What's happening on ${day}?`}
             placeholderTextColor="#999"
             multiline
           />
-          {fieldErrors[day] && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors[day]}</Text>}
         </View>
       ))}
 
       <TouchableOpacity
         style={[styles.saveButton, loading && styles.disabledButton]}
         onPress={handleSave}
-        disabled={loading}
+        disabled={loading || loadingPrograms}
       >
-        {loading ? (
+        {loading || loadingPrograms ? (
           <ActivityIndicator color="#FFFFFF" />
         ) : (
           <>

@@ -407,6 +407,10 @@ const VenueDetailScreen: React.FC = () => {
   }
 
   const showOwnButton = user && !isOwner && !isAdmin && !isCustomVenue && !existingRequestStatus
+  const visiblePrograms = useMemo(
+    () => Object.entries(venue?.weeklyPrograms || {}).filter(([, program]) => String(program || "").trim().length > 0),
+    [venue?.weeklyPrograms]
+  )
 
   // Header menu is now handled within the screen content since we don't use React Navigation headers
 
@@ -582,11 +586,11 @@ const VenueDetailScreen: React.FC = () => {
               </>
             )}
 
-            {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
+            {visiblePrograms.length > 0 && (
               <>
                 <Text style={styles.sectionTitle}>Weekly Program</Text>
                 <View style={styles.programContainer}>
-                  {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
+                  {visiblePrograms.map(([day, program]) => (
                     <View key={day} style={styles.programItem}>
                       <Text style={styles.programDay}>{day}</Text>
                       <Text style={styles.programDescription}>{program}</Text>
@@ -844,11 +848,11 @@ const VenueDetailScreen: React.FC = () => {
             </>
           )}
 
-          {venue.weeklyPrograms && Object.keys(venue.weeklyPrograms).length > 0 && (
-            <>
-              <Text style={styles.sectionTitle}>Weekly Program</Text>
-              <View style={styles.programContainer}>
-                {Object.entries(venue.weeklyPrograms).map(([day, program]) => (
+          {visiblePrograms.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>Weekly Program</Text>
+                <View style={styles.programContainer}>
+                  {visiblePrograms.map(([day, program]) => (
                   <View key={day} style={styles.programItem}>
                     <Text style={styles.programDay}>{day}</Text>
                     <Text style={styles.programDescription}>{program}</Text>
