@@ -1153,7 +1153,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .eq("venue_slug", venueId)
         .order("created_at", { ascending: false })
         .limit(1)
-        .single();
+        // A venue may not have any ratings yet; zero rows is a normal result.
+        .maybeSingle();
 
       if (error) return null;
 
