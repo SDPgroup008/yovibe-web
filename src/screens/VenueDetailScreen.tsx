@@ -375,6 +375,10 @@ const VenueDetailScreen: React.FC = () => {
     (navigation as any).navigate("TodaysVibe", { venueId, venueName: venue?.name || "" })
   }
 
+  const handleAddVibe = () => {
+    (navigation as any).navigate("AddVibe", { venueId, venueName: venue?.name || "" })
+  }
+
   const handleOpenOwnershipModal = () => {
     if (!user) {
       Alert.alert("Login Required", "Please login to request ownership of this venue")
@@ -641,10 +645,21 @@ const VenueDetailScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        <View style={{ width: "36%", flexShrink: 0 }}>
+        <ScrollView
+          style={styles.desktopRightColumn}
+          contentContainerStyle={styles.desktopRightColumnContent}
+          showsVerticalScrollIndicator={true}
+          nestedScrollEnabled
+        >
           <View style={styles.stickyCard}>
             {(isOwner || isAdmin) && (
               <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
+                {isOwner && (
+                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                    <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Add Vibe</Text>
+                  </TouchableOpacity>
+                )}
                 {isOwner && !isCustomVenue && (
                   <>
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
@@ -684,7 +699,7 @@ const VenueDetailScreen: React.FC = () => {
 
             <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Upcoming Events</Text>
             {upcomingEvents.length > 0 ? (
-              <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
+              <View>
                 {upcomingEvents.map((event) => (
                   <TouchableOpacity
                     key={event.id}
@@ -705,7 +720,7 @@ const VenueDetailScreen: React.FC = () => {
                     </View>
                   </TouchableOpacity>
                 ))}
-              </ScrollView>
+              </View>
             ) : (
               <View style={styles.emptyEventsContainer}>
                 <Text style={styles.emptyEventsText}>No upcoming events at this venue</Text>
@@ -713,7 +728,7 @@ const VenueDetailScreen: React.FC = () => {
               </View>
             )}
           </View>
-        </View>
+        </ScrollView>
       </View>
     ) : (
       <ScrollView
@@ -824,6 +839,12 @@ const VenueDetailScreen: React.FC = () => {
 
           {(isOwner || isAdmin) && (
             <View style={styles.actionButtonsContainer}>
+              {isOwner && (
+                <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                  <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Add Vibe</Text>
+                </TouchableOpacity>
+              )}
               {isOwner && !isCustomVenue && (
                 <>
                   <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
@@ -1648,6 +1669,14 @@ const styles = StyleSheet.create({
   desktopLeftContent: {
     paddingVertical: 20,
     paddingHorizontal: 8,
+  },
+  desktopRightColumn: {
+    width: "36%",
+    flexShrink: 0,
+    height: "100%",
+  },
+  desktopRightColumnContent: {
+    paddingBottom: 32,
   },
   stickyCard: {
     backgroundColor: "rgba(18, 18, 26, 0.85)",
