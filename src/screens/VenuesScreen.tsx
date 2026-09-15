@@ -8,6 +8,8 @@ import { useCompatNavigation } from "../utils/compatNavigation";
 import { useCachedVenues } from "../hooks/useDataCache";
 import { useVenuesScroll } from "../hooks/useScrollPersistence";
 import type { Venue } from "../models/Venue";
+import type { VibeImage } from "../models/VibeImage";
+import SupabaseService from "../services/SupabaseService";
 import VibeAnalysisService from "../services/VibeAnalysisService";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
@@ -118,6 +120,43 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
     }
   }, [venues]);
 
+  // Vibe images are the canonical source for today's live rating. Refresh
+  // them whenever the venue list changes so cards and ranking stay current.
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCurrentVibes = async () => {
+      const venueList = venues || []
+      if (!venueList.length) {
+        setVenueVibeRatings({})
+        return
+      }
+
+      const today = new Date()
+      const ratings: Record<string, number> = {}
+      await Promise.all(venueList.map(async (venue) => {
+        const key = venue.slug || venue.id
+        if (!key) return
+
+        try {
+          const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(key, today)
+          const latestVibe = vibeImages.reduce<VibeImage | null>(
+            (latest, image) => !latest || image.uploadedAt > latest.uploadedAt ? image : latest,
+            null,
+          )
+          ratings[key] = latestVibe?.vibeRating ?? venue.vibeRating ?? 0
+        } catch {
+          ratings[key] = venue.vibeRating ?? 0
+        }
+      }))
+
+      if (!cancelled) setVenueVibeRatings(ratings)
+    }
+
+    loadCurrentVibes()
+    return () => { cancelled = true }
+  }, [venues])
+
 
 
 
@@ -125,6 +164,9 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   const handleVenueSelect = (venueId: string) => {
     navigation.navigate("VenueDetail", { venueId });
   };
+
+  const getCurrentVibe = (venue: Venue) =>
+    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
 
   const getFilteredVenues = () => {
     // Handle search query filtering
@@ -150,8 +192,8 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       }
       
       const sorted = [...filtered].sort((a, b) => {
-        const aVibe = venueVibeRatings[a.id] || 0.0;
-        const bVibe = venueVibeRatings[b.id] || 0.0;
+        const aVibe = getCurrentVibe(a);
+        const bVibe = getCurrentVibe(b);
         return bVibe - aVibe;
       });
       return sorted;
@@ -200,8 +242,8 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
     
     // Sort by current vibe rating (highest first)
     const sorted = searchFiltered.sort((a, b) => {
-      const aVibe = venueVibeRatings[a.id] || 0.0;
-      const bVibe = venueVibeRatings[b.id] || 0.0;
+      const aVibe = getCurrentVibe(a);
+      const bVibe = getCurrentVibe(b);
       return bVibe - aVibe;
     });
     
@@ -210,7 +252,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   // Memoize filtered and sorted venues to prevent recalculation on every render
   // Only recalculate when venues, activeTab, or searchQuery changes
-  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery]);
+  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery, venueVibeRatings]);
 
   useEffect(() => {
     const venuesToDisplay = Array.isArray(filteredVenues) ? filteredVenues : [];
@@ -251,13 +293,13 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
           <View style={styles.vibeRatingContainer}>
             <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
             <Text
-              style={[styles.vibeRatingValue, { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id] || 0.0) }]}
+              style={[styles.vibeRatingValue, { color: VibeAnalysisService.getVibeColor(getCurrentVibe(item)) }]}
             >
-              {(venueVibeRatings[item.id] || 0.0).toFixed(1)}
+              {getCurrentVibe(item).toFixed(1)}
             </Text>
             <Text style={styles.vibeRatingDescription}>
               {" "}
-              - {VibeAnalysisService.getVibeDescription(venueVibeRatings[item.id] || 0.0)}
+              - {VibeAnalysisService.getVibeDescription(getCurrentVibe(item))}
             </Text>
           </View>
         </View>

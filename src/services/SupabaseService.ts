@@ -431,7 +431,9 @@ class SupabaseService {
       if (error) throw error;
 
       const venues: Venue[] = (data || []).map((doc) => ({
-        id: doc.id,
+        // Venues use slug as the public identifier and table primary key.
+        // Keep id aligned with slug so vibe lookups/ranking use the same key.
+        id: doc.slug || doc.id,
         slug: doc.slug,
         name: doc.name,
         location: doc.location,
@@ -1134,7 +1136,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .select("*")
         .eq("venue_id", venueSlug)
         .eq("user_id", userId)
-        .single();
+        .maybeSingle();
 
       if (error && error.code !== 'PGRST116') throw error;
       if (!data) return null;
@@ -1259,10 +1261,12 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data) {
         data.forEach((doc) => {
           vibeImages.push({
-            id: doc.slug,
+            id: doc.id,
             venueId: doc.venue_slug,
             imageUrl: doc.image_url,
-            vibeRating: doc.vibe_rating || Math.random() * 5,
+            // A missing rating means no measured vibe, not a random score.
+            // Deterministic zero keeps venue ranking and cards trustworthy.
+            vibeRating: doc.vibe_rating ?? 0,
             uploadedAt: new Date(doc.uploaded_at),
             uploadedBy: doc.uploaded_by,
           });
@@ -1652,6 +1656,17 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         .single();
 
       if (error) throw error;
+
+      // Keep the venue's denormalized rating synchronized for consumers that
+      // load venue rows without fetching today's vibe image list.
+      try {
+        await this.updateVenue(vibeImageData.venueId, { vibeRating: vibeImageData.vibeRating });
+      } catch (syncError) {
+        // The image remains the canonical record; a policy/cache issue here
+        // must not turn a successful vibe upload into a failed submission.
+        console.warn("SupabaseService: Unable to sync venue vibe rating:", syncError);
+      }
+
       return data.id;
     } catch (error) {
       console.error("SupabaseService: Error adding vibe image:", error);

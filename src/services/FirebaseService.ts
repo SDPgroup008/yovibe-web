@@ -1429,7 +1429,7 @@ class FirebaseService {
           id: doc.id,
           venueId: data.venueId,
           imageUrl: data.imageUrl,
-          vibeRating: data.vibeRating || Math.random() * 5,
+          vibeRating: data.vibeRating ?? 0,
           uploadedAt: data.uploadedAt.toDate(),
           uploadedBy: data.uploadedBy,
         })
@@ -1474,7 +1474,7 @@ class FirebaseService {
           id: doc.id,
           venueId: data.venueId,
           imageUrl: data.imageUrl,
-          vibeRating: data.vibeRating || Math.random() * 5,
+          vibeRating: data.vibeRating ?? 0,
           uploadedAt: uploadDate,
           uploadedBy: data.uploadedBy,
         })

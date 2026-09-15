@@ -455,20 +455,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                   ...prev,
                   [venueId]: rating,
                 }))
-              } else if (change.type === "removed") {
-                setVenueVibeRatings((prev) => ({
-                  ...prev,
-                  [venueId]: 0.0,
-                }))
               }
             })
           },
           (error) => {
             console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
-            setVenueVibeRatings((prev) => ({
-              ...prev,
-              [venueId]: 0.0,
-            }))
           }
         )
         vibeUnsubscribers.push(unsubscribe)
@@ -523,12 +514,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             const latestVibe = vibeImages.reduce((latest, image) => {
               return image.uploadedAt > latest.uploadedAt ? image : latest;
             });
-            setVenueVibeRatings(prev => ({ ...prev, [venue.id]: latestVibe.vibeRating || 0.0 }));
+            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: latestVibe.vibeRating || 0.0 }));
           } else {
-            setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
+            // Keep the denormalized venue rating when there is no image for today.
+            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: venue.vibeRating || 0.0 }));
           }
         } catch {
-          setVenueVibeRatings(prev => ({ ...prev, [venue.id]: 0.0 }));
+          // A transient daily-vibe read failure must not erase a valid venue rating.
+          setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: venue.vibeRating || 0.0 }));
         }
       }
       return true
@@ -599,6 +592,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     Linking.openURL(url)
   }
 
+  const getCurrentVibe = (venue: Venue) =>
+    venueVibeRatings[venueKey(venue)] ?? venue.vibeRating ?? 0
+
   // Memoized sorted and filtered venues
   const filteredAndSortedVenues = useMemo(() => {
     const searchTerm = searchQuery.toLowerCase().trim()
@@ -618,8 +614,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     
     // Sort by vibe rating (highest first)
     return [...filtered].sort((a, b) => {
-      const aVibe = venueVibeRatings[a.id] || 0.0
-      const bVibe = venueVibeRatings[b.id] || 0.0
+      const aVibe = getCurrentVibe(a)
+      const bVibe = getCurrentVibe(b)
       return bVibe - aVibe
     })
   }, [venues, venueVibeRatings, searchQuery])
@@ -866,8 +862,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                           <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
                           <View style={styles.vibeRatingContainer}>
                             <Text style={styles.vibeRatingLabel}>Vibe: </Text>
-                            <Text style={[styles.vibeRatingValue, { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" }]}>
-                              {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                            <Text style={[styles.vibeRatingValue, { color: vibeColor(getCurrentVibe(venue)) }]}>
+                              {getCurrentVibe(venue).toFixed(1)}
                             </Text>
                           </View>
                         </View>
@@ -943,8 +939,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                   <Text style={styles.hudAddress}>{selectedVenue.location}</Text>
                   <View style={styles.hudVibeRow}>
                     <Text style={styles.hudVibeLabel}>Live Vibe: </Text>
-                    <Text style={[styles.hudVibeValue, { color: vibeColor(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating) }]}>
-                      {(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating).toFixed(1)}
+                    <Text style={[styles.hudVibeValue, { color: vibeColor(getCurrentVibe(selectedVenue)) }]}>
+                      {getCurrentVibe(selectedVenue).toFixed(1)}
                     </Text>
                   </View>
                   <View style={styles.hudButtonsRow}>
@@ -992,8 +988,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                   <Text style={styles.hudAddress}>{selectedVenue.location}</Text>
                   <View style={styles.hudVibeRow}>
                     <Text style={styles.hudVibeLabel}>Live Vibe: </Text>
-                    <Text style={[styles.hudVibeValue, { color: vibeColor(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating) }]}>
-                      {(venueVibeRatings[selectedVenue.id] ?? selectedVenue.vibeRating).toFixed(1)}
+                    <Text style={[styles.hudVibeValue, { color: vibeColor(getCurrentVibe(selectedVenue)) }]}>
+                      {getCurrentVibe(selectedVenue).toFixed(1)}
                     </Text>
                   </View>
                   <View style={styles.hudButtonsRow}>
@@ -1144,10 +1140,10 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                                 <Text
                                   style={[
                                     styles.vibeRatingValue,
-                                    { color: (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 4 ? "#4CAF50" : (venueVibeRatings[venue.id] ?? venue.vibeRating) >= 3 ? "#FFC107" : "#F44336" },
+                                    { color: vibeColor(getCurrentVibe(venue)) },
                                   ]}
                                 >
-                                  {(venueVibeRatings[venue.id] ?? venue.vibeRating).toFixed(1)}
+                                  {getCurrentVibe(venue).toFixed(1)}
                                 </Text>
                               </View>
                             </View>

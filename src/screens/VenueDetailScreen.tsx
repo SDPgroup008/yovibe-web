@@ -216,9 +216,6 @@ const VenueDetailScreen: React.FC = () => {
             setVibeRating(rating)
             // Note: Real-time listener only gets rating data, not image URL
             // Image URL is loaded separately in the initial load
-          } else if (change.type === "removed") {
-            setVibeRating(0.0) // Default to 0.0 if rating is removed
-            setCurrentVibeImage(null)
           }
         })
       },

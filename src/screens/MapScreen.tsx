@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
@@ -21,6 +21,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([])
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
   const [currentPage, setCurrentPage] = useState(1)
   const [lastCreatedAt, setLastCreatedAt] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
@@ -42,6 +43,41 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     loadVenues()
   }, [])
 
+  // Load today's canonical vibe image rating for every venue. This keeps the
+  // list and its ordering in sync after a venue owner posts a new vibe.
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCurrentVibes = async () => {
+      if (!venues.length) {
+        setVenueVibeRatings({})
+        return
+      }
+
+      const today = new Date()
+      const ratings: Record<string, number> = {}
+      await Promise.all(venues.map(async (venue) => {
+        const key = venue.slug || venue.id
+        if (!key) return
+
+        try {
+          const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(key, today)
+          const latestVibe = vibeImages.reduce((latest, image) => (
+            !latest || image.uploadedAt > latest.uploadedAt ? image : latest
+          ), null as (typeof vibeImages[number] | null))
+          ratings[key] = latestVibe?.vibeRating ?? venue.vibeRating ?? 0
+        } catch {
+          ratings[key] = venue.vibeRating ?? 0
+        }
+      }))
+
+      if (!cancelled) setVenueVibeRatings(ratings)
+    }
+
+    loadCurrentVibes()
+    return () => { cancelled = true }
+  }, [venues])
+
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -59,11 +95,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
   }, [destinationVenueId, venues])
 
+  const getCurrentVibe = (venue: Venue) =>
+    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
+
+  const sortedVenues = useMemo(() => [...venues].sort((a, b) => {
+    return getCurrentVibe(b) - getCurrentVibe(a)
+  }), [venues, venueVibeRatings])
+
   useEffect(() => {
-    // Reset pagination when venues change
+    // Reset pagination when venues or their live ratings change.
     setCurrentPage(1);
-    setDisplayedVenues(venues.slice(0, ITEMS_PER_PAGE));
-  }, [venues]);
+    setDisplayedVenues(sortedVenues.slice(0, ITEMS_PER_PAGE));
+  }, [sortedVenues]);
 
   const isCacheValid = () => {
     if (!dataCache) return false;
@@ -185,7 +228,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     const nextPage = currentPage + 1;
     const startIndex = 0;
     const endIndex = nextPage * ITEMS_PER_PAGE;
-    setDisplayedVenues(venues.slice(startIndex, endIndex));
+    setDisplayedVenues(sortedVenues.slice(startIndex, endIndex));
     setCurrentPage(nextPage);
   };
 
@@ -248,7 +291,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 <Text style={styles.venueCategories}>{venue.categories.join(", ")}</Text>
               </View>
               <View style={styles.venueRating}>
-                <Text style={styles.ratingText}>{venue.vibeRating.toFixed(1)}</Text>
+                <Text style={styles.ratingText}>{getCurrentVibe(venue).toFixed(1)}</Text>
                 <Ionicons name="star" size={16} color="#FFD700" />
               </View>
               <View style={styles.venueActions}>
