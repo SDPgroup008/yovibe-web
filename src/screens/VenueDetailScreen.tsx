@@ -643,12 +643,13 @@ const VenueDetailScreen: React.FC = () => {
           </View>
         </ScrollView>
 
-        <ScrollView
-          style={styles.desktopRightColumn}
-          contentContainerStyle={styles.desktopRightColumnContent}
-          showsVerticalScrollIndicator={true}
-          nestedScrollEnabled
-        >
+        <View style={styles.desktopRightColumn}>
+          <ScrollView
+            style={styles.desktopRightScroll}
+            contentContainerStyle={styles.desktopRightColumnContent}
+            showsVerticalScrollIndicator={true}
+            nestedScrollEnabled
+          >
           <View style={styles.stickyCard}>
             {(isOwner || isAdmin) && (
               <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
@@ -726,7 +727,8 @@ const VenueDetailScreen: React.FC = () => {
               </View>
             )}
           </View>
-        </ScrollView>
+          </ScrollView>
+        </View>
         </View>
       </View>
     ) : (
@@ -1683,8 +1685,12 @@ const styles = StyleSheet.create({
   },
   desktopRightColumn: {
     width: "35%",
-    flexShrink: 0,
-    height: "100%",
+    paddingTop: 0,
+    minWidth: 0,
+  },
+  desktopRightScroll: {
+    flex: 1,
+    minWidth: 0,
   },
   desktopRightColumnContent: {
     paddingBottom: 32,
