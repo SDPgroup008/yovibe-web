@@ -665,18 +665,18 @@ const VenueDetailScreen: React.FC = () => {
                       <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Manage Programs</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3", marginTop: 10 }]} onPress={handleManageGallery}>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3" }]} onPress={handleManageGallery}>
                       <Ionicons name="images-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Manage Gallery</Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent, marginTop: 10 }]} onPress={handleAddEvent}>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleAddEvent}>
                       <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Add Event</Text>
                     </TouchableOpacity>
                   </>
                 )}
                 {isAdmin && (
-                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton, { marginTop: 10 }]} onPress={handleDeleteVenue}>
+                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
                     <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Delete Venue</Text>
                   </TouchableOpacity>
@@ -1166,13 +1166,20 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     marginVertical: responsiveSize(12, 16, 20),
     gap: responsiveSize(6, 8, 10),
+    justifyContent: "space-between",
   },
   actionButton: {
+    // Two equal columns keep the four owner actions compact and predictable
+    // in both the desktop sidebar and the mobile detail layout.
+    width: "48.5%",
+    minWidth: 0,
+    minHeight: responsiveSize(42, 46, 52),
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#2196F3",
-    paddingHorizontal: responsiveSize(10, 12, 16),
-    paddingVertical: responsiveSize(6, 8, 12),
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(6, 8, 10),
     borderRadius: responsiveSize(4, 6, 8),
     marginRight: 0,
     marginBottom: 0,
@@ -1185,6 +1192,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginLeft: responsiveSize(6, 8, 10),
     fontSize: responsiveSize(12, 14, 16),
+    flexShrink: 1,
+    textAlign: "center",
   },
   sectionTitle: {
     fontSize: responsiveSize(16, 20, 24),
