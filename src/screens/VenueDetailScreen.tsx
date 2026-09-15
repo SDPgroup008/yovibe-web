@@ -479,8 +479,9 @@ const VenueDetailScreen: React.FC = () => {
       }}
     />
     {isLargeScreen ? (
-      <View style={[styles.container, { backgroundColor: COLORS.background, flexDirection: "row", padding: 24, gap: 24 }]}>
-        <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+      <View style={[styles.container, { backgroundColor: COLORS.background }]}>
+        <View style={styles.desktopContainer}>
+        <ScrollView style={styles.desktopLeftColumn} showsVerticalScrollIndicator={false}>
           <Image 
             source={{ uri: venue.backgroundImageUrl }} 
             style={styles.desktopVenueHeaderImage}
@@ -726,6 +727,7 @@ const VenueDetailScreen: React.FC = () => {
             )}
           </View>
         </ScrollView>
+        </View>
       </View>
     ) : (
       <ScrollView
@@ -1663,12 +1665,24 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: "hidden",
   },
+  desktopContainer: {
+    flexDirection: "row",
+    flex: 1,
+    padding: 24,
+    gap: 24,
+    maxWidth: 1200,
+    width: "100%",
+    alignSelf: "center",
+  },
+  desktopLeftColumn: {
+    flex: 0.65,
+  },
   desktopLeftContent: {
     paddingVertical: 20,
     paddingHorizontal: 8,
   },
   desktopRightColumn: {
-    width: "36%",
+    width: "35%",
     flexShrink: 0,
     height: "100%",
   },
