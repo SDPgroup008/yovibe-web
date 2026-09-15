@@ -653,18 +653,19 @@ const VenueDetailScreen: React.FC = () => {
           <View style={styles.stickyCard}>
             {(isOwner || isAdmin) && (
               <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
-                {isOwner && (
-                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
-                    <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-                    <Text style={styles.actionButtonText}>Add Vibe</Text>
-                  </TouchableOpacity>
-                )}
-                {isOwner && !isCustomVenue && (
+                {isOwner && !isCustomVenue ? (
                   <>
+                    <View style={styles.actionButtonRow}>
+                      <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                        <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                        <Text style={styles.actionButtonText}>Add Vibe</Text>
+                      </TouchableOpacity>
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
                       <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Manage Programs</Text>
                     </TouchableOpacity>
+                    </View>
+                    <View style={styles.actionButtonRow}>
                     <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3" }]} onPress={handleManageGallery}>
                       <Ionicons name="images-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Manage Gallery</Text>
@@ -673,10 +674,18 @@ const VenueDetailScreen: React.FC = () => {
                       <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
                       <Text style={styles.actionButtonText}>Add Event</Text>
                     </TouchableOpacity>
+                    </View>
                   </>
-                )}
+                ) : isOwner ? (
+                  <View style={styles.actionButtonRow}>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                      <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.actionButtonText}>Add Vibe</Text>
+                    </TouchableOpacity>
+                  </View>
+                ) : null}
                 {isAdmin && (
-                  <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
+                  <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue}>
                     <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Delete Venue</Text>
                   </TouchableOpacity>
@@ -840,18 +849,19 @@ const VenueDetailScreen: React.FC = () => {
 
           {(isOwner || isAdmin) && (
             <View style={styles.actionButtonsContainer}>
-              {isOwner && (
-                <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
-                  <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
-                  <Text style={styles.actionButtonText}>Add Vibe</Text>
-                </TouchableOpacity>
-              )}
-              {isOwner && !isCustomVenue && (
+              {isOwner && !isCustomVenue ? (
                 <>
+                  <View style={styles.actionButtonRow}>
+                    <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                      <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                      <Text style={styles.actionButtonText}>Add Vibe</Text>
+                    </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionButton, { backgroundColor: COLORS.accent }]} onPress={handleManagePrograms}>
                     <Ionicons name="calendar-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Manage Programs</Text>
                   </TouchableOpacity>
+                  </View>
+                  <View style={styles.actionButtonRow}>
                   <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#7251A3" }]} onPress={handleManageGallery}>
                     <Ionicons name="images-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Manage Gallery</Text>
@@ -860,10 +870,18 @@ const VenueDetailScreen: React.FC = () => {
                     <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Add Event</Text>
                   </TouchableOpacity>
+                  </View>
                 </>
-              )}
+              ) : isOwner ? (
+                <View style={styles.actionButtonRow}>
+                  <TouchableOpacity style={[styles.actionButton, { backgroundColor: "#00A6A6" }]} onPress={handleAddVibe}>
+                    <Ionicons name="camera-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.actionButtonText}>Add Vibe</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
               {isAdmin && (
-                <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={handleDeleteVenue}>
+                <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue}>
                   <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                   <Text style={styles.actionButtonText}>Delete Venue</Text>
                 </TouchableOpacity>
@@ -1162,16 +1180,19 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(10, 12, 14),
   },
   actionButtonsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
+    flexDirection: "column",
     marginVertical: responsiveSize(12, 16, 20),
     gap: responsiveSize(6, 8, 10),
-    justifyContent: "space-between",
+  },
+  actionButtonRow: {
+    flexDirection: "row",
+    width: "100%",
+    gap: responsiveSize(6, 8, 10),
   },
   actionButton: {
-    // Two equal columns keep the four owner actions compact and predictable
-    // in both the desktop sidebar and the mobile detail layout.
-    width: "48.5%",
+    // The action rows own the layout so React Native Web cannot reflow the
+    // four owner actions into a vertical list.
+    flex: 1,
     minWidth: 0,
     minHeight: responsiveSize(42, 46, 52),
     flexDirection: "row",
@@ -1183,7 +1204,10 @@ const styles = StyleSheet.create({
     borderRadius: responsiveSize(4, 6, 8),
     marginRight: 0,
     marginBottom: 0,
-    flex: isTablet ? 0.48 : undefined,
+  },
+  actionButtonFullWidth: {
+    width: "100%",
+    flex: 0,
   },
   deleteButton: {
     backgroundColor: "#FF3B30",
