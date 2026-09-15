@@ -53,6 +53,7 @@ const EventDetailScreen: React.FC = () => {
   const [isGoing, setIsGoing] = useState(false)
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
+  const [showLoginPrompt, setShowLoginPrompt] = useState(false)
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -88,7 +89,7 @@ const EventDetailScreen: React.FC = () => {
 
   const handleToggleGoing = async () => {
     if (!user) {
-      Alert.alert("Sign In Required", "Please sign in to mark yourself as attending this event.")
+      setShowLoginPrompt(true)
       return
     }
 
@@ -397,6 +398,7 @@ const EventDetailScreen: React.FC = () => {
   const canManageEvent = isEventOwner || user?.userType === "admin"
 
   return (
+    <>
     <View style={[styles.container, { backgroundColor: COLORS.background }]}>
       {isLargeScreen ? (
         <View style={styles.desktopContainer}>
@@ -663,6 +665,43 @@ const EventDetailScreen: React.FC = () => {
         </ScrollView>
       )}
     </View>
+
+    <Modal
+      visible={showLoginPrompt}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowLoginPrompt(false)}
+    >
+      <View style={styles.loginPromptOverlay}>
+        <View style={styles.loginPromptCard}>
+          <Ionicons name="lock-closed-outline" size={30} color={COLORS.primary} />
+          <Text style={styles.loginPromptTitle}>Login required</Text>
+          <Text style={styles.loginPromptMessage}>login to continue with this action</Text>
+          <View style={styles.loginPromptButtons}>
+            <TouchableOpacity
+              style={styles.loginPromptCancelButton}
+              onPress={() => setShowLoginPrompt(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Cancel login"
+            >
+              <Text style={styles.loginPromptCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.loginPromptLoginButton}
+              onPress={() => {
+                setShowLoginPrompt(false)
+                navigation.navigate("Login")
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Login to continue"
+            >
+              <Text style={styles.loginPromptLoginText}>Login</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    </>
   )
 }
 
@@ -761,6 +800,67 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.95)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  loginPromptOverlay: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
+    padding: responsiveSize(20, 24, 32),
+  },
+  loginPromptCard: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: "#1A1A1A",
+    borderRadius: 16,
+    padding: responsiveSize(22, 26, 30),
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.35)",
+  },
+  loginPromptTitle: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "700",
+    marginTop: 10,
+  },
+  loginPromptMessage: {
+    color: "#C7D2E0",
+    fontSize: responsiveSize(13, 14, 15),
+    textAlign: "center",
+    marginTop: 8,
+    marginBottom: 22,
+  },
+  loginPromptButtons: {
+    flexDirection: "row",
+    width: "100%",
+    gap: 10,
+  },
+  loginPromptCancelButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 9,
+    backgroundColor: "#303030",
+  },
+  loginPromptCancelText: {
+    color: "#D7DCE4",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  loginPromptLoginButton: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    borderRadius: 9,
+    backgroundColor: COLORS.primary,
+  },
+  loginPromptLoginText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   fullImageCloseButton: {
     position: "absolute",

@@ -258,6 +258,7 @@ export const DesktopLayout: React.FC<{ children: React.ReactNode }> = ({ childre
 // Layout wrapper for mobile/tablet
 export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isLargeScreen } = useDeviceType();
+  const componentSizes = useComponentSizes();
 
   if (isLargeScreen) {
     return <>{children}</>;
@@ -266,7 +267,7 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <View style={styles.mobileLayout}>
       <AppHeader />
-      <View style={styles.mobileContent}>
+      <View style={[styles.mobileContent, { paddingBottom: componentSizes.tabBarHeight }]}>
         {children}
       </View>
       <TabBar />
@@ -448,7 +449,6 @@ const styles = StyleSheet.create({
   },
   mobileContent: {
     flex: 1,
-    paddingBottom: 80, // Account for bottom tab bar
   },
   // Standardized back button positioned in top-right corner
   standardBackButton: {

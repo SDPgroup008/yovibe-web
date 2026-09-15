@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
+import type { VibeImage } from "../models/VibeImage"
 
 const MyVenuesScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -39,14 +40,22 @@ const MyVenuesScreen: React.FC = () => {
       const venuesList = await SupabaseService.getVenuesByOwner(user.id)
       setVenues(venuesList)
 
-      // Load current vibe ratings for each venue
+      // Load today's canonical vibe ratings for cards and ranking.
       const vibeRatings: Record<string, number> = {}
-      for (const venue of venuesList) {
-        const rating = await SupabaseService.getLatestVibeRating(venue.id)
-        if (rating !== null) {
-          vibeRatings[venue.id] = rating
+      await Promise.all(venuesList.map(async (venue) => {
+        const key = venue.slug || venue.id
+        if (!key) return
+        try {
+          const images = await SupabaseService.getVibeImagesByVenueAndDate(key, new Date())
+          const latest = images.reduce<VibeImage | null>(
+            (current, image) => !current || image.uploadedAt > current.uploadedAt ? image : current,
+            null,
+          )
+          vibeRatings[key] = latest?.vibeRating ?? venue.vibeRating ?? 0
+        } catch {
+          vibeRatings[key] = venue.vibeRating ?? 0
         }
-      }
+      }))
       setVenueVibeRatings(vibeRatings)
     } catch (error) {
       console.error("Error loading venues:", error)
@@ -63,6 +72,14 @@ const MyVenuesScreen: React.FC = () => {
   const handleAddVenue = () => {
     navigation.navigate("AddVenue")
   }
+
+  const getCurrentVibe = (venue: Venue) =>
+    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
+
+  const sortedVenues = useMemo(
+    () => [...venues].sort((a, b) => getCurrentVibe(b) - getCurrentVibe(a)),
+    [venues, venueVibeRatings],
+  )
 
   const handleDeleteVenue = async (venueId: string) => {
     // Use a simple confirm dialog instead of Alert.alert for web compatibility
@@ -114,7 +131,7 @@ const MyVenuesScreen: React.FC = () => {
         </View>
       ) : (
         <FlatList
-          data={venues}
+          data={sortedVenues}
           keyExtractor={(item) => item.slug || item.id || item.name || Math.random().toString()}
           renderItem={({ item }) => (
             <View style={styles.venueCard}>
@@ -123,23 +140,21 @@ const MyVenuesScreen: React.FC = () => {
                   <View style={styles.venueGradient}>
                     <Text style={styles.venueName}>{item.name}</Text>
                     <Text style={styles.venueInfo}>{item.categories.join(", ")}</Text>
-                    {venueVibeRatings[item.id] && (
-                      <View style={styles.vibeRatingContainer}>
-                        <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-                        <Text
-                          style={[
-                            styles.vibeRatingValue,
-                            { color: VibeAnalysisService.getVibeColor(venueVibeRatings[item.id]) },
-                          ]}
-                        >
-                          {venueVibeRatings[item.id].toFixed(1)}
-                        </Text>
-                        <Text style={styles.vibeRatingDescription}>
-                          {" "}
-                          - {VibeAnalysisService.getVibeDescription(venueVibeRatings[item.id])}
-                        </Text>
-                      </View>
-                    )}
+                    <View style={styles.vibeRatingContainer}>
+                      <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
+                      <Text
+                        style={[
+                          styles.vibeRatingValue,
+                          { color: VibeAnalysisService.getVibeColor(getCurrentVibe(item)) },
+                        ]}
+                      >
+                        {getCurrentVibe(item).toFixed(1)}
+                      </Text>
+                      <Text style={styles.vibeRatingDescription}>
+                        {" "}
+                        - {VibeAnalysisService.getVibeDescription(getCurrentVibe(item))}
+                      </Text>
+                    </View>
                   </View>
                 </ImageBackground>
               </TouchableOpacity>
