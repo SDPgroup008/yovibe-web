@@ -277,6 +277,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         accessibilityLabel={`Event poster for ${item.name}`}
       >
         <View style={styles.eventOverlay}>
+          <View style={styles.eventBottomOverlay} pointerEvents="none" />
           <View style={styles.eventHeader}>
             <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
               <Text style={[styles.dateChipText, dateInfo.isSpecial && styles.dateChipTextSpecial]}>{dateInfo.label}</Text>
@@ -535,9 +536,16 @@ const styles = StyleSheet.create({
   },
   eventOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
     padding: responsiveSize(14, 18, 24),
     justifyContent: "space-between",
+  },
+  eventBottomOverlay: {
+    position: "absolute",
+    top: "60%",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    backgroundColor: "rgba(0,0,0,0.6)",
   },
   eventHeader: {
     flexDirection: "row",
