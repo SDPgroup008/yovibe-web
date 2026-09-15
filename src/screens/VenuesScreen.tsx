@@ -243,6 +243,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         accessibilityLabel={`Venue image for ${item.name}`}
       >
         <View style={styles.venueGradient}>
+          <View style={styles.venueBottomOverlay} pointerEvents="none" />
           <Text style={styles.venueName}>{item.name}</Text>
           <Text style={styles.venueInfo}>
             {item.categories && item.categories.length > 0 ? item.categories.join(", ") : "Other"}
@@ -647,6 +648,13 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "flex-end",
     padding: responsiveSize(12, 14, 16),
+  },
+  venueBottomOverlay: {
+    position: "absolute",
+    top: "55%",
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "rgba(0,0,0,0.5)",
   },
   venueName: {
