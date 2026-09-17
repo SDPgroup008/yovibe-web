@@ -255,10 +255,6 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     return { label: formatDateRange(eventDate), isSpecial: false };
   };
 
-  const getAttendeeCount = (event: Event) => {
-    return event.attendees ? event.attendees.length : 0;
-  };
-
   // Memoize renderEventItem to prevent recreation on every render
   const renderEventItem = useCallback(({ item }: { item: Event }) => {
     const dateInfo = getDateLabel(item.date);
@@ -299,12 +295,6 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             </View>
 
             <View style={styles.eventFooter}>
-              {getAttendeeCount(item) > 0 && (
-                <View style={styles.attendeeInfo}>
-                  <Ionicons name="people" size={16} color="#00D4FF" />
-                  <Text style={styles.attendeeText}>{getAttendeeCount(item)} going</Text>
-                </View>
-              )}
               {item.artists.length > 0 && (
                 <Text style={styles.artistsPreviewText} numberOfLines={1} ellipsizeMode="tail">
                   {item.artists.slice(0, 2).join(", ")}{item.artists.length > 2 ? ` +${item.artists.length - 2}` : ""}
@@ -517,7 +507,9 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   eventCard: {
-    marginHorizontal: responsiveSize(12, 16, 24),
+    // Keep the desktop horizontal gap (4px margins + 20px column gap)
+    // equal to the existing 28px vertical card gap.
+    marginHorizontal: responsiveSize(12, 16, 4),
     marginBottom: responsiveSize(16, 20, 28),
     borderRadius: responsiveSize(14, 18, 24),
     overflow: "hidden",
@@ -627,26 +619,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     minWidth: 0,
   },
-  attendeeInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 212, 255, 0.2)",
-    paddingHorizontal: responsiveSize(8, 10, 12),
-    paddingVertical: responsiveSize(3, 4, 5),
-    borderRadius: responsiveSize(8, 10, 12),
-    borderWidth: 1,
-    borderColor: "rgba(0, 212, 255, 0.3)",
-  },
-  attendeeText: {
-    color: "#00D4FF",
-    fontSize: responsiveSize(10, 11, 12),
-    fontWeight: "600",
-    marginLeft: responsiveSize(3, 4, 5),
-  },
   artistsPreviewText: {
     flex: 1,
     minWidth: 0,
-    textAlign: "right",
+    textAlign: "left",
     color: "#FFFFFF",
     fontSize: responsiveSize(10, 11, 12),
     opacity: 0.8,
