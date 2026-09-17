@@ -286,20 +286,13 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       >
         <View style={styles.venueGradient}>
           <View style={styles.venueBottomOverlay} pointerEvents="none" />
-          <Text style={styles.venueName}>{item.name}</Text>
-          <Text style={styles.venueInfo}>
-            {item.categories && item.categories.length > 0 ? item.categories.join(", ") : "Other"}
-          </Text>
-          <View style={styles.vibeRatingContainer}>
-            <Text style={styles.vibeRatingLabel}>Current Vibe: </Text>
-            <Text
-              style={[styles.vibeRatingValue, { color: VibeAnalysisService.getVibeColor(getCurrentVibe(item)) }]}
-            >
-              {getCurrentVibe(item).toFixed(1)}
+          <View style={styles.venueBottomContent}>
+            <Text style={styles.venueName} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
+            <Text style={styles.venueInfo} numberOfLines={1} ellipsizeMode="tail">
+              {item.categories && item.categories.length > 0 ? item.categories.join(", ") : "Other"}
             </Text>
-            <Text style={styles.vibeRatingDescription}>
-              {" "}
-              - {VibeAnalysisService.getVibeDescription(getCurrentVibe(item))}
+            <Text style={styles.vibeRatingText} numberOfLines={1} ellipsizeMode="tail">
+              Current Vibe: <Text style={[styles.vibeRatingValue, { color: VibeAnalysisService.getVibeColor(getCurrentVibe(item)) }]}>{getCurrentVibe(item).toFixed(1)}</Text> - {VibeAnalysisService.getVibeDescription(getCurrentVibe(item))}
             </Text>
           </View>
         </View>
@@ -688,8 +681,17 @@ const styles = StyleSheet.create({
   },
   venueGradient: {
     flex: 1,
+  },
+  venueBottomContent: {
+    position: "absolute",
+    top: "55%",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: "hidden",
+    paddingHorizontal: responsiveSize(8, 10, 12),
+    paddingVertical: responsiveSize(6, 8, 10),
     justifyContent: "flex-end",
-    padding: responsiveSize(12, 14, 16),
   },
   venueBottomOverlay: {
     position: "absolute",
@@ -703,30 +705,20 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(18, 22, 26),
     fontWeight: "bold",
     color: "white",
-    marginBottom: responsiveSize(2, 4, 6),
+    marginBottom: responsiveSize(1, 2, 4),
   },
   venueInfo: {
     fontSize: responsiveSize(12, 14, 16),
     color: "rgba(255,255,255,0.85)",
-    marginTop: responsiveSize(2, 4, 6),
+    marginTop: responsiveSize(1, 2, 4),
   },
-  vibeRatingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: responsiveSize(4, 6, 8),
-    flexWrap: "wrap",
-  },
-  vibeRatingLabel: {
-    fontSize: responsiveSize(11, 13, 14),
+  vibeRatingText: {
+    marginTop: responsiveSize(2, 3, 4),
+    fontSize: responsiveSize(10, 12, 13),
     color: "rgba(255,255,255,0.85)",
   },
   vibeRatingValue: {
-    fontSize: responsiveSize(12, 14, 16),
     fontWeight: "bold",
-  },
-  vibeRatingDescription: {
-    fontSize: responsiveSize(10, 12, 13),
-    color: "rgba(255,255,255,0.75)",
   },
   floatingAddButton: {
     position: "absolute",

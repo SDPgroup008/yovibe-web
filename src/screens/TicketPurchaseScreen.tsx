@@ -10,7 +10,6 @@ import { useRouter } from "../utils/URLRouter"
 import { useAuth } from "../contexts/AuthContext"
 import { v4 as uuidv4 } from "uuid"
 import TicketService from "../services/TicketService"
-import PaymentService from "../services/PaymentService"
 import PesaPalService from "../services/PesaPalService"
 import PawaPayService from "../services/PawaPayService"
 import SupabaseService from "../services/SupabaseService"
@@ -151,6 +150,7 @@ const TicketPurchaseScreen: React.FC = () => {
 
   // Calculate table entry details
   const selectedEntryFee = selectedTicketType ? ticketTypes.find((t: any) => t.name === selectedTicketType.name) : null
+  const selectedTicketLabel = selectedEntryFee?.name || selectedTicketType?.name || "Ticket"
   const isTableEntry = selectedEntryFee?.isTable ?? false
   const tableSize = selectedEntryFee?.tableSize ?? 1
   const actualTicketCount = isTableEntry ? quantity * tableSize : quantity
@@ -650,7 +650,7 @@ const TicketPurchaseScreen: React.FC = () => {
         setProgressStep(4) // Ticket successfully delivered
         setProgressCompleted(true)
         setPurchaseStatus("success")
-        setStatusMessage(`${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""} purchased successfully!`)
+        setStatusMessage(`${actualTicketCount} × ${selectedTicketLabel} purchased successfully!`)
         setTimeout(() => {
           setProgressVisible(false)
           navigation.navigate("MyTickets")
@@ -718,7 +718,6 @@ const TicketPurchaseScreen: React.FC = () => {
   }, [basePrice, actualTicketCount, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
-  const { appCommission, venueRevenue } = PaymentService.calculateRevenueSplit(total)
 
   // Installment preview � recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
@@ -1023,7 +1022,7 @@ const handleInstallmentPurchase = async () => {
       } else {
         /* console.log("[handlePurchase] PesaPal flow - total:", total, "buyerEmail:", buyerEmail) */
         // Handle card/bank transfer via PesaPal
-        const description = `${quantity}x ${selectedTicketTypeName} ticket(s) for ${event!.name}`
+        const description = `${quantity}x ${selectedTicketTypeName} for ${event!.name}`
         const callbackUrl = typeof window !== "undefined" ? `${window.location.origin}/events/payment-callback` : ""
 
         /* console.log("?? Submitting order to PesaPal...") */
@@ -1335,7 +1334,7 @@ const handleInstallmentPurchase = async () => {
 
         {!isTableEntry && (
           <View style={styles.priceRow}>
-            <Text style={styles.priceLabel}>Price per ticket:</Text>
+            <Text style={styles.priceLabel}>Price per {selectedTicketLabel.toLowerCase()}:</Text>
             <Text style={styles.priceValue}>UGX {basePrice.toLocaleString()}</Text>
           </View>
         )}
@@ -1388,10 +1387,10 @@ const handleInstallmentPurchase = async () => {
           step={2}
           title={isTableEntry
             ? `Names (${quantity} x ${tableSize} pax)`
-            : `Names (${actualTicketCount} ticket${actualTicketCount > 1 ? "s" : ""})`}
+            : `Names (${actualTicketCount} ${selectedTicketLabel})`}
         />
         {!user && (
-          <Text style={styles.sectionSubtitle}>Each ticket requires a unique name</Text>
+          <Text style={styles.sectionSubtitle}>Each entry requires a unique name</Text>
         )}
 
         {isTableEntry ? (
@@ -1778,8 +1777,15 @@ const handleInstallmentPurchase = async () => {
         <Text style={styles.sectionTitle}>Order Summary</Text>
 
         <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>{isTableEntry ? "Table price:" : `${selectedTicketLabel} price:`}</Text>
+          <Text style={styles.summaryValue}>UGX {(isTableEntry ? rawBasePrice : basePrice).toLocaleString()}</Text>
+        </View>
+
+        <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>
-            Tickets ({quantity}x){isTableEntry && tableSize > 1 ? ` (${tableSize} pax/table)` : ""}
+            {isTableEntry
+              ? `${quantity} table${quantity === 1 ? "" : "s"}:`
+              : `${actualTicketCount} ${selectedTicketLabel}:`}
           </Text>
           <Text style={styles.summaryValue}>UGX {subtotal.toLocaleString()}</Text>
         </View>
@@ -1789,19 +1795,6 @@ const handleInstallmentPurchase = async () => {
             <Text style={styles.summaryLabel}>Late Fee ({(event?.lateFeePercent ?? 0)}%):</Text>
             <Text style={styles.summaryValue}>UGX {lateFee.toLocaleString()}</Text>
           </View>
-        )}
-
-        {!useInstallments && (
-          <>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>YoVibe Fee (15%):</Text>
-              <Text style={styles.summaryValue}>UGX {appCommission.toLocaleString()}</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Event Revenue:</Text>
-              <Text style={styles.summaryValue}>UGX {venueRevenue.toLocaleString()}</Text>
-            </View>
-          </>
         )}
 
         {useInstallments && installmentPreview.length > 0 && (
@@ -1889,14 +1882,6 @@ const handleInstallmentPurchase = async () => {
         <View style={styles.trustRow}>
           <Ionicons name="lock-closed" size={13} color="#00D4FF" />
           <Text style={styles.trustText}>Secured by PesaPal &amp; PawaPay</Text>
-        </View>
-        <View style={styles.trustRow}>
-          <Ionicons name="shield-checkmark-outline" size={13} color="#00FF9F" />
-          <Text style={styles.trustText}>Instant ticket delivery to your email</Text>
-        </View>
-        <View style={styles.trustRow}>
-          <Ionicons name="information-circle-outline" size={13} color="#F59E0B" />
-          <Text style={styles.trustText}>Installment plans carry an 8% service fee</Text>
         </View>
       </View>
       </View>{/* desktopTicketRight */}

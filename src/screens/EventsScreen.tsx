@@ -289,11 +289,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             </View>
           </View>
 
-          <View style={styles.eventContent}>
-            <Text style={styles.eventName}>{item.name}</Text>
+          <View style={styles.eventBottomContent}>
+            <Text style={styles.eventName} numberOfLines={1} ellipsizeMode="tail">{item.name}</Text>
             <View style={styles.eventLocationRow}>
               <Ionicons name="location" size={16} color="#FFFFFF" />
-              <Text style={styles.eventLocation}>
+              <Text style={styles.eventLocation} numberOfLines={1} ellipsizeMode="tail">
                 {item.location ? `${item.location} • ${item.venueName}` : item.venueName}
               </Text>
             </View>
@@ -305,14 +305,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
                   <Text style={styles.attendeeText}>{getAttendeeCount(item)} going</Text>
                 </View>
               )}
-              <View style={styles.artistsPreview}>
-                {item.artists.slice(0, 2).map((artist, index) => (
-                  <Text key={index} style={styles.artistPreviewText}>
-                    {artist}
-                  </Text>
-                ))}
-                {item.artists.length > 2 && <Text style={styles.moreArtistsText}>+{item.artists.length - 2}</Text>}
-              </View>
+              {item.artists.length > 0 && (
+                <Text style={styles.artistsPreviewText} numberOfLines={1} ellipsizeMode="tail">
+                  {item.artists.slice(0, 2).join(", ")}{item.artists.length > 2 ? ` +${item.artists.length - 2}` : ""}
+                </Text>
+              )}
             </View>
           </View>
         </View>
@@ -590,15 +587,22 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(10, 11, 12),
     fontWeight: "700",
   },
-  eventContent: {
-    flex: 1,
+  eventBottomContent: {
+    position: "absolute",
+    top: "60%",
+    right: 0,
+    bottom: 0,
+    left: 0,
+    overflow: "hidden",
+    paddingHorizontal: responsiveSize(10, 12, 16),
+    paddingVertical: responsiveSize(8, 10, 12),
     justifyContent: "flex-end",
   },
   eventName: {
     fontSize: responsiveSize(18, 22, 26),
     fontWeight: "800",
     color: "#FFFFFF",
-    marginBottom: responsiveSize(6, 8, 10),
+    marginBottom: responsiveSize(3, 4, 6),
     textShadowColor: "rgba(0,0,0,0.8)",
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
@@ -606,9 +610,12 @@ const styles = StyleSheet.create({
   eventLocationRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(4, 6, 8),
+    minWidth: 0,
   },
   eventLocation: {
+    flex: 1,
+    minWidth: 0,
     fontSize: responsiveSize(13, 15, 16),
     color: "#FFFFFF",
     marginLeft: responsiveSize(4, 6, 8),
@@ -618,6 +625,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    minWidth: 0,
   },
   attendeeInfo: {
     flexDirection: "row",
@@ -635,20 +643,13 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     marginLeft: responsiveSize(3, 4, 5),
   },
-  artistsPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  artistPreviewText: {
+  artistsPreviewText: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "right",
     color: "#FFFFFF",
     fontSize: responsiveSize(10, 11, 12),
-    marginRight: responsiveSize(6, 8, 10),
     opacity: 0.8,
-  },
-  moreArtistsText: {
-    color: "#00D4FF",
-    fontSize: responsiveSize(10, 11, 12),
-    fontWeight: "600",
   },
   loadingContainer: {
     flex: 1,
