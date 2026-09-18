@@ -183,6 +183,14 @@ export const RouterProvider: React.FC<RouterProviderProps> = ({
     typeof window !== 'undefined' ? window.location.pathname : '/'
   ]);
 
+  const paramsForPath = (path: string): RouteParams => {
+    for (const route of routes) {
+      const matchParams = PathMatcher.match(route.path, path);
+      if (matchParams !== null) return matchParams;
+    }
+    return {};
+  };
+
   // Handle browser navigation
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -190,13 +198,14 @@ export const RouterProvider: React.FC<RouterProviderProps> = ({
     const handlePopState = () => {
       const newPath = window.location.pathname;
       setCurrentPath(newPath);
-      setHistory(prev => {
-        const newHistory = [...prev];
-        // Remove current path and add new one
-        if (newHistory[newHistory.length - 1] !== newPath) {
-          newHistory.push(newPath);
-        }
-        return newHistory;
+      setParams(paramsForPath(newPath));
+      setHistory((previousHistory) => {
+        const existingIndex = previousHistory.lastIndexOf(newPath);
+        // Browser back/forward should rewind or restore the in-app stack, not
+        // append a duplicate route that causes the header back button to stall.
+        return existingIndex >= 0
+          ? previousHistory.slice(0, existingIndex + 1)
+          : [...previousHistory, newPath];
       });
     };
 
@@ -206,13 +215,7 @@ export const RouterProvider: React.FC<RouterProviderProps> = ({
     const initialPath = window.location.pathname;
     if (initialPath !== '/' && initialPath !== '/login' && initialPath !== '/signup') {
       // Find matching route for deep link
-      for (const route of routes) {
-        const matchParams = PathMatcher.match(route.path, initialPath);
-        if (matchParams !== null) {
-          setParams(matchParams);
-          break;
-        }
-      }
+      setParams(paramsForPath(initialPath));
     }
 
     return () => window.removeEventListener('popstate', handlePopState);
@@ -236,24 +239,14 @@ export const RouterProvider: React.FC<RouterProviderProps> = ({
       return [...prev, path];
     });
 
-    // Update params for new path
-    for (const route of routes) {
-      const matchParams = PathMatcher.match(route.path, path);
-      if (matchParams !== null) {
-        setParams(matchParams);
-        break;
-      }
-    }
+    setParams(paramsForPath(path));
   };
 
   const goBack = () => {
-    if (history.length > 1) {
-      const newHistory = [...history];
-      newHistory.pop(); // Remove current
-      const previousPath = newHistory[newHistory.length - 1];
-
-      navigate(previousPath, true); // Replace current with previous
-    }
+    if (typeof window === 'undefined' || history.length <= 1) return;
+    // Let the browser emit popstate. The listener above then removes the
+    // current route from the same history stack instead of re-adding it.
+    window.history.back();
   };
 
   const canGoBack = history.length > 1;
