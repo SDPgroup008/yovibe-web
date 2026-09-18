@@ -93,6 +93,13 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
   }
 }
 
+function ticketBadgeLabel(data: CanonicalTicketData): string {
+  const label = [data.ticketType || "Standard"]
+  if (data.tableNumber != null && data.tableNumber !== "") label.push(`Table ${data.tableNumber}`)
+  if (data.seatNumber != null && data.seatNumber !== "") label.push(`Seat ${data.seatNumber}`)
+  return label.join(" \u00b7 ")
+}
+
 /**
  * Compute the hero poster rectangle for the DEFAULT (email-style) in-app ticket.
  * The SVG no longer renders the poster hero; MyTicketsScreen overlays the actual
@@ -111,7 +118,7 @@ export function computeEmailHeroRect(ticket: Ticket, event?: Event, design?: Tic
   const pad = isLandscape ? 24 : 32
   const rowH = isLandscape ? 24 : 28
   const gap = isLandscape ? 4 : 6
-  const rowCount = 6 + (data.seatNumber != null ? 1 : 0) + (data.tableNumber != null ? 1 : 0)
+  const rowCount = 4
   const detailsCardH = rowCount * rowH + (isLandscape ? 12 : 18)
   const titleH = isLandscape ? 54 : 66
   const attendeeH = isLandscape ? 50 : 58
@@ -187,15 +194,11 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const gap = isLandscape ? 4 : 6
 
   const details: Array<[string, string]> = [
-    ["Event", data.eventName],
-    ["Ticket Type", data.ticketType],
     ["Venue", data.venue],
     ["Date", data.date],
     ["Time", data.time],
     ["Ticket Ref", data.ticketRef],
   ]
-  if (data.seatNumber != null) details.push(["Seat", String(data.seatNumber)])
-  if (data.tableNumber != null) details.push(["Table", String(data.tableNumber)])
   const detailsCardH = details.length * rowH + (isLandscape ? 12 : 18)
 
   const titleH = isLandscape ? 54 : 66
@@ -223,11 +226,12 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
 
   // Title
   const titleY = y + pad
-  const badgeW = Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30))
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase()
+  const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30))
   const titleBlock = `
     <text x="${pad}" y="${titleY + 24}" font-family="${FONT_STACK}" font-size="24px" font-weight="800" fill="${esc(colors.text)}" letter-spacing="-0.5">${esc(data.eventName)}</text>
     <rect x="${pad}" y="${titleY + 34}" width="${badgeW}" height="22" rx="11" fill="${esc(colors.accent)}"/>
-    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>`
+    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>`
   y = titleY + titleH
 
   // Attendee card

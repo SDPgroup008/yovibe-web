@@ -84,17 +84,19 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
 }
 
 function emailDetailRows(data, options) {
-  const rows = [
-    ['EVENT', data.eventName || 'Event'],
-    ['TICKET', data.ticketType || 'Standard'],
+  return [
     ['VENUE', data.venue || 'Venue TBA'],
     ['DATE', data.date || ''],
     ['TIME', data.time || ''],
     ['REF', data.ticketRef || 'XXXXXXXX'],
   ];
-  if (data.seatNumber != null && data.seatNumber !== '') rows.push(['SEAT', String(data.seatNumber)]);
-  if (data.tableNumber != null && data.tableNumber !== '') rows.push(['TABLE', String(data.tableNumber)]);
-  return rows;
+}
+
+function ticketBadgeLabel(data) {
+  const label = [data.ticketType || 'Standard'];
+  if (data.tableNumber != null && data.tableNumber !== '') label.push(`Table ${data.tableNumber}`);
+  if (data.seatNumber != null && data.seatNumber !== '') label.push(`Seat ${data.seatNumber}`);
+  return label.join(' \u00b7 ');
 }
 
 // Email-style stacked layout for DEFAULT tickets (no custom uploaded background).
@@ -120,11 +122,12 @@ function renderDefaultSvg(data, options = {}) {
   const hero = hasPoster ? `
     <image href="${href(data.posterUrl)}" x="0" y="0" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>` : '';
 
-  const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+  const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30));
   const titleBlock = `
     ${showText ? `<text x="${pad}" y="${titleY}" font-family="Arial, Helvetica, sans-serif" font-size="24px" font-weight="800" fill="${primary}" letter-spacing="-0.5">${esc(data.eventName || 'Event')}</text>` : ''}
     <rect x="${pad}" y="${titleY + 10}" width="${badgeW}" height="22" rx="11" fill="${accent}"/>
-    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(String(data.ticketType || 'Standard').toUpperCase())}</text>` : ''}`;
+    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>` : ''}`;
 
   const attendeeBlock = `
     <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="${L.attendeeH}" rx="10" fill="#000" opacity="0.45" stroke="${border}"/>
@@ -326,12 +329,13 @@ async function renderTicketPdf(data) {
     const rows = emailDetailRows(data, {});
     const L = computeEmailLayout(W, H, isLandscape, rows.length, !!data.posterUrl);
     const { pad, contentW, rowH, titleY, attendeeY, detailCardY } = L;
-    const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
+    const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+    const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30));
     const ph = { pageHeight: H };
 
     // Title
     drawPdfText(page, data.eventName || 'Event', pad, titleY, 24, colors.text, { ...ph, font: bold });
-    drawPdfText(page, String(data.ticketType || 'Standard').toUpperCase(), pad + badgeW / 2, titleY + 24, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
+    drawPdfText(page, badgeLabel, pad + badgeW / 2, titleY + 24, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
 
     // Attendee
     drawPdfText(page, 'ADMITS', pad + 14, attendeeY + 20, 9, colors.accent, { ...ph, font: bold });
