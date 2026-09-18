@@ -1,5 +1,5 @@
 [build]
-  command = "npm run build:web"
+  command = "node scripts/generate-modern-functions.js && npm run build:web"
   publish = "dist"
 
 [[plugins]]
@@ -22,7 +22,7 @@
 
 [functions]
   # Tell Netlify where your serverless functions live
-  directory = "netlify/functions"
+  directory = "netlify/modern-functions"
   # Use esbuild to bundle function dependencies (including firebase-admin)
   node_bundler = "esbuild"
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
