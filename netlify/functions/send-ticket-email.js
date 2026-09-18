@@ -43,6 +43,10 @@ function getEmailAddress(sender) {
   return address;
 }
 
+function getTicketEmailSender() {
+  return `YoVibe Tickets <${getEmailAddress(getTicketEmailFrom())}>`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -712,7 +716,7 @@ async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inline
   if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
   try {
     const { data, error } = await resend.emails.send({
-      from: getTicketEmailFrom(),
+      from: getTicketEmailSender(),
       to: [to],
       subject,
       html,
