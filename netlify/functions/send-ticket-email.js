@@ -670,7 +670,7 @@ async function buildTicketPdf({
   return pdfDoc.save();
 }
 
-async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, inlineQr, ticketRef }) {
   if (!ZEPTOMAIL_TOKEN) {
     return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
   }
@@ -685,6 +685,7 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
       attachments: [],
     };
     if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
+    if (inlineQr) body.attachments.push({ content: Buffer.from(inlineQr.bytes).toString("base64"), mime_type: inlineQr.mimeType, name: "ticket-qr.png", content_id: "ticket-qr" });
     if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
 
     const res = await fetch("https://api.zeptomail.com/v1.1/email", {
@@ -707,7 +708,7 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
   }
 }
 
-async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, inlineQr, ticketRef }) {
   if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
   try {
     const { data, error } = await resend.emails.send({
@@ -718,6 +719,7 @@ async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inline
       text: text || undefined,
       attachments: [
         ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
+        ...(inlineQr ? [{ filename: "ticket-qr.png", content: Buffer.from(inlineQr.bytes), content_id: "ticket-qr" }] : []),
         ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
       ],
     });
@@ -790,6 +792,19 @@ exports.handler = async function (event) {
     };
   }
 
+  const inlinePng = undefined;
+
+  let pdfBytes;
+  let inlineQr;
+  try {
+    const qr = await loadQrImageBytes(qrCodeDataUrl);
+    if (qr) inlineQr = { bytes: qr.bytes, mimeType: qr.isPng ? "image/png" : "image/jpeg" };
+  } catch (err) {
+    console.error("send-ticket-email: QR attachment preparation failed", err);
+  }
+
+  const emailQrSource = inlineQr ? "cid:ticket-qr" : qrCodeDataUrl;
+
   const html = buildTicketEmailHtml({
     eventName,
     ticketType,
@@ -797,15 +812,13 @@ exports.handler = async function (event) {
     date,
     time,
     ticketRef,
-    qrCodeDataUrl,
+    qrCodeDataUrl: emailQrSource,
     buyerName,
     photoUploadLink,
     posterUrl,
     ticketDesign,
   });
-  const inlinePng = undefined;
 
-  let pdfBytes;
   try {
     pdfBytes = await buildTicketPdf({
       eventName,
@@ -853,6 +866,7 @@ exports.handler = async function (event) {
     text: plainText,
     pdfBytes,
     inlinePng,
+    inlineQr,
     ticketRef,
   });
 
@@ -877,6 +891,7 @@ exports.handler = async function (event) {
     text: plainText,
     pdfBytes,
     inlinePng,
+    inlineQr,
     ticketRef,
     eventName,
   });

@@ -1,6 +1,7 @@
 const { computeTicketLayout } = require('../functions/ticketLayoutEngine');
 const { Resvg } = require('@resvg/resvg-js');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { privateKeyFromReference, getObject } = require('./r2');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const href = (v) => esc(v).replace(/#/g, '%23');
@@ -226,6 +227,20 @@ async function asData(value) {
       }
     }
     return value;
+  }
+  const privateKey = privateKeyFromReference(value);
+  if (privateKey) {
+    try {
+      const object = await getObject('private', privateKey);
+      const bytes = object.Body?.transformToByteArray
+        ? Buffer.from(await object.Body.transformToByteArray())
+        : Buffer.from(await object.Body.transformToString('base64'), 'base64');
+      const mime = sniffImageMime(bytes) || String(object.ContentType || 'image/png').split(';')[0];
+      return `data:${mime};base64,${bytes.toString('base64')}`;
+    } catch (error) {
+      console.warn(`asData: private asset read failed for ${privateKey}: ${error.message || error}`);
+      return value;
+    }
   }
   if (!/^https?:\/\//i.test(value)) return value;
   let response;
