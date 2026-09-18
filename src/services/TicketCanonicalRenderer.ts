@@ -95,8 +95,8 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
 
 function ticketBadgeLabel(data: CanonicalTicketData): string {
   const label = [data.ticketType || "Standard"]
-  if (data.tableNumber != null && data.tableNumber !== "") label.push(`Table ${data.tableNumber}`)
-  if (data.seatNumber != null && data.seatNumber !== "") label.push(`Seat ${data.seatNumber}`)
+  if (data.tableNumber != null) label.push(`Table ${data.tableNumber}`)
+  if (data.seatNumber != null) label.push(`Seat ${data.seatNumber}`)
   return label.join(" \u00b7 ")
 }
 
@@ -336,6 +336,8 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   }
   const backgroundMask = posterOverlay ? ` mask="url(#${posterMaskId})"` : ""
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36))
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase()
+  const badgeW = Math.min(title.width - 32, Math.max(90, badgeLabel.length * 8 + 28))
   const infoRows = [
     ["Date", data.date], ["Time", data.time], ["Venue", data.venue],
   ]
@@ -413,8 +415,8 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     <!-- Title -->
     <g${blockScale(title)}>
       <text x="16" y="36" font-family="${FONT_STACK}" font-size="${Math.max(20, Math.min(34, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)" letter-spacing="-0.5">${esc(data.eventName)}</text>
-      <rect x="16" y="${title.height - 30}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="22" rx="11" fill="${esc(colors.accent)}"/>
-      <text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>
+      <rect x="16" y="${title.height - 30}" width="${badgeW}" height="22" rx="11" fill="${esc(colors.accent)}"/>
+      <text x="${badgeW / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>
     </g>
 
     <!-- Info card with attendee emphasis -->
