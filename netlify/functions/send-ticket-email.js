@@ -26,6 +26,23 @@ function isValidEmail(email) {
   return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// TICKET_EMAIL_FROM is the canonical setting shared by both providers. Keep
+// TICKET_EMAIL_ADDRESS as a temporary compatibility alias for deployments that
+// predate the unified sender configuration.
+function getTicketEmailFrom() {
+  return requiredEnv("TICKET_EMAIL_FROM", "TICKET_EMAIL_ADDRESS");
+}
+
+function getEmailAddress(sender) {
+  const value = String(sender || "").trim();
+  const bracketedAddress = value.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>/);
+  const address = (bracketedAddress ? bracketedAddress[1] : value).trim();
+  if (!isValidEmail(address)) {
+    throw new Error("Ticket sender must be a valid email address");
+  }
+  return address;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -658,19 +675,18 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
     return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
   }
 
-  const body = {
-    from: { address: requiredEnv('TICKET_EMAIL_ADDRESS'), name: "YoVibe Tickets" },
-    to: [{ email_address: { address: to } }],
-    subject,
-    htmlbody: html,
-    textbody: text || undefined,
-  };
-
-  body.attachments = [];
-  if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
-  if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
-
   try {
+    const body = {
+      from: { address: getEmailAddress(getTicketEmailFrom()), name: "YoVibe Tickets" },
+      to: [{ email_address: { address: to } }],
+      subject,
+      htmlbody: html,
+      textbody: text || undefined,
+      attachments: [],
+    };
+    if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
+    if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
+
     const res = await fetch("https://api.zeptomail.com/v1.1/email", {
       method: "POST",
       headers: {
@@ -693,23 +709,26 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
 
 async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
   if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
-  const from = requiredEnv('TICKET_EMAIL_FROM');
-  const { data, error } = await resend.emails.send({
-    from,
-    to: [to],
-    subject,
-    html,
-    text: text || undefined,
-    attachments: [
-      ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
-      ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
-    ],
-  });
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getTicketEmailFrom(),
+      to: [to],
+      subject,
+      html,
+      text: text || undefined,
+      attachments: [
+        ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
+        ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
+      ],
+    });
 
-  if (error) {
-    return { ok: false, error };
+    if (error) {
+      return { ok: false, error };
+    }
+    return { ok: true, id: data?.id };
+  } catch (error) {
+    return { ok: false, error: error.message || String(error) };
   }
-  return { ok: true, id: data?.id };
 }
 
 exports.handler = async function (event) {
@@ -720,6 +739,13 @@ exports.handler = async function (event) {
   if (!ZEPTOMAIL_TOKEN && !process.env.RESEND_API_KEY) {
     console.error("send-ticket-email: neither ZEPTOMAIL_TOKEN nor RESEND_API_KEY is set");
     return { statusCode: 500, body: JSON.stringify({ error: "Email service not configured" }) };
+  }
+
+  try {
+    getTicketEmailFrom();
+  } catch (error) {
+    console.error("send-ticket-email: ticket sender is not configured");
+    return { statusCode: 500, body: JSON.stringify({ error: "Ticket sender is not configured" }) };
   }
 
   let payload;
