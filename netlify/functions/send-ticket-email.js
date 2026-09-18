@@ -481,8 +481,10 @@ async function buildTicketPdf({
   buyerName,
   posterUrl,
   ticketDesign,
+  seatNumber,
+  tableNumber,
 }) {
-  return renderTicketPdf({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign });
+  return renderTicketPdf({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign, seatNumber, tableNumber });
 
   // Compute layout from ticket design using the shared engine
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
@@ -685,9 +687,10 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
       htmlbody: html,
       textbody: text || undefined,
       attachments: [],
+      inline_images: [],
     };
-    if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
-    if (inlineQr) body.attachments.push({ content: Buffer.from(inlineQr.bytes).toString("base64"), mime_type: inlineQr.mimeType, name: "ticket-qr.png", content_id: "ticket-qr" });
+    if (inlinePng) body.inline_images.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", cid: "ticket-artwork" });
+    if (inlineQr) body.inline_images.push({ content: Buffer.from(inlineQr.bytes).toString("base64"), mime_type: inlineQr.mimeType, name: "ticket-qr.png", cid: "ticket-qr" });
     if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
 
     const res = await fetch("https://api.zeptomail.com/v1.1/email", {
@@ -720,8 +723,8 @@ async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inline
       html,
       text: text || undefined,
       attachments: [
-        ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
-        ...(inlineQr ? [{ filename: "ticket-qr.png", content: Buffer.from(inlineQr.bytes), content_id: "ticket-qr" }] : []),
+        ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), contentId: "ticket-artwork" }] : []),
+        ...(inlineQr ? [{ filename: "ticket-qr.png", content: Buffer.from(inlineQr.bytes), contentId: "ticket-qr" }] : []),
         ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
       ],
     });
@@ -774,6 +777,7 @@ exports.handler = async function (event) {
     ticketDesign,
     seatNumber,
     tableNumber,
+    tableGroupId,
     allowResendFallback = true,
   } = payload;
 
@@ -816,6 +820,9 @@ exports.handler = async function (event) {
     ticketRef,
     qrCodeDataUrl: emailQrSource,
     buyerName,
+    seatNumber,
+    tableNumber,
+    tableGroupId,
     photoUploadLink,
     posterUrl,
     ticketDesign,
@@ -833,6 +840,8 @@ exports.handler = async function (event) {
       buyerName,
       posterUrl,
       ticketDesign,
+      seatNumber,
+      tableNumber,
     });
   } catch (err) {
     // PDF generation failing shouldn't block the email entirely — log it
