@@ -223,12 +223,10 @@ function buildTicketEmailHtml({
 
   // Build ticket details rows (all wrapped in a table-based card)
   const detailRows = [
-    tableRow("EVENT", escapeHtml(eventName)),
     tableRow("TICKET TYPE", escapeHtml(ticketType)),
     venue ? tableRow("VENUE", escapeHtml(venue)) : "",
     tableRow("DATE", escapeHtml(date)),
     tableRow("TIME", escapeHtml(time)),
-    tableRow("TICKET REF", escapeHtml(ticketRef)),
     seatNumber != null ? tableRow("SEAT", String(seatNumber)) : "",
     tableNumber != null ? tableRow("TABLE", String(tableNumber)) : "",
     tableGroupId && tableNumber == null ? tableRow("TABLE", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : "",
@@ -310,7 +308,7 @@ function buildTicketEmailHtml({
   const brandBar = `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:${colors.footer}; border-bottom:1px solid #2a2a2a;">
       <tr>
-        <td style="padding:18px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:18px; font-weight:800; color:${colors.accent};">YoVibe</td>
+        <td style="padding:18px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:18px; font-weight:800;"><span style="color:#EF233C;">Yo</span><span style="color:#0A84FF;">Vibe</span></td>
       </tr>
     </table>`;
 
