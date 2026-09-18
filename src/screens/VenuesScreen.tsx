@@ -690,8 +690,9 @@ const styles = StyleSheet.create({
     left: 0,
     overflow: "hidden",
     paddingHorizontal: responsiveSize(8, 10, 12),
-    paddingVertical: responsiveSize(6, 8, 10),
-    justifyContent: "flex-end",
+    paddingTop: 2,
+    paddingBottom: responsiveSize(6, 8, 10),
+    justifyContent: "flex-start",
   },
   venueBottomOverlay: {
     position: "absolute",

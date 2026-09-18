@@ -40,6 +40,14 @@ const responsiveSize = (small: number, medium: number, large: number) => {
   return small;
 };
 
+// Entry-fee amounts are stored as comma-formatted whole numbers (for example,
+// "10,000"). Strip every non-digit character before grouping the digits so
+// letters and other symbols can never enter the amount field.
+const formatEntryFeeAmount = (value: string): string => {
+  const digits = value.replace(/\D/g, "")
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",")
+}
+
 type EntryFee = { name: string; amount: string; isTable?: boolean; tableSize?: number; maxTickets?: number; seatMap?: { type: "none" | "numbered" | "cinema"; rows?: number; cols?: number }; ticketDesign?: { enabled: boolean; orientation: "portrait" | "landscape"; source: "template" | "upload"; template_id: string | null; background_url: string | null; dimensions: { width: number; height: number }; qr_position?: "top" | "bottom" | "center" | "left" | "right"; layout?: TicketLayout } }
 
 // ─── Interactive ticket editor (web only) ────────────────────────────────────
@@ -1273,8 +1281,10 @@ const AddEventScreen: React.FC<any> = (props) => {
                 <TextInput
                   style={[styles.input, styles.feeAmountInput]}
                   value={newFeeAmount}
-                  onChangeText={setNewFeeAmount}
-                  placeholder="Amount (e.g. 20,000 UGX)"
+                  onChangeText={(value) => setNewFeeAmount(formatEntryFeeAmount(value))}
+                  keyboardType="numeric"
+                  inputMode="numeric"
+                  placeholder="Amount (e.g. 20,000)"
                   placeholderTextColor="#999"
                 />
                 <View style={styles.checkboxRow}>

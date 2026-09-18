@@ -29,6 +29,20 @@ import { publicSiteUrl } from "../config/runtime";
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
 
+const formatCompactEntryFee = (value: unknown): string => {
+  const amount = Number(String(value ?? "").replace(/[^0-9.]/g, ""))
+  if (!Number.isFinite(amount)) return "0"
+  if (amount >= 1_000_000) {
+    const compact = (amount / 1_000_000).toFixed(amount % 1_000_000 === 0 ? 0 : 1)
+    return `${compact.replace(/\.0$/, "")}M`
+  }
+  if (amount >= 1_000) {
+    const compact = (amount / 1_000).toFixed(amount % 1_000 === 0 ? 0 : 1)
+    return `${compact.replace(/\.0$/, "")}K`
+  }
+  return Math.round(amount).toLocaleString()
+};
+
 // Static responsive function for StyleSheet - uses current dimensions
 const responsiveSize = (mobile: number, tablet: number, desktop: number): number => {
   const { width } = Dimensions.get('window');
@@ -278,10 +292,22 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
               <Text style={[styles.dateChipText, dateInfo.isSpecial && styles.dateChipTextSpecial]}>{dateInfo.label}</Text>
             </View>
-            <View style={styles.feeChip}>
-              <Text style={styles.feeChipText}>
-                {item.isFreeEntry ? "Free" : item.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
-              </Text>
+            <View style={styles.feeChips}>
+              {item.isFreeEntry ? (
+                <View style={styles.feeChip}>
+                  <Text style={styles.feeChipText}>Free</Text>
+                </View>
+              ) : Array.from({ length: Math.ceil(item.entryFees.length / 3) }, (_, rowIndex) => (
+                <View key={`fee-row-${rowIndex}`} style={styles.feeChipRow}>
+                  {item.entryFees.slice(rowIndex * 3, rowIndex * 3 + 3).map((fee) => (
+                    <View key={`${fee.name}-${fee.amount}`} style={styles.feeChip}>
+                      <Text style={styles.feeChipText} numberOfLines={1}>
+                        {fee.name}: {formatCompactEntryFee(fee.amount)}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
             </View>
           </View>
 
@@ -543,13 +569,14 @@ const styles = StyleSheet.create({
   },
   dateChip: {
     backgroundColor: "rgba(0, 212, 255, 0.9)",
-    paddingHorizontal: responsiveSize(8, 10, 12),
-    paddingVertical: responsiveSize(4, 5, 6),
-    borderRadius: responsiveSize(14, 16, 20),
+    paddingHorizontal: responsiveSize(5, 7, 8),
+    paddingVertical: responsiveSize(2, 3, 4),
+    borderRadius: responsiveSize(9, 11, 13),
+    marginTop: responsiveSize(-5, -6, -8),
   },
   dateChipText: {
     color: "#FFFFFF",
-    fontSize: responsiveSize(10, 11, 12),
+    fontSize: responsiveSize(8, 9, 10),
     fontWeight: "700",
   },
   // Special styles for TODAY/TOMORROW date chips
@@ -570,13 +597,27 @@ const styles = StyleSheet.create({
   },
   feeChip: {
     backgroundColor: "rgba(255, 215, 0, 0.9)",
-    paddingHorizontal: responsiveSize(8, 10, 12),
-    paddingVertical: responsiveSize(4, 5, 6),
-    borderRadius: responsiveSize(14, 16, 20),
+    paddingHorizontal: responsiveSize(5, 7, 8),
+    paddingVertical: responsiveSize(2, 3, 4),
+    borderRadius: responsiveSize(9, 11, 13),
+  },
+  feeChips: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: responsiveSize(2, 3, 4),
+    maxWidth: "65%",
+    marginTop: responsiveSize(-6, -7, -9),
+    marginRight: responsiveSize(-4, -6, -8),
+  },
+  feeChipRow: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "flex-start",
+    gap: responsiveSize(2, 3, 4),
   },
   feeChipText: {
     color: "#000000",
-    fontSize: responsiveSize(10, 11, 12),
+    fontSize: responsiveSize(8, 9, 10),
     fontWeight: "700",
   },
   eventBottomContent: {
@@ -587,8 +628,9 @@ const styles = StyleSheet.create({
     left: 0,
     overflow: "hidden",
     paddingHorizontal: responsiveSize(10, 12, 16),
-    paddingVertical: responsiveSize(8, 10, 12),
-    justifyContent: "flex-end",
+    paddingTop: 2,
+    paddingBottom: responsiveSize(8, 10, 12),
+    justifyContent: "flex-start",
   },
   eventName: {
     fontSize: responsiveSize(18, 22, 26),
