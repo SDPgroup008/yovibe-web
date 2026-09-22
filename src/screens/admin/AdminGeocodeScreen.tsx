@@ -126,10 +126,23 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
   // throttles to ~1 req/s, so keep batches small).
   const syncLimit = Math.max(1, Math.min(4, Number(limit) || 4))
 
+  const geocodeRequest = async (query: URLSearchParams, options: RequestInit = {}) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.")
+
+    return fetch(`${FUNC_URL}?${query.toString()}`, {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        Authorization: `Bearer ${session.access_token}`,
+      },
+    })
+  }
+
   const runSyncBatch = async (): Promise<ResultSummary> => {
     const params = new URLSearchParams({ limit: String(syncLimit) })
     if (dryRun) params.set("dryRun", "1")
-    const res = await fetch(`${FUNC_URL}?${params.toString()}`)
+    const res = await geocodeRequest(params)
     const body = await res.json().catch(() => ({}))
     if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
     return body as ResultSummary
@@ -210,7 +223,7 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
     try {
       const params = new URLSearchParams({ limit: String(BACKGROUND_LIMIT) })
       if (dryRun) params.set("dryRun", "1")
-      const res = await fetch(`${FUNC_URL}?${params.toString()}`, {
+      const res = await geocodeRequest(params, {
         headers: { "x-nf-async": "true" },
       })
       const body = await res.json().catch(() => ({}))
@@ -235,7 +248,7 @@ const AdminGeocodeScreen: React.FC<AdminGeocodeScreenProps> = ({ navigation }) =
     setMode("sync")
     setError(null)
     try {
-      const res = await fetch(`${FUNC_URL}?resetFailed=1`)
+      const res = await geocodeRequest(new URLSearchParams({ resetFailed: "1" }))
       const body = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(body?.error || `Request failed (${res.status})`)
       setResult({
