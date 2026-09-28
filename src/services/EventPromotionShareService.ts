@@ -100,7 +100,11 @@ export const EventPromotionShareService = {
     page.drawText("Powered by YoVibe", { x: A4_WIDTH - 150, y: 80, size: 10, font: regular, color: rgb(0.38, 0.44, 0.55) })
 
     const pdfBytes = await pdf.save()
-    downloadBlob(new Blob([pdfBytes], { type: "application/pdf" }), `${safeFileName(event.name || event.slug || event.id)}-event-invitation.pdf`)
+    // Copy into a browser-owned ArrayBuffer. pdf-lib exposes Uint8Array with an
+    // ArrayBufferLike backing type that is not accepted by the DOM Blob type.
+    const blobBytes = new Uint8Array(pdfBytes.byteLength)
+    blobBytes.set(pdfBytes)
+    downloadBlob(new Blob([blobBytes.buffer], { type: "application/pdf" }), `${safeFileName(event.name || event.slug || event.id)}-event-invitation.pdf`)
   },
 }
 

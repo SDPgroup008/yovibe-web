@@ -249,3 +249,7 @@ export class TicketService {
     }
   }
 }
+
+// Preserve the existing screen import contract. The class itself contains
+// only the server-authoritative ticket operations defined above.
+export default TicketService

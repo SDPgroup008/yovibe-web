@@ -6,9 +6,14 @@ const { spawnSync } = require('node:child_process');
 const config = path.resolve(__dirname, '..', 'tests', 'load', 'staging-artillery.yml');
 const output = path.join(os.tmpdir(), `yovibe-staging-artillery-${process.pid}.json`);
 const npx = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+const isWindows = process.platform === 'win32';
+const command = isWindows ? (process.env.ComSpec || 'cmd.exe') : npx;
+const args = isWindows
+  ? ['/d', '/s', '/c', `${npx} --yes artillery@2.0.34 run "${config}" --output "${output}"`]
+  : ['--yes', 'artillery@2.0.34', 'run', config, '--output', output];
 
 try {
-  const result = spawnSync(npx, ['--yes', 'artillery@2.0.34', 'run', config, '--output', output], {
+  const result = spawnSync(command, args, {
     cwd: path.resolve(__dirname, '..'),
     stdio: 'inherit',
     shell: false,

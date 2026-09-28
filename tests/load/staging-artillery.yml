@@ -34,5 +34,5 @@ scenarios:
       - get:
           url: "/.netlify/functions/health"
           expect:
-            - statusCode: 503
+            - statusCode: 200
             - contentType: json
