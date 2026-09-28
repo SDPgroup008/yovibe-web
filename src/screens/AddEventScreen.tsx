@@ -23,6 +23,7 @@ import { uploadToR2 } from "../services/R2Service"
 import { useAuth } from "../contexts/AuthContext"
 import { generateEditorHTML, defaultLayout } from "../services/TicketPDFService"
 import type { TicketLayout } from "../services/TicketLayoutEngine"
+import type { EventCreatorType } from "../models/Event"
 import { ValidationDialog } from "../components/ValidationDialog"
 
 // Responsive breakpoints for add event screen
@@ -829,6 +830,16 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Error", "You must be logged in to add an event")
       return
     }
+    const createdByType: EventCreatorType | null =
+      user.userType === "regular_user"
+        ? "user"
+        : user.userType === "club_owner" || user.userType === "admin"
+          ? user.userType
+          : null
+    if (!createdByType) {
+      Alert.alert("Error", "Only regular users, venue owners, and administrators can create events")
+      return
+    }
     if (!useCustomVenue && !selectedVenueId) {
       newErrors.venue = "Please select a venue for this event"
     }
@@ -937,7 +948,7 @@ const AddEventScreen: React.FC<any> = (props) => {
         entryFees: isFreeEntry ? [] : processedEntryFees,
         attendees: [],
         createdBy: user.id,
-        createdByType: user.userType,
+        createdByType,
         priceIndicator: processedEntryFees.length > 0 ? Math.min(...processedEntryFees.map((fee) => parseFloat(fee.amount))) : 0,
         isFreeEntry,
         ticket_design: null,

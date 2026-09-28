@@ -14,6 +14,7 @@ const PUBLIC_ROOTS = new Set([
   'program-posters',
   'venue-gallery',
 ]);
+const REGULAR_ORGANISER_ROOTS = new Set(['events', 'ticket-designs']);
 
 function corsHeaders(event) {
   const configuredOrigin = new URL(getSiteUrl()).origin;
@@ -49,16 +50,20 @@ function validatePath(path) {
   return null;
 }
 
+function canUploadToPath(profile, path) {
+  const role = profile?.user_type;
+  const root = path.split('/').filter(Boolean)[0]?.toLowerCase();
+
+  if (role === 'admin' || role === 'club_owner') return true;
+  return role === 'regular_user' && REGULAR_ORGANISER_ROOTS.has(root);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders(event), body: '' };
   if (event.httpMethod !== 'POST') return response(event, 405, { error: 'Method Not Allowed' });
 
   try {
     const { profile } = await requireUser(event);
-    if (!profile || !['club_owner', 'admin'].includes(profile.user_type)) {
-      return response(event, 403, { error: 'Organiser or admin access required' });
-    }
-
     const input = JSON.parse(event.body || '{}');
     const { file, filename, contentType, path } = input;
     if (!file || !filename || !contentType || !path) {
@@ -66,6 +71,11 @@ exports.handler = async (event) => {
     }
     const pathError = validatePath(path);
     if (pathError) return response(event, 400, { error: `Invalid path: ${pathError}` });
+    if (!canUploadToPath(profile, path)) {
+      return response(event, 403, {
+        error: 'Regular organisers may upload event posters and ticket designs only',
+      });
+    }
     if (typeof filename !== 'string' || !FILENAME_RE.test(filename) || filename.includes('..')) {
       return response(event, 400, { error: 'Invalid filename' });
     }
