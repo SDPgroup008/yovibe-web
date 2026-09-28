@@ -710,16 +710,17 @@ export class TicketService {
     seatNumber?: number;
     tableNumber?: number;
   }> {
+    if (!scanningEventId) {
+      return { success: false, reason: "Scanner event context is required. Open a valid staff scan link and try again." }
+    }
     try {
-      if (scanningEventId) {
-        return await scanTicketSecure({
-          action: "validate",
-          qrText: ticketId,
-          eventId: scanningEventId,
-          staffToken: staffToken || undefined,
-          location,
-        })
-      }
+      return await scanTicketSecure({
+        action: "validate",
+        qrText: ticketId,
+        eventId: scanningEventId,
+        staffToken: staffToken || undefined,
+        location,
+      })
 
       /* console.log("========================================") */
       /* console.log("🔍 TICKET VALIDATION FLOW STARTED") */
@@ -897,30 +898,15 @@ console.error("❌ Error details:", updateError.details)
 
   static async grantReentryPass(
     ticketId: string,
+    eventId: string,
     grantedById: string,
     grantedByName: string,
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      const { data: ticket, error: fetchErr } = await supabase
-        .from("tickets")
-        .select("id, status, buyer_name")
-        .eq("id", ticketId)
-        .single()
-      if (fetchErr || !ticket) return { success: false, error: "Ticket not found" }
-      if (ticket.status !== "used") return { success: false, error: "Ticket has not been scanned yet" }
-      const { error } = await supabase
-        .from("tickets")
-        .update({
-          reentry_pass: {
-            grantedAt: new Date().toISOString(),
-            grantedBy: grantedById,
-            grantedByName,
-            used: false,
-          },
-        })
-        .eq("id", ticketId)
-      if (error) throw error
-      return { success: true }
+      void grantedById
+      void grantedByName
+      const result = await scanTicketSecure({ action: "grant-reentry", eventId, ticketId })
+      return result.success ? { success: true } : { success: false, error: result.reason || "Failed to grant re-entry" }
     } catch (e: any) {
       return { success: false, error: e.message || "Failed to grant re-entry" }
     }
@@ -930,21 +916,14 @@ console.error("❌ Error details:", updateError.details)
     eventSlug: string,
     query: string,
   ): Promise<{ id: string; buyerName: string; entryFeeType: string; status: string; reentryPass: any } | null> {
-    const q = query.trim().toLowerCase()
-    const { data, error } = await supabase
-      .from("tickets")
-      .select("id, buyer_name, entry_fee_type, status, reentry_pass, ticket_ref")
-      .eq("event_slug", eventSlug)
-      .or(`ticket_ref.ilike.%${q}%,buyer_name.ilike.%${q}%`)
-      .limit(1)
-      .single()
-    if (error || !data) return null
+    const result = await scanTicketSecure({ action: "find-reentry", eventId: eventSlug, query })
+    if (!result.success) return null
     return {
-      id: data.id,
-      buyerName: data.buyer_name,
-      entryFeeType: data.entry_fee_type,
-      status: data.status,
-      reentryPass: data.reentry_pass ?? null,
+      id: result.ticketId,
+      buyerName: result.buyerName,
+      entryFeeType: result.entryFeeType,
+      status: result.status,
+      reentryPass: result.reentryPass ?? null,
     }
   }
 
@@ -959,17 +938,18 @@ console.error("❌ Error details:", updateError.details)
     staffToken?: string,
     qrText?: string,
   ): Promise<{ success: boolean; reason?: string }> {
+    if (!eventId || !qrText) {
+      return { success: false, reason: "Scanner event context and QR code are required." }
+    }
     try {
-      if (eventId && qrText) {
-        return await scanTicketSecure({
-          action: "confirm-photo",
-          ticketId: ticketDocId,
-          qrText,
-          eventId,
-          staffToken: staffToken || undefined,
-          location,
-        })
-      }
+      return await scanTicketSecure({
+        action: "confirm-photo",
+        ticketId: ticketDocId,
+        qrText,
+        eventId,
+        staffToken: staffToken || undefined,
+        location,
+      })
 
       /* console.log("========================================") */
       /* console.log("✅ PHOTO VERIFICATION CONFIRMATION") */
@@ -1237,16 +1217,8 @@ console.error("❌ Error details:", updateError.details)
   }
 
   static async getTicketsByEmail(email: string): Promise<Ticket[]> {
-    try {
-      /* console.log("📋 TicketService.getTicketsByEmail: Fetching tickets for email:", email) */
-      const { data: rows } = await supabase.from("tickets").select("*").eq("buyer_email", email)
-      const ticketList = (rows || []).map(this.rowToTicket)
-      /* console.log("✅ Found", ticketList.length, "tickets") */
-      return ticketList
-    } catch (error) {
-      console.error("Error getting tickets by email:", error)
-      return []
-    }
+    void email
+    throw new Error("Direct email ticket lookup has been removed. Use request-ticket-resend instead.")
   }
 
   private static async generateSecureQRCode(
@@ -1307,23 +1279,17 @@ console.error("❌ Error details:", updateError.details)
     photoUrl: string
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      /* console.log("🔒 TicketService.addSecurityPhoto: Adding security photo") */
-      /* console.log("   - Ticket ID:", ticketId) */
-      /* console.log("   - Token:", token ? "present" : "missing") */
-
-      const { data, error } = await supabase.rpc("add_ticket_security_photo", {
-        p_ticket_id: ticketId,
-        p_token: token,
-        p_photo_url: photoUrl,
+      void photoUrl
+      const response = await fetch(resolveFunctionUrl("buyer-photo-access"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", ticketId, token }),
       })
-
-      if (error) {
-        console.error("❌ RPC error:", error)
-        return { success: false, error: error.message }
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || payload.status !== "done") {
+        return { success: false, error: payload.error || "Failed to save security photo" }
       }
-
-      /* console.log("✅ Security photo added successfully") */
-      return { success: data }
+      return { success: true }
     } catch (error) {
       console.error("❌ Error adding security photo:", error)
       return { success: false, error: "Failed to add security photo" }

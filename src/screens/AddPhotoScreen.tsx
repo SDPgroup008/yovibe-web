@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { View, Text, TouchableOpacity, Alert, ActivityIndicator, SafeAreaView, StyleSheet, Platform } from "react-native"
 import { useNavigation } from "../utils/URLRouter"
-import { supabase } from "../config/supabase"
 import { uploadBuyerPhoto } from "../services/R2Service"
 import * as ImagePicker from "expo-image-picker"
 import type { Ticket } from "../models/Ticket"
@@ -82,27 +81,22 @@ export default function AddPhotoScreen() {
       setState("uploading")
       const photoUri = result.assets[0].uri
 
-      const result2 = await uploadBuyerPhoto(photoUri, ticket.id, token || undefined)
-
-      const { data, error } = await supabase.rpc("add_ticket_security_photo", {
-        p_ticket_id: ticket.id,
-        p_token: token,
-        p_photo_url: result2.url,
+      await uploadBuyerPhoto(photoUri, ticket.id, token || undefined)
+      const response = await fetch("/.netlify/functions/buyer-photo-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "complete", ticketId: ticket.id, token }),
       })
+      const data = await response.json().catch(() => ({}))
 
-      if (error) {
-        Alert.alert("Error", error.message)
+      if (!response.ok || data.status !== "done") {
+        Alert.alert("Error", data.error || "Failed to save security photo")
         setState("valid")
         return
       }
 
-      if (data) {
-        setState("done")
-        Alert.alert("Success", "Security photo added successfully!")
-      } else {
-        setState("invalid")
-        Alert.alert("Error", "Failed to add security photo")
-      }
+      setState("done")
+      Alert.alert("Success", "Security photo added successfully!")
     } catch (error) {
       console.error("Photo upload error:", error)
       Alert.alert("Error", "Failed to upload photo")

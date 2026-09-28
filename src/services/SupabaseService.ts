@@ -10,6 +10,18 @@ import type { VibeImage } from "../models/VibeImage"
 import type { VenueOwnershipRequest } from "../models/VenueOwnershipRequest"
 import { v4 as uuidv4 } from "uuid"
 
+const FUNCTIONS_BASE_URL =
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  ""
+
+const resolveFunctionUrl = (functionName: string): string => {
+  const base = FUNCTIONS_BASE_URL.replace(/\/$/, "")
+  return base ? `${base}/.netlify/functions/${functionName}` : `/.netlify/functions/${functionName}`
+}
+
 // Responsive breakpoints for image loading optimization
 const { width: screenWidth } = Dimensions.get('window');
 const isSmallDevice = screenWidth < 380;
@@ -2155,24 +2167,14 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
 
   async getOccupiedSeats(eventSlug: string, feeTypeName: string): Promise<number[]> {
     try {
-      /* console.log(`[getOccupiedSeats] 🔍 Fetching occupied seats for eventSlug="${eventSlug}", feeTypeName="${feeTypeName}"`); */
-      const { data, error } = await supabase
-        .from("tickets_api")
-        .select("seatNumber, entryFeeType")
-        .eq("event_slug", eventSlug)
-        .eq("entryFeeType", feeTypeName)
-        .in("status", ["active", "used", "pending"])
-      /* console.log(`[getOccupiedSeats] Query result: ${JSON.stringify(data)}`); */
-      if (error) {
-        console.error(`[getOccupiedSeats] ❌ Query error:`, error);
-        throw error
-      }
-      const seatNumbers = (data || [])
-        .map((r: any) => r.seatNumber)
-        .filter(Boolean)
-        .map((n: any) => typeof n === 'number' ? n : parseInt(n, 10));
-      /* console.log(`[getOccupiedSeats] ✅ Final occupied seats: ${JSON.stringify(seatNumbers)}`); */
-      return seatNumbers;
+      const response = await fetch(resolveFunctionUrl("ticket-availability"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventSlug, feeType: feeTypeName }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Unable to load seat availability")
+      return Array.isArray(data.occupiedSeats) ? data.occupiedSeats : []
     } catch (error) {
       console.error("SupabaseService: Error getting occupied seats:", error)
       return []
@@ -2233,16 +2235,14 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
 
   async getOccupiedTables(eventSlug: string, feeTypeName: string): Promise<number[]> {
     try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("table_number")
-        .eq("event_slug", eventSlug)
-        .eq("entry_fee_type", feeTypeName)
-        .in("status", ["active", "used", "pending"])
-        .not("table_number", "is", null);
-      if (error) throw error;
-      const tableNumbers = [...new Set((data || []).map((r: any) => r.table_number).filter((n: any) => n != null))];
-      return tableNumbers;
+      const response = await fetch(resolveFunctionUrl("ticket-availability"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventSlug, feeType: feeTypeName }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Unable to load table availability")
+      return Array.isArray(data.occupiedTables) ? data.occupiedTables : []
     } catch (error) {
       console.error("SupabaseService: Error getting occupied tables:", error);
       return [];

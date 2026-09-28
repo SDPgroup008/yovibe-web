@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useRef } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, TextInput, ScrollView, Modal, Animated } from "react-native"
+import { useState, useEffect } from "react"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../../contexts/AuthContext"
 import TicketService from "../../services/TicketService"
@@ -38,20 +38,6 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
   const [fulfillments, setFulfillments] = useState<PendingFulfillment[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [recoveryState, setRecoveryState] = useState<{
-    fulfillmentId: string | null
-    status: "idle" | "running" | "success" | "failed"
-    message: string
-  }>({ fulfillmentId: null, status: "idle", message: "" })
-  
-  const [attendeeModal, setAttendeeModal] = useState<{
-    visible: boolean
-    fulfillment: PendingFulfillment | null
-    names: string[]
-  }>({ visible: false, fulfillment: null, names: [] })
-  
-  const bannerOpacity = useRef(new Animated.Value(0)).current
-
   useEffect(() => {
     if (user?.userType !== "admin") {
       Alert.alert("Access Denied", "Admin access required")
@@ -59,28 +45,6 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
     }
     loadFulfillments()
   }, [user])
-
-  useEffect(() => {
-    if (recoveryState.status !== "idle") {
-      Animated.timing(bannerOpacity, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: false,
-      }).start()
-      
-      const timeout = setTimeout(() => {
-        Animated.timing(bannerOpacity, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: false,
-        }).start(() => {
-          setRecoveryState({ fulfillmentId: null, status: "idle", message: "" })
-        })
-      }, 5000)
-      
-      return () => clearTimeout(timeout)
-    }
-  }, [recoveryState.status])
 
   const loadFulfillments = async () => {
     setLoading(true)
@@ -111,159 +75,12 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
     Alert.alert("Copied", "Reference ID copied to clipboard")
   }
 
-  const renderStatusBanner = () => {
-    if (recoveryState.status === "idle") return null
-    
-    const isSuccess = recoveryState.status === "success"
-    const isRunning = recoveryState.status === "running"
-    
-    return (
-      <Animated.View 
-        style={[
-          styles.statusBanner, 
-          isSuccess ? styles.statusSuccess : isRunning ? styles.statusRunning : styles.statusFailed,
-          { opacity: bannerOpacity }
-        ]}
-      >
-        <Text style={styles.statusBannerText}>
-          {isSuccess ? "✅ " : isRunning ? "⏳ " : "❌ "}
-          {recoveryState.message}
-        </Text>
-      </Animated.View>
-    )
-  }
-
-  const openAttendeeNameModal = (fulfillment: PendingFulfillment) => {
-    const needsNames = !fulfillment.attendeeNames || fulfillment.attendeeNames.length < fulfillment.quantity
-    const initialNames = needsNames 
-      ? Array(fulfillment.quantity).fill("").map((_, i) => fulfillment.attendeeNames?.[i] || "")
-      : fulfillment.attendeeNames || []
-    
-    setAttendeeModal({
-      visible: true,
-      fulfillment,
-      names: initialNames,
-    })
-  }
-
-  const handleRecoveryWithNames = () => {
-    if (!attendeeModal.fulfillment) return
-    
-    const { fulfillment, names } = attendeeModal
-    const validNames = names.map(n => n.trim()).filter(n => n.length > 0)
-    
-    if (validNames.length < fulfillment.quantity) {
-      Alert.alert("Invalid Names", `Please enter at least ${fulfillment.quantity} unique attendee name(s)`)
-      return
-    }
-    
-    setAttendeeModal({ ...attendeeModal, visible: false })
-    performManualRecovery(fulfillment, validNames)
-  }
-
-  const handleRecoveryWithoutNames = (fulfillment: PendingFulfillment) => {
-    setAttendeeModal({ ...attendeeModal, visible: false })
-    performManualRecovery(fulfillment, fulfillment.attendeeNames)
-  }
-
-  const performManualRecovery = async (fulfillment: PendingFulfillment, attendeeNames?: string[]) => {
-    const adminEmail = user?.email || "admin"
-    setRecoveryState({ 
-      fulfillmentId: fulfillment.id, 
-      status: "running", 
-      message: `Starting manual recovery for ${fulfillment.buyerName || fulfillment.buyerEmail}...` 
-    })
-
-    try {
-      const result = await TicketService.recoverTicket(fulfillment, adminEmail, attendeeNames)
-
-      if (result.success) {
-        setRecoveryState({ 
-          fulfillmentId: fulfillment.id, 
-          status: "success", 
-          message: `✅ Successfully recovered ${result.ticketIds.length} ticket(s)` 
-        })
-        loadFulfillments()
-      } else {
-        setRecoveryState({ 
-          fulfillmentId: fulfillment.id, 
-          status: "failed", 
-          message: `❌ Failed: ${result.error}` 
-        })
-      }
-    } catch (error: any) {
-      setRecoveryState({ 
-        fulfillmentId: fulfillment.id, 
-        status: "failed", 
-        message: `❌ Error: ${error.message || "Unknown error"}` 
-      })
-    }
-  }
-
   const renderItem = ({ item }: { item: PendingFulfillment }) => {
     const isExpanded = expandedId === item.id
     const stageColor = getStageColor(item.status, item.created_at)
-    const hasTicketIds = item.ticketIds && item.ticketIds.length > 0
-    const needsNames = !item.attendeeNames || item.attendeeNames.length < item.quantity
-    const failedOnEmailSend = item.lastError?.toLowerCase().includes("email send")
-
-    // Fallback detection: if status is "failed" and the last error mentions "email send",
-    // tickets were likely created but the email stage failed (old records may have empty ticket_ids)
+    const hasTicketIds = Boolean(item.ticketIds?.length)
+    const failedOnEmailSend = item.lastError?.toLowerCase().includes("email send") || false
     const likelyTicketsExist = item.status === "failed" && failedOnEmailSend
-
-    const getActionButton = () => {
-      // If tickets were already created and it failed on email, resume from email stage
-      // hasTicketIds checks stored ticket_ids; likelyTicketsExist handles old records where
-      // ticket_ids wasn't saved but the tickets table has the actual ticket data
-      if ((hasTicketIds || likelyTicketsExist) && failedOnEmailSend) {
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonResume]}
-            onPress={() => handleRecoveryWithoutNames(item)}
-          >
-            <Ionicons name="mail" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Resume Sending Emails</Text>
-          </TouchableOpacity>
-        )
-      }
-      
-      // If tickets were already created (failed at some other stage), resume recovery
-      if (hasTicketIds) {
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonResume]}
-            onPress={() => handleRecoveryWithoutNames(item)}
-          >
-            <Ionicons name="refresh" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Resume Recovery</Text>
-          </TouchableOpacity>
-        )
-      }
-      
-      // No tickets created yet — needs names
-      if (needsNames) {
-        return (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.actionButtonPrimary]}
-            onPress={() => openAttendeeNameModal(item)}
-          >
-            <Ionicons name="person" size={20} color="#FFFFFF" />
-            <Text style={styles.actionButtonText}>Enter Names</Text>
-          </TouchableOpacity>
-        )
-      }
-      
-      // Has names, no tickets — fresh recovery
-      return (
-        <TouchableOpacity
-          style={[styles.actionButton, styles.actionButtonPrimary]}
-          onPress={() => handleRecoveryWithoutNames(item)}
-        >
-          <Ionicons name="play" size={20} color="#FFFFFF" />
-          <Text style={styles.actionButtonText}>Recover Tickets</Text>
-        </TouchableOpacity>
-      )
-    }
 
     return (
       <View style={styles.card} key={item.id}>
@@ -342,7 +159,12 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
             )}
             
             <View style={styles.actionRow}>
-              {getActionButton()}
+          <View style={styles.workerNotice}>
+            <Ionicons name="time-outline" size={18} color="#00D4FF" />
+            <Text style={styles.workerNoticeText}>
+              Recovery is handled automatically by the secure fulfillment worker.
+            </Text>
+          </View>
               <TouchableOpacity
                 style={[styles.actionButton, styles.actionButtonSecondary]}
                 onPress={() => copyToClipboard(item.id)}
@@ -368,7 +190,6 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {renderStatusBanner()}
       <View style={styles.header}>
         <Text style={styles.title}>Stranded Purchases</Text>
         <TouchableOpacity onPress={loadFulfillments}>
@@ -391,64 +212,6 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
         />
       )}
 
-      {/* Attendee Names Modal */}
-      <Modal
-        visible={attendeeModal.visible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setAttendeeModal({ ...attendeeModal, visible: false })}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Enter Attendee Names</Text>
-              <TouchableOpacity onPress={() => setAttendeeModal({ ...attendeeModal, visible: false })}>
-                <Ionicons name="close" size={24} color="#FFFFFF" />
-              </TouchableOpacity>
-            </View>
-            
-            {attendeeModal.fulfillment && (
-              <>
-                <Text style={styles.modalSubtitle}>
-                  {attendeeModal.fulfillment.quantity} ticket(s) for {attendeeModal.fulfillment.buyerName || attendeeModal.fulfillment.buyerEmail}
-                </Text>
-                
-                <ScrollView style={styles.modalBody}>
-                  {Array.from({ length: attendeeModal.fulfillment.quantity }).map((_, index) => (
-                    <TextInput
-                      key={index}
-                      style={styles.modalInput}
-                      value={attendeeModal.names[index]}
-                      onChangeText={(text) => {
-                        const newNames = [...attendeeModal.names]
-                        newNames[index] = text
-                        setAttendeeModal({ ...attendeeModal, names: newNames })
-                      }}
-                      placeholder={`Name ${index + 1}`}
-                      placeholderTextColor="#888"
-                    />
-                  ))}
-                </ScrollView>
-                
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.modalButtonSecondary}
-                    onPress={() => setAttendeeModal({ ...attendeeModal, visible: false })}
-                  >
-                    <Text style={styles.modalButtonTextSecondary}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.modalButtonPrimary}
-                    onPress={handleRecoveryWithNames}
-                  >
-                    <Text style={styles.modalButtonTextPrimary}>Recover Tickets</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </View>
-        </View>
-      </Modal>
     </View>
   )
 }
@@ -459,6 +222,8 @@ const styles = StyleSheet.create({
   loadingText: { color: "#FFFFFF", marginTop: 16 },
   header: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", padding: 16, paddingTop: 48, backgroundColor: "#1a1a1a" },
   title: { color: "#FFFFFF", fontSize: 20, fontWeight: "bold" },
+  workerNotice: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 14, padding: 12, borderRadius: 10, backgroundColor: "rgba(0, 212, 255, 0.08)" },
+  workerNoticeText: { flex: 1, color: "#B9EFFF", fontSize: 13, lineHeight: 18 },
   list: { padding: 16 },
   card: { backgroundColor: "#1a1a1a", borderRadius: 12, marginBottom: 12, overflow: "hidden" },
   cardHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", padding: 16, paddingBottom: 8 },

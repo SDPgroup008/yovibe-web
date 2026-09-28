@@ -26,6 +26,27 @@ function isValidEmail(email) {
   return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
+// TICKET_EMAIL_FROM is the canonical setting shared by both providers. Keep
+// TICKET_EMAIL_ADDRESS as a temporary compatibility alias for deployments that
+// predate the unified sender configuration.
+function getTicketEmailFrom() {
+  return requiredEnv("TICKET_EMAIL_FROM", "TICKET_EMAIL_ADDRESS");
+}
+
+function getEmailAddress(sender) {
+  const value = String(sender || "").trim();
+  const bracketedAddress = value.match(/<\s*([^<>\s]+@[^<>\s]+)\s*>/);
+  const address = (bracketedAddress ? bracketedAddress[1] : value).trim();
+  if (!isValidEmail(address)) {
+    throw new Error("Ticket sender must be a valid email address");
+  }
+  return address;
+}
+
+function getTicketEmailSender() {
+  return `YoVibe Tickets <${getEmailAddress(getTicketEmailFrom())}>`;
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -202,12 +223,10 @@ function buildTicketEmailHtml({
 
   // Build ticket details rows (all wrapped in a table-based card)
   const detailRows = [
-    tableRow("EVENT", escapeHtml(eventName)),
     tableRow("TICKET TYPE", escapeHtml(ticketType)),
     venue ? tableRow("VENUE", escapeHtml(venue)) : "",
     tableRow("DATE", escapeHtml(date)),
     tableRow("TIME", escapeHtml(time)),
-    tableRow("TICKET REF", escapeHtml(ticketRef)),
     seatNumber != null ? tableRow("SEAT", String(seatNumber)) : "",
     tableNumber != null ? tableRow("TABLE", String(tableNumber)) : "",
     tableGroupId && tableNumber == null ? tableRow("TABLE", tableGroupId.includes("TABLE") ? tableGroupId.split("TABLE_").pop() : tableGroupId.slice(-4)) : "",
@@ -289,7 +308,7 @@ function buildTicketEmailHtml({
   const brandBar = `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse; background:${colors.footer}; border-bottom:1px solid #2a2a2a;">
       <tr>
-        <td style="padding:18px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:18px; font-weight:800; color:${colors.accent};">YoVibe</td>
+        <td style="padding:18px 24px; font-family:-apple-system, 'Segoe UI', Roboto, Arial, sans-serif; font-size:18px; font-weight:800;"><span style="color:#EF233C;">Yo</span><span style="color:#0A84FF;">Vibe</span></td>
       </tr>
     </table>`;
 
@@ -462,8 +481,10 @@ async function buildTicketPdf({
   buyerName,
   posterUrl,
   ticketDesign,
+  seatNumber,
+  tableNumber,
 }) {
-  return renderTicketPdf({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign });
+  return renderTicketPdf({ eventName, ticketType, venue, date, time, ticketRef, qrCodeDataUrl, buyerName, posterUrl, ticketDesign, seatNumber, tableNumber });
 
   // Compute layout from ticket design using the shared engine
   const computed = computeTicketLayout(ticketDesign || {}, { hasPoster: false });
@@ -653,24 +674,25 @@ async function buildTicketPdf({
   return pdfDoc.save();
 }
 
-async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, inlineQr, ticketRef }) {
   if (!ZEPTOMAIL_TOKEN) {
     return { ok: false, error: "ZEPTOMAIL_TOKEN not configured" };
   }
 
-  const body = {
-    from: { address: requiredEnv('TICKET_EMAIL_ADDRESS'), name: "YoVibe Tickets" },
-    to: [{ email_address: { address: to } }],
-    subject,
-    htmlbody: html,
-    textbody: text || undefined,
-  };
-
-  body.attachments = [];
-  if (inlinePng) body.attachments.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", content_id: "ticket-artwork" });
-  if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
-
   try {
+    const body = {
+      from: { address: getEmailAddress(getTicketEmailFrom()), name: "YoVibe Tickets" },
+      to: [{ email_address: { address: to } }],
+      subject,
+      htmlbody: html,
+      textbody: text || undefined,
+      attachments: [],
+      inline_images: [],
+    };
+    if (inlinePng) body.inline_images.push({ content: Buffer.from(inlinePng).toString("base64"), mime_type: "image/png", name: "ticket-artwork.png", cid: "ticket-artwork" });
+    if (inlineQr) body.inline_images.push({ content: Buffer.from(inlineQr.bytes).toString("base64"), mime_type: inlineQr.mimeType, name: "ticket-qr.png", cid: "ticket-qr" });
+    if (pdfBytes) body.attachments.push({ content: Buffer.from(pdfBytes).toString("base64"), mime_type: "application/pdf", name: `${ticketRef}.pdf` });
+
     const res = await fetch("https://api.zeptomail.com/v1.1/email", {
       method: "POST",
       headers: {
@@ -691,25 +713,29 @@ async function sendViaZeptoMail({ to, subject, html, text, pdfBytes, inlinePng, 
   }
 }
 
-async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, ticketRef }) {
+async function sendViaResendFallback({ to, subject, html, text, pdfBytes, inlinePng, inlineQr, ticketRef }) {
   if (!resend) return { ok: false, error: "RESEND_API_KEY not configured" };
-  const from = requiredEnv('TICKET_EMAIL_FROM');
-  const { data, error } = await resend.emails.send({
-    from,
-    to: [to],
-    subject,
-    html,
-    text: text || undefined,
-    attachments: [
-      ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), content_id: "ticket-artwork" }] : []),
-      ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
-    ],
-  });
+  try {
+    const { data, error } = await resend.emails.send({
+      from: getTicketEmailSender(),
+      to: [to],
+      subject,
+      html,
+      text: text || undefined,
+      attachments: [
+        ...(inlinePng ? [{ filename: "ticket-artwork.png", content: Buffer.from(inlinePng), contentId: "ticket-artwork" }] : []),
+        ...(inlineQr ? [{ filename: "ticket-qr.png", content: Buffer.from(inlineQr.bytes), contentId: "ticket-qr" }] : []),
+        ...(pdfBytes ? [{ filename: `${ticketRef}.pdf`, content: Buffer.from(pdfBytes).toString("base64") }] : []),
+      ],
+    });
 
-  if (error) {
-    return { ok: false, error };
+    if (error) {
+      return { ok: false, error };
+    }
+    return { ok: true, id: data?.id };
+  } catch (error) {
+    return { ok: false, error: error.message || String(error) };
   }
-  return { ok: true, id: data?.id };
 }
 
 exports.handler = async function (event) {
@@ -720,6 +746,13 @@ exports.handler = async function (event) {
   if (!ZEPTOMAIL_TOKEN && !process.env.RESEND_API_KEY) {
     console.error("send-ticket-email: neither ZEPTOMAIL_TOKEN nor RESEND_API_KEY is set");
     return { statusCode: 500, body: JSON.stringify({ error: "Email service not configured" }) };
+  }
+
+  try {
+    getTicketEmailFrom();
+  } catch (error) {
+    console.error("send-ticket-email: ticket sender is not configured");
+    return { statusCode: 500, body: JSON.stringify({ error: "Ticket sender is not configured" }) };
   }
 
   let payload;
@@ -744,6 +777,7 @@ exports.handler = async function (event) {
     ticketDesign,
     seatNumber,
     tableNumber,
+    tableGroupId,
     allowResendFallback = true,
   } = payload;
 
@@ -764,6 +798,19 @@ exports.handler = async function (event) {
     };
   }
 
+  const inlinePng = undefined;
+
+  let pdfBytes;
+  let inlineQr;
+  try {
+    const qr = await loadQrImageBytes(qrCodeDataUrl);
+    if (qr) inlineQr = { bytes: qr.bytes, mimeType: qr.isPng ? "image/png" : "image/jpeg" };
+  } catch (err) {
+    console.error("send-ticket-email: QR attachment preparation failed", err);
+  }
+
+  const emailQrSource = inlineQr ? "cid:ticket-qr" : qrCodeDataUrl;
+
   const html = buildTicketEmailHtml({
     eventName,
     ticketType,
@@ -771,15 +818,16 @@ exports.handler = async function (event) {
     date,
     time,
     ticketRef,
-    qrCodeDataUrl,
+    qrCodeDataUrl: emailQrSource,
     buyerName,
+    seatNumber,
+    tableNumber,
+    tableGroupId,
     photoUploadLink,
     posterUrl,
     ticketDesign,
   });
-  const inlinePng = undefined;
 
-  let pdfBytes;
   try {
     pdfBytes = await buildTicketPdf({
       eventName,
@@ -792,6 +840,8 @@ exports.handler = async function (event) {
       buyerName,
       posterUrl,
       ticketDesign,
+      seatNumber,
+      tableNumber,
     });
   } catch (err) {
     // PDF generation failing shouldn't block the email entirely — log it
@@ -827,6 +877,7 @@ exports.handler = async function (event) {
     text: plainText,
     pdfBytes,
     inlinePng,
+    inlineQr,
     ticketRef,
   });
 
@@ -851,6 +902,7 @@ exports.handler = async function (event) {
     text: plainText,
     pdfBytes,
     inlinePng,
+    inlineQr,
     ticketRef,
     eventName,
   });

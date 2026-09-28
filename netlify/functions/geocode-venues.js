@@ -10,7 +10,7 @@
 // Invocation (admin-triggered):
 //   GET  /.netlify/functions/geocode-venues?limit=5            → sync batch
 //   GET  /.netlify/functions/geocode-venues?dryRun=1           → report only
-//   GET  /.netlify/functions/geocode-venues?token=<secret>     → if GEOCODE_ADMIN_SECRET is set
+//   GET  /.netlify/functions/geocode-venues?limit=5            → authenticated administrator only
 //
 // For large backfills use Netlify BACKGROUND mode (up to ~15 min runtime),
 // e.g. from an external scheduler / curl with the header:
@@ -20,14 +20,15 @@
 // Env vars (set in Netlify dashboard):
 //   SUPABASE_SECRET_KEY  (required — secret, never in the frontend)
 //   SUPABASE_URL               (optional; falls back to the YoVibe URL)
-//   GEOCODE_ADMIN_SECRET       (optional; requires ?token= or x-admin-token header)
+// The caller's Supabase access token is verified server-side and must belong
+// to an administrator. No browser-visible shared secret is used.
 //
 // Optional query params:
 //   dryRun=1   — report what would be geocoded, do NOT write anything
 //   limit=N    — cap how many venues this invocation processes
 
-const { getAdminClient } = require('../shared/supabaseAdmin');
-const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
+const { requireUser, json } = require('../shared/supabaseAdmin');
+const { getSiteUrl } = require('../shared/runtimeConfig');
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
 const THROTTLE_MS = 1150; // Nominatim allows ~1 request/second
 const DEFAULT_SYNC_LIMIT = 4; // keeps a synchronous run inside the ~10s timeout
@@ -77,21 +78,16 @@ async function geocodeVenue(venue) {
   return null;
 }
 
-function adminTokenOk(event) {
-  const secret = requiredEnv('GEOCODE_ADMIN_SECRET');
-  const query = new URLSearchParams((event.rawUrl || event.url || "").split("?")[1] || "");
-  const fromQuery = query.get("token");
-  const fromHeader = (event.headers && event.headers["x-admin-token"]) || "";
-  return fromQuery === secret || fromHeader === secret;
-}
-
 exports.handler = async (event) => {
-  if (!adminTokenOk(event)) {
-    return {
-      statusCode: 401,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ error: "Unauthorized" }),
-    };
+  let admin;
+  try {
+    const identity = await requireUser(event);
+    if (identity.profile?.user_type !== "admin") {
+      return json(403, { error: "Administrator access required" });
+    }
+    admin = identity.admin;
+  } catch (error) {
+    return json(error.statusCode || 500, { error: error.message || "Authentication failed" });
   }
 
   const query = new URLSearchParams((event.rawUrl || event.url || "").split("?")[1] || "");
@@ -104,8 +100,6 @@ exports.handler = async (event) => {
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
     ? Math.min(requestedLimit, isBackground ? BACKGROUND_LIMIT : MAX_SYNC_LIMIT)
     : (isBackground ? BACKGROUND_LIMIT : DEFAULT_SYNC_LIMIT);
-
-  const admin = getAdminClient();
 
   try {
     // The `geocode_failed` column only exists after the migration is applied.

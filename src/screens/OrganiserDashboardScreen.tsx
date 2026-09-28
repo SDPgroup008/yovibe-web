@@ -578,9 +578,15 @@ const OrganiserDashboardScreen: React.FC = () => {
   const fetchTicketData = useCallback(async () => {
     if (!eventId) return
     try {
-      const { data, error } = await supabase.from("tickets").select("*").eq("event_slug", eventId).limit(500)
-      if (error) throw error
-      const rows = data || []
+      const { data: { session } } = await supabase.auth.getSession()
+      const response = await fetch("/.netlify/functions/organiser-ticket-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ action: "tickets", eventId }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "Unable to load ticket data")
+      const rows = payload.tickets || []
       rows.sort((a: any, b: any) => { const da = a.purchase_date || a.created_at || ""; const db = b.purchase_date || b.created_at || ""; return db.localeCompare(da) })
       processTicketData(rows)
     } catch (error) { console.error("OrganiserDashboardScreen: Error fetching tickets:", error) }
@@ -589,27 +595,15 @@ const OrganiserDashboardScreen: React.FC = () => {
   const fetchScanLogs = useCallback(async () => {
     if (!eventId) return
     try {
-      const { data, error } = await supabase.from("ticket_validations").select("*").eq("event_slug", eventId).order("validatedAt", { ascending: false, nullsFirst: false }).limit(10)
-      if (error) throw error
-      const ticketIds = [...new Set((data || []).map((v: any) => v.ticketId).filter(Boolean))]
-      let ticketMap: Record<string, any> = {}
-      if (ticketIds.length > 0) {
-        const { data: tickets } = await supabase.from("tickets").select("id, ticket_ref, entry_fee_type, seat_number, table_number, buyer_name").in("id", ticketIds)
-        for (const t of tickets || []) ticketMap[t.id] = t
-      }
-      setScanLogs((data || []).map((v: any) => {
-        const ticket = ticketMap[v.ticketId] || {}
-        return {
-          time: v.validatedAt ? new Date(v.validatedAt).toLocaleTimeString() : "",
-          name: ticket.buyer_name || "—",
-          ticketRef: ticket.ticket_ref || v.ticketId?.substring(0, 8) || "—",
-          feeType: ticket.entry_fee_type || "—",
-          seatNumber: ticket.seat_number != null ? String(ticket.seat_number) : "—",
-          tableNumber: ticket.table_number != null ? String(ticket.table_number) : "—",
-          status: v.status === "granted" ? "Valid" : "Invalid",
-          reason: v.reason || (v.status === "granted" ? "" : "Validation failed"),
-        }
-      }))
+      const { data: { session } } = await supabase.auth.getSession()
+      const response = await fetch("/.netlify/functions/organiser-ticket-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+        body: JSON.stringify({ action: "scan-logs", eventId }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "Unable to load scan logs")
+      setScanLogs(payload.logs || [])
     } catch (error) { console.error("OrganiserDashboardScreen: Error fetching scan logs:", error) }
   }, [eventId])
 
@@ -789,6 +783,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     setReentryMessage(null)
     const result = await TicketService.grantReentryPass(
       reentryTicket.id,
+      event?.slug || eventId,
       user.id,
       user.displayName || user.email || "Organiser"
     )
@@ -1071,10 +1066,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const reset: Record<string, number> = {}; Object.keys(payoutTicketTypes).forEach(k => { reset[k] = 0 }); setPayoutSelections(reset)
       // Reload ticket data so payoutTicketTypes reflects the updated payout_eligible/payout_status
       /* console.log("[PayoutSubmit] 🔄 Reloading ticket data to sync payout eligibility...") */
-      try {
-        const { data: updatedTickets } = await supabase.from("tickets").select("*").eq("event_slug", eventId || "")
-        if (updatedTickets) processTicketData(updatedTickets)
-      } catch (err) { console.error("[PayoutSubmit] ⚠️ Failed to reload tickets:", err) }
+      try { await fetchTicketData() } catch (err) { console.error("[PayoutSubmit] ⚠️ Failed to reload tickets:", err) }
     } catch (error: any) {
       console.error("[PayoutSubmit] ❌ FATAL ERROR:", error)
       console.error("[PayoutSubmit]    Error name:", error?.name)

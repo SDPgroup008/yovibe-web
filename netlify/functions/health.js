@@ -21,9 +21,11 @@ const CRITICAL_VARS = [
   'R2_ENDPOINT', 'R2_PRIVATE_BUCKET_NAME', 'R2_PRIVATE_ACCESS_KEY_ID', 'R2_PRIVATE_SECRET_ACCESS_KEY',
   'R2_PUBLIC_BUCKET_NAME', 'R2_PUBLIC_ACCESS_KEY_ID', 'R2_PUBLIC_SECRET_ACCESS_KEY', 'R2_PUBLIC_URL',
   'SITE_URL', 'REFUND_LINK_SECRET', 'PAYOUT_OTP_SECRET',
-  'FULFILLMENT_WORKER_SECRET', 'STAGING_ACCESS_SECRET', 'STAGING_ACCESS_PASSWORD',
+  'FULFILLMENT_WORKER_SECRET',
   'TICKET_EMAIL_FROM', 'PAYOUT_EMAIL_FROM',
 ];
+
+const STAGING_ONLY_VARS = ['STAGING_ACCESS_SECRET', 'STAGING_ACCESS_PASSWORD'];
 
 const FIREBASE_VARS = ['FIREBASE_PROJECT_ID', 'FIREBASE_SERVICE_ACCOUNT'];
 const LEGACY_PUBLIC_R2_ALIASES = {
@@ -42,8 +44,13 @@ const firebaseNotificationsDisabledForStaging = () => (
 exports.handler = async (event) => {
   const env = {};
   let missing = [];
+  const isStaging = String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging';
   const firebaseDisabled = firebaseNotificationsDisabledForStaging();
-  const requiredVars = firebaseDisabled ? CRITICAL_VARS : [...CRITICAL_VARS, ...FIREBASE_VARS];
+  const requiredVars = [
+    ...CRITICAL_VARS,
+    ...(isStaging ? STAGING_ONLY_VARS : []),
+    ...(firebaseDisabled ? [] : FIREBASE_VARS),
+  ];
   for (const key of requiredVars) {
     const legacyAlias = String(process.env.APP_ENV || '').trim().toLowerCase() === 'staging'
       ? null

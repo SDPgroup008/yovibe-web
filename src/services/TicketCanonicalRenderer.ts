@@ -93,6 +93,13 @@ export function canonicalTicketData(ticket: Ticket, event?: Event): CanonicalTic
   }
 }
 
+function ticketBadgeLabel(data: CanonicalTicketData): string {
+  const label = [data.ticketType || "Standard"]
+  if (data.tableNumber != null) label.push(`Table ${data.tableNumber}`)
+  if (data.seatNumber != null) label.push(`Seat ${data.seatNumber}`)
+  return label.join(" \u00b7 ")
+}
+
 /**
  * Compute the hero poster rectangle for the DEFAULT (email-style) in-app ticket.
  * The SVG no longer renders the poster hero; MyTicketsScreen overlays the actual
@@ -111,7 +118,7 @@ export function computeEmailHeroRect(ticket: Ticket, event?: Event, design?: Tic
   const pad = isLandscape ? 24 : 32
   const rowH = isLandscape ? 24 : 28
   const gap = isLandscape ? 4 : 6
-  const rowCount = 6 + (data.seatNumber != null ? 1 : 0) + (data.tableNumber != null ? 1 : 0)
+  const rowCount = 4
   const detailsCardH = rowCount * rowH + (isLandscape ? 12 : 18)
   const titleH = isLandscape ? 54 : 66
   const attendeeH = isLandscape ? 50 : 58
@@ -187,15 +194,11 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
   const gap = isLandscape ? 4 : 6
 
   const details: Array<[string, string]> = [
-    ["Event", data.eventName],
-    ["Ticket Type", data.ticketType],
     ["Venue", data.venue],
     ["Date", data.date],
     ["Time", data.time],
     ["Ticket Ref", data.ticketRef],
   ]
-  if (data.seatNumber != null) details.push(["Seat", String(data.seatNumber)])
-  if (data.tableNumber != null) details.push(["Table", String(data.tableNumber)])
   const detailsCardH = details.length * rowH + (isLandscape ? 12 : 18)
 
   const titleH = isLandscape ? 54 : 66
@@ -223,11 +226,12 @@ function renderEmailStyleSvg(ticket: Ticket, event: Event | undefined, design: T
 
   // Title
   const titleY = y + pad
-  const badgeW = Math.min(contentW, Math.max(96, data.ticketType.length * 8 + 30))
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase()
+  const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30))
   const titleBlock = `
     <text x="${pad}" y="${titleY + 24}" font-family="${FONT_STACK}" font-size="24px" font-weight="800" fill="${esc(colors.text)}" letter-spacing="-0.5">${esc(data.eventName)}</text>
     <rect x="${pad}" y="${titleY + 34}" width="${badgeW}" height="22" rx="11" fill="${esc(colors.accent)}"/>
-    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>`
+    <text x="${pad + badgeW / 2}" y="${titleY + 48}" font-family="${FONT_STACK}" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>`
   y = titleY + titleH
 
   // Attendee card
@@ -332,6 +336,8 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
   }
   const backgroundMask = posterOverlay ? ` mask="url(#${posterMaskId})"` : ""
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36))
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase()
+  const badgeW = Math.min(title.width - 32, Math.max(90, badgeLabel.length * 8 + 28))
   const infoRows = [
     ["Date", data.date], ["Time", data.time], ["Venue", data.venue],
   ]
@@ -409,8 +415,8 @@ export function renderCanonicalTicketSvg(ticket: Ticket, event?: Event, designOv
     <!-- Title -->
     <g${blockScale(title)}>
       <text x="16" y="36" font-family="${FONT_STACK}" font-size="${Math.max(20, Math.min(34, title.height / 3))}px" font-weight="800" fill="${esc(colors.text)}" filter="url(#titleShadow)" letter-spacing="-0.5">${esc(data.eventName)}</text>
-      <rect x="16" y="${title.height - 30}" width="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28))}" height="22" rx="11" fill="${esc(colors.accent)}"/>
-      <text x="${Math.min(title.width - 32, Math.max(90, data.ticketType.length * 8 + 28)) / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(data.ticketType.toUpperCase())}</text>
+      <rect x="16" y="${title.height - 30}" width="${badgeW}" height="22" rx="11" fill="${esc(colors.accent)}"/>
+      <text x="${badgeW / 2 + 16}" y="${title.height - 15}" font-family="${FONT_STACK}" font-size="10px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>
     </g>
 
     <!-- Info card with attendee emphasis -->

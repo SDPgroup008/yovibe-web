@@ -59,7 +59,11 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
-    const width = (layout.width - (spacing.md * (gridColumns + 1))) / gridColumns;
+    // Keep venue-card columns aligned with the event grid, including the
+    // desktop navigation offset and the same visible inter-card spacing.
+    const navbarOffset = deviceType.isLargeScreen ? 80 : 0;
+    const availableWidth = layout.width - navbarOffset;
+    const width = (availableWidth - (spacing.md * (gridColumns + 1))) / gridColumns;
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
   }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
@@ -272,14 +276,14 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   const renderVenueCard = useCallback(({ item }: { item: Venue }) => {
     return (
     <TouchableOpacity 
-      style={[styles.venueCard, { width: cardWidth, paddingHorizontal: spacing.md }]}
+      style={[styles.venueCard, { width: cardWidth }]}
       onPress={() => handleVenueSelect(item.slug || item.id)}
       accessibilityLabel={`View venue: ${item.name}`}
       accessibilityRole="button"
     >
       <ImageBackground 
         source={{ uri: item.backgroundImageUrl }} 
-        style={[styles.venueImage, { width: cardWidth, height: cardHeight }]}
+        style={[styles.venueImage, { height: cardHeight }]}
         loading="lazy"
         resizeMode="cover"
         accessibilityLabel={`Venue image for ${item.name}`}
@@ -451,7 +455,12 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
           })}
           contentContainerStyle={[
             styles.venuesList,
-            { paddingHorizontal: spacing.md, paddingRight: spacing.md }
+            {
+              paddingHorizontal: spacing.md,
+              paddingLeft: deviceType.isLargeScreen ? 80 : 0,
+              paddingRight: deviceType.isLargeScreen ? 80 : 0,
+              columnGap: gridColumns > 1 ? spacing.md : 0,
+            }
           ]}
 
           refreshControl={
@@ -663,10 +672,14 @@ const styles = StyleSheet.create({
   venuesList: {
     padding: responsiveSize(12, 16, 20),
     paddingBottom: responsiveSize(100, 120, 140),
+    alignItems: 'center',
   },
   venueCard: {
     height: responsiveSize(160, 200, 240),
-    marginBottom: responsiveSize(12, 16, 20),
+    // Match the event grid: margins plus FlatList columnGap yield equal
+    // horizontal and vertical whitespace at every breakpoint.
+    marginHorizontal: responsiveSize(12, 16, 4),
+    marginBottom: responsiveSize(16, 20, 28),
     borderRadius: responsiveSize(10, 14, 16),
     overflow: "hidden",
     shadowColor: "rgba(0, 212, 255, 0.3)",

@@ -39,6 +39,20 @@ async function authorizeScanner(event, admin, eventId, staffToken) {
   return { validatorId: authUser.id };
 }
 
+async function authorizeEventOwner(event, admin, eventId) {
+  const { authUser, profile } = await requireUser(event);
+  if (profile?.user_type === 'admin') return { validatorId: authUser.id, profile };
+  const { data: scanEvent, error } = await admin.from('events').select('created_by, created_by_auth')
+    .eq('slug', eventId).maybeSingle();
+  if (error) throw error;
+  if (!scanEvent) throw Object.assign(new Error('Event not found'), { statusCode: 404 });
+  const ids = [authUser.id, profile?.uid, profile?.id].filter(Boolean).map(String);
+  if (!ids.includes(String(scanEvent.created_by || '')) && !ids.includes(String(scanEvent.created_by_auth || ''))) {
+    throw Object.assign(new Error('You do not own this event'), { statusCode: 403 });
+  }
+  return { validatorId: authUser.id, profile };
+}
+
 async function logValidation(admin, ticket, validatorId, location, status, reason) {
   const row = {
     ticketId: ticket.id,
@@ -59,10 +73,45 @@ exports.handler = async (event) => {
   try {
     const body = JSON.parse(event.body || '{}');
     const eventId = typeof body.eventId === 'string' ? body.eventId.trim() : '';
+    const action = typeof body.action === 'string' ? body.action : 'validate';
     const qrText = typeof body.qrText === 'string' ? body.qrText : '';
-    if (!eventId || !qrText) return json(400, { success: false, reason: 'eventId and qrText are required' });
+    if (!eventId) return json(400, { success: false, reason: 'eventId is required' });
 
     const admin = getAdminClient();
+    if (action === 'find-reentry') {
+      await authorizeEventOwner(event, admin, eventId);
+      const query = String(body.query || '').trim().replace(/[%_,()]/g, '');
+      if (query.length < 2 || query.length > 120) return json(400, { success: false, reason: 'Enter at least two search characters' });
+      const { data: ticket, error } = await admin.from('tickets')
+        .select('id, buyer_name, entry_fee_type, status, reentry_pass')
+        .eq('event_slug', eventId)
+        .or(`ticket_ref.ilike.%${query}%,buyer_name.ilike.%${query}%`)
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      if (!ticket) return json(404, { success: false, reason: 'Ticket not found' });
+      return json(200, {
+        success: true, ticketId: ticket.id, buyerName: ticket.buyer_name,
+        entryFeeType: ticket.entry_fee_type, status: ticket.status, reentryPass: ticket.reentry_pass || null,
+      });
+    }
+    if (action === 'grant-reentry') {
+      const { validatorId, profile } = await authorizeEventOwner(event, admin, eventId);
+      const ticketId = typeof body.ticketId === 'string' ? body.ticketId.trim() : '';
+      if (!ticketId) return json(400, { success: false, reason: 'ticketId is required' });
+      const { data: ticket, error } = await admin.from('tickets')
+        .select('id, status').eq('id', ticketId).eq('event_slug', eventId).maybeSingle();
+      if (error) throw error;
+      if (!ticket) return json(404, { success: false, reason: 'Ticket not found' });
+      if (ticket.status !== 'used') return json(409, { success: false, reason: 'Ticket has not been scanned yet' });
+      const { error: updateError } = await admin.from('tickets').update({ reentry_pass: {
+        grantedAt: new Date().toISOString(), grantedBy: validatorId,
+        grantedByName: profile?.name || profile?.full_name || 'Event organiser', used: false,
+      } }).eq('id', ticket.id).eq('status', 'used');
+      if (updateError) throw updateError;
+      return json(200, { success: true });
+    }
+    if (!qrText) return json(400, { success: false, reason: 'qrText is required' });
     const { validatorId } = await authorizeScanner(event, admin, eventId, body.staffToken);
     const qr = verify(qrText);
     if (!qr.valid || !qr.ticketId) return json(422, { success: false, reason: 'Invalid QR code' });
@@ -107,12 +156,12 @@ exports.handler = async (event) => {
       return json(409, { success: false, reason, ...details });
     }
 
-    if (body.action !== 'confirm-photo' && ticket.buyer_photo_url) {
+    if (action !== 'confirm-photo' && ticket.buyer_photo_url) {
       return json(200, {
         success: true, needsPhotoVerification: true, ticketDocId: ticket.id, ...details,
       });
     }
-    if (body.action === 'confirm-photo' && !ticket.buyer_photo_url) {
+    if (action === 'confirm-photo' && !ticket.buyer_photo_url) {
       return json(409, { success: false, reason: 'This ticket does not require photo confirmation', ...details });
     }
 
@@ -128,7 +177,7 @@ exports.handler = async (event) => {
       return json(409, { success: false, reason: 'Ticket already used', ...details });
     }
     await logValidation(admin, ticket, validatorId, body.location, 'granted',
-      body.action === 'confirm-photo' ? 'Photo verification confirmed' : null);
+      action === 'confirm-photo' ? 'Photo verification confirmed' : null);
     return json(200, { success: true, ...details });
   } catch (error) {
     console.error('[ScanTicket] Error:', error.message);

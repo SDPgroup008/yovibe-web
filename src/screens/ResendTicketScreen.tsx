@@ -14,8 +14,6 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
-import TicketService from "../services/TicketService"
-import SupabaseService from "../services/SupabaseService"
 
 const ResendTicketScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -41,58 +39,17 @@ const ResendTicketScreen: React.FC = () => {
     setLoading(true)
 
     try {
-      const tickets = await TicketService.getTicketsByEmail(email.trim())
-
-      if (tickets.length === 0) {
-        Alert.alert("Not Found", "If we found tickets for this email, they've been resent.")
-        return
-      }
-
-      // Get event to find ticket designs for each ticket type
-      const eventId = tickets[0]?.eventId
-      const event = eventId ? await SupabaseService.getEventById(eventId) : null
-
-      let successCount = 0
-      let failCount = 0
-
-      for (const ticket of tickets) {
-        try {
-          const response = await fetch(`/.netlify/functions/send-ticket-email`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              buyerEmail: ticket.buyerEmail,
-              buyerName: ticket.buyerName,
-              eventName: ticket.eventName,
-              ticketType: ticket.entryFeeType,
-              venue: ticket.venueName,
-              date: ticket.eventStartTime.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
-              time: ticket.eventStartTime.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              ticketRef: ticket.ticketRef,
-              qrCodeDataUrl: ticket.qrCodeDataUrl,
-              seatNumber: ticket.tableNumber ? undefined : ticket.seatNumber,
-              tableNumber: ticket.tableNumber,
-              tableGroupId: ticket.tableGroupId,
-              // Find the ticket design from the entry fee
-              ticketDesign: event?.entryFees?.find((f: any) => f.name === ticket.entryFeeType)?.ticketDesign,
-              posterUrl: event?.posterImageUrl,
-            }),
-          })
-
-          if (response.ok) {
-            successCount++
-          } else {
-            failCount++
-          }
-        } catch (err) {
-          failCount++
-        }
-      }
+      const response = await fetch(`/.netlify/functions/request-ticket-resend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      if (!response.ok) throw new Error("Ticket resend request failed")
 
       setSent(true)
       Alert.alert(
         "Tickets Resent",
-        `Successfully resent ${successCount} ticket(s)${failCount > 0 ? ` with ${failCount} failure(s)` : ""}.`,
+        "If tickets exist for this email address, they have been sent again.",
         [{ text: "OK", onPress: () => navigation.goBack() }]
       )
     } catch (error) {

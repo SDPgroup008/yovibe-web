@@ -1,6 +1,7 @@
 const { computeTicketLayout } = require('../functions/ticketLayoutEngine');
 const { Resvg } = require('@resvg/resvg-js');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
+const { privateKeyFromReference, getObject } = require('./r2');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const href = (v) => esc(v).replace(/#/g, '%23');
@@ -83,17 +84,19 @@ function computeEmailLayout(W, H, isLandscape, rowCount, hasPoster) {
 }
 
 function emailDetailRows(data, options) {
-  const rows = [
-    ['EVENT', data.eventName || 'Event'],
-    ['TICKET', data.ticketType || 'Standard'],
+  return [
     ['VENUE', data.venue || 'Venue TBA'],
     ['DATE', data.date || ''],
     ['TIME', data.time || ''],
     ['REF', data.ticketRef || 'XXXXXXXX'],
   ];
-  if (data.seatNumber != null && data.seatNumber !== '') rows.push(['SEAT', String(data.seatNumber)]);
-  if (data.tableNumber != null && data.tableNumber !== '') rows.push(['TABLE', String(data.tableNumber)]);
-  return rows;
+}
+
+function ticketBadgeLabel(data) {
+  const label = [data.ticketType || 'Standard'];
+  if (data.tableNumber != null && data.tableNumber !== '') label.push(`Table ${data.tableNumber}`);
+  if (data.seatNumber != null && data.seatNumber !== '') label.push(`Seat ${data.seatNumber}`);
+  return label.join(' \u00b7 ');
 }
 
 // Email-style stacked layout for DEFAULT tickets (no custom uploaded background).
@@ -119,11 +122,12 @@ function renderDefaultSvg(data, options = {}) {
   const hero = hasPoster ? `
     <image href="${href(data.posterUrl)}" x="0" y="0" width="${W}" height="${heroH}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${heroClip})"/>` : '';
 
-  const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+  const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30));
   const titleBlock = `
     ${showText ? `<text x="${pad}" y="${titleY}" font-family="Arial, Helvetica, sans-serif" font-size="24px" font-weight="800" fill="${primary}" letter-spacing="-0.5">${esc(data.eventName || 'Event')}</text>` : ''}
     <rect x="${pad}" y="${titleY + 10}" width="${badgeW}" height="22" rx="11" fill="${accent}"/>
-    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(String(data.ticketType || 'Standard').toUpperCase())}</text>` : ''}`;
+    ${showText ? `<text x="${pad + badgeW / 2}" y="${titleY + 24}" font-family="Arial, Helvetica, sans-serif" font-size="11px" font-weight="700" fill="#fff" text-anchor="middle" letter-spacing="1">${esc(badgeLabel)}</text>` : ''}`;
 
   const attendeeBlock = `
     <rect x="${pad}" y="${attendeeY}" width="${contentW}" height="${L.attendeeH}" rx="10" fill="#000" opacity="0.45" stroke="${border}"/>
@@ -196,8 +200,8 @@ function renderSvg(data, options = {}) {
   const text = (x, y, v, size, color, weight = 500, anchor = 'start', filter = '') => options.includeText === false ? '' : `<text x="${x}" y="${y}" font-family="Arial, Helvetica, sans-serif" font-size="${size}px" font-weight="${weight}" fill="${color}" text-anchor="${anchor}"${filter ? ` filter="url(#titleShadow)"` : ''}>${esc(v)}</text>`;
   const qrSize = Math.max(64, Math.min(qr.width - 24, qr.height - 36));
   const rows = [['DATE', data.date], ['TIME', data.time], ['VENUE', data.venue || 'Venue TBA'], ['ATTENDEE', data.buyerName || 'Guest']];
-  if (data.seatNumber != null) rows.push(['SEAT', String(data.seatNumber)]);
-  if (data.tableNumber != null) rows.push(['TABLE', String(data.tableNumber)]);
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+  const badgeW = Math.min(title.width - 32, Math.max(90, badgeLabel.length * 8 + 28));
   const rowH = Math.max(22, (info.height - 24) / rows.length);
   // Replicate the editor's CSS background model (background-position: calc(50% + x) calc(50% + y)):
   // center the scale·W × scale·H background box, then offset by (x, y) in ticket-space pixels.
@@ -208,7 +212,7 @@ function renderSvg(data, options = {}) {
   const bg = design.source === 'upload' && design.background_url ? `<image href="${href(design.background_url)}" x="${bgLeft}" y="${bgTop}" width="${W * bgScale}" height="${H * bgScale}" preserveAspectRatio="xMidYMid slice" opacity=".85"/>` : `<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${base}"/><stop offset="100%" stop-color="${accent}" stop-opacity=".72"/></linearGradient><clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath></defs><rect width="${W}" height="${H}" fill="url(#bg)"/>`;
   const posterImage = data.posterUrl ? `<rect width="${poster.width}" height="${poster.height}" rx="10" fill="#000" opacity=".35"/><image href="${href(data.posterUrl)}" x="0" y="0" width="${poster.width}" height="${poster.height}" preserveAspectRatio="xMidYMid slice" clip-path="url(#posterClip)"/>` : '';
   const qrImage = data.qrCodeDataUrl ? `<image href="${href(data.qrCodeDataUrl)}" x="${(qr.width - qrSize) / 2}" y="10" width="${qrSize}" height="${qrSize}" preserveAspectRatio="xMidYMid meet"/>` : text(qr.width / 2, qr.height / 2, 'QR unavailable', 14, secondary, 600, 'middle');
-  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${base}"/><stop offset="100%" stop-color="${accent}" stop-opacity=".72"/></linearGradient><clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath><filter id="titleShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity=".75"/></filter></defs>${bg}<rect width="${W}" height="${H}" fill="#000000" opacity="${layout.isUploadBg ? 0 : .16}"/><g${g(poster)}>${posterImage}</g><g${g(title)}>${text(16, 34, data.eventName, Math.max(16, Math.min(30, title.height / 3)), primary, 800, 'start', 'url(#titleShadow)')}<rect x="16" y="${title.height - 28}" width="${Math.min(title.width - 32, Math.max(90, String(data.ticketType || 'Standard').length * 8 + 28))}" height="20" rx="10" fill="${accent}"/>${text(Math.min(title.width - 32, Math.max(90, String(data.ticketType || 'Standard').length * 8 + 28)) / 2 + 16, title.height - 14, String(data.ticketType || 'Standard').toUpperCase(), 10, '#fff', 700, 'middle')}</g><g${g(info)}><rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity=".48" stroke="${border}"/>${rows.map((r, i) => `${text(16, 22 + i * rowH, r[0], 9, secondary, 700)}${text(16, 36 + i * rowH, r[1], 12, primary, 600)}`).join('')}</g><g${g(qr)}><rect width="${qr.width}" height="${qr.height}" rx="12" fill="${qrBg}" stroke="${accent}" stroke-width="2"/>${qrImage}${text(qr.width / 2, qr.height - 20, data.ticketRef, 10, accent, 700, 'middle')}</g><rect x="0" y="${H - 34}" width="${W}" height="34" fill="#000" opacity=".55"/>${text(18, H - 13, 'YOVIBE', 10, accent, 700)}${text(W - 18, H - 13, data.ticketRef, 10, secondary, 500, 'end')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="${base}"/><stop offset="100%" stop-color="${accent}" stop-opacity=".72"/></linearGradient><clipPath id="posterClip"><rect width="${poster.width}" height="${poster.height}" rx="10"/></clipPath><filter id="titleShadow" x="-20%" y="-30%" width="140%" height="170%"><feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity=".75"/></filter></defs>${bg}<rect width="${W}" height="${H}" fill="#000000" opacity="${layout.isUploadBg ? 0 : .16}"/><g${g(poster)}>${posterImage}</g><g${g(title)}>${text(16, 34, data.eventName, Math.max(16, Math.min(30, title.height / 3)), primary, 800, 'start', 'url(#titleShadow)')}<rect x="16" y="${title.height - 28}" width="${badgeW}" height="20" rx="10" fill="${accent}"/>${text(badgeW / 2 + 16, title.height - 14, badgeLabel, 10, '#fff', 700, 'middle')}</g><g${g(info)}><rect width="${info.width}" height="${info.height}" rx="10" fill="#000" opacity=".48" stroke="${border}"/>${rows.map((r, i) => `${text(16, 22 + i * rowH, r[0], 9, secondary, 700)}${text(16, 36 + i * rowH, r[1], 12, primary, 600)}`).join('')}</g><g${g(qr)}><rect width="${qr.width}" height="${qr.height}" rx="12" fill="${qrBg}" stroke="${accent}" stroke-width="2"/>${qrImage}${text(qr.width / 2, qr.height - 20, data.ticketRef, 10, accent, 700, 'middle')}</g><rect x="0" y="${H - 34}" width="${W}" height="34" fill="#000" opacity=".55"/>${text(18, H - 13, 'YOVIBE', 10, accent, 700)}${text(W - 18, H - 13, data.ticketRef, 10, secondary, 500, 'end')}</svg>`;
 }
 
 async function asData(value) {
@@ -226,6 +230,20 @@ async function asData(value) {
       }
     }
     return value;
+  }
+  const privateKey = privateKeyFromReference(value);
+  if (privateKey) {
+    try {
+      const object = await getObject('private', privateKey);
+      const bytes = object.Body?.transformToByteArray
+        ? Buffer.from(await object.Body.transformToByteArray())
+        : Buffer.from(await object.Body.transformToString('base64'), 'base64');
+      const mime = sniffImageMime(bytes) || String(object.ContentType || 'image/png').split(';')[0];
+      return `data:${mime};base64,${bytes.toString('base64')}`;
+    } catch (error) {
+      console.warn(`asData: private asset read failed for ${privateKey}: ${error.message || error}`);
+      return value;
+    }
   }
   if (!/^https?:\/\//i.test(value)) return value;
   let response;
@@ -311,12 +329,13 @@ async function renderTicketPdf(data) {
     const rows = emailDetailRows(data, {});
     const L = computeEmailLayout(W, H, isLandscape, rows.length, !!data.posterUrl);
     const { pad, contentW, rowH, titleY, attendeeY, detailCardY } = L;
-    const badgeW = Math.min(contentW, Math.max(96, String(data.ticketType || 'Standard').length * 8 + 30));
+    const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+    const badgeW = Math.min(contentW, Math.max(96, badgeLabel.length * 8 + 30));
     const ph = { pageHeight: H };
 
     // Title
     drawPdfText(page, data.eventName || 'Event', pad, titleY, 24, colors.text, { ...ph, font: bold });
-    drawPdfText(page, String(data.ticketType || 'Standard').toUpperCase(), pad + badgeW / 2, titleY + 24, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
+    drawPdfText(page, badgeLabel, pad + badgeW / 2, titleY + 24, 11, '#ffffff', { ...ph, font: bold, align: 'center' });
 
     // Attendee
     drawPdfText(page, 'ADMITS', pad + 14, attendeeY + 20, 9, colors.accent, { ...ph, font: bold });
@@ -351,8 +370,8 @@ async function renderTicketPdf(data) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const ref = data.ticketRef || data.ticketId || 'XXXXXXXX';
-  const ticketType = data.ticketType || 'Standard';
-  const badgeWidth = Math.min(title.width - 32, Math.max(90, String(ticketType).length * 8 + 28));
+  const badgeLabel = ticketBadgeLabel(data).toUpperCase();
+  const badgeWidth = Math.min(title.width - 32, Math.max(90, badgeLabel.length * 8 + 28));
   const titleScale = title.scale || 1;
   const infoScale = info.scale || 1;
   const qrScale = qr.scale || 1;
@@ -361,7 +380,7 @@ async function renderTicketPdf(data) {
   const titleSize = Math.max(16, Math.min(30, title.height / 3)) * titleScale;
   drawPdfText(page, data.eventName || 'Event', titleX + 18 * titleScale, titleY + 36 * titleScale, titleSize, '#000000', { pageHeight: artwork.height, font: bold });
   drawPdfText(page, data.eventName || 'Event', titleX + 16 * titleScale, titleY + 34 * titleScale, titleSize, colors.text, { pageHeight: artwork.height, font: bold });
-  drawPdfText(page, String(ticketType).toUpperCase(), titleX + (badgeWidth / 2 + 16) * titleScale, titleY + (title.height - 18) * titleScale, 10 * titleScale, '#ffffff', { pageHeight: artwork.height, font: bold, align: 'center' });
+  drawPdfText(page, badgeLabel, titleX + (badgeWidth / 2 + 16) * titleScale, titleY + (title.height - 18) * titleScale, 10 * titleScale, '#ffffff', { pageHeight: artwork.height, font: bold, align: 'center' });
 
   const rows = [['DATE', data.date], ['TIME', data.time], ['VENUE', data.venue || 'Venue TBA'], ['ATTENDEE', data.buyerName || 'Guest']];
   const rowH = Math.max(22, (info.height - 24) / rows.length);

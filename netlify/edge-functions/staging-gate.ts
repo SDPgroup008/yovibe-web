@@ -1,4 +1,24 @@
 const COOKIE_NAME = 'yovibe_staging';
+type EdgeRuntimeGlobals = typeof globalThis & {
+  Netlify?: { env?: { get(name: string): string | undefined } };
+  Deno?: { env?: { get(name: string): string | undefined } };
+};
+
+function getEdgeEnv(name: string): string | undefined {
+  const runtime = globalThis as EdgeRuntimeGlobals;
+  try {
+    const value = runtime.Netlify?.env?.get(name);
+    if (value) return value;
+  } catch {
+    // Netlify.env is the current Edge Functions API; retain Deno as a local/legacy fallback.
+  }
+  try {
+    return runtime.Deno?.env?.get(name);
+  } catch {
+    return undefined;
+  }
+}
+
 const EXEMPT_PATHS = new Set([
   '/staging-access.html',
   '/favicon.png',
@@ -35,7 +55,7 @@ async function validCookie(value: string | null): Promise<boolean> {
   const [expiryText, signature] = value.split('.');
   const expiry = Number(expiryText);
   if (!Number.isInteger(expiry) || expiry <= Math.floor(Date.now() / 1000) || !signature) return false;
-  const secret = Deno.env.get('STAGING_ACCESS_SECRET');
+  const secret = getEdgeEnv('STAGING_ACCESS_SECRET');
   if (!secret) return false;
   const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const expected = base64Url(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(expiryText)));
@@ -55,13 +75,13 @@ function timingSafeTextEqual(a: string, b: string): boolean {
 }
 
 function validInternalFunctionRequest(request: Request): boolean {
-  const expected = Deno.env.get('FULFILLMENT_WORKER_SECRET') || '';
+  const expected = getEdgeEnv('FULFILLMENT_WORKER_SECRET') || '';
   const supplied = request.headers.get('x-fulfillment-worker-secret') || '';
   return expected.length >= 32 && supplied.length > 0 && timingSafeTextEqual(supplied, expected);
 }
 
 export default async (request: Request, context: any) => {
-  if ((Deno.env.get('APP_ENV') || '').toLowerCase() !== 'staging') return context.next();
+  if ((getEdgeEnv('APP_ENV') || '').toLowerCase() !== 'staging') return context.next();
   const url = new URL(request.url);
   if (EXEMPT_PATHS.has(url.pathname)) return context.next();
   if (url.pathname.startsWith('/.netlify/functions/') && validInternalFunctionRequest(request)) {
