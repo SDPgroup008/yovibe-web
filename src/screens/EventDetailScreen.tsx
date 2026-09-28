@@ -32,6 +32,15 @@ const { width: screenWidth } = Dimensions.get('window');
 const isSmallDevice = screenWidth < 380;
 const isTablet = screenWidth >= 768;
 const isLargeScreen = screenWidth >= 1024;
+const SOCIAL_DESCRIPTION_LIMIT = 160;
+
+const socialShareDescription = (description: string | undefined, eventName: string) => {
+  const normalized = String(description || "").replace(/\s+/g, " ").trim()
+  const value = normalized || `Discover ${eventName} on YoVibe.`
+  return value.length > SOCIAL_DESCRIPTION_LIMIT
+    ? `${value.slice(0, SOCIAL_DESCRIPTION_LIMIT - 3).trimEnd()}...`
+    : value
+}
 
 /* console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
 
@@ -142,14 +151,15 @@ const EventDetailScreen: React.FC = () => {
      try {
        // Generate the event detail URL for deep linking
        const baseUrl = typeof window !== 'undefined' ? window.location.origin : publicSiteUrl()
-       const eventUrl = `${baseUrl}/events/${event.id}`
+       const eventUrl = `${baseUrl}/events/${event.slug || event.id}`
+       const description = socialShareDescription(event.description, event.name)
 
        // Check if we're in development and provide helpful message
        const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost'
 
        const shareMessage = isDevelopment
-         ? `Check out ${event.name} at ${event.venueName} on ${event.date.toDateString()}!\n\n${event.description}\n\nNote: For rich previews on social media, use a public URL (try ngrok for testing): ${eventUrl}`
-         : `Check out ${event.name} at ${event.venueName} on ${event.date.toDateString()}! ${event.description}`
+         ? `${event.name}\n${description}\n\n${eventUrl}\n\nRich previews require a public URL.`
+         : `${event.name}\n${description}\n\n${eventUrl}`
 
        const result = await Share.share({
          title: event.name,
@@ -232,7 +242,8 @@ const EventDetailScreen: React.FC = () => {
 
     // Generate the event URL for deep linking
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : publicSiteUrl()
-    const eventUrl = `${baseUrl}/events/${event.id}`
+    const eventUrl = `${baseUrl}/events/${event.slug || event.id}`
+    const description = socialShareDescription(event.description, event.name)
 
     // Normalize the price to a clean numeric string for schema.org Offer.price
     const rawPrice = event.isFreeEntry ? "0" : (event.entryFees?.[0]?.amount || "0")
@@ -259,7 +270,7 @@ const EventDetailScreen: React.FC = () => {
       "@context": "https://schema.org",
       "@type": "Event",
       "name": event.name,
-      "description": event.description || `Join us at ${event.venueName} for an amazing event`,
+      "description": description,
       "startDate": event.date.toISOString(),
       "endDate": endFromTime().toISOString(),
       "eventAttendanceMode": "https://schema.org/OfflineEventAttendanceMode",
@@ -307,7 +318,7 @@ const EventDetailScreen: React.FC = () => {
     // Inject Open Graph meta tags for social media sharing
     const ogMetaTags = [
       { property: 'og:title', content: `${event.name} - YoVibe` },
-      { property: 'og:description', content: event.description || `Check out ${event.name} at ${event.venueName} on ${event.date.toDateString()}!` },
+      { property: 'og:description', content: description },
       { property: 'og:image', content: event.posterImageUrl },
       { property: 'og:url', content: eventUrl },
       { property: 'og:type', content: 'website' },
@@ -318,7 +329,7 @@ const EventDetailScreen: React.FC = () => {
       // Twitter Card meta tags for better Twitter sharing
       { name: 'twitter:card', content: 'summary_large_image' },
       { name: 'twitter:title', content: `${event.name} - YoVibe` },
-      { name: 'twitter:description', content: event.description || `Check out ${event.name} at ${event.venueName} on ${event.date.toDateString()}!` },
+      { name: 'twitter:description', content: description },
       { name: 'twitter:image', content: event.posterImageUrl },
       { name: 'twitter:site', content: '@yovibe' }
     ]
@@ -345,7 +356,7 @@ const EventDetailScreen: React.FC = () => {
       try {
         const metaData = {
           title: `${event.name} - YoVibe`,
-          description: event.description || `Check out ${event.name} at ${event.venueName} on ${event.date.toDateString()}!`,
+          description,
           image: event.posterImageUrl,
           url: eventUrl,
           type: 'event'
