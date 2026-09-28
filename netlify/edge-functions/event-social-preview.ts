@@ -1,6 +1,26 @@
 const SOCIAL_CRAWLER = /facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|skypeuripreview|pinterestbot|googlebot/i;
 const DESCRIPTION_LIMIT = 160;
 
+type EdgeRuntimeGlobals = typeof globalThis & {
+  Netlify?: { env?: { get(name: string): string | undefined } };
+  Deno?: { env?: { get(name: string): string | undefined } };
+};
+
+function getEdgeEnv(name: string): string | undefined {
+  const runtime = globalThis as EdgeRuntimeGlobals;
+  try {
+    const value = runtime.Netlify?.env?.get(name);
+    if (value) return value;
+  } catch {
+    // Netlify.env is the current Edge Functions API; retain Deno as a local/legacy fallback.
+  }
+  try {
+    return runtime.Deno?.env?.get(name);
+  } catch {
+    return undefined;
+  }
+}
+
 type PublicEvent = {
   name?: unknown;
   description?: unknown;
@@ -43,13 +63,19 @@ function eventSlugFromPath(pathname: string): string | null {
 }
 
 async function fetchPublicEvent(slug: string): Promise<PublicEvent | null> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL') || Deno.env.get('NEXT_PUBLIC_SUPABASE_URL');
+  const supabaseUrl = getEdgeEnv('SUPABASE_URL') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_URL');
   const publishableKey =
-    Deno.env.get('SUPABASE_PUBLISHABLE_KEY') ||
-    Deno.env.get('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
-    Deno.env.get('SUPABASE_ANON_KEY') ||
-    Deno.env.get('NEXT_PUBLIC_SUPABASE_ANON_KEY');
-  if (!supabaseUrl || !publishableKey) return null;
+    getEdgeEnv('SUPABASE_PUBLISHABLE_KEY') ||
+    getEdgeEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') ||
+    getEdgeEnv('SUPABASE_ANON_KEY') ||
+    getEdgeEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !publishableKey) {
+    console.error('[event-social-preview] Supabase configuration is unavailable to this Edge Function', {
+      hasUrl: Boolean(supabaseUrl),
+      hasPublishableKey: Boolean(publishableKey),
+    });
+    return null;
+  }
 
   const endpoint = new URL('/rest/v1/events', supabaseUrl);
   endpoint.searchParams.set('select', 'slug,name,description,poster_image_url');
@@ -63,7 +89,10 @@ async function fetchPublicEvent(slug: string): Promise<PublicEvent | null> {
       Accept: 'application/json',
     },
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    console.error('[event-social-preview] Supabase event lookup failed', { status: response.status, slug });
+    return null;
+  }
   const rows = await response.json();
   return Array.isArray(rows) && rows[0] ? rows[0] as PublicEvent : null;
 }
@@ -99,7 +128,10 @@ export default async (request: Request, context: any) => {
 
   try {
     const event = await fetchPublicEvent(slug);
-    if (!event || typeof event.name !== 'string' || !event.name.trim()) return context.next();
+    if (!event || typeof event.name !== 'string' || !event.name.trim()) {
+      console.warn('[event-social-preview] No public event metadata found; using the SPA response', { slug });
+      return context.next();
+    }
 
     const canonicalUrl = new URL(requestUrl.pathname, requestUrl.origin).toString();
     const title = `${event.name.trim()} | YoVibe`;
@@ -115,6 +147,7 @@ export default async (request: Request, context: any) => {
       ? new Response(null, { status: 200, headers })
       : new Response(previewHtml({ canonicalUrl, title, description, imageUrl }), { status: 200, headers });
   } catch {
+    console.error('[event-social-preview] Unexpected preview generation error', { slug });
     return context.next();
   }
 };
