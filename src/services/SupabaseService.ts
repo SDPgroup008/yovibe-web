@@ -5,7 +5,7 @@ import { Dimensions } from "react-native"
 import type { User, UserType } from "../models/User"
 import type { Venue, WeeklyProgramValue } from "../models/Venue"
 import type { VenueGalleryItem } from "../models/VenueGalleryItem"
-import type { Event } from "../models/Event"
+import type { Event, EventCreatorType } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
 import type { VenueOwnershipRequest } from "../models/VenueOwnershipRequest"
 import { v4 as uuidv4 } from "uuid"
@@ -25,6 +25,14 @@ export const generateSlug = (name: string): string => {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
 };
+
+type PersistedEventCreatorType = "user" | "club_owner" | "admin"
+
+const normalizeEventCreatorType = (creatorType?: EventCreatorType): PersistedEventCreatorType => {
+  if (creatorType === "regular_user" || creatorType === "user") return "user"
+  if (creatorType === "club_owner" || creatorType === "admin") return creatorType
+  throw new Error("Only regular users, venue owners, and administrators can create events")
+}
 
 // Determine optimal image size based on device
 const getOptimalImageSize = (): { width: number; quality: number } => {
@@ -973,6 +981,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (!(eventData.date instanceof Date) || isNaN(eventData.date.getTime())) {
         throw new Error("Invalid event date provided")
       }
+      const createdByType = normalizeEventCreatorType(eventData.createdByType)
 
       const baseSlug = generateSlug(eventData.name)
       const MAX_SLUG_ATTEMPTS = 6
@@ -1012,7 +1021,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
             attendees: eventData.attendees || [],
             created_by: eventData.createdBy,
             created_by_auth: sessionUser.id,
-            created_by_type: eventData.createdByType,
+            created_by_type: createdByType,
             payment_methods: eventData.paymentMethods || { mobileMoney: [], bankAccounts: [] },
             created_at: new Date().toISOString(),
             is_deleted: false,

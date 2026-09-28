@@ -1,5 +1,8 @@
 import type { Timestamp } from "firebase/firestore"
-import type { UserType } from "./User"
+
+// `user` is the persisted database value for a regular organiser. The
+// application-facing role remains `regular_user` in the users table.
+export type EventCreatorType = "user" | "regular_user" | "club_owner" | "admin"
 
 export interface Event {
   id: string
@@ -18,7 +21,7 @@ export interface Event {
   createdAt: Date
   createdBy?: string
   createdByAuth?: string
-  createdByType?: UserType
+  createdByType?: EventCreatorType
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
@@ -96,7 +99,7 @@ export interface FirestoreEvent {
   isFeatured: boolean
   createdAt: Date
   createdBy?: string
-  createdByType?: UserType
+  createdByType?: EventCreatorType
   location?: string
   priceIndicator?: number
   isFreeEntry: boolean
