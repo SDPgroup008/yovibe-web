@@ -31,6 +31,7 @@ import PesaPalService from "../services/PesaPalService"
 import PawaPayService from "../services/PawaPayService"
 import StaffTokenService from "../services/StaffTokenService"
 import RefundService from "../services/RefundService"
+import EventPromotionShareService from "../services/EventPromotionShareService"
 import { useAuth } from "../contexts/AuthContext"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { publicSiteUrl } from "../config/runtime"
@@ -284,6 +285,9 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [pendingQrText, setPendingQrText] = useState("")
   const [buyerPhotoUrl, setBuyerPhotoUrl] = useState<string>("")
   const [buyerName, setBuyerName] = useState<string>("")
+  const [eventPromotionQr, setEventPromotionQr] = useState("")
+  const [generatingEventPromotionQr, setGeneratingEventPromotionQr] = useState(false)
+  const [downloadingEventPromotion, setDownloadingEventPromotion] = useState<"png" | "pdf" | null>(null)
 
   // Admin dashboard state
   const [adminTotalAppCommission, setAdminTotalAppCommission] = useState(0)
@@ -372,10 +376,44 @@ const OrganiserDashboardScreen: React.FC = () => {
 
   const copyToClipboard = async (text: string) => {
     try {
+      if (typeof navigator === "undefined" || !navigator.clipboard) throw new Error("Clipboard is unavailable")
       await navigator.clipboard.writeText(text)
       Alert.alert("Copied", "Link copied to clipboard")
     } catch {
       Alert.alert("Error", "Failed to copy")
+    }
+  }
+
+  const getEventPromotionUrl = () => {
+    if (!event) throw new Error("Event details are still loading")
+    return EventPromotionShareService.getEventUrl(event)
+  }
+
+  const handleGenerateEventPromotionQr = async () => {
+    try {
+      setGeneratingEventPromotionQr(true)
+      const qrCode = await EventPromotionShareService.generateQrCode(getEventPromotionUrl())
+      setEventPromotionQr(qrCode)
+      Alert.alert("QR Code Ready", "Your event promotion QR code is ready to share.")
+    } catch (error: any) {
+      Alert.alert("Unable to Generate QR Code", error?.message || "Please try again.")
+    } finally {
+      setGeneratingEventPromotionQr(false)
+    }
+  }
+
+  const handleDownloadEventPromotion = async (format: "png" | "pdf") => {
+    if (!eventPromotionQr || !event) return
+    try {
+      setDownloadingEventPromotion(format)
+      const eventUrl = getEventPromotionUrl()
+      if (format === "png") EventPromotionShareService.downloadPng(eventPromotionQr, event)
+      else await EventPromotionShareService.downloadPdf(eventPromotionQr, event, eventUrl)
+      Alert.alert("Download Started", `Your event QR ${format.toUpperCase()} is downloading.`)
+    } catch (error: any) {
+      Alert.alert("Download Failed", error?.message || "Please try again.")
+    } finally {
+      setDownloadingEventPromotion(null)
     }
   }
 
@@ -1604,6 +1642,50 @@ const OrganiserDashboardScreen: React.FC = () => {
       </View>
 
       <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>📣 Event Promotion QR</Text>
+        <View style={styles.eventPromotionCard}>
+          {eventPromotionQr ? (
+            <Image source={{ uri: eventPromotionQr }} style={styles.eventPromotionQr} accessibilityLabel="QR code linking to this event's details page" />
+          ) : (
+            <View style={styles.eventPromotionPlaceholder}>
+              <Ionicons name="qr-code-outline" size={44} color="#00D4FF" />
+              <Text style={styles.eventPromotionDescription}>Create a scan-ready link to your public event page.</Text>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[styles.eventPromotionGenerateButton, generatingEventPromotionQr && styles.eventPromotionButtonDisabled]}
+            onPress={handleGenerateEventPromotionQr}
+            disabled={generatingEventPromotionQr || !event}
+          >
+            {generatingEventPromotionQr ? <ActivityIndicator color="#001018" /> : <Ionicons name="qr-code-outline" size={18} color="#001018" />}
+            <Text style={styles.eventPromotionGenerateText}>{eventPromotionQr ? "Regenerate QR Code" : "Generate QR Code"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.eventPromotionLinkButton} onPress={() => copyToClipboard(getEventPromotionUrl())} disabled={!event}>
+            <Ionicons name="link-outline" size={18} color="#00D4FF" />
+            <Text style={styles.eventPromotionLinkText}>Copy Event Link</Text>
+          </TouchableOpacity>
+          <View style={styles.eventPromotionDownloadRow}>
+            <TouchableOpacity
+              style={[styles.eventPromotionDownloadButton, (!eventPromotionQr || downloadingEventPromotion !== null) && styles.eventPromotionButtonDisabled]}
+              onPress={() => handleDownloadEventPromotion("png")}
+              disabled={!eventPromotionQr || downloadingEventPromotion !== null}
+            >
+              {downloadingEventPromotion === "png" ? <ActivityIndicator color="#FFF" /> : <Ionicons name="image-outline" size={18} color="#FFF" />}
+              <Text style={styles.eventPromotionDownloadText}>PNG</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.eventPromotionDownloadButton, (!eventPromotionQr || downloadingEventPromotion !== null) && styles.eventPromotionButtonDisabled]}
+              onPress={() => handleDownloadEventPromotion("pdf")}
+              disabled={!eventPromotionQr || downloadingEventPromotion !== null}
+            >
+              {downloadingEventPromotion === "pdf" ? <ActivityIndicator color="#FFF" /> : <Ionicons name="document-text-outline" size={18} color="#FFF" />}
+              <Text style={styles.eventPromotionDownloadText}>PDF</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
         <Text style={styles.dashboardSectionTitle}>📷 Ticket Scanner</Text>
         <TouchableOpacity style={styles.scannerButton} onPress={handleScanTicket} disabled={scanning || validating}>
           <Ionicons name="qr-code-outline" size={48} color={COLORS.primary} />
@@ -2038,6 +2120,18 @@ const styles = StyleSheet.create({
   scannerButtonTitle: { color: "#00D4FF", fontSize: 18, fontWeight: "bold", marginTop: 12 },
   scannerButtonText: { color: "#888", fontSize: 14, marginTop: 4 },
   scannerButtonArrow: { position: "absolute", right: 16, top: "50%", marginTop: -12 },
+  eventPromotionCard: { backgroundColor: "#1a1a1a", borderRadius: 12, padding: 16, borderWidth: 1, borderColor: "rgba(0,212,255,0.26)", alignItems: "center" },
+  eventPromotionPlaceholder: { minHeight: 138, alignItems: "center", justifyContent: "center", paddingHorizontal: 16 },
+  eventPromotionDescription: { color: "#9BA7B7", fontSize: 13, lineHeight: 19, textAlign: "center", marginTop: 10 },
+  eventPromotionQr: { width: 178, height: 178, borderRadius: 8, backgroundColor: "#FFF", marginBottom: 14 },
+  eventPromotionGenerateButton: { width: "100%", minHeight: 44, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", backgroundColor: "#00D4FF", borderRadius: 8, paddingHorizontal: 12 },
+  eventPromotionGenerateText: { color: "#001018", fontSize: 14, fontWeight: "800" },
+  eventPromotionLinkButton: { width: "100%", minHeight: 42, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,212,255,0.5)", borderRadius: 8, marginTop: 10, paddingHorizontal: 12 },
+  eventPromotionLinkText: { color: "#00D4FF", fontSize: 14, fontWeight: "700" },
+  eventPromotionDownloadRow: { width: "100%", flexDirection: "row", gap: 10, marginTop: 10 },
+  eventPromotionDownloadButton: { flex: 1, minHeight: 42, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#273449", borderRadius: 8, paddingHorizontal: 10 },
+  eventPromotionDownloadText: { color: "#FFF", fontSize: 13, fontWeight: "800" },
+  eventPromotionButtonDisabled: { opacity: 0.45 },
   paymentDetailRow: { marginBottom: 4 },
   paymentDetailText: { color: "#FFF", fontSize: 14 },
   paymentDetailSubtext: { color: "#888", fontSize: 12, marginTop: 2 },
