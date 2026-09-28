@@ -97,9 +97,18 @@ export default function AdminWithdrawalsScreen() {
       const all = await SupabaseService.getEvents()
       const featured = all.filter(e => e.isFeatured)
       const enriched: EventRevenue[] = []
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Session expired")
 
       for (const evt of featured) {
-        const allTickets = await SupabaseService.getTicketsByEvent(evt.slug)
+        const response = await fetch("/.netlify/functions/organiser-ticket-data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ action: "tickets", eventId: evt.slug }),
+        })
+        const payload = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(payload.error || `Unable to load ticket data for ${evt.name}`)
+        const allTickets = payload.tickets || []
         const eligible = allTickets.filter((t: any) => {
           const pe = t.payout_eligible ?? t.payoutEligible ?? false
           const ps = t.payout_status ?? t.payoutStatus ?? "pending"

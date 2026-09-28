@@ -616,9 +616,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   }, [eventId])
   useEffect(() => { fetchScanLogs() }, [fetchScanLogs])
   useEffect(() => { if (!eventId) return; fetchTicketData()
-    const tc = supabase.channel(`tickets-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'tickets', filter: `event_slug=eq.${eventId}` }, () => fetchTicketData()).subscribe()
     const vc = supabase.channel(`validations-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_validations', filter: `event_slug=eq.${eventId}` }, () => fetchScanLogs()).subscribe()
-    return () => { supabase.removeChannel(tc); supabase.removeChannel(vc) }
+    return () => { supabase.removeChannel(vc) }
   }, [eventId, fetchTicketData, fetchScanLogs])
 
   // Load payout history from Supabase - scoped to current event
@@ -626,8 +625,15 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (!user || !eventId) return
     const loadPayouts = async () => {
       try {
-        const { data: evTickets } = await supabase.from('tickets').select('id').eq('event_slug', eventId)
-        const eventTicketIds = new Set((evTickets || []).map((t: any) => t.id))
+        const { data: { session } } = await supabase.auth.getSession()
+        const ticketResponse = await fetch("/.netlify/functions/organiser-ticket-data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}) },
+          body: JSON.stringify({ action: "tickets", eventId }),
+        })
+        const ticketPayload = await ticketResponse.json().catch(() => ({}))
+        if (!ticketResponse.ok) throw new Error(ticketPayload.error || "Unable to load event payout data")
+        const eventTicketIds = new Set((ticketPayload.tickets || []).map((ticket: any) => ticket.id))
         const payouts = await SupabaseService.getPayoutsByOrganizer(user.id)
         if (payouts && payouts.length > 0) {
           const filtered = payouts.filter((p: any) => (p.ticket_ids || []).some((id: string) => eventTicketIds.has(id)))

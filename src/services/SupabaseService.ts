@@ -1717,109 +1717,29 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
   // ============ Ticket Methods ============
 
   async saveTicket(ticket: any): Promise<string> {
-    try {
-      const { seatNumber, tableNumber, gatewayFee, buyerPhone, tableSize, ...restTicket } = ticket
-      const ticketData = {
-        ...restTicket,
-        seat_number: seatNumber,
-        table_number: tableNumber,
-        gateway_fee: gatewayFee,
-        buyer_phone: buyerPhone,
-        table_size: tableSize,
-        event_slug: ticket.eventSlug || ticket.eventId,
-        created_at: new Date().toISOString(),
-      };
-
-      const { data, error } = await supabase
-        .from("tickets")
-        .insert(ticketData)
-        .select("id")
-        .single();
-
-      if (error) throw error;
-
-      return data.id;
-    } catch (error) {
-      console.error("SupabaseService: Error saving ticket:", error);
-      throw error;
-    }
+    void ticket
+    throw new Error("Browser ticket creation has been removed. Use fulfill-purchase.")
   }
 
   async getTicketById(ticketId: string): Promise<any | null> {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .eq("id", ticketId)
-        .single();
-
-      if (error) return null;
-      return data;
-    } catch (error) {
-      console.error("SupabaseService: Error getting ticket by ID:", error);
-      return null;
-    }
+    void ticketId
+    throw new Error("Direct ticket lookup has been removed. Use the applicable server ticket flow.")
   }
 
   async getTicketByQRCode(qrCode: string): Promise<any | null> {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .eq("qr_code", qrCode)
-        .single();
-
-      if (error) return null;
-      return data;
-    } catch (error) {
-      console.error("SupabaseService: Error getting ticket by QR code:", error);
-      return null;
-    }
+    void qrCode
+    throw new Error("Browser QR lookup has been removed. Use scan-ticket.")
   }
 
-async updateTicket(ticketId: string, data: any): Promise<void> {
-    try {
-      // Map camelCase to snake_case
-      const dbData: any = {};
-      if (data.payoutStatus) dbData.payout_status = data.payoutStatus;
-      if (data.payoutDate) dbData.payout_date = data.payoutDate;
-      if (data.payoutEligible !== undefined) dbData.payout_eligible = data.payoutEligible;
-      if (data.status) dbData.status = data.status;
-      if (data.isScanned !== undefined) dbData.is_scanned = data.isScanned;
-      if (data.scannedAt) dbData.scanned_at = data.scannedAt;
-      if (data.seatNumber !== undefined) dbData.seat_number = data.seatNumber;
-      if (data.tableNumber !== undefined) dbData.table_number = data.tableNumber;
-      if (data.payoutEligible === undefined && data.payoutStatus === undefined && data.payoutDate === undefined && data.status === undefined && data.isScanned === undefined && data.scannedAt === undefined && data.seatNumber === undefined && data.tableNumber === undefined) {
-        // No mapped fields found, use raw data as fallback
-        Object.assign(dbData, data);
-      }
-
-      const { error } = await supabase
-        .from("tickets")
-        .update(dbData)
-        .eq("id", ticketId);
-
-      if (error) throw error;
-    } catch (error) {
-      console.error("SupabaseService: Error updating ticket:", error);
-      throw error;
-    }
+  async updateTicket(ticketId: string, data: any): Promise<void> {
+    void ticketId
+    void data
+    throw new Error("Browser ticket updates have been removed. Use the applicable server ticket flow.")
   }
 
   async getTicketsByEvent(eventId: string): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .eq("event_slug", eventId)
-        .limit(10000);
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error("SupabaseService: Error getting tickets by event:", error);
-      return [];
-    }
+    void eventId
+    throw new Error("Direct event ticket reads have been removed. Use organiser-ticket-data.")
   }
 
   async getTicketsByUser(userId: string): Promise<any[]> {
@@ -2183,14 +2103,14 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
 
   async getSoldTicketCount(eventSlug: string, feeTypeName: string): Promise<number> {
     try {
-      const { count, error } = await supabase
-        .from("tickets")
-        .select("id", { count: "exact", head: true })
-        .eq("event_slug", eventSlug)
-        .eq("entry_fee_type", feeTypeName)
-        .in("status", ["active", "used", "pending"])
-      if (error) throw error
-      return count || 0
+      const response = await fetch(resolveFunctionUrl("ticket-availability"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventSlug, feeType: feeTypeName }),
+      })
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(data.error || "Unable to load ticket availability")
+      return Number.isInteger(data.soldCount) && data.soldCount >= 0 ? data.soldCount : 0
     } catch (error) {
       console.error("SupabaseService: Error getting sold ticket count:", error)
       return 0
@@ -2198,39 +2118,13 @@ async updateTicket(ticketId: string, data: any): Promise<void> {
   }
 
   async getEligibleTicketsForPayout(organizerId: string): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .eq("payout_status", "pending")
-        .eq("payout_eligible", true)
-        .limit(10000);
-
-      // Note: In a real implementation you would also filter by the organizer's venues/events
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error("SupabaseService: Error getting eligible tickets for payout:", error);
-      return [];
-    }
+    void organizerId
+    throw new Error("Browser payout ticket reads have been removed. Use the payout service.")
   }
 
   async getEligibleTicketsForEvent(eventId: string): Promise<any[]> {
-    try {
-      const { data, error } = await supabase
-        .from("tickets")
-        .select("*")
-        .eq("event_slug", eventId)
-        .eq("payout_status", "pending")
-        .eq("payout_eligible", true)
-        .limit(10000);
-
-      if (error) throw error;
-      return data || [];
-    } catch (error) {
-      console.error("SupabaseService: Error getting eligible tickets for event:", error);
-      return [];
-    }
+    void eventId
+    throw new Error("Browser payout ticket reads have been removed. Use the payout service.")
   }
 
   async getOccupiedTables(eventSlug: string, feeTypeName: string): Promise<number[]> {

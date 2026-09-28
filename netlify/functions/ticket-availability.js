@@ -47,7 +47,10 @@ exports.handler = async (event) => {
       .map((row) => integer(row.table_number))
       .filter((value) => value !== null))];
 
-    return json(200, { occupiedSeats, occupiedTables });
+    // A quantity is public inventory information, not ticket data. Returning
+    // it lets checkout enforce a visible capacity limit without querying
+    // tickets from the browser.
+    return json(200, { occupiedSeats, occupiedTables, soldCount: (rows || []).length });
   } catch (error) {
     console.error('[TicketAvailability] Error:', error.message);
     return json(500, { error: 'Unable to load ticket availability' });
