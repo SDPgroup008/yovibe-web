@@ -288,6 +288,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [eventPromotionQr, setEventPromotionQr] = useState("")
   const [generatingEventPromotionQr, setGeneratingEventPromotionQr] = useState(false)
   const [downloadingEventPromotion, setDownloadingEventPromotion] = useState<"png" | "pdf" | null>(null)
+  const [eventPromotionLinkCopied, setEventPromotionLinkCopied] = useState(false)
 
   // Admin dashboard state
   const [adminTotalAppCommission, setAdminTotalAppCommission] = useState(0)
@@ -379,8 +380,10 @@ const OrganiserDashboardScreen: React.FC = () => {
       if (typeof navigator === "undefined" || !navigator.clipboard) throw new Error("Clipboard is unavailable")
       await navigator.clipboard.writeText(text)
       Alert.alert("Copied", "Link copied to clipboard")
+      return true
     } catch {
       Alert.alert("Error", "Failed to copy")
+      return false
     }
   }
 
@@ -414,6 +417,17 @@ const OrganiserDashboardScreen: React.FC = () => {
       Alert.alert("Download Failed", error?.message || "Please try again.")
     } finally {
       setDownloadingEventPromotion(null)
+    }
+  }
+
+  const handleCopyEventPromotionLink = async () => {
+    try {
+      const copied = await copyToClipboard(getEventPromotionUrl())
+      if (!copied) return
+      setEventPromotionLinkCopied(true)
+      setTimeout(() => setEventPromotionLinkCopied(false), 3000)
+    } catch {
+      // copyToClipboard already presents the failure message.
     }
   }
 
@@ -1660,10 +1674,16 @@ const OrganiserDashboardScreen: React.FC = () => {
             {generatingEventPromotionQr ? <ActivityIndicator color="#001018" /> : <Ionicons name="qr-code-outline" size={18} color="#001018" />}
             <Text style={styles.eventPromotionGenerateText}>{eventPromotionQr ? "Regenerate QR Code" : "Generate QR Code"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.eventPromotionLinkButton} onPress={() => copyToClipboard(getEventPromotionUrl())} disabled={!event}>
+          <TouchableOpacity style={styles.eventPromotionLinkButton} onPress={handleCopyEventPromotionLink} disabled={!event}>
             <Ionicons name="link-outline" size={18} color="#00D4FF" />
             <Text style={styles.eventPromotionLinkText}>Copy Event Link</Text>
           </TouchableOpacity>
+          {eventPromotionLinkCopied && (
+            <View style={styles.eventPromotionCopiedNotice} accessibilityLiveRegion="polite">
+              <Ionicons name="checkmark-circle" size={16} color="#55E6A5" />
+              <Text style={styles.eventPromotionCopiedText}>Link copied</Text>
+            </View>
+          )}
           <View style={styles.eventPromotionDownloadRow}>
             <TouchableOpacity
               style={[styles.eventPromotionDownloadButton, (!eventPromotionQr || downloadingEventPromotion !== null) && styles.eventPromotionButtonDisabled]}
@@ -2128,6 +2148,8 @@ const styles = StyleSheet.create({
   eventPromotionGenerateText: { color: "#001018", fontSize: 14, fontWeight: "800" },
   eventPromotionLinkButton: { width: "100%", minHeight: 42, flexDirection: "row", gap: 8, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "rgba(0,212,255,0.5)", borderRadius: 8, marginTop: 10, paddingHorizontal: 12 },
   eventPromotionLinkText: { color: "#00D4FF", fontSize: 14, fontWeight: "700" },
+  eventPromotionCopiedNotice: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 8 },
+  eventPromotionCopiedText: { color: "#55E6A5", fontSize: 13, fontWeight: "700" },
   eventPromotionDownloadRow: { width: "100%", flexDirection: "row", gap: 10, marginTop: 10 },
   eventPromotionDownloadButton: { flex: 1, minHeight: 42, flexDirection: "row", gap: 7, alignItems: "center", justifyContent: "center", backgroundColor: "#273449", borderRadius: 8, paddingHorizontal: 10 },
   eventPromotionDownloadText: { color: "#FFF", fontSize: 13, fontWeight: "800" },
