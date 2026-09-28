@@ -9,7 +9,9 @@
       "backgroundColor": "#121212",
       "resizeMode": "contain"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yovibe.app",
@@ -38,7 +40,9 @@
       "bundler": "metro",
       "build": {
         "babel": {
-          "include": ["@expo/vector-icons"]
+          "include": [
+            "@expo/vector-icons"
+          ]
         }
       },
       "server": {
@@ -47,9 +51,18 @@
       "favicon": "./assets/favicon.png",
       "manifest": "./public/manifest.webmanifest"
     },
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "experiments": {
       "tsconfigPaths": true
-    }
+    },
+    "plugins": [
+      "expo-sharing",
+      "expo-asset",
+      "expo-font"
+    ]
   }
 }
