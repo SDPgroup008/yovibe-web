@@ -9,7 +9,7 @@ const getApiKey = () => {
 
 const UGANDA_PROVIDERS = new Set(['MTN_MOMO_UGA', 'AIRTEL_OAPI_UGA'])
 const PAWAPAY_MOBILE_MONEY_MAX_UGX = 5_000_000
-const PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE = 'the limit for mobile money is 5,000,000, for total beyond that use Credit card option or reduce the total and continue with mobile money'
+const PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE = 'The limit for mobile money is 5,000,000, for total beyond that use Credit card option or reduce the total and continue with mobile money'
 
 function normalizeUgandanPhone(value) {
   let digits = String(value || '').replace(/\D/g, '')

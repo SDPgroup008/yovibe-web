@@ -726,7 +726,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const mobileMoneyLimitExceeded = total > PAWAPAY_MOBILE_MONEY_MAX_UGX
 
   const showMobileMoneyLimitMessage = () => {
-    Alert.alert("Mobile Money limit", PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE)
+    Alert.alert("Mobile Money limit", PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE, [{ text: "OK" }])
   }
 
   // Clear a stale Mobile Money selection if checkout changes push the final
