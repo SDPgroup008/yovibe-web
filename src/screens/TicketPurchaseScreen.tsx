@@ -23,6 +23,10 @@ import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { blobToDataURL } from "../utils/expoHelpers"
+import {
+  PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE,
+  PAWAPAY_MOBILE_MONEY_MAX_UGX,
+} from "../constants/paymentLimits"
 
 // ─── Design tokens (UI only) ─────────────────────────────────────────
 const SURFACE = "rgba(18, 18, 26, 0.72)"
@@ -390,6 +394,7 @@ const TicketPurchaseScreen: React.FC = () => {
       }
     }
     if (paymentMethod === "mobile_money") {
+      if (mobileMoneyLimitExceeded) errs.paymentMethod = PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE
       if (!mobileMoneyNumber.trim()) errs.mobileMoneyNumber = "Please enter your mobile money number"
       else if (!PHONE_REGEX.test(mobileMoneyNumber.trim())) errs.mobileMoneyNumber = "Enter a valid Ugandan phone (e.g. 0772123456)"
     }
@@ -718,6 +723,19 @@ const TicketPurchaseScreen: React.FC = () => {
   }, [basePrice, actualTicketCount, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
+  const mobileMoneyLimitExceeded = total > PAWAPAY_MOBILE_MONEY_MAX_UGX
+
+  const showMobileMoneyLimitMessage = () => {
+    Alert.alert("Mobile Money limit", PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE)
+  }
+
+  // Clear a stale Mobile Money selection if checkout changes push the final
+  // amount above the provider limit.
+  useEffect(() => {
+    if (!mobileMoneyLimitExceeded || paymentMethod !== "mobile_money") return
+    setPaymentMethod(null)
+    showMobileMoneyLimitMessage()
+  }, [mobileMoneyLimitExceeded, paymentMethod])
 
   // Installment preview � recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
@@ -813,6 +831,10 @@ const updateBuyerName = (index: number, name: string) => {
   }
 
 const handleInstallmentPurchase = async () => {
+    if (paymentMethod === "mobile_money" && mobileMoneyLimitExceeded) {
+      showMobileMoneyLimitMessage()
+      return
+    }
     setFieldErrors({})
     const errs = validatePurchaseForm()
     delete errs.paymentMethod; delete errs.mobileMoneyNumber; delete errs.cardFirstName; delete errs.cardLastName; delete errs.cardPhone
@@ -958,6 +980,11 @@ const handleInstallmentPurchase = async () => {
 
   const handlePurchase = async () => {
     /* console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod) */
+
+    if (paymentMethod === "mobile_money" && mobileMoneyLimitExceeded) {
+      showMobileMoneyLimitMessage()
+      return
+    }
     
     // Consolidated validation
     setFieldErrors({})
@@ -1612,7 +1639,13 @@ const handleInstallmentPurchase = async () => {
         <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "mobile_money" && styles.paymentOptionSelected]}
-          onPress={() => setPaymentMethod("mobile_money")}
+          onPress={() => {
+            if (mobileMoneyLimitExceeded) {
+              showMobileMoneyLimitMessage()
+              return
+            }
+            setPaymentMethod("mobile_money")
+          }}
         >
           <View style={styles.paymentOptionMain}>
             <View style={[styles.paymentOptionIcon, paymentMethod === "mobile_money" && styles.paymentOptionIconActive]}>
@@ -1620,7 +1653,9 @@ const handleInstallmentPurchase = async () => {
             </View>
             <View>
               <Text style={[styles.paymentOptionText, paymentMethod === "mobile_money" && styles.paymentOptionTextSelected]}>Mobile Money</Text>
-              <Text style={styles.paymentOptionSub}>MTN &amp; Airtel — instant</Text>
+              <Text style={styles.paymentOptionSub}>
+                {mobileMoneyLimitExceeded ? "Unavailable above UGX 5,000,000" : "MTN & Airtel — instant"}
+              </Text>
             </View>
           </View>
           {paymentMethod === "mobile_money" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}

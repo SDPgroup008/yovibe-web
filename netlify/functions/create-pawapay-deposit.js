@@ -8,6 +8,8 @@ const getApiKey = () => {
 }
 
 const UGANDA_PROVIDERS = new Set(['MTN_MOMO_UGA', 'AIRTEL_OAPI_UGA'])
+const PAWAPAY_MOBILE_MONEY_MAX_UGX = 5_000_000
+const PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE = 'the limit for mobile money is 5,000,000, for total beyond that use Credit card option or reduce the total and continue with mobile money'
 
 function normalizeUgandanPhone(value) {
   let digits = String(value || '').replace(/\D/g, '')
@@ -75,6 +77,9 @@ exports.handler = async (event, context) => {
     const formattedPhone = normalizeUgandanPhone(phoneNumber)
     if (!Number.isFinite(numericAmount) || numericAmount <= 0 || !Number.isInteger(numericAmount)) {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Amount must be a positive whole number for UGX' }) }
+    }
+    if (numericAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX) {
+      return { statusCode: 400, body: JSON.stringify({ success: false, error: PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE }) }
     }
     if (normalizedCurrency !== 'UGX') {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Only UGX mobile-money deposits are supported' }) }
