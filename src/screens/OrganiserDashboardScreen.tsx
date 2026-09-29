@@ -1130,8 +1130,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   // ===========================================================================
   const renderWithdrawModal = () => (
     <Modal visible={showWithdrawModal} transparent animationType="slide" onRequestClose={() => setShowWithdrawModal(false)}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
+      <View style={[styles.modalOverlay, isLargeScreen && styles.modalOverlayDesktop]}>
+        <View style={[styles.modalContainer, isLargeScreen && styles.modalContainerDesktop]}>
           {/* Header */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>💰 Withdraw Earnings</Text>
@@ -1140,7 +1140,7 @@ const OrganiserDashboardScreen: React.FC = () => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+          <ScrollView style={[styles.modalBody, isLargeScreen && styles.modalBodyDesktop]} showsVerticalScrollIndicator={false}>
             {/* Payment method tabs */}
             <View style={styles.payoutTabRow}>
                 <TouchableOpacity
@@ -1192,7 +1192,7 @@ const OrganiserDashboardScreen: React.FC = () => {
             {payoutTab === "mobile_money" && (
               <>
               {/* Provider selection */}
-              <View style={styles.phoneSection}>
+              <View style={[styles.phoneSection, isLargeScreen && styles.phoneSectionDesktop]}>
                 <Text style={styles.phoneLabel}>📱 Provider</Text>
                 <View style={styles.providerRow}>
                   <TouchableOpacity
@@ -1211,7 +1211,7 @@ const OrganiserDashboardScreen: React.FC = () => {
               </View>
 
               {/* Mobile money number */}
-              <View style={styles.phoneSection}>
+              <View style={[styles.phoneSection, isLargeScreen && styles.phoneSectionDesktop]}>
                 <Text style={styles.phoneLabel}>📱 Mobile Money Number</Text>
                 <View style={styles.phoneRow}>
                   <TextInput
@@ -1271,7 +1271,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           )}
 
           {payoutTab === "card" && (
-            <View style={styles.phoneSection}>
+            <View style={[styles.phoneSection, isLargeScreen && styles.phoneSectionDesktop]}>
               <Text style={styles.phoneLabel}>🏦 Bank Details</Text>
               <TextInput
                 style={[styles.phoneInput, payoutFieldErrors.bankName && styles.inputError]}
@@ -1331,7 +1331,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           </ScrollView>
 
 {/* Summary bar */}
-          <View style={styles.summaryBar}>
+          <View style={[styles.summaryBar, isLargeScreen && styles.summaryBarDesktop]}>
             <View style={styles.summaryLeft}>
               <Text style={styles.summaryLabel}>Selected</Text>
               <Text style={styles.summaryCount}>{totalSelected} item{totalSelected !== 1 ? "s" : ""}</Text>
@@ -2160,12 +2160,16 @@ const styles = StyleSheet.create({
 
   // -- Withdraw Modal --
   modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.85)", justifyContent: "flex-end" },
+  modalOverlayDesktop: { justifyContent: "center", alignItems: "center", padding: 24 },
   modalContainer: { backgroundColor: "#111", borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: 800 },
+  modalContainerDesktop: { width: "94%", maxWidth: 760, height: "92%", maxHeight: "92%", alignSelf: "center", borderRadius: 24, padding: 24, overflow: "hidden" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 },
   modalTitle: { color: "#FFF", fontSize: 20, fontWeight: "bold" },
   modalBody: { maxHeight: 750 },
+  modalBodyDesktop: { flex: 1, maxHeight: undefined },
   sliderSection: { marginBottom: 0 },
   phoneSection: { marginTop: 4, marginBottom: 80 },
+  phoneSectionDesktop: { marginBottom: 16 },
   phoneLabel: { color: "#FFF", fontSize: 15, fontWeight: "600", marginBottom: 8 },
   phoneRow: { marginBottom: 8 },
   phoneInput: { backgroundColor: "#1a1a1a", color: "#FFF", padding: 14, borderRadius: 10, fontSize: 16, borderWidth: 1, borderColor: "#333" },
@@ -2176,6 +2180,7 @@ const styles = StyleSheet.create({
   providerChipText: { color: "#888", fontWeight: "600" },
   providerChipTextActive: { color: "#00D4FF" },
   summaryBar: { flexDirection: "row", alignItems: "center", paddingTop: 12, borderTopWidth: 1, borderTopColor: "#222", position: "absolute", bottom: 0, left: 0, right: 0, backgroundColor: "#111", padding: 16, borderTopLeftRadius: 16, borderTopRightRadius: 16 },
+  summaryBarDesktop: { position: "relative", left: undefined, right: undefined, bottom: undefined, marginHorizontal: -24, marginBottom: -24, paddingHorizontal: 24, borderRadius: 0 },
   summaryLeft: { flex: 1 },
   summaryCenter: { flex: 1, alignItems: "center" },
   summaryLabel: { color: "#666", fontSize: 11 },

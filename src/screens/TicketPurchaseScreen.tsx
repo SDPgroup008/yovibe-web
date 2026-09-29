@@ -331,6 +331,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<"pending" | "completed" | "failed" | null>(null)
   const [purchaseStatus, setPurchaseStatus] = useState<"success" | "error" | null>(null)
   const [statusMessage, setStatusMessage] = useState("")
+  const [showMobileMoneyLimitDialog, setShowMobileMoneyLimitDialog] = useState(false)
   // Reused across retries so the server-side fulfillment is idempotent.
   const [activeFulfillmentId, setActiveFulfillmentId] = useState<string | null>(null)
   const [acceptedTerms, setAcceptedTerms] = useState(false)
@@ -726,7 +727,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const mobileMoneyLimitExceeded = total > PAWAPAY_MOBILE_MONEY_MAX_UGX
 
   const showMobileMoneyLimitMessage = () => {
-    Alert.alert("Mobile Money limit", PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE, [{ text: "OK" }])
+    setShowMobileMoneyLimitDialog(true)
   }
 
   // Clear a stale Mobile Money selection if checkout changes push the final
@@ -1275,6 +1276,28 @@ const handleInstallmentPurchase = async () => {
         message={statusMessage || "Payment failed. Please try again."}
         onDismiss={() => { setPurchaseStatus(null); setStatusMessage("") }}
       />
+
+      <Modal
+        visible={showMobileMoneyLimitDialog}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMobileMoneyLimitDialog(false)}
+      >
+        <View style={styles.mobileMoneyLimitOverlay}>
+          <View style={styles.mobileMoneyLimitDialog}>
+            <Text style={styles.mobileMoneyLimitTitle}>Mobile Money limit</Text>
+            <Text style={styles.mobileMoneyLimitMessage}>{PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE}</Text>
+            <TouchableOpacity
+              style={styles.mobileMoneyLimitButton}
+              onPress={() => setShowMobileMoneyLimitDialog(false)}
+              accessibilityRole="button"
+              accessibilityLabel="OK"
+            >
+              <Text style={styles.mobileMoneyLimitButtonText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <View style={isLargeScreen ? styles.desktopTicketLayout : undefined}>
       <View style={isLargeScreen ? styles.desktopTicketLeft : undefined}>
@@ -2853,6 +2876,48 @@ const styles = StyleSheet.create({
     color: "#666666",
     fontSize: 12,
     marginTop: 2,
+  },
+  mobileMoneyLimitOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.72)",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  mobileMoneyLimitDialog: {
+    width: "100%",
+    maxWidth: 440,
+    backgroundColor: "#1A1A24",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(0,212,255,0.35)",
+    padding: 22,
+  },
+  mobileMoneyLimitTitle: {
+    color: "#FFFFFF",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 12,
+  },
+  mobileMoneyLimitMessage: {
+    color: "#D7E0EA",
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  mobileMoneyLimitButton: {
+    alignSelf: "flex-end",
+    marginTop: 20,
+    minWidth: 88,
+    paddingVertical: 11,
+    paddingHorizontal: 20,
+    borderRadius: 9,
+    alignItems: "center",
+    backgroundColor: "#00D4FF",
+  },
+  mobileMoneyLimitButtonText: {
+    color: "#001018",
+    fontSize: 14,
+    fontWeight: "800",
   },
   paymentForm: {
     marginTop: 16,
