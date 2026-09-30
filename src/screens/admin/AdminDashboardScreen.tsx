@@ -357,7 +357,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   }) => (
     <View style={st.metricCard}>
       <Ionicons name={icon as any} size={22} color={iconColor} />
-      <Text style={st.metricValue}>{fmt(Number(value))}</Text>
+      <Text style={st.metricValue}>{typeof value === 'number' ? fmt(value) : value}</Text>
       <Text style={st.metricLabel}>{label}</Text>
       {delta && <Text style={[st.deltaArrow, { color: delta.color }]}>{delta.arrow} {delta.pct}</Text>}
     </View>
