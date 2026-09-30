@@ -21,10 +21,11 @@ try {
 }
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, messaging, notificationsEnabled } from "./config/firebase";
+import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
+import { showForegroundNotification } from "./utils/browserNotifications";
 
 type DeferredInstallPrompt = {
   prompt: () => Promise<void>;
@@ -95,7 +96,7 @@ function NotificationBanner({ title, body, onClose }) {
   );
 }
 
-// 🔔 Trigger GitHub Action via repository_dispatch AND save to Firestore with topic subscription
+// 🔔 Save the browser token server-side for direct broadcast delivery.
 async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
     const res = await fetch("/.netlify/functions/save-token", {
@@ -108,7 +109,7 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
       console.error("Failed to save token:", await res.text());
     } else {
       const result = await res.json();
-      /* console.log("[App] Token saved and subscribed to all-users:", result); */
+      /* console.log("[App] Token saved for direct broadcast delivery:", result); */
     }
   } catch (err) {
     console.error("Error calling Netlify function:", err);
@@ -244,29 +245,37 @@ function AppContent() {
     }
   }, [user]);
 
-  // 🔔 Listen for foreground notifications
+  // 🔔 Listen for foreground notifications after Firebase Messaging finishes
+  // asynchronous initialization. FCM does not display system notifications
+  // automatically while the page is focused, so display one explicitly.
   useEffect(() => {
-    if (!notificationsEnabled || !messaging) {
-      return;
-    }
+    if (!notificationsEnabled) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    const unsubscribe = onMessage(messaging, async (payload) => {
-      /* console.log("[iOS-NOTIF] Foreground notification received"); */
-      /* console.log("[iOS-NOTIF] Title:", payload.notification?.title); */
+    ensureMessagingInitialized().then((instance) => {
+      if (!instance || cancelled) return;
+      unsubscribe = onMessage(instance, async (payload) => {
+        try {
+          await NotificationService.processIncomingNotification(payload, user?.uid);
+          await showForegroundNotification(payload);
+        } catch (error) {
+          console.error("❌ ERROR processing foreground notification:", error);
+        }
 
-      try {
-        await NotificationService.processIncomingNotification(payload, user?.uid);
-      } catch (error) {
-        console.error("❌ ERROR saving notification to Firestore:", error);
-      }
-
-      setBanner({
-        title: payload.notification?.title || "Notification",
-        body: payload.notification?.body || "",
+        setBanner({
+          title: payload.notification?.title || "Notification",
+          body: payload.notification?.body || "",
+        });
       });
+    }).catch((error) => {
+      console.warn("[Notifications] Foreground listener initialization failed:", error);
     });
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [user]);
 
   // 🔔 Handle permission banner actions

@@ -1,4 +1,3 @@
-const https = require('https');
 const fs = require('fs');
 
 const KAMPALA_OFFSET_MS = 3 * 60 * 60 * 1000;
@@ -149,7 +148,6 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
 
   const message = {
     message: {
-      topic: 'all-users',
       notification: {
         title: summary.title,
         body: summary.body,
@@ -159,7 +157,6 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
       webpush: {
         headers: {
           TTL: '86400',
-          ...(summary.imageUrl ? { image: summary.imageUrl } : {}),
         },
         fcm_options: { link: summary.deepLink },
       },
@@ -180,6 +177,18 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
   return message;
 }
 
+function buildMulticastMessage(summary, notificationId, dedupeKey) {
+  const httpMessage = buildFcmMessage(summary, notificationId, dedupeKey).message;
+  return {
+    notification: httpMessage.notification,
+    data: httpMessage.data,
+    webpush: {
+      headers: httpMessage.webpush.headers,
+      fcmOptions: { link: summary.deepLink },
+    },
+  };
+}
+
 function loadServiceAccount() {
   const configuredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (configuredPath && fs.existsSync(configuredPath)) {
@@ -198,59 +207,79 @@ function loadServiceAccount() {
   }
 }
 
-let cachedAccessToken;
-let tokenExpiry = 0;
+let firebaseMessaging;
 
-async function getAccessToken() {
-  if (cachedAccessToken && Date.now() < tokenExpiry - 300000) return cachedAccessToken;
-  const { GoogleAuth } = require('google-auth-library');
-  const auth = new GoogleAuth({
-    credentials: loadServiceAccount(),
-    scopes: ['https://www.googleapis.com/auth/firebase.messaging'],
+function getFirebaseMessaging() {
+  if (firebaseMessaging) return firebaseMessaging;
+  const { cert, getApps, initializeApp } = require('firebase-admin/app');
+  const { getMessaging } = require('firebase-admin/messaging');
+  const app = getApps()[0] || initializeApp({
+    credential: cert(loadServiceAccount()),
+    projectId: requiredEnv('FIREBASE_PROJECT_ID'),
   });
-  const client = await auth.getClient();
-  const token = await client.getAccessToken();
-  if (!token.token) throw new Error('Unable to obtain Firebase access token');
-  cachedAccessToken = token.token;
-  tokenExpiry = Date.now() + 3300000;
-  return cachedAccessToken;
+  firebaseMessaging = getMessaging(app);
+  return firebaseMessaging;
 }
 
-async function sendFcmMessage(message) {
-  const accessToken = await getAccessToken();
-  const projectId = requiredEnv('FIREBASE_PROJECT_ID');
-  const body = JSON.stringify(message);
+async function listActiveTokens(supabase) {
+  const tokens = [];
+  const pageSize = 1000;
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('notification_tokens')
+      .select('token')
+      .eq('is_active', true)
+      .order('created_at', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = (data || []).map((row) => row.token).filter(Boolean);
+    tokens.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return [...new Set(tokens)];
+}
 
-  return new Promise((resolve, reject) => {
-    const request = https.request({
-      hostname: 'fcm.googleapis.com',
-      path: `/v1/projects/${encodeURIComponent(projectId)}/messages:send`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Length': Buffer.byteLength(body),
-      },
-    }, (response) => {
-      let responseBody = '';
-      response.on('data', (chunk) => { responseBody += chunk; });
-      response.on('end', () => {
-        if (response.statusCode >= 200 && response.statusCode < 300) {
-          let parsed;
-          try { parsed = JSON.parse(responseBody); } catch { parsed = {}; }
-          resolve({ providerMessageId: parsed.name || null });
-          return;
-        }
-        const error = new Error(`Firebase send failed with HTTP ${response.statusCode}`);
-        error.statusCode = response.statusCode;
-        error.responseBody = responseBody.slice(0, 1000);
-        reject(error);
-      });
+function isStaleTokenError(error) {
+  return error?.code === 'messaging/registration-token-not-registered'
+    || error?.code === 'messaging/invalid-registration-token';
+}
+
+async function markStaleTokensInactive(supabase, tokens) {
+  if (!tokens.length) return 0;
+  const { error } = await supabase
+    .from('notification_tokens')
+    .update({ is_active: false, updated_at: new Date().toISOString() })
+    .in('token', tokens);
+  if (error) throw error;
+  return tokens.length;
+}
+
+async function sendToActiveTokens({ supabase, message }) {
+  const tokens = await listActiveTokens(supabase);
+  if (!tokens.length) {
+    return { targeted: 0, successful: 0, failed: 0, stale: 0 };
+  }
+
+  const messaging = getFirebaseMessaging();
+  const stats = { targeted: tokens.length, successful: 0, failed: 0, stale: 0 };
+  const batchSize = 500;
+
+  for (let offset = 0; offset < tokens.length; offset += batchSize) {
+    const batch = tokens.slice(offset, offset + batchSize);
+    const response = await messaging.sendEachForMulticast({ ...message, tokens: batch });
+    const staleTokens = [];
+    response.responses.forEach((result, index) => {
+      if (result.success) {
+        stats.successful += 1;
+      } else {
+        stats.failed += 1;
+        if (isStaleTokenError(result.error)) staleTokens.push(batch[index]);
+      }
     });
-    request.on('error', reject);
-    request.write(body);
-    request.end();
-  });
+    stats.stale += await markStaleTokensInactive(supabase, staleTokens);
+  }
+
+  return stats;
 }
 
 async function findExistingBroadcast(supabase, dedupeKey) {
@@ -323,20 +352,20 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
 
   await updateNotificationData(supabase, notificationId, notificationData);
 
-  const message = buildFcmMessage(summary, notificationId, dedupeKey);
+  const message = buildMulticastMessage(summary, notificationId, dedupeKey);
   try {
-    const result = await sendFcmMessage(message);
+    const delivery = await sendToActiveTokens({ supabase, message });
     notificationData = {
       ...notificationData,
-      deliveryStatus: 'sent',
-      providerMessageId: result.providerMessageId,
+      deliveryStatus: delivery.successful > 0 ? 'sent' : 'no_active_tokens',
+      delivery,
       sentAt: new Date().toISOString(),
       eventPreviews: summary.previews,
       eventIds: summary.previews.map((event) => event.slug),
       totalEventCount: summary.events.length,
     };
     await updateNotificationData(supabase, notificationId, notificationData);
-    return { skipped: false, sent: true, notificationId, dedupeKey, count: summary.events.length };
+    return { skipped: false, sent: delivery.successful > 0, notificationId, dedupeKey, count: summary.events.length, delivery };
   } catch (error) {
     notificationData = {
       ...notificationData,
@@ -352,6 +381,8 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
 module.exports = {
   buildSummaryPayload,
   buildFcmMessage,
+  buildMulticastMessage,
   getSummaryWindow,
+  sendToActiveTokens,
   sendEventSummaryBroadcast,
 };

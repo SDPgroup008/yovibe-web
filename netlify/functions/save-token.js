@@ -1,119 +1,15 @@
 /**
  * netlify/functions/save-token.js
  *
- * This function saves FCM tokens to Supabase and subscribes
- * them to the "all-users" FCM topic for push notifications.
- *
- * Uses OAuth2 with the Firebase service account for FCM v1 API.
+ * This function saves FCM tokens to Supabase. Scheduled broadcasts target
+ * the active token rows directly through Firebase multicast delivery.
  *
  * Environment variables required (set in Netlify):
  *   SUPABASE_URL              - Supabase project URL
  *   SUPABASE_SECRET_KEY       - Supabase secret key
- *   FIREBASE_SERVICE_ACCOUNT  - Full service account JSON string
- *   GOOGLE_APPLICATION_CREDENTIALS - Path to service account JSON file (alternative)
  */
 
-const https = require("https");
-const { GoogleAuth } = require("google-auth-library");
 const { getAdminClient } = require('../shared/supabaseAdmin');
-const { requiredEnv } = require('../shared/runtimeConfig');
-
-const getFcmProjectId = () => requiredEnv('FIREBASE_PROJECT_ID');
-
-/**
- * Load the service account credentials.
- */
-function loadServiceAccount() {
-  // 1. Check env var
-  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-      return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-    } catch { /* fall through */ }
-  }
-
-  throw new Error('FIREBASE_SERVICE_ACCOUNT is not configured');
-}
-
-let cachedAccessToken = null;
-let tokenExpiry = 0;
-
-/**
- * Get an OAuth2 access token for FCM using the service account.
- */
-async function getAccessToken() {
-  // Return cached token if still valid (within 5 min of expiry)
-  if (cachedAccessToken && Date.now() < tokenExpiry - 300000) {
-    return cachedAccessToken;
-  }
-
-  const serviceAccount = loadServiceAccount();
-  const auth = new GoogleAuth({
-    credentials: serviceAccount,
-    scopes: ["https://www.googleapis.com/auth/firebase.messaging"],
-  });
-  const client = await auth.getClient();
-  const token = await client.getAccessToken();
-  cachedAccessToken = token.token;
-  // Tokens typically expire in 3600s, cache for 55 min
-  tokenExpiry = Date.now() + 3300000;
-  return cachedAccessToken;
-}
-
-/**
- * Subscribe a token to the "all-users" FCM topic via FCM v1 API.
- */
-async function subscribeTokenToTopic(token) {
-  let accessToken;
-  try {
-    accessToken = await getAccessToken();
-  } catch (err) {
-    console.log("[save-token] Could not get access token, skipping topic subscription:", err.message);
-    return { successCount: 0, failureCount: 0, skipped: true };
-  }
-
-  const fcmProject = getFcmProjectId();
-
-  return new Promise((resolve) => {
-    const postData = JSON.stringify({
-      token,
-      topic: "all-users",
-    });
-
-    const options = {
-      hostname: "fcm.googleapis.com",
-      path: `/v1/projects/${fcmProject}/registrations`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Length": Buffer.byteLength(postData),
-      },
-    };
-
-    const req = https.request(options, (res) => {
-      let body = "";
-      res.on("data", (chunk) => (body += chunk));
-      res.on("end", () => {
-        if (res.statusCode === 200 || res.statusCode === 409) {
-          // 200 = created, 409 = already exists - both are fine
-          console.log("[save-token] FCM topic subscription success:", body);
-          resolve({ successCount: 1, failureCount: 0 });
-        } else {
-          console.error("[save-token] FCM topic subscription error:", res.statusCode, body);
-          resolve({ successCount: 0, failureCount: 1 });
-        }
-      });
-    });
-
-    req.on("error", (err) => {
-      console.error("[save-token] FCM topic subscription network error:", err);
-      resolve({ successCount: 0, failureCount: 1 });
-    });
-
-    req.write(postData);
-    req.end();
-  });
-}
 
 export async function handler(event) {
   // Only allow POST requests
@@ -197,26 +93,12 @@ export async function handler(event) {
       console.log("[save-token] Created new token:", tokenId);
     }
 
-    // Subscribe the token to the "all-users" FCM topic
-    let subscriptionResult = null;
-    try {
-      const result = await subscribeTokenToTopic(token);
-      subscriptionResult = {
-        successCount: result.successCount,
-        failureCount: result.failureCount,
-      };
-      console.log(`[save-token] Subscribed token to "all-users":`, subscriptionResult);
-    } catch (subError) {
-      console.error("[save-token] Error subscribing token to topic:", subError);
-      subscriptionResult = { error: subError.message };
-    }
-
     return {
       statusCode: 200,
       body: JSON.stringify({
         success: true,
         tokenId,
-        subscription: subscriptionResult,
+        delivery: "direct_multicast",
       }),
     };
   } catch (err) {

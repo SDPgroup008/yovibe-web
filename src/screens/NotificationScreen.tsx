@@ -20,7 +20,7 @@ import { useNotificationsScroll } from "../hooks/useScrollPersistence"
 export default function NotificationScreen() {
   const { user } = useAuth()
   const navigation = useCompatNavigation()
-  const userId = user?.uid ?? ''
+  const userId = user?.uid
   const { data: notifications, loading, error, refetch } = useCachedNotifications(userId)
   const { scrollRef, onScroll } = useNotificationsScroll()
   const [refreshing, setRefreshing] = useState(false)
@@ -60,21 +60,23 @@ export default function NotificationScreen() {
       )
     )
 
+    const isEventSummary = notification.data?.summaryMode === "today"
+      || notification.data?.summaryMode === "week"
+      || notification.type === "upcoming_summary"
+
     // Navigate based on notification type or deepLink
-    if (notification.type === "upcoming_summary") {
+    if (isEventSummary) {
       // Navigate to Events screen to show all events
       if (typeof window !== 'undefined') {
-        window.location.href = '/events';
+        window.location.href = notification.deepLink || '/events';
       }
       return
     }
 
     if (notification.deepLink) {
-      // Navigate directly using URL
-      if (notification.deepLink.startsWith("/events/")) {
-        if (typeof window !== 'undefined') {
-          window.location.href = notification.deepLink;
-        }
+      // Navigate directly using absolute or relative URL.
+      if (typeof window !== 'undefined') {
+        window.location.href = notification.deepLink;
       }
     }
   }
@@ -149,7 +151,9 @@ export default function NotificationScreen() {
   }
 
   const renderNotification = ({ item }: { item: AppNotification }) => {
-    const isWorkflowSummary = item.type === "upcoming_summary"
+    const isWorkflowSummary = item.data?.summaryMode === "today"
+      || item.data?.summaryMode === "week"
+      || item.type === "upcoming_summary"
     const eventPreviews = isWorkflowSummary ? getEventPreviews(item) : []
     const parsedEventIds = typeof item.data?.eventIds === "string"
       ? (() => { try { return JSON.parse(item.data.eventIds) } catch { return [] } })()

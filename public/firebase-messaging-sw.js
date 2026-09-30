@@ -1,8 +1,8 @@
 /* eslint-disable no-undef */
 
-const APP_CACHE = "yovibe-app-v1";
-const RUNTIME_CACHE = "yovibe-runtime-v1";
-const DYNAMIC_CACHE = "yovibe-dynamic-v1";
+const APP_CACHE = "yovibe-app-v2";
+const RUNTIME_CACHE = "yovibe-runtime-v2";
+const DYNAMIC_CACHE = "yovibe-dynamic-v2";
 const OFFLINE_URL = "/offline.html";
 
 // Maximum items in runtime cache before eviction
@@ -230,40 +230,8 @@ self.addEventListener("periodicsync", (event) => {
   }
 });
 
-// Firebase Cloud Messaging support for background notifications.
-try {
-  importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js");
-  importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
-
-  firebase.initializeApp({
-    apiKey: "__FIREBASE_API_KEY__",
-    authDomain: "__FIREBASE_AUTH_DOMAIN__",
-    projectId: "__FIREBASE_PROJECT_ID__",
-    storageBucket: "__FIREBASE_STORAGE_BUCKET__",
-    messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
-    appId: "__FIREBASE_APP_ID__",
-    measurementId: "__FIREBASE_MEASUREMENT_ID__",
-  });
-
-  const messaging = firebase.messaging();
-
-  messaging.onBackgroundMessage((payload) => {
-    const title = payload?.notification?.title || "YoVibe";
-    const image = payload?.notification?.image || payload?.data?.imageUrl;
-    const options = {
-      body: payload?.notification?.body || "You have a new update.",
-      icon: "/assets/icon.png",
-      badge: "/assets/favicon.png",
-      ...(image ? { image } : {}),
-      data: payload?.data || {},
-    };
-
-    self.registration.showNotification(title, options);
-  });
-} catch (error) {
-  console.warn("[SW] Firebase messaging unavailable:", error);
-}
-
+// Register this before importing Firebase Messaging. Firebase's documentation
+// warns that importing the SDK first can overwrite custom click handling.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const targetUrl = event.notification?.data?.url || event.notification?.data?.deepLink || "/";
@@ -283,3 +251,40 @@ self.addEventListener("notificationclick", (event) => {
     })
   );
 });
+
+// Firebase Cloud Messaging support for background notifications.
+try {
+  importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js");
+  importScripts("https://www.gstatic.com/firebasejs/10.13.2/firebase-messaging-compat.js");
+
+  firebase.initializeApp({
+    apiKey: "__FIREBASE_API_KEY__",
+    authDomain: "__FIREBASE_AUTH_DOMAIN__",
+    projectId: "__FIREBASE_PROJECT_ID__",
+    storageBucket: "__FIREBASE_STORAGE_BUCKET__",
+    messagingSenderId: "__FIREBASE_MESSAGING_SENDER_ID__",
+    appId: "__FIREBASE_APP_ID__",
+    measurementId: "__FIREBASE_MEASUREMENT_ID__",
+  });
+
+  const messaging = firebase.messaging();
+
+  messaging.onBackgroundMessage((payload) => {
+    // Notification payloads are displayed automatically by FCM in the
+    // background. Only display data-only messages here to avoid duplicates.
+    if (payload?.notification) return;
+    const title = payload?.notification?.title || "YoVibe";
+    const image = payload?.notification?.image || payload?.data?.imageUrl;
+    const options = {
+      body: payload?.notification?.body || "You have a new update.",
+      icon: "/assets/icon.png",
+      badge: "/assets/favicon.png",
+      ...(image ? { image } : {}),
+      data: payload?.data || {},
+    };
+
+    self.registration.showNotification(title, options);
+  });
+} catch (error) {
+  console.warn("[SW] Firebase messaging unavailable:", error);
+}

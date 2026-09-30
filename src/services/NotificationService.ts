@@ -5,6 +5,35 @@ import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { AppNotification, NotificationAnalytics, DailyNotificationStats, NotificationUserInteraction, NotificationDetailedAnalytics } from "../models/Notification"
 
+const GUEST_NOTIFICATION_STATE_KEY = "yovibe_guest_notification_state_v1"
+
+type GuestNotificationState = {
+  isRead?: boolean
+  readAt?: string
+  openedAt?: string
+}
+
+function readGuestNotificationStates(): Record<string, GuestNotificationState> {
+  if (typeof window === "undefined" || !window.localStorage) return {}
+  try {
+    const raw = window.localStorage.getItem(GUEST_NOTIFICATION_STATE_KEY)
+    const parsed = raw ? JSON.parse(raw) : {}
+    return parsed && typeof parsed === "object" ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function writeGuestNotificationStates(states: Record<string, GuestNotificationState>): void {
+  if (typeof window === "undefined" || !window.localStorage) return
+  try {
+    const entries = Object.entries(states).slice(-200)
+    window.localStorage.setItem(GUEST_NOTIFICATION_STATE_KEY, JSON.stringify(Object.fromEntries(entries)))
+  } catch {
+    // Local read state is best-effort and must never block notifications.
+  }
+}
+
 export class NotificationService {
   private static instance: NotificationService
 
@@ -23,7 +52,20 @@ export class NotificationService {
   }
 
   private async applyUserReadStates(notifications: AppNotification[], userId?: string): Promise<AppNotification[]> {
-    if (!userId || notifications.length === 0) return notifications
+    if (notifications.length === 0) return notifications
+    if (!userId) {
+      const states = readGuestNotificationStates()
+      return notifications.map((notification) => {
+        const state = states[notification.id]
+        if (!state) return notification
+        return {
+          ...notification,
+          isRead: state.isRead === true,
+          readAt: state.readAt ? new Date(state.readAt) : notification.readAt,
+          openedAt: state.openedAt ? new Date(state.openedAt) : notification.openedAt,
+        }
+      })
+    }
 
     const ids = notifications.map((notification) => notification.id)
     const { data, error } = await supabase
@@ -140,7 +182,8 @@ export class NotificationService {
 
       const allRows = [...(broadcastData || []), ...personalData]
       if (!userId || allRows.length === 0) {
-        return allRows.filter((row) => row.is_read !== true).length
+        const states = readGuestNotificationStates()
+        return allRows.filter((row) => states[row.id]?.isRead !== true && row.is_read !== true).length
       }
 
       const { data: states, error: statesError } = await supabase
@@ -162,7 +205,13 @@ export class NotificationService {
   // Mark notification as read
   async markAsRead(notificationId: string, userId?: string): Promise<void> {
     try {
-      if (!userId) return
+      if (!userId) {
+        const states = readGuestNotificationStates()
+        states[notificationId] = { ...states[notificationId], isRead: true, readAt: new Date().toISOString() }
+        writeGuestNotificationStates(states)
+        this.notifyListeners()
+        return
+      }
       const now = new Date().toISOString()
       const { error } = await supabase
         .from("notification_user_states")
@@ -184,7 +233,14 @@ export class NotificationService {
   // Mark notification as opened
   async markAsOpened(notificationId: string, userId?: string): Promise<void> {
     try {
-      if (!userId) return
+      if (!userId) {
+        const states = readGuestNotificationStates()
+        const now = new Date().toISOString()
+        states[notificationId] = { ...states[notificationId], isRead: true, readAt: now, openedAt: now }
+        writeGuestNotificationStates(states)
+        this.notifyListeners()
+        return
+      }
       const now = new Date().toISOString()
       const { error } = await supabase
         .from("notification_user_states")
@@ -209,7 +265,18 @@ export class NotificationService {
     try {
       const notifications = await this.getUserNotifications(userId)
       const unreadNotifications = notifications.filter(n => !n.isRead)
-      if (!userId || unreadNotifications.length === 0) return
+      if (unreadNotifications.length === 0) return
+
+      if (!userId) {
+        const states = readGuestNotificationStates()
+        const now = new Date().toISOString()
+        unreadNotifications.forEach((notification) => {
+          states[notification.id] = { ...states[notification.id], isRead: true, readAt: now }
+        })
+        writeGuestNotificationStates(states)
+        this.notifyListeners()
+        return
+      }
 
       const now = new Date().toISOString()
       const { error } = await supabase

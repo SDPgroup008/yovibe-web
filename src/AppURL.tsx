@@ -6,10 +6,11 @@ import { RouterProvider, routes } from './utils/routes';
 import { DesktopLayout, MobileLayout } from './components/Navigation';
 import PermissionBanner from './components/PermissionBanner';
 import NotificationBanner from './components/NotificationBanner';
-import { requestNotificationPermission, getWebFcmToken, messaging, notificationsEnabled } from './config/firebase';
+import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled } from './config/firebase';
 import { onMessage } from 'firebase/messaging';
 import NotificationService from './services/NotificationService';
 import LoginScreen from './screens/auth/LoginScreen';
+import { showForegroundNotification } from './utils/browserNotifications';
 
 async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
@@ -106,29 +107,36 @@ const MainApp: React.FC = () => {
     }
   }, [user]);
 
-  // Foreground notification listener (existing logic)
+  // Foreground notification listener. Firebase Messaging initializes
+  // asynchronously, and focused pages need an explicit system notification.
   useEffect(() => {
-    if (!notificationsEnabled || !messaging) {
-      return;
-    }
+    if (!notificationsEnabled) return;
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
 
-    const unsubscribe = onMessage(messaging, async (payload) => {
-      /* console.log("[iOS-NOTIF] Foreground notification received"); */
-      /* console.log("[iOS-NOTIF] Title:", payload.notification?.title); */
+    ensureMessagingInitialized().then((instance) => {
+      if (!instance || cancelled) return;
+      unsubscribe = onMessage(instance, async (payload) => {
+        try {
+          await NotificationService.processIncomingNotification(payload, user?.uid);
+          await showForegroundNotification(payload);
+        } catch (error) {
+          console.error("❌ ERROR processing foreground notification:", error);
+        }
 
-      try {
-        await NotificationService.processIncomingNotification(payload, user?.uid);
-      } catch (error) {
-        console.error("❌ ERROR saving notification to Firestore:", error);
-      }
-
-      setBanner({
-        title: payload.notification?.title || "Notification",
-        body: payload.notification?.body || "",
+        setBanner({
+          title: payload.notification?.title || "Notification",
+          body: payload.notification?.body || "",
+        });
       });
+    }).catch((error) => {
+      console.warn("[Notifications] Foreground listener initialization failed:", error);
     });
 
-    return () => unsubscribe();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [user]);
 
   // Permission handlers (existing logic)

@@ -145,14 +145,14 @@ export function useCachedUserTickets(userId: string) {
   });
 }
 
-export function useCachedNotifications(userId: string) {
+export function useCachedNotifications(userId?: string) {
   return useDataCache({
-    cacheKey: CACHE_KEYS.NOTIFICATIONS(userId),
+    cacheKey: CACHE_KEYS.NOTIFICATIONS(userId || 'guest'),
     fetchFunction: async () => {
       const { default: NotificationService } = await import('../services/NotificationService');
       return NotificationService.getUserNotifications(userId);
     },
     ttl: 1 * 60 * 1000, // 1 minute for notifications (very dynamic)
-    enabled: !!userId
+    enabled: true
   });
 }
