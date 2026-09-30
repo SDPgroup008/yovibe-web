@@ -15,37 +15,36 @@ export class NotificationService {
     return NotificationService.instance
   }
 
-  // Save a notification to Supabase
+  // Notification creation is server-only. This method remains as a compatibility
+  // guard so an old client path fails closed instead of writing arbitrary rows.
   async saveNotification(notification: Omit<AppNotification, "id" | "createdAt">): Promise<string> {
-    /* console.log("[NotificationService] saveNotification called"); */
-    
-    try {
-      const notificationData: any = {
-        user_id: notification.userId,
-        title: notification.title,
-        body: notification.body,
-        type: notification.type,
-        data: notification.data,
-        image_url: notification.imageUrl,
-        deep_link: notification.deepLink,
-        is_read: false,
-        created_at: new Date().toISOString(),
+    void notification
+    throw new Error("Notifications must be created by an authorized server function")
+  }
+
+  private async applyUserReadStates(notifications: AppNotification[], userId?: string): Promise<AppNotification[]> {
+    if (!userId || notifications.length === 0) return notifications
+
+    const ids = notifications.map((notification) => notification.id)
+    const { data, error } = await supabase
+      .from("notification_user_states")
+      .select("notification_id,is_read,read_at,opened_at")
+      .eq("user_id", userId)
+      .in("notification_id", ids)
+
+    if (error) throw error
+
+    const states = new Map((data || []).map((state) => [state.notification_id, state]))
+    return notifications.map((notification) => {
+      const state = states.get(notification.id)
+      if (!state) return notification
+      return {
+        ...notification,
+        isRead: state.is_read === true,
+        readAt: state.read_at ? new Date(state.read_at) : notification.readAt,
+        openedAt: state.opened_at ? new Date(state.opened_at) : notification.openedAt,
       }
-
-      const { data, error } = await supabase
-        .from("notifications")
-        .insert(notificationData)
-        .select("id")
-        .single()
-
-      if (error) throw error
-
-      /* console.log("[NotificationService] ✅ Saved notification with ID:", data.id); */
-      return data.id
-    } catch (error) {
-      console.error("[NotificationService] ❌ ERROR saving notification:", error);
-      throw error
-    }
+    })
   }
 
   // Get notifications for a specific user
@@ -109,9 +108,9 @@ export class NotificationService {
       }
 
       // Sort all notifications by date and limit
-      return allNotifications
+      return this.applyUserReadStates(allNotifications
         .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(0, limitCount)
+        .slice(0, limitCount), userId)
     } catch (error) {
       console.error("NotificationService: Error getting notifications:", error)
       return []
@@ -121,32 +120,39 @@ export class NotificationService {
   // Get unread count for a user
   async getUnreadCount(userId?: string): Promise<number> {
     try {
-      let count = 0
-
-      // Get broadcast unread notifications
       const { data: broadcastData, error: broadcastError } = await supabase
         .from("notifications")
-        .select("id", { count: "exact" })
+        .select("id,is_read")
         .is("user_id", null)
-        .eq("is_read", false)
 
       if (broadcastError) throw broadcastError
-      count += broadcastData?.length || 0
 
-      // If user is authenticated, also get their personal unread notifications
+      let personalData: Array<{ id: string; is_read: boolean | null }> = []
       if (userId) {
         const { data: userData, error: userError } = await supabase
           .from("notifications")
-          .select("id", { count: "exact" })
+          .select("id,is_read")
           .eq("user_id", userId)
-          .eq("is_read", false)
 
         if (userError) throw userError
-        count += userData?.length || 0
+        personalData = userData || []
       }
 
-      /* console.log(`NotificationService: Total unread count for user ${userId || 'anonymous'}: ${count}`) */
-      return count
+      const allRows = [...(broadcastData || []), ...personalData]
+      if (!userId || allRows.length === 0) {
+        return allRows.filter((row) => row.is_read !== true).length
+      }
+
+      const { data: states, error: statesError } = await supabase
+        .from("notification_user_states")
+        .select("notification_id,is_read")
+        .eq("user_id", userId)
+        .in("notification_id", allRows.map((row) => row.id))
+
+      if (statesError) throw statesError
+      const stateById = new Map((states || []).map((state) => [state.notification_id, state.is_read === true]))
+
+      return allRows.filter((row) => stateById.has(row.id) ? !stateById.get(row.id) : row.is_read !== true).length
     } catch (error) {
       console.error("NotificationService: Error getting unread count:", error)
       return 0
@@ -154,15 +160,18 @@ export class NotificationService {
   }
 
   // Mark notification as read
-  async markAsRead(notificationId: string): Promise<void> {
+  async markAsRead(notificationId: string, userId?: string): Promise<void> {
     try {
+      if (!userId) return
+      const now = new Date().toISOString()
       const { error } = await supabase
-        .from("notifications")
-        .update({
+        .from("notification_user_states")
+        .upsert({
+          notification_id: notificationId,
+          user_id: userId,
           is_read: true,
-          read_at: new Date().toISOString(),
-        })
-        .eq("id", notificationId)
+          read_at: now,
+        }, { onConflict: "notification_id,user_id" })
 
       if (error) throw error
 
@@ -175,14 +184,17 @@ export class NotificationService {
   // Mark notification as opened
   async markAsOpened(notificationId: string, userId?: string): Promise<void> {
     try {
+      if (!userId) return
+      const now = new Date().toISOString()
       const { error } = await supabase
-        .from("notifications")
-        .update({
+        .from("notification_user_states")
+        .upsert({
+          notification_id: notificationId,
+          user_id: userId,
           opened_at: new Date().toISOString(),
           is_read: true,
-          read_at: new Date().toISOString(),
-        })
-        .eq("id", notificationId)
+          read_at: now,
+        }, { onConflict: "notification_id,user_id" })
 
       if (error) throw error
 
@@ -197,10 +209,18 @@ export class NotificationService {
     try {
       const notifications = await this.getUserNotifications(userId)
       const unreadNotifications = notifications.filter(n => !n.isRead)
+      if (!userId || unreadNotifications.length === 0) return
 
-      for (const notification of unreadNotifications) {
-        await this.markAsRead(notification.id)
-      }
+      const now = new Date().toISOString()
+      const { error } = await supabase
+        .from("notification_user_states")
+        .upsert(unreadNotifications.map((notification) => ({
+          notification_id: notification.id,
+          user_id: userId,
+          is_read: true,
+          read_at: now,
+        })), { onConflict: "notification_id,user_id" })
+      if (error) throw error
 
       /* console.log(`NotificationService: Marked ${unreadNotifications.length} notifications as read`) */
     } catch (error) {
@@ -460,28 +480,13 @@ export class NotificationService {
     })
   }
 
-  // Process incoming push notification and save to database
+  // Process incoming push notification. Server-created notifications already exist
+  // in Supabase; never create a second row for a foreground delivery.
   async processIncomingNotification(payload: any, userId?: string): Promise<void> {
     /* console.log("[NotificationService] processIncomingNotification called"); */
 
     try {
-      const notificationType = payload.data?.type || "other"
-      const isBroadcast = notificationType === "upcoming_summary"
-
-      const notification: Omit<AppNotification, "id" | "createdAt"> = {
-        userId: isBroadcast ? undefined : (userId || undefined),
-        title: payload.notification?.title || "Notification",
-        body: payload.notification?.body || "",
-        type: notificationType,
-        data: payload.data || {},
-        deepLink: payload.data?.deepLink,
-        imageUrl: payload.notification?.imageUrl,
-        isRead: false,
-      }
-
-      const notificationId = await this.saveNotification(notification)
-
-      /* console.log("[NotificationService] ✅ Notification saved with ID:", notificationId); */
+      void userId
       this.notifyListeners()
     } catch (error) {
       console.error("[NotificationService] ❌ ERROR processing incoming notification:", error);

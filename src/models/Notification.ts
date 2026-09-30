@@ -1,4 +1,11 @@
 // Notification model
+export interface EventSummaryPreview {
+  slug: string
+  name: string
+  posterUrl?: string | null
+  date?: string | null
+}
+
 export interface AppNotification {
   id: string
   userId?: string // If null, it's a broadcast notification

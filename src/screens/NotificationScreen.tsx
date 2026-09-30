@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react"
 import {
   View,
   Text,
+  Image,
   StyleSheet,
   FlatList,
   TouchableOpacity,
@@ -10,7 +11,7 @@ import {
 } from "react-native"
 import { useAuth } from "../contexts/AuthContext"
 import NotificationService from "../services/NotificationService"
-import type { AppNotification } from "../models/Notification"
+import type { AppNotification, EventSummaryPreview } from "../models/Notification"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useCachedNotifications } from "../hooks/useDataCache"
 import { useNotificationsScroll } from "../hooks/useScrollPersistence"
@@ -25,6 +26,13 @@ export default function NotificationScreen() {
   const [refreshing, setRefreshing] = useState(false)
   const [localNotifications, setLocalNotifications] = useState<AppNotification[]>([])
   const [localLoading, setLocalLoading] = useState(false)
+
+  useEffect(() => {
+    const unsubscribe = NotificationService.addNotificationListener(() => {
+      refetch()
+    })
+    return unsubscribe
+  }, [refetch])
 
   const loadNotifications = async () => {
     try {
@@ -112,6 +120,20 @@ export default function NotificationScreen() {
     }
   }
 
+  const getEventPreviews = (notification: AppNotification): EventSummaryPreview[] => {
+    const raw = notification.data?.eventPreviews
+    if (Array.isArray(raw)) return raw.slice(0, 3)
+    if (typeof raw === "string") {
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed.slice(0, 3) : []
+      } catch {
+        return []
+      }
+    }
+    return []
+  }
+
   const formatTimestamp = (date: Date) => {
     const now = new Date()
     const diff = now.getTime() - date.getTime()
@@ -128,8 +150,12 @@ export default function NotificationScreen() {
 
   const renderNotification = ({ item }: { item: AppNotification }) => {
     const isWorkflowSummary = item.type === "upcoming_summary"
-    const eventCount = isWorkflowSummary && item.data?.eventIds 
-      ? JSON.parse(item.data.eventIds).length 
+    const eventPreviews = isWorkflowSummary ? getEventPreviews(item) : []
+    const parsedEventIds = typeof item.data?.eventIds === "string"
+      ? (() => { try { return JSON.parse(item.data.eventIds) } catch { return [] } })()
+      : item.data?.eventIds
+    const eventCount = isWorkflowSummary
+      ? Number(item.data?.totalEventCount || parsedEventIds?.length || eventPreviews.length || 0)
       : 0
     const summaryMode = item.data?.summaryMode || "week"
     
@@ -156,7 +182,30 @@ export default function NotificationScreen() {
           {isWorkflowSummary && eventCount > 0 && (
             <View style={styles.eventCountContainer}>
               <Text style={styles.eventCountText}>📅 {eventCount} event{eventCount !== 1 ? "s" : ""}</Text>
-              <Text style={styles.tapToView}>Tap to view all events</Text>
+              {eventPreviews.length > 0 && (
+                <View style={styles.previewList}>
+                  {eventPreviews.map((event) => (
+                    <TouchableOpacity
+                      key={event.slug}
+                      style={styles.previewCard}
+                      onPress={(pressEvent) => {
+                        pressEvent.stopPropagation()
+                        if (typeof window !== "undefined") window.location.href = `/events/${event.slug}`
+                      }}
+                    >
+                      {event.posterUrl ? (
+                        <Image source={{ uri: event.posterUrl }} style={styles.previewImage} />
+                      ) : (
+                        <View style={[styles.previewImage, styles.previewImageFallback]}>
+                          <Text style={styles.previewImageFallbackText}>🎟️</Text>
+                        </View>
+                      )}
+                      <Text style={styles.previewName} numberOfLines={2}>{event.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+              <Text style={styles.tapToView}>See more events</Text>
             </View>
           )}
           <Text style={styles.timestamp}>{formatTimestamp(item.createdAt)}</Text>
@@ -336,6 +385,41 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: "#999",
     fontStyle: "italic",
+    marginTop: 8,
+  },
+  previewList: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 10,
+  },
+  previewCard: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: "#F7F9FC",
+    borderRadius: 8,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E4EAF2",
+  },
+  previewImage: {
+    width: "100%",
+    height: 76,
+    backgroundColor: "#E9EEF5",
+  },
+  previewImageFallback: {
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  previewImageFallbackText: {
+    fontSize: 22,
+  },
+  previewName: {
+    color: "#263238",
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
+    paddingHorizontal: 7,
+    paddingVertical: 7,
   },
   icon: {
     fontSize: 24,

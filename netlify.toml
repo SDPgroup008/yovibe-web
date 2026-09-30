@@ -9,7 +9,7 @@
   # External-service values are intentionally absent. Each Netlify project must
   # provide explicit environment variables; missing configuration fails closed.
   # Secrets Scanning Configuration - Omit paths containing expected config values
-  SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,src/services/PesaPalService.ts,src/services/PawaPayService.ts,sendNotifications.js,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,netlify/functions/create-pesapal-order.js,netlify/functions/verify-pesapal-payment.js,netlify/functions/process-pesapal-payout.js,netlify/functions/register-ipn.js,netlify/functions/pesapal-ipn.js,netlify/functions/create-pawapay-deposit.js,netlify/functions/verify-pawapay-payment.js,app.json,.gitignore,package.json,package-lock.json"
+  SECRETS_SCAN_OMIT_PATHS = "R2_SETUP.md,SEO_AUDIT_REPORT.md,plans/**,public/**,web/**,src/config/**,src/components/SEOMetadata.tsx,src/contexts/AuthContext.tsx,src/screens/**,src/services/R2Service.ts,src/services/AnalyticsService.ts,src/services/FirebaseService.ts,src/services/PesaPalService.ts,src/services/PawaPayService.ts,subscribeTokens.js,index.web.js,netlify/functions/append-token.js,netlify/functions/uploadR2.js,netlify/functions/create-pesapal-order.js,netlify/functions/verify-pesapal-payment.js,netlify/functions/process-pesapal-payout.js,netlify/functions/register-ipn.js,netlify/functions/pesapal-ipn.js,netlify/functions/create-pawapay-deposit.js,netlify/functions/verify-pawapay-payment.js,app.json,.gitignore,package.json,package-lock.json"
   # Omit environment variable keys that are public by design or appear in documentation
   # Firebase credentials are public (frontend config)
   # Bucket names and provider URLs are not secrets.
@@ -48,6 +48,14 @@
 [functions."purge-expired-photos"]
   # Phase 4 (4.3): daily photo/QR retention purge at 04:00
   schedule = "0 4 * * *"
+
+[functions."broadcast-todays-events"]
+  # 09:00 and 18:00 Africa/Kampala (UTC+3)
+  schedule = "0 6,15 * * *"
+
+[functions."broadcast-week-events"]
+  # 11:00 and 20:00 Africa/Kampala (UTC+3)
+  schedule = "0 8,17 * * *"
 
 [[headers]]
   for = "/manifest.webmanifest"

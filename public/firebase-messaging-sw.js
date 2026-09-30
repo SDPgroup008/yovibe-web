@@ -249,10 +249,12 @@ try {
 
   messaging.onBackgroundMessage((payload) => {
     const title = payload?.notification?.title || "YoVibe";
+    const image = payload?.notification?.image || payload?.data?.imageUrl;
     const options = {
       body: payload?.notification?.body || "You have a new update.",
       icon: "/assets/icon.png",
       badge: "/assets/favicon.png",
+      ...(image ? { image } : {}),
       data: payload?.data || {},
     };
 
@@ -264,7 +266,7 @@ try {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification?.data?.url || "/";
+  const targetUrl = event.notification?.data?.url || event.notification?.data?.deepLink || "/";
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
