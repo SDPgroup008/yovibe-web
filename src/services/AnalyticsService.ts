@@ -77,6 +77,7 @@ export interface VisitorBucketCounts {
 
 export interface VisitorAnalyticsBucket {
   key: string;
+  start: string;
   sessions: number;
   newVisitors: number;
   returningVisitors: number;
@@ -88,7 +89,7 @@ export interface VisitorAnalyticsResponse {
   period: 'day' | 'week' | 'month' | 'year' | 'decade';
   range: { start: string; end: string };
   buckets: VisitorAnalyticsBucket[];
-  totals: { sessions: number; uniqueVisitors: number; newVisitors: number; returningVisitors: number; unidentifiedSessions: number };
+  totals: { sessions: number; uniqueVisitors: number; newVisitors: number; returningVisitors: number; unidentifiedSessions: number; averageDuration: number };
 }
 
 interface AnalyticsDateRange {
@@ -821,11 +822,13 @@ class AnalyticsService {
       const visitorPeriod = period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'year';
       const analytics = await this.getVisitorAnalytics(visitorPeriod);
       return analytics.buckets.map((bucket) => ({
-        date: bucket.key,
+        // The overview chart formats this as a Date. The server supplies the
+        // Africa/Kampala bucket boundary so labels never depend on a display key.
+        date: bucket.start,
         authenticatedSessions: 0,
         unauthenticatedSessions: bucket.sessions,
         totalSessions: bucket.sessions,
-        averageDuration: 0,
+        averageDuration: analytics.totals.averageDuration,
         uniqueAuthenticatedUsers: 0,
         uniqueUnauthenticatedUsers: bucket.uniqueVisitors,
         totalUniqueUsers: bucket.uniqueVisitors,
@@ -1004,7 +1007,7 @@ class AnalyticsService {
         returningUnauthenticatedUsers: analytics.totals.returningVisitors,
         totalNewUsers: analytics.totals.newVisitors,
         totalReturningUsers: analytics.totals.returningVisitors,
-        averageDuration: 0,
+        averageDuration: analytics.totals.averageDuration,
         lastUpdated: new Date(),
       };
       /* Legacy browser-side aggregation remains below temporarily for source compatibility. */

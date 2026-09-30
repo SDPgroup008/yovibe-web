@@ -28,9 +28,10 @@ const fmt = (n: number) => {
 };
 
 const fmtDuration = (s: number): string => {
-  if (s < 60) return `${Math.round(s)}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ${Math.round(s % 60)}s`;
+  const safeSeconds = Number.isFinite(s) && s >= 0 ? s : 0;
+  if (safeSeconds < 60) return `${Math.round(safeSeconds)}s`;
+  const m = Math.floor(safeSeconds / 60);
+  if (m < 60) return `${m}m ${Math.round(safeSeconds % 60)}s`;
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 };
 

@@ -65,15 +65,16 @@ async function visitorProfiles(admin, keys) {
 }
 function aggregate(period, sessions, firstSeen, range) {
   const definitions = bucketDefinitions(period, range);
-  const buckets = definitions.map((definition) => ({ ...definition, sessions: 0, newVisitors: 0, returningVisitors: 0, uniqueVisitors: 0 }));
+  const buckets = definitions.map((definition, index) => ({ ...definition, start: bucketStart(period, index, range).toISOString(), sessions: 0, newVisitors: 0, returningVisitors: 0, uniqueVisitors: 0 }));
   const inBucket = buckets.map(() => new Set());
   const newInBucket = buckets.map(() => new Set());
   const returnInBucket = buckets.map(() => new Set());
-  const rangeVisitors = new Set(); const newRange = new Set(); const returningRange = new Set(); let unidentifiedSessions = 0;
+  const rangeVisitors = new Set(); const newRange = new Set(); const returningRange = new Set(); let unidentifiedSessions = 0; let durationTotal = 0; let durationCount = 0;
   for (const row of sessions) {
     const index = bucketIndex(period, row.start_time, range);
     if (index < 0 || index >= buckets.length) continue;
     buckets[index].sessions += 1;
+    if (Number.isFinite(row.duration) && row.duration >= 0) { durationTotal += row.duration; durationCount += 1; }
     const key = row.canonical_visitor_key;
     const first = key ? firstSeen.get(key) : null;
     if (!key || !first) { unidentifiedSessions += 1; continue; }
@@ -84,7 +85,7 @@ function aggregate(period, sessions, firstSeen, range) {
     else if (new Date(first) < bucketRangeStart) returnInBucket[index].add(key);
   }
   buckets.forEach((bucket, index) => { bucket.uniqueVisitors = inBucket[index].size; bucket.newVisitors = newInBucket[index].size; bucket.returningVisitors = returnInBucket[index].size; });
-  return { buckets, totals: { sessions: sessions.length, uniqueVisitors: rangeVisitors.size, newVisitors: newRange.size, returningVisitors: returningRange.size, unidentifiedSessions } };
+  return { buckets, totals: { sessions: sessions.length, uniqueVisitors: rangeVisitors.size, newVisitors: newRange.size, returningVisitors: returningRange.size, unidentifiedSessions, averageDuration: durationCount ? durationTotal / durationCount : 0 } };
 }
 function bucketStart(period, index, range) {
   const p = kampalaParts(range.start);
@@ -132,7 +133,7 @@ exports.handler = async (event) => {
     const period = body.period;
     if (!PERIODS.has(period)) return json(400, { error: 'A valid period is required' });
     const range = rangeFor(period);
-    const sessions = await paged(admin, 'analytics_sessions', 'start_time,canonical_visitor_key', [
+    const sessions = await paged(admin, 'analytics_sessions', 'start_time,canonical_visitor_key,duration', [
       (query) => query.gte('start_time', range.start.toISOString()),
       (query) => query.lt('start_time', range.end.toISOString()),
       (query) => query.order('start_time', { ascending: true }),
