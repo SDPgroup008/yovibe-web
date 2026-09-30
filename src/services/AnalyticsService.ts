@@ -64,6 +64,91 @@ export interface TodaySummary {
   lastUpdated: Date;
 }
 
+export interface VisitorSessionRow {
+  start_time: string;
+  unique_visitor_id: string | null;
+}
+
+export interface VisitorBucketCounts {
+  sessions: number;
+  newUsers: number;
+  returningUsers: number;
+}
+
+interface AnalyticsDateRange {
+  start: Date;
+  end: Date;
+}
+
+const localDayRange = (date: Date): AnalyticsDateRange => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+  return { start, end };
+};
+
+const localWeekRange = (date: Date): AnalyticsDateRange => {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 7);
+  return { start, end };
+};
+
+const localMonthRange = (year: number, month: number): AnalyticsDateRange => ({
+  start: new Date(year, month, 1),
+  end: new Date(year, month + 1, 1),
+});
+
+const localYearRange = (year: number): AnalyticsDateRange => ({
+  start: new Date(year, 0, 1),
+  end: new Date(year + 1, 0, 1),
+});
+
+const localDecadeRange = (decadeStartYear: number): AnalyticsDateRange => ({
+  start: new Date(decadeStartYear, 0, 1),
+  end: new Date(decadeStartYear + 10, 0, 1),
+});
+
+/**
+ * Aggregate visitor sessions into period buckets. A visitor is counted once
+ * per displayed bucket, while every session contributes to the sessions
+ * count. A visitor is returning in a bucket when they have a session before
+ * that bucket, including an earlier bucket in the same selected period.
+ */
+export function aggregateVisitorSessions(
+  rows: VisitorSessionRow[],
+  existingVisitorIds: Set<string>,
+  bucketCount: number,
+  getBucketIndex: (startTime: Date) => number,
+): VisitorBucketCounts[] {
+  const buckets = Array.from({ length: bucketCount }, () => ({
+    sessions: 0,
+    newUsers: 0,
+    returningUsers: 0,
+  }));
+  const knownVisitors = new Set(existingVisitorIds);
+  const visitorsInBucket = Array.from({ length: bucketCount }, () => new Set<string>());
+
+  [...rows].sort((a, b) => a.start_time.localeCompare(b.start_time)).forEach((row) => {
+    const bucketIndex = getBucketIndex(new Date(row.start_time));
+    if (bucketIndex < 0 || bucketIndex >= bucketCount || !Number.isInteger(bucketIndex)) return;
+
+    buckets[bucketIndex].sessions += 1;
+    const visitorId = row.unique_visitor_id;
+    if (visitorId && !visitorsInBucket[bucketIndex].has(visitorId)) {
+      visitorsInBucket[bucketIndex].add(visitorId);
+      if (knownVisitors.has(visitorId)) buckets[bucketIndex].returningUsers += 1;
+      else buckets[bucketIndex].newUsers += 1;
+    }
+
+    if (visitorId) knownVisitors.add(visitorId);
+  });
+
+  return buckets;
+}
+
 class AnalyticsService {
   private readonly analyticsDisabledKey = 'yovibe_analytics_disabled';
 
@@ -93,6 +178,33 @@ class AnalyticsService {
 
   private isRlsOrForbiddenError(error: any): boolean {
     return error?.code === '42501' || error?.status === 401 || error?.status === 403 || /row-level security|forbidden/i.test(error?.message || '');
+  }
+
+  private async fetchVisitorSessions(startTime?: string, endTime?: string): Promise<VisitorSessionRow[]> {
+    const rows: VisitorSessionRow[] = [];
+    const pageSize = 1000;
+    let offset = 0;
+
+    while (true) {
+      let query = supabase
+        .from('analytics_sessions')
+        .select('start_time, unique_visitor_id')
+        .order('start_time', { ascending: true })
+        .range(offset, offset + pageSize - 1);
+
+      if (startTime) query = query.gte('start_time', startTime);
+      if (endTime) query = query.lt('start_time', endTime);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      if (!data || data.length === 0) break;
+
+      rows.push(...(data as VisitorSessionRow[]));
+      if (data.length < pageSize) break;
+      offset += pageSize;
+    }
+
+    return rows;
   }
 
   /**
@@ -428,19 +540,9 @@ class AnalyticsService {
    */
   async getHourlyVisitorsForDay(date: Date): Promise<{ hour: number; sessions: number; newUsers: number; returningUsers: number }[]> {
     try {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(startOfDay);
-      endOfDay.setHours(23, 59, 59, 999);
+      const { start: startOfDay, end: endOfDay } = localDayRange(date);
 
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .select('*')
-        .gte('start_time', startOfDay.toISOString())
-        .lte('start_time', endOfDay.toISOString())
-        .order('start_time', { ascending: true });
-
-      if (error) throw error;
+      const data = await this.fetchVisitorSessions(startOfDay.toISOString(), endOfDay.toISOString());
       
       // Initialize 24 hours
       const hourlyData = Array.from({ length: 24 }, (_, hour) => ({
@@ -451,21 +553,15 @@ class AnalyticsService {
       }));
 
       // Get existing visitors before this day
-      const { data: previousVisitors, error: prevError } = await supabase
-        .from('analytics_sessions')
-        .select('unique_visitor_id')
-        .lt('start_time', startOfDay.toISOString());
-
-      if (prevError) throw prevError;
-
       const existingVisitors = new Set<string>();
-      (previousVisitors || []).forEach(session => {
+      const previousVisitors = await this.fetchVisitorSessions(undefined, startOfDay.toISOString());
+      previousVisitors.forEach(session => {
         if (session.unique_visitor_id) existingVisitors.add(session.unique_visitor_id);
       });
 
       const visitorsToday = new Set<string>();
 
-      (data || []).forEach((session) => {
+      data.forEach((session) => {
         const hour = new Date(session.start_time).getHours();
         hourlyData[hour].sessions++;
         
@@ -495,19 +591,9 @@ class AnalyticsService {
   async getDailyVisitorsForWeek(weekStartDate: Date): Promise<{ day: number; dayName: string; sessions: number; newUsers: number; returningUsers: number }[]> {
     try {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const startOfWeek = new Date(weekStartDate);
-      startOfWeek.setHours(0, 0, 0, 0);
-      const endOfWeek = new Date(startOfWeek);
-      endOfWeek.setDate(endOfWeek.getDate() + 7);
+      const { start: startOfWeek, end: endOfWeek } = localWeekRange(weekStartDate);
 
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .select('*')
-        .gte('start_time', startOfWeek.toISOString())
-        .lt('start_time', endOfWeek.toISOString())
-        .order('start_time', { ascending: true });
-
-      if (error) throw error;
+      const data = await this.fetchVisitorSessions(startOfWeek.toISOString(), endOfWeek.toISOString());
       
       // Initialize 7 days
       const dailyData = Array.from({ length: 7 }, (_, day) => ({
@@ -519,21 +605,15 @@ class AnalyticsService {
       }));
 
       // Get existing visitors before this week
-      const { data: previousVisitors, error: prevError } = await supabase
-        .from('analytics_sessions')
-        .select('unique_visitor_id')
-        .lt('start_time', startOfWeek.toISOString());
-
-      if (prevError) throw prevError;
-
       const existingVisitors = new Set<string>();
-      (previousVisitors || []).forEach(session => {
+      const previousVisitors = await this.fetchVisitorSessions(undefined, startOfWeek.toISOString());
+      previousVisitors.forEach(session => {
         if (session.unique_visitor_id) existingVisitors.add(session.unique_visitor_id);
       });
 
       const visitorsThisWeek = new Set<string>();
 
-      (data || []).forEach((session) => {
+      data.forEach((session) => {
         const day = new Date(session.start_time).getDay();
         dailyData[day].sessions++;
         
@@ -562,28 +642,11 @@ class AnalyticsService {
    */
   async getWeeklyVisitorsForMonth(year: number, month: number): Promise<{ week: number; weekLabel: string; sessions: number; newUsers: number; returningUsers: number }[]> {
     try {
-      const startOfMonth = new Date(year, month, 1);
-      const endOfMonth = new Date(year, month + 1, 0);
-      const daysInMonth = endOfMonth.getDate();
+      const { start: startOfMonth, end: endOfMonth } = localMonthRange(year, month);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
       const weeksInMonth = Math.ceil((daysInMonth + startOfMonth.getDay()) / 7);
 
-      const allData: { start_time: string; unique_visitor_id: string }[] = [];
-      const PAGE = 1000;
-      let offset = 0;
-      let fetched = 0;
-      do {
-        const { data, error } = await supabase
-          .from('analytics_sessions')
-          .select('start_time, unique_visitor_id')
-          .gte('start_time', startOfMonth.toISOString())
-          .lte('start_time', endOfMonth.toISOString())
-          .range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allData.push(...data);
-        fetched = data.length;
-        offset += PAGE;
-      } while (fetched === PAGE);
+      const allData = await this.fetchVisitorSessions(startOfMonth.toISOString(), endOfMonth.toISOString());
       devLog('getWeeklyVisitorsForMonth: fetched', allData.length, `sessions for ${year}/${month + 1}`);
       
       // Initialize weeks
@@ -596,21 +659,15 @@ class AnalyticsService {
       }));
 
       // Get existing visitors before this month
-      const { data: previousVisitors, error: prevError } = await supabase
-        .from('analytics_sessions')
-        .select('unique_visitor_id')
-        .lt('start_time', startOfMonth.toISOString());
-
-      if (prevError) throw prevError;
-
       const existingVisitors = new Set<string>();
-      (previousVisitors || []).forEach(session => {
+      const previousVisitors = await this.fetchVisitorSessions(undefined, startOfMonth.toISOString());
+      previousVisitors.forEach(session => {
         if (session.unique_visitor_id) existingVisitors.add(session.unique_visitor_id);
       });
 
       const visitorsThisMonth = new Set<string>();
 
-      (allData || []).forEach((session) => {
+      allData.forEach((session) => {
         const sessionDate = new Date(session.start_time);
         const dayOfMonth = sessionDate.getDate();
         const week = Math.floor((dayOfMonth + startOfMonth.getDay() - 1) / 7);
@@ -644,28 +701,9 @@ class AnalyticsService {
    */
   async getMonthlyVisitorsForYear(year: number): Promise<{ month: number; monthName: string; sessions: number; newUsers: number; returningUsers: number }[]> {
     try {
-      const startOfYear = new Date(year, 0, 1);
-      startOfYear.setHours(0, 0, 0, 0);
-      const endOfYear = new Date(year + 1, 0, 1);
+      const { start: startOfYear, end: endOfYear } = localYearRange(year);
 
-      // Paginate through all rows (PostgREST caps at 1000 per request)
-      const allData: { start_time: string; unique_visitor_id: string }[] = [];
-      const PAGE = 1000;
-      let offset = 0;
-      let fetched = 0;
-      do {
-        const { data, error } = await supabase
-          .from('analytics_sessions')
-          .select('start_time, unique_visitor_id')
-          .gte('start_time', startOfYear.toISOString())
-          .lt('start_time', endOfYear.toISOString())
-          .range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allData.push(...data);
-        fetched = data.length;
-        offset += PAGE;
-      } while (fetched === PAGE);
+      const allData = await this.fetchVisitorSessions(startOfYear.toISOString(), endOfYear.toISOString());
       devLog('getMonthlyVisitorsForYear: fetched', allData.length, 'sessions for', year);
 
       const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -677,47 +715,20 @@ class AnalyticsService {
         returningUsers: 0,
       }));
 
-      const { data: previousVisitors, error: prevError } = await supabase
-        .from('analytics_sessions')
-        .select('unique_visitor_id')
-        .lt('start_time', startOfYear.toISOString())
-        .limit(50000);
-
-      if (prevError) throw prevError;
-
       const existingVisitors = new Set<string>();
-      (previousVisitors || []).forEach((session) => {
+      const previousVisitors = await this.fetchVisitorSessions(undefined, startOfYear.toISOString());
+      previousVisitors.forEach((session) => {
         if (session.unique_visitor_id) existingVisitors.add(session.unique_visitor_id);
       });
 
-      const visitorsThisYear = new Set<string>();
-
-      (allData || []).forEach((session) => {
-        const month = new Date(session.start_time).getMonth();
-        monthlyData[month].sessions++;
-
-        const visitorId = session.unique_visitor_id;
-        if (visitorId && !visitorsThisYear.has(visitorId)) {
-          visitorsThisYear.add(visitorId);
-          if (existingVisitors.has(visitorId)) {
-            monthlyData[month].returningUsers++;
-          } else {
-            monthlyData[month].newUsers++;
-          }
-        }
-      });
+      const counts = aggregateVisitorSessions(allData, existingVisitors, 12, (date) => date.getMonth());
+      monthlyData.forEach((month, index) => Object.assign(month, counts[index]));
 
       devLog('getMonthlyVisitorsForYear: monthly totals', monthlyData.map(m => `${m.monthName}:${m.sessions}`).join(', '));
       return monthlyData;
     } catch (error) {
       console.error('Analytics: Error getting monthly visitors for year', error);
-      return Array.from({ length: 12 }, (_, month) => ({
-        month,
-        monthName: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][month],
-        sessions: 0,
-        newUsers: 0,
-        returningUsers: 0,
-      }));
+      throw error;
     }
   }
 
@@ -726,27 +737,10 @@ class AnalyticsService {
    */
   async getYearlyVisitorsForDecade(decadeStartYear: number): Promise<{ year: number; yearLabel: string; sessions: number; newUsers: number; returningUsers: number }[]> {
     try {
-      const startOfDecade = new Date(decadeStartYear, 0, 1);
-      startOfDecade.setHours(0, 0, 0, 0);
-      const endOfDecade = new Date(decadeStartYear + 10, 0, 1);
+      const { start: startOfDecade, end: endOfDecade } = localDecadeRange(decadeStartYear);
 
-      const allData: { start_time: string; unique_visitor_id: string }[] = [];
-      const PAGE = 1000;
-      let offset = 0;
-      let fetched = 0;
-      do {
-        const { data, error } = await supabase
-          .from('analytics_sessions')
-          .select('start_time, unique_visitor_id')
-          .gte('start_time', startOfDecade.toISOString())
-          .lt('start_time', endOfDecade.toISOString())
-          .range(offset, offset + PAGE - 1);
-        if (error) throw error;
-        if (!data || data.length === 0) break;
-        allData.push(...data);
-        fetched = data.length;
-        offset += PAGE;
-      } while (fetched === PAGE);
+
+      const allData = await this.fetchVisitorSessions(startOfDecade.toISOString(), endOfDecade.toISOString());
       devLog('getYearlyVisitorsForDecade: fetched', allData.length, 'sessions for decade', decadeStartYear);
 
       const yearlyData = Array.from({ length: 10 }, (_, i) => {
@@ -760,51 +754,19 @@ class AnalyticsService {
         };
       });
 
-      const { data: previousVisitors, error: prevError } = await supabase
-        .from('analytics_sessions')
-        .select('unique_visitor_id')
-        .lt('start_time', startOfDecade.toISOString());
-
-      if (prevError) throw prevError;
-
       const existingVisitors = new Set<string>();
-      (previousVisitors || []).forEach((session) => {
+      const previousVisitors = await this.fetchVisitorSessions(undefined, startOfDecade.toISOString());
+      previousVisitors.forEach((session) => {
         if (session.unique_visitor_id) existingVisitors.add(session.unique_visitor_id);
       });
 
-      const visitorsThisDecade = new Set<string>();
-
-      (allData || []).forEach((session) => {
-        const year = new Date(session.start_time).getFullYear();
-        const yearIndex = year - decadeStartYear;
-        if (yearIndex < 0 || yearIndex > 9) return;
-
-        yearlyData[yearIndex].sessions++;
-
-        const visitorId = session.unique_visitor_id;
-        if (visitorId && !visitorsThisDecade.has(visitorId)) {
-          visitorsThisDecade.add(visitorId);
-          if (existingVisitors.has(visitorId)) {
-            yearlyData[yearIndex].returningUsers++;
-          } else {
-            yearlyData[yearIndex].newUsers++;
-          }
-        }
-      });
+      const counts = aggregateVisitorSessions(allData, existingVisitors, 10, (date) => date.getFullYear() - decadeStartYear);
+      yearlyData.forEach((year, index) => Object.assign(year, counts[index]));
 
       return yearlyData;
     } catch (error) {
       console.error('Analytics: Error getting yearly visitors for decade', error);
-      return Array.from({ length: 10 }, (_, i) => {
-        const year = decadeStartYear + i;
-        return {
-          year,
-          yearLabel: `${year}`,
-          sessions: 0,
-          newUsers: 0,
-          returningUsers: 0,
-        };
-      });
+      throw error;
     }
   }
 

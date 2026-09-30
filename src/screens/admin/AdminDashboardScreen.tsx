@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity,
-  Dimensions, RefreshControl,
+  Dimensions, RefreshControl, useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -123,9 +123,12 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   const [weeklyVisitors, setWeeklyVisitors] = useState<any[]>([]);
   const [monthlyVisitors, setMonthlyVisitors] = useState<any[]>([]);
   const [yearlyVisitors, setYearlyVisitors] = useState<any[]>([]);
+  const [granularError, setGranularError] = useState<string | null>(null);
 
   const [topReferrer] = useState('Direct / None');
   const [topDevice] = useState('Mobile');
+  const { width: windowWidth } = useWindowDimensions();
+  const isDesktopLayout = windowWidth >= 768;
 
   /* ── Consolidated data loader with cache + dedupe ────────────────── */
   const loadTab = useCallback(async (tab: string, period: string, force = false) => {
@@ -171,11 +174,13 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
 
     // Visitors (granular) — stale-while-revalidate
     if (tab === 'visitors' || tab === 'all') {
+      setGranularError(null);
       if (!force && cacheValid(granularKey, 30000)) {
         // Use cache
       } else if (!inflight.has(granularKey)) {
         dedupedFetch(granularKey, async () => {
           setGranularLoading(true);
+          setGranularError(null);
           try {
             const now = new Date();
             let h: any[] | null = null, d: any[] | null = null, w: any[] | null = null, m: any[] | null = null, y: any[] | null = null;
@@ -190,6 +195,14 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
             if (m) setMonthlyVisitors(m);
             if (y) setYearlyVisitors(y);
             cacheSet(granularKey, { h, d, w, m, y });
+          } catch (error) {
+            console.error('Admin analytics: failed to load visitor period', { period, error });
+            setGranularError('Visitor data could not be loaded for this period. Try refreshing.');
+            if (period === 'day') setHourlyVisitors([]);
+            else if (period === 'week') setDailyVisitors([]);
+            else if (period === 'month') setWeeklyVisitors([]);
+            else if (period === 'year') setMonthlyVisitors([]);
+            else setYearlyVisitors([]);
           } finally { setGranularLoading(false); }
         });
       }
@@ -281,6 +294,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   }, [selectedPeriod, hourlyVisitors, dailyVisitors, weeklyVisitors, monthlyVisitors, yearlyVisitors]);
 
   const visitorTotal = useMemo(() => visitorRows.reduce((s, r) => s + r.sessions, 0), [visitorRows]);
+  const hasVisitorData = useMemo(() => visitorRows.some((r) => r.sessions > 0 || r.newUsers > 0 || r.returning > 0), [visitorRows]);
 
   const exportCsv = () => {
     const csv = [['period', 'bucket', 'sessions', 'new_visitors', 'returning_visitors'] as string[],
@@ -296,13 +310,19 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   };
 
   /* ── Chart data helpers ──────────────────────────────────────────── */
-  const barChartData = useMemo((): BarItem[] => {
-    if (selectedPeriod === 'day') return hourlyVisitors.map((h: any) => ({ label: `${h.hour}`, primary: h.sessions }));
-    if (selectedPeriod === 'week') return dailyVisitors.map((d: any) => ({ label: d.dayName.substring(0, 3), primary: d.sessions }));
-    if (selectedPeriod === 'month') return weeklyVisitors.map((w: any) => ({ label: w.weekLabel, primary: w.sessions }));
-    if (selectedPeriod === 'year') return monthlyVisitors.map((m: any) => ({ label: m.monthName.substring(0, 3), primary: m.sessions }));
-    return yearlyVisitors.map((y: any) => ({ label: y.yearLabel.substring(2), primary: y.sessions }));
-  }, [selectedPeriod, hourlyVisitors, dailyVisitors, weeklyVisitors, monthlyVisitors, yearlyVisitors]);
+  const visitorChartData = useMemo(() => {
+    const rows = visitorRows.map((row) => ({
+      label: row.bucket,
+      sessions: row.sessions,
+      newUsers: row.newUsers,
+      returning: row.returning,
+    }));
+    return {
+      sessions: rows.map((row) => ({ label: row.label, primary: row.sessions })),
+      newUsers: rows.map((row) => ({ label: row.label, primary: row.newUsers })),
+      returning: rows.map((row) => ({ label: row.label, primary: row.returning })),
+    };
+  }, [visitorRows]);
 
   const trendBars = useMemo((): BarItem[] => trendData.map(d => ({
     label: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -451,18 +471,45 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
                   </View>
                 </View>
 
-                {/* Bar Chart */}
-                {barChartData.length > 0 && (
+                {/* Visitor charts */}
+                {granularError ? (
+                  <View style={st.emptyVisitorCard}>
+                    <Ionicons name="alert-circle-outline" size={24} color="#FFB020" />
+                    <Text style={st.emptyVisitorText}>{granularError}</Text>
+                  </View>
+                ) : !hasVisitorData ? (
+                  <View style={st.emptyVisitorCard}>
+                    <Ionicons name="bar-chart-outline" size={24} color="#666" />
+                    <Text style={st.emptyVisitorText}>No visitor data for this period</Text>
+                  </View>
+                ) : (
                   <View style={st.card}>
                     <View style={st.cardHeader}><Ionicons name="bar-chart" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Visitor Trend</Text></View>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                      <BarChart data={barChartData} height={140} color="#00D4FF" />
-                    </ScrollView>
+                    <View style={[st.visitorChartsRow, !isDesktopLayout && st.visitorChartsColumn]}>
+                      <View style={[st.visitorChartPanel, isDesktopLayout && st.visitorChartPanelDesktop]}>
+                        <Text style={[st.visitorChartTitle, { color: '#00D4FF' }]}>Sessions</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <BarChart data={visitorChartData.sessions} height={140} color="#00D4FF" />
+                        </ScrollView>
+                      </View>
+                      <View style={[st.visitorChartPanel, isDesktopLayout && st.visitorChartPanelDesktop]}>
+                        <Text style={[st.visitorChartTitle, { color: '#4CAF50' }]}>New Visitors</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <BarChart data={visitorChartData.newUsers} height={140} color="#4CAF50" />
+                        </ScrollView>
+                      </View>
+                      <View style={[st.visitorChartPanel, isDesktopLayout && st.visitorChartPanelDesktop]}>
+                        <Text style={[st.visitorChartTitle, { color: '#FF00FF' }]}>Returning Visitors</Text>
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                          <BarChart data={visitorChartData.returning} height={140} color="#FF00FF" />
+                        </ScrollView>
+                      </View>
+                    </View>
                   </View>
                 )}
 
                 {/* Table */}
-                {visitorRows.length > 0 && (
+                {hasVisitorData && visitorRows.length > 0 && (
                   <View style={st.card}>
                     <View style={st.cardHeader}><Ionicons name="list" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Detail</Text></View>
                     <View style={st.tableHeader}>
@@ -586,6 +633,13 @@ const st = StyleSheet.create({
   exportBtn: { padding: 6, marginLeft: 'auto' },
   breakdownRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
   breakdownCard: { flex: 1, backgroundColor: '#1a1a2e', borderRadius: 8, padding: 10, alignItems: 'center' },
+  visitorChartsRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  visitorChartsColumn: { flexDirection: 'column' },
+  visitorChartPanel: { backgroundColor: '#1a1a2e', borderRadius: 10, padding: 10, overflow: 'hidden' },
+  visitorChartPanelDesktop: { flex: 1, minWidth: 0 },
+  visitorChartTitle: { fontSize: 12, fontWeight: '700', marginBottom: 6 },
+  emptyVisitorCard: { backgroundColor: '#13131a', borderRadius: 14, padding: 28, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', alignItems: 'center', gap: 8 },
+  emptyVisitorText: { color: '#888', fontSize: 13, textAlign: 'center' },
   breakdownLabel: { color: '#666', fontSize: 11 },
   breakdownValue: { color: '#FFF', fontSize: 13, fontWeight: '700', marginTop: 2 },
   tableHeader: { flexDirection: 'row', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
