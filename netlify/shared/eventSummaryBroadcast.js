@@ -5,6 +5,10 @@ const KAMPALA_OFFSET_MS = 3 * 60 * 60 * 1000;
 const MAX_PREVIEWS = 3;
 const MAX_FCM_BYTES = 3900;
 const PUBLIC_EVENTS_PATH = '/events';
+// The notifications table has an existing CHECK constraint. Event-summary
+// broadcasts are promotional content; summaryMode in data distinguishes
+// today's and week's broadcasts without introducing a new database type.
+const NOTIFICATION_TYPE = 'promotion';
 
 function requiredEnv(name) {
   const value = process.env[name];
@@ -254,7 +258,7 @@ async function findExistingBroadcast(supabase, dedupeKey) {
     .from('notifications')
     .select('id,data')
     .is('user_id', null)
-    .eq('type', 'upcoming_summary')
+    .eq('type', NOTIFICATION_TYPE)
     .contains('data', { dedupeKey })
     .order('created_at', { ascending: false })
     .limit(1);
@@ -306,7 +310,7 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
       user_id: null,
       title: summary.title,
       body: summary.body,
-      type: 'upcoming_summary',
+      type: NOTIFICATION_TYPE,
       data: notificationData,
       image_url: summary.imageUrl || null,
       deep_link: summary.deepLink,

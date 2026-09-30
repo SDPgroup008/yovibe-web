@@ -13,6 +13,14 @@
  *   SITE_URL
  */
 
+const path = require('path');
+const dotenv = require('dotenv');
+
+// Match the local Expo/Netlify environment convention. Load .env.local first;
+// dotenv does not override an already-defined variable, so local values win.
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+
 const { createClient } = require('@supabase/supabase-js');
 const { sendEventSummaryBroadcast } = require('./netlify/shared/eventSummaryBroadcast');
 
