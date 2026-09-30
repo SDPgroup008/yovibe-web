@@ -13,7 +13,7 @@ import { supabase } from "../config/supabase";
 import SupabaseService from "../services/SupabaseService";
 import AnalyticsService from "../services/AnalyticsService";
 import type { User } from "../models/User";
-import { Platform, Dimensions } from "react-native";
+import { AppState, Platform, Dimensions } from "react-native";
 
 // Responsive context enhancements
 const { width: screenWidth } = Dimensions.get('window');
@@ -79,6 +79,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   
   // Track analytics session
   const sessionIdRef = useRef<string | null>(null);
+  const analyticsIdentityRef = useRef<string | null>(null);
 
   // Prevent overlapping concurrent fetches for the same UID
   const profileFetchInFlightRef = useRef<string | null>(null);
@@ -175,43 +176,52 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
   }, []);
 
-  // Track analytics session
+  // Start only after the initial auth state is resolved. This prevents the
+  // historical guest-then-account duplicate created during application boot.
   useEffect(() => {
-    // Only track sessions on web platform
-    if (Platform.OS !== 'web') return;
-
-    const startSession = async () => {
+    if (isLoading) return;
+    let cancelled = false;
+    const platform = Platform.OS === 'web' ? 'web' : 'mobile';
+    const synchronize = async () => {
       try {
-        const sessionId = await AnalyticsService.startSession(
-          user?.id || null,
-          'web'
-        );
-        sessionIdRef.current = sessionId;
-        // console.log('Analytics: Session started for', user ? 'authenticated user' : 'guest');
-      } catch (error) {
-        // console.error('Analytics: Failed to start session', error);
-      }
-    };
-
-    const endSession = async () => {
-      if (sessionIdRef.current) {
-        try {
-          await AnalyticsService.endSession(sessionIdRef.current);
-          // console.log('Analytics: Session ended');
-        } catch (error) {
-          // console.error('Analytics: Failed to end session', error);
+        if (!sessionIdRef.current) {
+          sessionIdRef.current = await AnalyticsService.startSession(user?.id || null, platform);
+        } else if (user?.id && !analyticsIdentityRef.current) {
+          sessionIdRef.current = await AnalyticsService.promoteSession(sessionIdRef.current);
         }
+        if (!cancelled) analyticsIdentityRef.current = user?.id || null;
+      } catch {
+        // Analytics is best-effort and must never block authentication.
       }
     };
+    synchronize();
+    return () => { cancelled = true; };
+  }, [isLoading, user?.id]);
 
-    // Start session when component mounts or user changes
-    startSession();
-
-    // End session on unmount or before starting a new one
-    return () => {
-      endSession();
+  useEffect(() => {
+    const platform = Platform.OS === 'web' ? 'web' : 'mobile';
+    let lastTouch = 0;
+    const touch = () => {
+      if (!sessionIdRef.current || Date.now() - lastTouch < 60000) return;
+      lastTouch = Date.now();
+      AnalyticsService.touchSession(sessionIdRef.current, platform)
+        .then((sessionId) => { sessionIdRef.current = sessionId; })
+        .catch(() => undefined);
     };
-  }, [user?.id]);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      const events = ['pointerdown', 'keydown', 'scroll', 'focus'];
+      events.forEach((name) => window.addEventListener(name, touch, { passive: true }));
+      const onVisibility = () => { if (document.visibilityState === 'visible') touch(); };
+      document.addEventListener('visibilitychange', onVisibility);
+      return () => { events.forEach((name) => window.removeEventListener(name, touch)); document.removeEventListener('visibilitychange', onVisibility); };
+    }
+    const subscription = AppState.addEventListener('change', (state) => { if (state === 'active') touch(); });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => () => {
+    if (sessionIdRef.current) AnalyticsService.endSession(sessionIdRef.current).catch(() => undefined);
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     setIsLoading(true);
@@ -276,6 +286,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(true);
     try {
       // console.log("AuthContext: Signing out...");
+      if (sessionIdRef.current) {
+        await AnalyticsService.endSession(sessionIdRef.current);
+        sessionIdRef.current = null;
+      }
+      AnalyticsService.rotateGuestVisitorId();
+      analyticsIdentityRef.current = null;
       await SupabaseService.signOut();
       // Clear local user state explicitly so UI can immediately reflect unauthenticated state.
       setUser(null);

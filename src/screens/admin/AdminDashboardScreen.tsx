@@ -6,7 +6,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
-import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary } from '../../services/AnalyticsService';
+import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary, VisitorAnalyticsResponse } from '../../services/AnalyticsService';
 import NotificationService from '../../services/NotificationService';
 import TokenService, { TokenAnalyticsSummary, DailyTokenStats } from '../../services/TokenService';
 
@@ -123,6 +123,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   const [weeklyVisitors, setWeeklyVisitors] = useState<any[]>([]);
   const [monthlyVisitors, setMonthlyVisitors] = useState<any[]>([]);
   const [yearlyVisitors, setYearlyVisitors] = useState<any[]>([]);
+  const [visitorTotals, setVisitorTotals] = useState<VisitorAnalyticsResponse['totals'] | null>(null);
   const [granularError, setGranularError] = useState<string | null>(null);
 
   const [topReferrer] = useState('Direct / None');
@@ -182,19 +183,20 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
           setGranularLoading(true);
           setGranularError(null);
           try {
-            const now = new Date();
+            const visitor = await AnalyticsService.getVisitorAnalytics(period as VisitorAnalyticsResponse['period']);
             let h: any[] | null = null, d: any[] | null = null, w: any[] | null = null, m: any[] | null = null, y: any[] | null = null;
-            if (period === 'day') h = await AnalyticsService.getHourlyVisitorsForDay(new Date(now.getFullYear(), now.getMonth(), now.getDate()));
-            else if (period === 'week') { const ws = new Date(now); ws.setDate(now.getDate() - now.getDay()); d = await AnalyticsService.getDailyVisitorsForWeek(ws); }
-            else if (period === 'month') w = await AnalyticsService.getWeeklyVisitorsForMonth(now.getFullYear(), now.getMonth());
-            else if (period === 'year') m = await AnalyticsService.getMonthlyVisitorsForYear(now.getFullYear());
-            else { const ds = Math.floor(now.getFullYear() / 10) * 10; y = await AnalyticsService.getYearlyVisitorsForDecade(ds); }
+            if (period === 'day') h = visitor.buckets.map((bucket, hour) => ({ hour, sessions: bucket.sessions, newUsers: bucket.newVisitors, returningUsers: bucket.returningVisitors }));
+            else if (period === 'week') d = visitor.buckets.map((bucket, day) => ({ day, dayName: bucket.key, sessions: bucket.sessions, newUsers: bucket.newVisitors, returningUsers: bucket.returningVisitors }));
+            else if (period === 'month') w = visitor.buckets.map((bucket, week) => ({ week, weekLabel: bucket.key, sessions: bucket.sessions, newUsers: bucket.newVisitors, returningUsers: bucket.returningVisitors }));
+            else if (period === 'year') m = visitor.buckets.map((bucket, month) => ({ month, monthName: bucket.key, sessions: bucket.sessions, newUsers: bucket.newVisitors, returningUsers: bucket.returningVisitors }));
+            else y = visitor.buckets.map((bucket) => ({ year: Number(bucket.key), yearLabel: bucket.key, sessions: bucket.sessions, newUsers: bucket.newVisitors, returningUsers: bucket.returningVisitors }));
             if (h) setHourlyVisitors(h);
             if (d) setDailyVisitors(d);
             if (w) setWeeklyVisitors(w);
             if (m) setMonthlyVisitors(m);
             if (y) setYearlyVisitors(y);
-            cacheSet(granularKey, { h, d, w, m, y });
+            setVisitorTotals(visitor.totals);
+            cacheSet(granularKey, { h, d, w, m, y, totals: visitor.totals });
           } catch (error) {
             console.error('Admin analytics: failed to load visitor period', { period, error });
             setGranularError('Visitor data could not be loaded for this period. Try refreshing.');
@@ -206,13 +208,14 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
           } finally { setGranularLoading(false); }
         });
       }
-      const cachedG = cacheGet<{ h: any[] | null; d: any[] | null; w: any[] | null; m: any[] | null; y: any[] | null }>(granularKey);
+      const cachedG = cacheGet<{ h: any[] | null; d: any[] | null; w: any[] | null; m: any[] | null; y: any[] | null; totals?: VisitorAnalyticsResponse['totals'] }>(granularKey);
       if (cachedG) {
         if (cachedG.h) setHourlyVisitors(cachedG.h);
         if (cachedG.d) setDailyVisitors(cachedG.d);
         if (cachedG.w) setWeeklyVisitors(cachedG.w);
         if (cachedG.m) setMonthlyVisitors(cachedG.m);
         if (cachedG.y) setYearlyVisitors(cachedG.y);
+        if (cachedG.totals) setVisitorTotals(cachedG.totals);
       }
 
       // Frequent visitors (lightweight, always fresh)
@@ -459,9 +462,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
                 <View style={st.card}>
                   <View style={st.cardHeader}><Ionicons name="people-outline" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Visitor Summary</Text></View>
                   <View style={st.metricGrid}>
-                    <MetricCard icon="pulse" iconColor="#00D4FF" value={visitorTotal} label="Total Sessions" />
-                    <MetricCard icon="person-add" iconColor="#4CAF50" value={visitorRows.reduce((s, r) => s + r.newUsers, 0)} label="New Visitors" />
-                    <MetricCard icon="repeat" iconColor="#FF00FF" value={visitorRows.reduce((s, r) => s + r.returning, 0)} label="Returning" />
+                    <MetricCard icon="pulse" iconColor="#00D4FF" value={visitorTotals?.sessions ?? visitorTotal} label="Total Sessions" />
+                    <MetricCard icon="people-outline" iconColor="#FFD700" value={visitorTotals?.uniqueVisitors ?? 0} label="Unique Visitors" />
+                    <MetricCard icon="person-add" iconColor="#4CAF50" value={visitorTotals?.newVisitors ?? 0} label="New Visitors" />
+                    <MetricCard icon="repeat" iconColor="#FF00FF" value={visitorTotals?.returningVisitors ?? 0} label="Returning" />
                   </View>
 
                   {/* Breakdown: Referrer & Device */}
@@ -485,6 +489,8 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
                 ) : (
                   <View style={st.card}>
                     <View style={st.cardHeader}><Ionicons name="bar-chart" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Visitor Trend</Text></View>
+                    <Text style={st.breakdownLabel}>Each chart bucket is deduplicated independently. Period totals above are deduplicated for the whole selected period.</Text>
+                    {visitorTotals?.unidentifiedSessions ? <Text style={[st.breakdownLabel, { color: '#FFB020', marginTop: 4 }]}>{visitorTotals.unidentifiedSessions} legacy session(s) have no usable visitor identity.</Text> : null}
                     <View style={[st.visitorChartsRow, !isDesktopLayout && st.visitorChartsColumn]}>
                       <View style={[st.visitorChartPanel, isDesktopLayout && st.visitorChartPanelDesktop]}>
                         <Text style={[st.visitorChartTitle, { color: '#00D4FF' }]}>Sessions</Text>

@@ -75,6 +75,22 @@ export interface VisitorBucketCounts {
   returningUsers: number;
 }
 
+export interface VisitorAnalyticsBucket {
+  key: string;
+  sessions: number;
+  newVisitors: number;
+  returningVisitors: number;
+  uniqueVisitors: number;
+}
+
+export interface VisitorAnalyticsResponse {
+  timezone: 'Africa/Kampala';
+  period: 'day' | 'week' | 'month' | 'year' | 'decade';
+  range: { start: string; end: string };
+  buckets: VisitorAnalyticsBucket[];
+  totals: { sessions: number; uniqueVisitors: number; newVisitors: number; returningVisitors: number; unidentifiedSessions: number };
+}
+
 interface AnalyticsDateRange {
   start: Date;
   end: Date;
@@ -110,6 +126,16 @@ const localDecadeRange = (decadeStartYear: number): AnalyticsDateRange => ({
   start: new Date(decadeStartYear, 0, 1),
   end: new Date(decadeStartYear + 10, 0, 1),
 });
+
+const FUNCTIONS_BASE_URL = (
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  ''
+).replace(/\/$/, '');
+
+const functionUrl = (name: string) => `${FUNCTIONS_BASE_URL}/.netlify/functions/${name}`;
 
 /**
  * Aggregate visitor sessions into period buckets. A visitor is counted once
@@ -151,6 +177,27 @@ export function aggregateVisitorSessions(
 
 class AnalyticsService {
   private readonly analyticsDisabledKey = 'yovibe_analytics_disabled';
+  private readonly visitorIdKey = 'yovibe_visitor_id';
+
+  private async functionRequest<T>(name: string, body: Record<string, unknown>): Promise<T> {
+    const { data } = await supabase.auth.getSession();
+    const response = await fetch(functionUrl(name), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(data.session?.access_token ? { Authorization: `Bearer ${data.session.access_token}` } : {}),
+      },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || `Analytics request failed (${response.status})`);
+    this.enableAnalytics();
+    return payload as T;
+  }
+
+  async getVisitorAnalytics(period: VisitorAnalyticsResponse['period']): Promise<VisitorAnalyticsResponse> {
+    return this.functionRequest<VisitorAnalyticsResponse>('analytics-admin', { period });
+  }
 
   private isAnalyticsDisabled(): boolean {
     try {
@@ -178,6 +225,14 @@ class AnalyticsService {
 
   private isRlsOrForbiddenError(error: any): boolean {
     return error?.code === '42501' || error?.status === 401 || error?.status === 403 || /row-level security|forbidden/i.test(error?.message || '');
+  }
+
+  private enableAnalytics(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) localStorage.removeItem(this.analyticsDisabledKey);
+    } catch {
+      // Storage availability must not affect analytics requests.
+    }
   }
 
   private async fetchVisitorSessions(startTime?: string, endTime?: string): Promise<VisitorSessionRow[]> {
@@ -266,14 +321,14 @@ class AnalyticsService {
    * Get or create a unique visitor ID for tracking
    */
   private getUniqueVisitorId(): string {
-    const VISITOR_ID_KEY = 'yovibe_visitor_id';
-    
     if (typeof window !== 'undefined' && window.localStorage) {
-      let visitorId = localStorage.getItem(VISITOR_ID_KEY);
+      let visitorId = localStorage.getItem(this.visitorIdKey);
       
       if (!visitorId) {
-        visitorId = `visitor_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-        localStorage.setItem(VISITOR_ID_KEY, visitorId);
+        visitorId = typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `visitor_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+        localStorage.setItem(this.visitorIdKey, visitorId);
       }
       
       return visitorId;
@@ -317,34 +372,12 @@ class AnalyticsService {
    * Start a new session
    */
   async startSession(userId: string | null, platform: 'web' | 'mobile'): Promise<string> {
-    if (this.isAnalyticsDisabled()) {
-      return '';
-    }
-
     try {
-      const uniqueVisitorId = this.getUniqueVisitorId();
-      const visitNumber = await this.getTodayVisitCount(uniqueVisitorId) + 1;
-      
-      const sessionData = {
-        user_id: userId,
-        unique_visitor_id: uniqueVisitorId,
-        is_authenticated: !!userId,
-        start_time: new Date().toISOString(),
-        platform,
-        user_agent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined,
-        visit_number: visitNumber,
-      };
-
-      const { data, error } = await supabase
-        .from('analytics_sessions')
-        .insert(sessionData)
-        .select('id')
-        .single();
-
-      if (error) throw error;
-
-      /* console.log('Analytics: Session started', data.id, 'Visit #', visitNumber, 'for visitor', uniqueVisitorId); */
-      return data.id;
+      void userId; // The function derives account identity from the verified access token.
+      const result = await this.functionRequest<{ sessionId: string }>('analytics-session', {
+        action: 'start', guestVisitorId: this.getUniqueVisitorId(), platform,
+      });
+      return result.sessionId;
     } catch (error) {
       if (this.isRlsOrForbiddenError(error)) {
         this.disableAnalytics();
@@ -361,43 +394,37 @@ class AnalyticsService {
    * End a session and record duration
    */
   async endSession(sessionId: string): Promise<void> {
-    if (!sessionId || this.isAnalyticsDisabled()) {
+    if (!sessionId) {
       return;
     }
 
     try {
-      const endTime = new Date();
-      
-      // Get the session document to calculate duration
-      const { data: sessionData, error: fetchError } = await supabase
-        .from('analytics_sessions')
-        .select('start_time')
-        .eq('id', sessionId)
-        .single();
-      
-      if (fetchError) throw fetchError;
-
-      if (sessionData) {
-        const startTime = new Date(sessionData.start_time);
-        const duration = Math.floor((endTime.getTime() - startTime.getTime()) / 1000); // in seconds
-
-        const { error: updateError } = await supabase
-          .from('analytics_sessions')
-          .update({
-            end_time: endTime.toISOString(),
-            duration,
-          })
-          .eq('id', sessionId);
-
-        if (updateError) throw updateError;
-
-        /* console.log('Analytics: Session ended', sessionId, 'Duration:', duration, 'seconds'); */
-      }
+      await this.functionRequest('analytics-session', {
+        action: 'end', sessionId, guestVisitorId: this.getUniqueVisitorId(), platform: 'web',
+      });
     } catch (error) {
       if (!this.isRlsOrForbiddenError(error)) {
         console.error('Analytics: Error ending session', error);
       }
     }
+  }
+
+  async touchSession(sessionId: string, platform: 'web' | 'mobile'): Promise<string> {
+    const result = await this.functionRequest<{ sessionId: string }>('analytics-session', {
+      action: 'touch', sessionId, guestVisitorId: this.getUniqueVisitorId(), platform,
+    });
+    return result.sessionId;
+  }
+
+  async promoteSession(sessionId: string): Promise<string> {
+    const result = await this.functionRequest<{ sessionId: string }>('analytics-session', {
+      action: 'promote', sessionId, guestVisitorId: this.getUniqueVisitorId(), platform: 'web',
+    });
+    return result.sessionId;
+  }
+
+  rotateGuestVisitorId(): void {
+    if (typeof window !== 'undefined' && window.localStorage) localStorage.removeItem(this.visitorIdKey);
   }
 
   /**
@@ -422,6 +449,22 @@ class AnalyticsService {
     }
 
     try {
+      const analytics = await this.getVisitorAnalytics('month');
+      return {
+        authenticatedUsers: 0,
+        unauthenticatedUsers: 0,
+        totalSessions: analytics.totals.sessions,
+        averageDuration: 0,
+        totalDuration: 0,
+        uniqueAuthenticatedUsers: 0,
+        uniqueUnauthenticatedUsers: analytics.totals.uniqueVisitors,
+        totalUniqueUsers: analytics.totals.uniqueVisitors,
+        averageVisitsPerUser: analytics.totals.uniqueVisitors ? analytics.totals.sessions / analytics.totals.uniqueVisitors : 0,
+        newAuthenticatedUsers: 0,
+        newUnauthenticatedUsers: analytics.totals.newVisitors,
+        totalNewUsers: analytics.totals.newVisitors,
+      };
+      /* Legacy browser-side aggregation remains below temporarily for source compatibility. */
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
@@ -478,7 +521,7 @@ class AnalyticsService {
             .limit(1);
 
           if (!firstError && firstSession && firstSession.length > 0) {
-            visitorFirstSessions.set(visitorId, new Date(firstSession[0].start_time));
+            visitorFirstSessions.set(visitorId, new Date(firstSession[0]!.start_time));
           }
         }
       }
@@ -775,6 +818,22 @@ class AnalyticsService {
    */
   async getTrendData(period: 'daily' | 'weekly' | 'yearly', limit: number = 30): Promise<TrendData[]> {
     try {
+      const visitorPeriod = period === 'daily' ? 'day' : period === 'weekly' ? 'week' : 'year';
+      const analytics = await this.getVisitorAnalytics(visitorPeriod);
+      return analytics.buckets.map((bucket) => ({
+        date: bucket.key,
+        authenticatedSessions: 0,
+        unauthenticatedSessions: bucket.sessions,
+        totalSessions: bucket.sessions,
+        averageDuration: 0,
+        uniqueAuthenticatedUsers: 0,
+        uniqueUnauthenticatedUsers: bucket.uniqueVisitors,
+        totalUniqueUsers: bucket.uniqueVisitors,
+        newAuthenticatedUsers: 0,
+        newUnauthenticatedUsers: bucket.newVisitors,
+        totalNewUsers: bucket.newVisitors,
+      }));
+      /* Legacy browser-side aggregation remains below temporarily for source compatibility. */
       const now = new Date();
       let startDate = new Date();
 
@@ -936,6 +995,19 @@ class AnalyticsService {
    */
   async getTodaySummary(): Promise<TodaySummary> {
     try {
+      const analytics = await this.getVisitorAnalytics('day');
+      return {
+        totalSessions: analytics.totals.sessions,
+        newAuthenticatedUsers: 0,
+        newUnauthenticatedUsers: analytics.totals.newVisitors,
+        returningAuthenticatedUsers: 0,
+        returningUnauthenticatedUsers: analytics.totals.returningVisitors,
+        totalNewUsers: analytics.totals.newVisitors,
+        totalReturningUsers: analytics.totals.returningVisitors,
+        averageDuration: 0,
+        lastUpdated: new Date(),
+      };
+      /* Legacy browser-side aggregation remains below temporarily for source compatibility. */
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -976,7 +1048,7 @@ class AnalyticsService {
           .limit(1);
 
         if (!firstError && firstSession && firstSession.length > 0) {
-          visitorFirstSessions.set(visitorId, new Date(firstSession[0].start_time));
+          visitorFirstSessions.set(visitorId, new Date(firstSession[0]!.start_time));
         }
       }
 
@@ -997,7 +1069,7 @@ class AnalyticsService {
           processedVisitors.add(visitorId);
           
           const firstSession = visitorFirstSessions.get(visitorId);
-          const isNew = firstSession && firstSession >= today && firstSession < tomorrow;
+          const isNew = Boolean(firstSession && firstSession >= today && firstSession < tomorrow);
           
           if (isNew) {
             // New user today
@@ -1039,6 +1111,9 @@ class AnalyticsService {
    */
   async getFrequentVisitorsToday(): Promise<UserVisitData[]> {
     try {
+      const result = await this.functionRequest<{ visitors: UserVisitData[] }>('analytics-admin', { action: 'frequent' });
+      return result.visitors.map((visitor) => ({ ...visitor, lastVisit: new Date(visitor.lastVisit) }));
+      /* Legacy browser-side aggregation remains below temporarily for source compatibility. */
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
@@ -1089,6 +1164,9 @@ class AnalyticsService {
    */
   async getAllUnauthenticatedVisitors(): Promise<UserVisitData[]> {
     try {
+      const result = await this.functionRequest<{ visitors: UserVisitData[] }>('analytics-admin', { action: 'guests' });
+      return result.visitors.map((visitor) => ({ ...visitor, lastVisit: new Date(visitor.lastVisit) }));
+      /* Legacy browser-side aggregation remains below temporarily for source compatibility. */
       const { data, error } = await supabase
         .from('analytics_sessions')
         .select('*')
