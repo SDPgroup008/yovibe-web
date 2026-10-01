@@ -78,6 +78,7 @@ function buildSummaryText(mode, events) {
   if (!count) return {
     title,
     body: `No events scheduled ${period}. Tap to see more.`,
+    pushBody: `No events scheduled ${period}. Tap to see more.`,
   };
 
   const names = events.slice(0, MAX_PREVIEWS).map((event) => trimName(event.name, 48));
@@ -85,6 +86,10 @@ function buildSummaryText(mode, events) {
   return {
     title,
     body: `${names.join(' • ')}${suffix}. See more events in YoVibe.`,
+    // The device notification uses the collage for event names and posters;
+    // keeping this body short prevents the OS from showing a duplicate list
+    // of names beside the image. The in-app notification keeps the richer body.
+    pushBody: `${count} event${count === 1 ? '' : 's'} happening ${period}. Tap to view event posters.`,
   };
 }
 
@@ -117,9 +122,15 @@ async function buildSummaryPayload({ supabase, mode, now = new Date() }) {
     previews,
     title: text.title,
     body: text.body,
+    pushBody: text.pushBody,
     imageUrl: previews[0]?.posterUrl,
     deepLink: `${getPublicSiteUrl()}${PUBLIC_EVENTS_PATH}`,
   };
+}
+
+function getNotificationCollageUrl(notificationId) {
+  if (!notificationId) return undefined;
+  return `${getPublicSiteUrl()}/.netlify/functions/notification-preview?notificationId=${encodeURIComponent(String(notificationId))}`;
 }
 
 function serializeEventPreviews(previews) {
@@ -131,6 +142,7 @@ function serializeEventPreviews(previews) {
 }
 
 function buildFcmMessage(summary, notificationId, dedupeKey) {
+  const imageUrl = summary.collageUrl || summary.imageUrl;
   const data = {
     type: 'upcoming_summary',
     summaryMode: summary.mode,
@@ -139,7 +151,8 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
     eventIds: JSON.stringify(summary.previews.map((event) => event.slug)),
     eventPreviews: serializeEventPreviews(summary.previews),
     totalEventCount: String(summary.events.length),
-    ...(summary.imageUrl ? { imageUrl: summary.imageUrl } : {}),
+    ...(imageUrl ? { imageUrl } : {}),
+    ...(summary.collageUrl ? { collageUrl: summary.collageUrl } : {}),
     deepLink: summary.deepLink,
     url: summary.deepLink,
     rangeStart: summary.range.start,
@@ -150,8 +163,8 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
     message: {
       notification: {
         title: summary.title,
-        body: summary.body,
-        ...(summary.imageUrl ? { image: summary.imageUrl } : {}),
+        body: summary.pushBody || summary.body,
+        ...(imageUrl ? { image: imageUrl } : {}),
       },
       data,
       webpush: {
@@ -350,9 +363,17 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
     notificationId = data.id;
   }
 
+  const collageUrl = getNotificationCollageUrl(notificationId);
+  notificationData = { ...notificationData, collageUrl };
+  const { error: assetError } = await supabase
+    .from('notifications')
+    .update({ data: notificationData, image_url: collageUrl || summary.imageUrl || null })
+    .eq('id', notificationId);
+  if (assetError) throw assetError;
+
   await updateNotificationData(supabase, notificationId, notificationData);
 
-  const message = buildMulticastMessage(summary, notificationId, dedupeKey);
+  const message = buildMulticastMessage({ ...summary, collageUrl }, notificationId, dedupeKey);
   try {
     const delivery = await sendToActiveTokens({ supabase, message });
     notificationData = {
@@ -383,6 +404,7 @@ module.exports = {
   buildFcmMessage,
   buildMulticastMessage,
   getSummaryWindow,
+  getNotificationCollageUrl,
   sendToActiveTokens,
   sendEventSummaryBroadcast,
 };

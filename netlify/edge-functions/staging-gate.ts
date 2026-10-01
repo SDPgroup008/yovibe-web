@@ -23,6 +23,10 @@ const EXEMPT_PATHS = new Set([
   '/staging-access.html',
   '/favicon.png',
   '/.netlify/functions/staging-access',
+  // Device notification services cannot send the browser's staging cookie.
+  // This endpoint only renders a public event-summary collage addressed by an
+  // unguessable notification UUID and performs its own promotion-row check.
+  '/.netlify/functions/notification-preview',
   '/.netlify/functions/health',
   '/.netlify/functions/pesapal-ipn',
   '/.netlify/functions/pesapal-refund-callback',

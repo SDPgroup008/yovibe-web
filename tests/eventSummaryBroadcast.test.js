@@ -2,6 +2,7 @@ const {
   buildFcmMessage,
   buildSummaryPayload,
   getSummaryWindow,
+  getNotificationCollageUrl,
 } = require('../netlify/shared/eventSummaryBroadcast');
 
 describe('event summary broadcasts', () => {
@@ -62,5 +63,25 @@ describe('event summary broadcasts', () => {
     expect(Buffer.byteLength(JSON.stringify(message), 'utf8')).toBeLessThan(4096);
     expect(message.message.webpush.fcm_options.link).toBe('https://yovibe.net/events');
     expect(message.message.notification.image).toBe('https://cdn.example.com/poster.jpg');
+  });
+
+  test('uses the public collage endpoint when a notification id is available', () => {
+    const collageUrl = getNotificationCollageUrl('8b8b5b5b-1234-4567-8901-123456789012');
+    const message = buildFcmMessage({
+      mode: 'today',
+      title: 'Events happening today: 1',
+      body: 'One event. See more events in YoVibe.',
+      pushBody: '1 event happening today. Tap to view event posters.',
+      collageUrl,
+      imageUrl: 'https://cdn.example.com/poster.jpg',
+      deepLink: 'https://yovibe.net/events',
+      range: { start: '2026-09-29T21:00:00.000Z', end: '2026-09-30T21:00:00.000Z' },
+      events: [{ slug: 'one' }],
+      previews: [{ slug: 'one', name: 'One', posterUrl: 'https://cdn.example.com/poster.jpg' }],
+    }, '8b8b5b5b-1234-4567-8901-123456789012', 'today:2026-09-30:09');
+
+    expect(message.message.notification.image).toBe(collageUrl);
+    expect(message.message.notification.body).toContain('posters');
+    expect(message.message.data.collageUrl).toBe(collageUrl);
   });
 });
