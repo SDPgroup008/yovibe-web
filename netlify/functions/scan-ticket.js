@@ -68,6 +68,22 @@ async function logValidation(admin, ticket, validatorId, location, status, reaso
   if (error) console.warn('[ScanTicket] Validation log failed:', error.message);
 }
 
+function buildTicketRedemptionUpdate(ticket, now) {
+  const update = {
+    status: 'used',
+    is_scanned: true,
+    scanned_at: now,
+  };
+
+  // Sale-time payouts can settle before a guest reaches the door. Scanning
+  // must never reset a claimed/paid payout back to pending. Legacy scan-gated
+  // tickets are still made eligible on their first successful scan.
+  if ((ticket.payout_status || 'pending') === 'pending' && ticket.payout_eligible !== true) {
+    update.payout_eligible = true;
+  }
+  return update;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return json(405, { success: false, reason: 'Method not allowed' });
   try {
@@ -166,10 +182,9 @@ exports.handler = async (event) => {
     }
 
     const now = new Date().toISOString();
-    const { data: redeemed, error: redeemError } = await admin.from('tickets').update({
-      status: 'used', is_scanned: true, scanned_at: now,
-      payout_eligible: true, payout_status: 'pending',
-    }).eq('id', ticket.id).eq('status', 'active').eq('is_scanned', false)
+    const { data: redeemed, error: redeemError } = await admin.from('tickets').update(
+      buildTicketRedemptionUpdate(ticket, now)
+    ).eq('id', ticket.id).eq('status', 'active').eq('is_scanned', false)
       .eq('payment_status', 'completed').select('id');
     if (redeemError) throw redeemError;
     if (!redeemed || redeemed.length !== 1) {
@@ -183,4 +198,9 @@ exports.handler = async (event) => {
     console.error('[ScanTicket] Error:', error.message);
     return json(error.statusCode || 500, { success: false, reason: error.message || 'Validation failed' });
   }
+};
+
+module.exports = {
+  handler: exports.handler,
+  buildTicketRedemptionUpdate,
 };

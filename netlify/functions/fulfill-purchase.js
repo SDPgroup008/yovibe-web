@@ -24,6 +24,7 @@ const {
 } = require('../shared/ticketFulfillment');
 const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
 const { privateKeyFromReference, presignR2 } = require('../shared/r2');
+const { getEventPayoutEligibility } = require('../shared/eventPayoutEligibility');
 
 function accessibleQr(value) {
   const key = privateKeyFromReference(value);
@@ -161,6 +162,11 @@ exports.handler = async (event) => {
     const event = await loadEvent(admin, eventId);
     if (!event) return error(404, { success: false, error: `Event not found: ${eventId}` });
 
+    // Snapshot the event's payout policy at the verified-sale boundary. The
+    // fulfillment worker may run later, after an admin changes the setting;
+    // that later change must not alter this already completed sale.
+    const payoutEligibilityPolicy = await getEventPayoutEligibility(admin, event.slug || event.id);
+
     // ── Step 3b: Server-side price verification (Phase 2.2) ─────────────────
     // Recompute the expected total from the NOTIFIED price + late fee and
     // reject any client-supplied amount that does not match — a tampered
@@ -270,6 +276,7 @@ exports.handler = async (event) => {
       paymentId,
       pesapalTransactionId: verificationResult.transactionId || null,
       pesapalConfirmationCode: verificationResult.confirmationCode || null,
+      salePayoutEligible: payoutEligibilityPolicy.salePayoutEnabled === true,
     };
     const claim = await admin.from('pending_ticket_fulfillments').insert({
       id: fulfillmentId,

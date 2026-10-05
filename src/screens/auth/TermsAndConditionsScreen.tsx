@@ -576,8 +576,10 @@ const TermsAndConditionsScreen: React.FC = () => {
             9.2 Payouts to Organizers:
           </Text>
           <Text style={styles.paragraph}>
-            (a) Payouts are available to Organizers for Tickets that have been scanned, validated, and
-            marked as "payout-eligible" with a payout status of "pending" in the Platform;
+            (a) By default, payouts are available to Organizers for Tickets that have been scanned,
+            validated, and marked as "payout-eligible" with a payout status of "pending" in the
+            Platform. For an Event expressly enabled by a Platform administrator, Tickets become
+            payout-eligible after the Platform verifies successful payment, without waiting for scanning;
           </Text>
           <Text style={styles.paragraph}>
             (b) Organizers may request payouts for eligible Tickets through the Platform dashboard by
@@ -605,7 +607,8 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (g) The Company reserves the right to withhold payouts pending investigation of suspected
-            fraud, chargebacks, or violations of these Terms;
+            fraud, refunds, chargebacks, or violations of these Terms. A refund, chargeback, or reversal
+            after a completed payout may be recovered from future Organizer payouts;
           </Text>
           <Text style={styles.paragraph}>
             (h) Payout statuses include: pending, processing, paid, and failed. Organizers will be

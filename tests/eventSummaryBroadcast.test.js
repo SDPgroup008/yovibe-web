@@ -62,10 +62,11 @@ describe('event summary broadcasts', () => {
     const message = buildFcmMessage(summary, 'notification-id', 'today:2026-09-30:09');
     expect(Buffer.byteLength(JSON.stringify(message), 'utf8')).toBeLessThan(4096);
     expect(message.message.webpush.fcm_options.link).toBe('https://yovibe.net/events');
-    expect(message.message.notification.image).toBe('https://cdn.example.com/poster.jpg');
+    expect(message.message.notification.image).toBeUndefined();
+    expect(message.message.notification.body).toContain('A');
   });
 
-  test('uses the public collage endpoint when a notification id is available', () => {
+  test('keeps collage previews in-app without attaching them to push notifications', () => {
     const collageUrl = getNotificationCollageUrl('8b8b5b5b-1234-4567-8901-123456789012');
     const message = buildFcmMessage({
       mode: 'today',
@@ -80,8 +81,8 @@ describe('event summary broadcasts', () => {
       previews: [{ slug: 'one', name: 'One', posterUrl: 'https://cdn.example.com/poster.jpg' }],
     }, '8b8b5b5b-1234-4567-8901-123456789012', 'today:2026-09-30:09');
 
-    expect(message.message.notification.image).toBe(collageUrl);
-    expect(message.message.notification.body).toContain('posters');
-    expect(message.message.data.collageUrl).toBe(collageUrl);
+    expect(message.message.notification.image).toBeUndefined();
+    expect(message.message.notification.body).toContain('One');
+    expect(message.message.data.collageUrl).toBeUndefined();
   });
 });

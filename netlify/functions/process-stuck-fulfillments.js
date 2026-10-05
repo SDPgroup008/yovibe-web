@@ -132,9 +132,7 @@ async function processOne(admin, f) {
     if (existingError) throw existingError;
     await persistInstallmentTicketIds(admin, f, existingIds);
     const existingEvent = await loadEvent(admin, f.event_id);
-    for (const ticket of existingTickets || []) {
-      await insertTicketNotification(admin, existingEvent, ticket);
-    }
+    await insertTicketNotification(admin, existingEvent, existingTickets || []);
     await enqueueTicketEmailJobs(admin, existingEvent, existingTickets || [], f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Tickets already created; marking fulfilled');
     return 'succeeded';
@@ -158,6 +156,9 @@ async function processOne(admin, f) {
   const method = f.pawapay_deposit_id ? 'mobile_money' : ((payload && payload.payment && payload.payment.method) || 'credit_card');
   const sharedPaymentId = f.payment_id || (payload && payload.paymentId);
   const isTableEntry = !!(payload && payload.isTableEntry);
+  // This is snapshotted by fulfill-purchase only after the payment provider
+  // confirms success. Legacy rows intentionally remain scan-gated.
+  const salePayoutEligible = payload?.salePayoutEligible === true;
   const tableSize = isTableEntry ? Math.max(1, Math.floor(Number(payload.tableSize) || 1)) : null;
   const verifiedFeePrice = payload && payload.unitPrice != null ? Number(payload.unitPrice) : null;
   // The verified event fee is a table total for table tiers. Ticket rows still
@@ -180,9 +181,7 @@ async function processOne(admin, f) {
     const recoveredIds = recoveredTickets.map((ticket) => ticket.id);
     await admin.from('pending_ticket_fulfillments').update({ ticket_ids: recoveredIds }).eq('id', f.id);
     await persistInstallmentTicketIds(admin, f, recoveredIds);
-    for (const ticket of recoveredTickets) {
-      await insertTicketNotification(admin, event, ticket);
-    }
+    await insertTicketNotification(admin, event, recoveredTickets);
     await enqueueTicketEmailJobs(admin, event, recoveredTickets, f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Recovered tickets created before worker interruption');
     return 'succeeded';
@@ -226,6 +225,7 @@ async function processOne(admin, f) {
       payment: { ...((payload && payload.payment) || {}), ticketType: (payload && payload.ticketType) || f.ticket_type || undefined },
       pesapalTransactionId: verification.transactionId || (payload && payload.pesapalTransactionId),
       pesapalConfirmationCode: verification.confirmationCode || (payload && payload.pesapalConfirmationCode),
+      salePayoutEligible,
     });
     createdRows.push(row);
   }
@@ -255,10 +255,7 @@ async function processOne(admin, f) {
   if (idsError) throw idsError;
   await persistInstallmentTicketIds(admin, f, createdIds);
 
-  for (const row of createdRows) {
-    await insertTicketNotification(admin, event, row);
-
-  }
+  await insertTicketNotification(admin, event, createdRows);
 
   await enqueueTicketEmailJobs(admin, event, createdRows, f.buyer_email, f.id);
 

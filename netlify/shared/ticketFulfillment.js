@@ -315,26 +315,43 @@ async function uploadImageDataUrl(dataUrl, pathPrefix, filenameBase) {
 
 // ─── Ticket-sale notification ───────────────────────────────────────────────
 
-async function insertTicketNotification(admin, event, ticket) {
+async function insertTicketNotification(admin, event, ticketOrTickets) {
   try {
     const eventRow = event || {};
+    const tickets = Array.isArray(ticketOrTickets) ? ticketOrTickets : [ticketOrTickets];
+    const validTickets = tickets.filter(Boolean);
+    if (!validTickets.length) return;
     const eventName = eventRow.name || 'your event';
+    const typeCounts = new Map();
+    validTickets.forEach((ticket) => {
+      const type = String(ticket.entry_fee_type || ticket.ticket_type || 'Standard').trim() || 'Standard';
+      typeCounts.set(type, (typeCounts.get(type) || 0) + 1);
+    });
+    const ticketSummary = [...typeCounts.entries()]
+      .map(([type, count]) => `${count} ${type}`)
+      .join(', ');
+    const ticketIds = validTickets.map((ticket) => ticket.id).filter(Boolean);
+    const paymentId = validTickets.find((ticket) => ticket.payment_id)?.payment_id;
+    const notificationKey = `ticket_purchase:${paymentId || ticketIds.slice().sort().join(',')}`;
     await notifyEventOrganizersAndAdmins({
       supabase: admin,
       eventRow,
       payload: {
         title: '🎫 New Ticket Purchased',
-        body: `A ticket was purchased for ${eventName}.`,
+        body: `${ticketSummary} ticket${validTickets.length === 1 ? '' : 's'} purchased for ${eventName}.`,
         type: NOTIFICATION_TYPES.TICKET,
         deepLink: eventRow.slug ? `/events/${eventRow.slug}` : '/profile/admin/dashboard',
         data: {
           kind: 'ticket_purchase',
-          notificationKey: `ticket_purchase:${ticket.id}`,
+          notificationKey,
           eventId: eventRow.slug || eventRow.id || '',
           eventSlug: eventRow.slug || '',
           eventName,
-          ticketId: ticket.id,
-          ticketType: ticket.entry_fee_type || ticket.ticket_type || '',
+          ticketId: ticketIds[0] || '',
+          ticketIds,
+          ticketCount: validTickets.length,
+          ticketType: typeCounts.size === 1 ? [...typeCounts.keys()][0] : '',
+          ticketTypes: Object.fromEntries(typeCounts),
         },
       },
     });
@@ -455,6 +472,7 @@ async function createTicketServerSide(admin, {
   payment,             // { method, provider?, number?, name?, cardName?, bankName?, accountNumber?, accountName? }
   pesapalTransactionId,
   pesapalConfirmationCode,
+  salePayoutEligible = false,
 }) {
   const eventSlug = event.slug || event.id;
   // Match the client model exactly: the app treats the public slug as the
@@ -538,7 +556,9 @@ async function createTicketServerSide(admin, {
     is_late_purchase: isLatePurchase,
     is_scanned: false,
     expires_at: expiresAt.toISOString(),
-    payout_eligible: false,
+    // Sale-time eligibility is a verified-payment snapshot. It must be
+    // supplied by fulfill-purchase, never by a browser payload.
+    payout_eligible: salePayoutEligible === true,
     payout_status: 'pending',
     payment_id: paymentId,
     payment_status: 'completed',

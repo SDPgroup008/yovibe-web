@@ -26,7 +26,7 @@ exports.handler = async (event) => {
 
     if (action === 'tickets') {
       const { data, error } = await admin.from('tickets')
-        .select('id,event_id,event_name,entry_fee_type,total_amount,venue_revenue,app_commission,gateway_fee,is_late_purchase,is_scanned,status,payout_eligible,payout_status,purchase_date,payment_method,created_at,refund_status')
+        .select('id,event_id,event_name,entry_fee_type,total_amount,venue_revenue,app_commission,gateway_fee,is_late_purchase,is_scanned,status,payout_eligible,payout_status,purchase_date,payment_method,payment_status,created_at,refund_status')
         .eq('event_slug', eventId)
         .order('purchase_date', { ascending: false })
         .limit(500);

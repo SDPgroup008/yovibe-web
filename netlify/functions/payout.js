@@ -10,6 +10,7 @@ const { otpMatches } = require('../shared/payoutOtp');
 const { notifyPayoutTerminal } = require('../shared/personalNotifications');
 
 const ACTIVE_REFUND_STATES = ['pending_admin_review', 'approved', 'processing', 'submitted', 'completed', 'needs_attention'];
+const PAYABLE_TICKET_STATUSES = ['active', 'used'];
 
 function amountNumber(value) {
   const n = Number(value);
@@ -86,8 +87,8 @@ function buildRecipient(payoutEvent, requested) {
 
 async function releaseTickets(admin, ticketIds, currentStatus) {
   await admin.from('tickets').update({ payout_status: 'pending', payout_eligible: true })
-    .in('id', ticketIds).eq('payout_status', currentStatus).eq('status', 'used')
-    .eq('is_scanned', true).eq('refund_status', 'none');
+    .in('id', ticketIds).eq('payout_status', currentStatus)
+    .in('status', PAYABLE_TICKET_STATUSES).eq('refund_status', 'none');
 }
 
 exports.handler = async (event) => {
@@ -162,8 +163,9 @@ exports.handler = async (event) => {
     const claimedStatus = payoutMethod === 'mobile_money' ? 'processing' : 'pending_review';
     const { data: claimed, error: claimError } = await admin.from('tickets')
       .update({ payout_status: claimedStatus, payout_eligible: false }).in('id', ticketIds)
-      .eq('status', 'used').eq('is_scanned', true).eq('payout_status', 'pending')
-      .eq('payout_eligible', true).eq('refund_status', 'none').select('id');
+      .in('status', PAYABLE_TICKET_STATUSES).eq('payment_status', 'completed')
+      .eq('payout_status', 'pending').eq('payout_eligible', true)
+      .eq('refund_status', 'none').select('id');
     if (claimError) throw claimError;
     if (!claimed || claimed.length !== ticketIds.length) {
       if (claimed?.length) await releaseTickets(admin, claimed.map((ticket) => ticket.id), claimedStatus);

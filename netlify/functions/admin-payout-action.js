@@ -87,7 +87,7 @@ exports.handler = async (event) => {
         await admin.from("tickets")
           .update({ payout_status: "pending", payout_eligible: true })
           .in("id", ticketIds).eq("payout_status", "pending_review")
-          .eq("status", "used").eq("is_scanned", true).eq("refund_status", "none");
+          .in("status", ["active", "used"]).eq("refund_status", "none");
       }
       await notifyPayoutTerminal({ supabase: admin, payout, status: "rejected" })
         .catch((notificationError) => console.warn("admin-payout-action: terminal notification skipped:", notificationError.message));

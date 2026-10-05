@@ -80,10 +80,9 @@ function buildSummaryText(mode, events) {
   return {
     title,
     body: `${names.join(' • ')}${suffix}. See more events in YoVibe.`,
-    // The device notification uses the collage for event names and posters;
-    // keeping this body short prevents the OS from showing a duplicate list
-    // of names beside the image. The in-app notification keeps the richer body.
-    pushBody: `${count} event${count === 1 ? '' : 's'} happening ${period}. Tap to view event posters.`,
+    // System notifications use event names again. The in-app notification
+    // center still retains the richer poster previews.
+    pushBody: `${names.join(' • ')}${suffix}. See more events in YoVibe.`,
   };
 }
 
@@ -136,7 +135,6 @@ function serializeEventPreviews(previews) {
 }
 
 function buildFcmMessage(summary, notificationId, dedupeKey) {
-  const imageUrl = summary.collageUrl || summary.imageUrl;
   const data = {
     type: 'upcoming_summary',
     summaryMode: summary.mode,
@@ -145,8 +143,6 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
     eventIds: JSON.stringify(summary.previews.map((event) => event.slug)),
     eventPreviews: serializeEventPreviews(summary.previews),
     totalEventCount: String(summary.events.length),
-    ...(imageUrl ? { imageUrl } : {}),
-    ...(summary.collageUrl ? { collageUrl: summary.collageUrl } : {}),
     deepLink: summary.deepLink,
     url: summary.deepLink,
     rangeStart: summary.range.start,
@@ -157,8 +153,7 @@ function buildFcmMessage(summary, notificationId, dedupeKey) {
     message: {
       notification: {
         title: summary.title,
-        body: summary.pushBody || summary.body,
-        ...(imageUrl ? { image: imageUrl } : {}),
+        body: summary.body,
       },
       data,
       webpush: {
@@ -274,7 +269,7 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
 
   await updateNotificationData(supabase, notificationId, notificationData);
 
-  const message = buildMulticastMessage({ ...summary, collageUrl }, notificationId, dedupeKey);
+  const message = buildMulticastMessage(summary, notificationId, dedupeKey);
   try {
     const delivery = await sendToActiveTokens({ supabase, message });
     notificationData = {

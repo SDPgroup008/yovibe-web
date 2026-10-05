@@ -5,12 +5,13 @@
 
 function ticketIsPayable(t) {
   const refundState = t.refund_status || 'none';
+  const ticketStatus = t.status || 'active';
   return (
     t.payout_eligible === true &&
     (t.payout_status || 'pending') === 'pending' &&
     refundState === 'none' &&
-    t.status === 'used' &&
-    t.is_scanned === true
+    t.payment_status === 'completed' &&
+    ['active', 'used'].includes(ticketStatus)
   );
 }
 

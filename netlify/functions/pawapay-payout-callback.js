@@ -103,7 +103,7 @@ exports.handler = async (event) => {
           await admin.from('tickets')
             .update({ payout_status: 'pending', payout_eligible: true })
             .in('id', ticketIds).eq('payout_status', 'processing')
-            .eq('status', 'used').eq('is_scanned', true).eq('refund_status', 'none');
+            .in('status', ['active', 'used']).eq('refund_status', 'none');
         }
         if ((nextStatus === 'completed' || nextStatus === 'failed') && payout.status !== nextStatus) {
           await notifyPayoutTerminal({

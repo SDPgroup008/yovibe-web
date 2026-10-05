@@ -66,7 +66,7 @@ describe('event summary multicast delivery', () => {
     }, 'notification-id', 'today:2026-09-30:09');
 
     expect(message.topic).toBeUndefined();
-    expect(message.notification.image).toBe('https://cdn.example.com/poster.jpg');
+    expect(message.notification.image).toBeUndefined();
     expect(message.webpush.fcmOptions.link).toBe('https://yovibe.net/events');
   });
 

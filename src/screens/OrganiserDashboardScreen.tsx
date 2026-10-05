@@ -241,7 +241,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [withdrawLoading, setWithdrawLoading] = useState(false)
   
   // Payout slider state
-  const [payoutTicketTypes, setPayoutTicketTypes] = useState<Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }>>({})
+  const [payoutTicketTypes, setPayoutTicketTypes] = useState<Record<string, { total: number; price: number; eligibleIds: string[]; isTable?: boolean; tableSize?: number }>>({})
   const [payoutSelections, setPayoutSelections] = useState<Record<string, number>>({})
   const [payoutPhone, setPayoutPhone] = useState("")
   const [payoutPhoneConfirm, setPayoutPhoneConfirm] = useState("")
@@ -256,8 +256,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [bankAccountNumber, setBankAccountNumber] = useState("")
   const [bankAccountName, setBankAccountName] = useState("")
   const [payoutFieldErrors, setPayoutFieldErrors] = useState<Record<string, string>>({})
-  // Maps ticketId → payment_method for filtering payouts by tab
-  const [scannedPaymentMethods, setScannedPaymentMethods] = useState<Record<string, string>>({})
+  // Maps an eligible ticket id to its completed payment method for payout tabs.
+  const [paymentMethodsByTicketId, setPaymentMethodsByTicketId] = useState<Record<string, string>>({})
 
   const [ticketSalesByType, setTicketSalesByType] = useState<Record<string, { early: { count: number; revenue: number }; late: { count: number; revenue: number }; scanned: { count: number; revenue: number } }>>({})
   const [organizerPaymentDetails, setOrganizerPaymentDetails] = useState<{
@@ -312,6 +312,9 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [eventCreatorPaymentDetails, setEventCreatorPaymentDetails] = useState<any>(null)
   const [eventStatusExpanded, setEventStatusExpanded] = useState(false)
   const [lateFeeExpanded, setLateFeeExpanded] = useState(false)
+  const [salePayoutEnabled, setSalePayoutEnabled] = useState(false)
+  const [payoutEligibilityLoading, setPayoutEligibilityLoading] = useState(false)
+  const [payoutEligibilityUpdating, setPayoutEligibilityUpdating] = useState(false)
 
   const confirmEventStatusChange = async () => {
     if (!event || !pendingEventAction) {
@@ -496,6 +499,8 @@ const OrganiserDashboardScreen: React.FC = () => {
       status: row.status || "pending",
       payoutEligible: row.payout_eligible ?? row.payoutEligible ?? false,
       payoutStatus: row.payout_status || row.payoutStatus || "pending",
+      paymentStatus: row.payment_status || row.paymentStatus || "",
+      refundStatus: row.refund_status || row.refundStatus || "none",
       purchaseDate: row.purchase_date || row.purchaseDate,
       paymentMethod: row.payment_method || row.paymentMethod,
       created_at: row.created_at,
@@ -511,12 +516,12 @@ const OrganiserDashboardScreen: React.FC = () => {
     let earlyCount = 0, lateCount = 0, totalRevenue = 0, eligibleTotal = 0
     let totalAppCommission = 0, totalGatewayFees = 0
     const salesByType: TicketSalesByType = {}
-    const payoutTypes: Record<string, { total: number; price: number; scannedIds: string[]; isTable?: boolean; tableSize?: number }> = {}
+    const payoutTypes: Record<string, { total: number; price: number; eligibleIds: string[]; isTable?: boolean; tableSize?: number }> = {}
 
     if (event?.entryFees) {
       event.entryFees.forEach((fee: { name: string; amount: string; isTable?: boolean; tableSize?: number }) => {
         salesByType[fee.name] = { early: { count: 0, revenue: 0 }, late: { count: 0, revenue: 0 }, scanned: { count: 0, revenue: 0 } }
-        payoutTypes[fee.name] = { total: 0, price: parseInt(fee.amount?.replace(/[^0-9]/g, "") || "0"), scannedIds: [], isTable: fee.isTable || false, tableSize: fee.tableSize || 1 }
+        payoutTypes[fee.name] = { total: 0, price: parseInt(fee.amount?.replace(/[^0-9]/g, "") || "0"), eligibleIds: [], isTable: fee.isTable || false, tableSize: fee.tableSize || 1 }
       })
     }
 
@@ -527,7 +532,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const isLate = t.isLatePurchase
       const isScanned = t.isScanned || t.status === "used"
       const refundState = t.refundStatus ?? t.refund_status ?? "none"
-      const isEligible = t.payoutEligible === true && t.payoutStatus === "pending" && refundState === "none"
+      const isEligible = t.payoutEligible === true && t.payoutStatus === "pending" && t.paymentStatus === "completed" && refundState === "none" && (t.status === "active" || t.status === "used")
       const tPaymentMethod = t.paymentMethod || "mobile_money"
 
       if (isLate) lateCount++; else earlyCount++
@@ -545,15 +550,16 @@ const OrganiserDashboardScreen: React.FC = () => {
         salesByType[ticketType].scanned.revenue += amount
       }
 
-      // Track for payout (use scanned & payout-eligible tickets only)
-      if (isScanned && isEligible) {
+      // Eligible rows may be active (sale-time eligibility) or used
+      // (the default scan-gated policy).
+      if (isEligible) {
         if (!payoutTypes[ticketType]) {
-          payoutTypes[ticketType] = { total: 0, price: t.venueRevenue || 0, scannedIds: [], isTable: false, tableSize: 1 }
+          payoutTypes[ticketType] = { total: 0, price: t.venueRevenue || 0, eligibleIds: [], isTable: false, tableSize: 1 }
         }
         // Override the initial price from entryFees (full amount) with actual venueRevenue (price - app fees)
         payoutTypes[ticketType].price = t.venueRevenue || 0
         payoutTypes[ticketType].total++
-        payoutTypes[ticketType].scannedIds.push(t.id)
+        payoutTypes[ticketType].eligibleIds.push(t.id)
       }
     })
 
@@ -563,7 +569,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const t = rowToTicket(ticket)
       pmMap[t.id] = t.paymentMethod || "mobile_money"
     })
-    setScannedPaymentMethods(pmMap)
+    setPaymentMethodsByTicketId(pmMap)
 
     setTicketSalesEarly(earlyCount)
     setTicketSalesLate(lateCount)
@@ -592,6 +598,72 @@ const OrganiserDashboardScreen: React.FC = () => {
     } catch (error) { console.error("OrganiserDashboardScreen: Error fetching tickets:", error) }
   }, [eventId, processTicketData])
 
+  const fetchPayoutEligibility = useCallback(async () => {
+    if (!eventId || !user) return
+    setPayoutEligibilityLoading(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) return
+      const response = await fetch(`/.netlify/functions/event-payout-eligibility?eventId=${encodeURIComponent(eventId)}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "Unable to load payout eligibility")
+      setSalePayoutEnabled(payload.salePayoutEnabled === true)
+    } catch (error) {
+      console.error("OrganiserDashboardScreen: Error loading payout eligibility:", error)
+      setSalePayoutEnabled(false)
+    } finally {
+      setPayoutEligibilityLoading(false)
+    }
+  }, [eventId, user])
+
+  const updateSalePayoutEligibility = async (nextEnabled: boolean) => {
+    if (!eventId || user?.userType !== "admin") return
+    setPayoutEligibilityUpdating(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error("Session expired. Please sign in again.")
+      const response = await fetch("/.netlify/functions/event-payout-eligibility", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ eventId, salePayoutEnabled: nextEnabled }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.error || "Unable to update payout eligibility")
+      setSalePayoutEnabled(payload.salePayoutEnabled === true)
+      Alert.alert(
+        nextEnabled ? "Sale-Time Eligibility Enabled" : "Sale-Time Eligibility Disabled",
+        nextEnabled
+          ? "Future successfully paid tickets for this event can be selected for payout before scanning. No payout is sent automatically."
+          : "Future ticket sales return to scan-based payout eligibility. Tickets already eligible remain unchanged.",
+      )
+      await fetchTicketData()
+    } catch (error: any) {
+      Alert.alert("Unable to Update", error?.message || "Please try again.")
+    } finally {
+      setPayoutEligibilityUpdating(false)
+    }
+  }
+
+  const confirmSalePayoutEligibilityChange = () => {
+    const nextEnabled = !salePayoutEnabled
+    Alert.alert(
+      nextEnabled ? "Enable Sale-Time Eligibility?" : "Disable Sale-Time Eligibility?",
+      nextEnabled
+        ? "Future successfully paid tickets for this event will become eligible for payout without waiting to be scanned. Organisers must still request and authorise payouts with their OTP."
+        : "Future ticket sales will require scanning before payout eligibility. Tickets that were already eligible will remain eligible.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: nextEnabled ? "Enable" : "Disable",
+          style: nextEnabled ? "default" : "destructive",
+          onPress: () => { void updateSalePayoutEligibility(nextEnabled) },
+        },
+      ],
+    )
+  }
+
   const fetchScanLogs = useCallback(async () => {
     if (!eventId) return
     try {
@@ -615,6 +687,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     load()
   }, [eventId])
   useEffect(() => { fetchScanLogs() }, [fetchScanLogs])
+  useEffect(() => { void fetchPayoutEligibility() }, [fetchPayoutEligibility])
   useEffect(() => { if (!eventId) return; fetchTicketData()
     const vc = supabase.channel(`validations-${eventId}`).on('postgres_changes', { event: '*', schema: 'public', table: 'ticket_validations', filter: `event_slug=eq.${eventId}` }, () => fetchScanLogs()).subscribe()
     return () => { supabase.removeChannel(vc) }
@@ -979,7 +1052,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     /* console.log("[PayoutSubmit] ✅ Validation passed") */
     /* console.log("[PayoutSubmit]    payoutSelections:", JSON.stringify(payoutSelections)) */
     /* console.log("[PayoutSubmit]    payoutTicketTypes keys:", Object.keys(payoutTicketTypes)) */
-    /* console.log("[PayoutSubmit]    scannedPaymentMethods keys:", Object.keys(scannedPaymentMethods).length) */
+    /* console.log("[PayoutSubmit]    paymentMethodsByTicketId keys:", Object.keys(paymentMethodsByTicketId).length) */
     /* console.log("[PayoutSubmit]    eligiblePayoutTotal:", eligiblePayoutTotal) */
 
     // Collect selected tickets filtered by payment method
@@ -995,25 +1068,19 @@ const OrganiserDashboardScreen: React.FC = () => {
         const isTableType = data.isTable || false
         const tableSize = data.tableSize || 1
         const actualTicketCount = isTableType ? count * tableSize : count
-        const allIds = data.scannedIds.slice(0, actualTicketCount)
-        /* console.log(`[PayoutSubmit]    → Type ${type}: allIds[0..${actualTicketCount}] = ${allIds.length} IDs`) */
-        
-        // Filter by payment method
-        const filteredIds = allIds.filter(id => {
-          const pm = scannedPaymentMethods[id] || "mobile_money"
-          const match = pm === targetMethod
-          if (!match) /* console.log(`[PayoutSubmit]    → Filtering OUT ticket ${id.slice(0,12)}... (pm=${pm}, target=${targetMethod})`) */
-          return match
-        })
-        /* console.log(`[PayoutSubmit]    → After filter: ${filteredIds.length} IDs match ${targetMethod}`) */
-        if (filteredIds.length === 0) {
+        // Filter before slicing so a mixed card/mobile ticket type cannot
+        // consume the requested count with tickets from the other payout tab.
+        const matchingIds = data.eligibleIds.filter(id => (paymentMethodsByTicketId[id] || "mobile_money") === targetMethod)
+        const selectedIdsForType = matchingIds.slice(0, actualTicketCount)
+        /* console.log(`[PayoutSubmit]    → Type ${type}: ${selectedIdsForType.length}/${actualTicketCount} IDs match ${targetMethod}`) */
+        if (selectedIdsForType.length === 0) {
           /* console.log(`[PayoutSubmit]    → ⚠️ No ${targetMethod} tickets for type ${type}, skipping`) */
           continue
         }
-        selectedTicketIds.push(...filteredIds)
+        selectedTicketIds.push(...selectedIdsForType)
         const addedAmount = Math.round(count * (isTableType ? (data.price * tableSize) : (data.price || 0)) * 100) / 100
         totalAmount += addedAmount
-        /* console.log(`[PayoutSubmit]    → Added ${filteredIds.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`) */
+        /* console.log(`[PayoutSubmit]    → Added ${selectedIdsForType.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`) */
       } else {
         /* console.log(`[PayoutSubmit]    → Skipping type ${type} (count=${count}, exists=${!!payoutTicketTypes[type]})`) */
       }
@@ -1161,14 +1228,14 @@ const OrganiserDashboardScreen: React.FC = () => {
 
             {/* Ticket type sliders */}
             {Object.entries(payoutTicketTypes).length === 0 ? (
-              <Text style={{ color: "#888", textAlign: "center", padding: 30 }}>No scanned tickets eligible for payout</Text>
+              <Text style={{ color: "#888", textAlign: "center", padding: 30 }}>No tickets are currently eligible for payout</Text>
             ) : (
               Object.entries(payoutTicketTypes).map(([typeName, data]) => {
                 const isTableType = data.isTable || false
                 const tableSize = data.tableSize || 1
                 const targetMethod = payoutTab === "mobile_money" ? "mobile_money" : "credit_card"
                 // Count only tickets matching the active tab's payment method
-                const filteredCount = data.scannedIds.filter(id => (scannedPaymentMethods[id] || "mobile_money") === targetMethod).length
+                const filteredCount = data.eligibleIds.filter(id => (paymentMethodsByTicketId[id] || "mobile_money") === targetMethod).length
                 // For table types: slider counts in tables (1 = 1 full table)
                 const sliderMax = isTableType ? Math.floor(filteredCount / tableSize) : filteredCount
                 const sliderPrice = isTableType ? data.price * tableSize : data.price
@@ -1645,7 +1712,13 @@ const OrganiserDashboardScreen: React.FC = () => {
               <Text style={styles.eligibleAmount}>UGX {eligiblePayoutTotal.toLocaleString()}</Text>
             </View>
           </View>
-          <Text style={styles.eligibleDesc}>Select tickets by type to cash out</Text>
+          <Text style={styles.eligibleDesc}>
+            {payoutEligibilityLoading
+              ? "Checking this event's payout policy..."
+              : salePayoutEnabled
+                ? "Verified sales are eligible before scanning. Select tickets by type to cash out."
+                : "Tickets become eligible after scanning. Select tickets by type to cash out."}
+          </Text>
           <TouchableOpacity style={[styles.withdrawBtn, eligiblePayoutTotal === 0 && { opacity: 0.4 }]} onPress={() => setShowWithdrawModal(true)} disabled={eligiblePayoutTotal === 0}>
             <Ionicons name="cash-outline" size={20} color="#FFF" />
             <Text style={styles.withdrawBtnText}>Withdraw Earnings</Text>
@@ -1856,6 +1929,39 @@ const OrganiserDashboardScreen: React.FC = () => {
                 </View>}
               </View>
             )}
+
+            {/* Per-event payout policy — administrators only */}
+            <View style={styles.dashboardSection}>
+              <Text style={styles.dashboardSectionTitle}>⚙️ Payout Eligibility Policy</Text>
+              <View style={styles.dashboardCard}>
+                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "700" }}>Eligible after successful sale</Text>
+                    <Text style={{ color: "#888", fontSize: 12, marginTop: 4, lineHeight: 17 }}>
+                      {salePayoutEnabled
+                        ? "New verified sales can be paid out before ticket scanning."
+                        : "New tickets become eligible after a successful scan."}
+                    </Text>
+                  </View>
+                  <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: salePayoutEnabled ? "rgba(16,185,129,0.16)" : "rgba(148,163,184,0.14)" }}>
+                    <Text style={{ color: salePayoutEnabled ? "#10B981" : "#94A3B8", fontSize: 11, fontWeight: "800" }}>
+                      {payoutEligibilityLoading ? "LOADING" : salePayoutEnabled ? "ENABLED" : "SCAN-GATED"}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={{ color: "#F59E0B", fontSize: 11, lineHeight: 16, marginTop: 12 }}>
+                  This changes future completed sales only. It never sends a payout automatically and does not change existing ticket eligibility.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.withdrawBtn, { marginTop: 14, backgroundColor: salePayoutEnabled ? "#475569" : "#0F766E" }, (payoutEligibilityLoading || payoutEligibilityUpdating) && { opacity: 0.55 }]}
+                  disabled={payoutEligibilityLoading || payoutEligibilityUpdating}
+                  onPress={confirmSalePayoutEligibilityChange}
+                >
+                  {payoutEligibilityUpdating ? <ActivityIndicator size="small" color="#FFF" /> : <Ionicons name={salePayoutEnabled ? "pause-circle-outline" : "flash-outline"} size={20} color="#FFF" />}
+                  <Text style={styles.withdrawBtnText}>{salePayoutEnabled ? "Use Scan-Gated Eligibility" : "Enable Sale-Time Eligibility"}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
             {/* Admin Revenue Summary */}
             <View style={styles.dashboardSection}>
