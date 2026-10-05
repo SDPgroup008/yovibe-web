@@ -93,7 +93,10 @@ export default function NotificationScreen() {
       case "upcoming_summary":
         return "📊"
       case "ticket_purchase":
+      case "ticket_update":
         return "🎫"
+      case "payout_update":
+        return "💸"
       case "ticket_validation":
         return "✅"
       case "payment_confirmation":
@@ -114,7 +117,10 @@ export default function NotificationScreen() {
       case "event_summary":
         return "#FFF3E0"
       case "ticket_purchase":
+      case "ticket_update":
         return "#F3E5F5"
+      case "payout_update":
+        return "#E8F5E9"
       case "payment_confirmation":
         return "#E8F5E9"
       default:

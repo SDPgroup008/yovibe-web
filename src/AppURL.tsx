@@ -6,7 +6,7 @@ import { RouterProvider, routes } from './utils/routes';
 import { DesktopLayout, MobileLayout } from './components/Navigation';
 import PermissionBanner from './components/PermissionBanner';
 import NotificationBanner from './components/NotificationBanner';
-import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled } from './config/firebase';
+import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled, getWebPushAvailability } from './config/firebase';
 import { onMessage } from 'firebase/messaging';
 import NotificationService from './services/NotificationService';
 import LoginScreen from './screens/auth/LoginScreen';
@@ -58,7 +58,7 @@ const MainApp: React.FC = () => {
 
   // Keep existing notification logic
   useEffect(() => {
-    if (!notificationsEnabled) return;
+    if (!notificationsEnabled || !getWebPushAvailability().supported) return;
     // Service worker registration (existing logic)
     (async () => {
       if ("serviceWorker" in navigator) {
@@ -110,7 +110,7 @@ const MainApp: React.FC = () => {
   // Foreground notification listener. Firebase Messaging initializes
   // asynchronously, and focused pages need an explicit system notification.
   useEffect(() => {
-    if (!notificationsEnabled) return;
+    if (!notificationsEnabled || !getWebPushAvailability().supported) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 

@@ -16,6 +16,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getAdminClient } = require('./supabaseAdmin');
 const { requiredEnv, assertPesapalUrl, assertPawaPayUrl, getSiteUrl } = require('./runtimeConfig');
 const { uploadObject, deleteObject, privateKeyFromReference } = require('./r2');
+const { notifyEventOrganizersAndAdmins, NOTIFICATION_TYPES } = require('./personalNotifications');
 
 const APP_COMMISSION_RATE = 0.15;
 
@@ -312,21 +313,33 @@ async function uploadImageDataUrl(dataUrl, pathPrefix, filenameBase) {
   return uploadToR2(key, bytes, mime, 'private');
 }
 
-// ─── Notification (replicates NotificationService.notifyTicketPurchase) ─────
+// ─── Ticket-sale notification ───────────────────────────────────────────────
 
 async function insertTicketNotification(admin, event, ticket) {
   try {
-    const { error } = await admin.from('notifications').insert({
-      user_id: event.created_by || event.created_by_auth || '',
-      title: '🎫 New Ticket Purchased',
-      body: `${ticket.buyer_name} purchased a ticket for ${event.name}`,
-      type: 'ticket_purchase',
-      data: { eventId: event.slug || event.id, ticketId: ticket.id, buyerName: ticket.buyer_name },
-      is_read: false,
+    const eventRow = event || {};
+    const eventName = eventRow.name || 'your event';
+    await notifyEventOrganizersAndAdmins({
+      supabase: admin,
+      eventRow,
+      payload: {
+        title: '🎫 New Ticket Purchased',
+        body: `A ticket was purchased for ${eventName}.`,
+        type: NOTIFICATION_TYPES.TICKET,
+        deepLink: eventRow.slug ? `/events/${eventRow.slug}` : '/profile/admin/dashboard',
+        data: {
+          kind: 'ticket_purchase',
+          notificationKey: `ticket_purchase:${ticket.id}`,
+          eventId: eventRow.slug || eventRow.id || '',
+          eventSlug: eventRow.slug || '',
+          eventName,
+          ticketId: ticket.id,
+          ticketType: ticket.entry_fee_type || ticket.ticket_type || '',
+        },
+      },
     });
-    if (error) console.warn('[TicketFulfillment] Notification insert skipped:', error.message);
   } catch (e) {
-    console.warn('[TicketFulfillment] Notification insert error:', e.message);
+    console.warn('[TicketFulfillment] Ticket-sale notification skipped:', e.message);
   }
 }
 

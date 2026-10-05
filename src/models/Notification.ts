@@ -11,7 +11,7 @@ export interface AppNotification {
   userId?: string // If null, it's a broadcast notification
   title: string
   body: string
-  type: "event_summary" | "ticket_purchase" | "ticket_validation" | "payment_confirmation" | "event_reminder" | "welcome" | "upcoming_summary" | "refund_update" | "event_status_change" | "other"
+  type: "event_summary" | "ticket_purchase" | "ticket_update" | "ticket_validation" | "payment_confirmation" | "event_reminder" | "welcome" | "upcoming_summary" | "refund_update" | "payout_update" | "event_status_change" | "other"
   data?: Record<string, any>
   imageUrl?: string
   deepLink?: string

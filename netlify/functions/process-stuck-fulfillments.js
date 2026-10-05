@@ -131,7 +131,11 @@ async function processOne(admin, f) {
       .in('id', existingIds);
     if (existingError) throw existingError;
     await persistInstallmentTicketIds(admin, f, existingIds);
-    await enqueueTicketEmailJobs(admin, await loadEvent(admin, f.event_id), existingTickets || [], f.buyer_email, f.id);
+    const existingEvent = await loadEvent(admin, f.event_id);
+    for (const ticket of existingTickets || []) {
+      await insertTicketNotification(admin, existingEvent, ticket);
+    }
+    await enqueueTicketEmailJobs(admin, existingEvent, existingTickets || [], f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Tickets already created; marking fulfilled');
     return 'succeeded';
   }
@@ -176,6 +180,9 @@ async function processOne(admin, f) {
     const recoveredIds = recoveredTickets.map((ticket) => ticket.id);
     await admin.from('pending_ticket_fulfillments').update({ ticket_ids: recoveredIds }).eq('id', f.id);
     await persistInstallmentTicketIds(admin, f, recoveredIds);
+    for (const ticket of recoveredTickets) {
+      await insertTicketNotification(admin, event, ticket);
+    }
     await enqueueTicketEmailJobs(admin, event, recoveredTickets, f.buyer_email, f.id);
     await bump(admin, f, 'fulfilled', 'Recovered tickets created before worker interruption');
     return 'succeeded';

@@ -7,6 +7,7 @@ const { requireUser, json } = require('../shared/supabaseAdmin');
 const { ticketIsPayable } = require('../shared/payoutRules');
 const { submitPawaPayPayout } = require('./create-pawapay-payout');
 const { otpMatches } = require('../shared/payoutOtp');
+const { notifyPayoutTerminal } = require('../shared/personalNotifications');
 
 const ACTIVE_REFUND_STATES = ['pending_admin_review', 'approved', 'processing', 'submitted', 'completed', 'needs_attention'];
 
@@ -209,6 +210,12 @@ exports.handler = async (event) => {
       } catch (providerError) {
         await admin.from('payouts').update({ status: 'failed', admin_note: providerError.message, updated_at: new Date().toISOString() })
           .eq('id', payout.id).eq('status', 'processing');
+        await notifyPayoutTerminal({
+          supabase: admin,
+          payout: { ...payout, status: 'failed' },
+          eventRow: payoutEvent,
+          status: 'failed',
+        }).catch((notificationError) => console.warn('[Payout] Failure notification skipped:', notificationError.message));
         await releaseTickets(admin, ticketIds, claimedStatus);
         throw Object.assign(new Error(providerError.message || 'PawaPay payout initiation failed'), { statusCode: 502 });
       }

@@ -1,4 +1,4 @@
-const fs = require('fs');
+const { sendToActiveTokens } = require('./personalNotifications');
 
 const KAMPALA_OFFSET_MS = 3 * 60 * 60 * 1000;
 const MAX_PREVIEWS = 3;
@@ -8,12 +8,6 @@ const PUBLIC_EVENTS_PATH = '/events';
 // broadcasts are promotional content; summaryMode in data distinguishes
 // today's and week's broadcasts without introducing a new database type.
 const NOTIFICATION_TYPE = 'promotion';
-
-function requiredEnv(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is not configured`);
-  return value;
-}
 
 function getPublicSiteUrl() {
   const value = process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL;
@@ -200,99 +194,6 @@ function buildMulticastMessage(summary, notificationId, dedupeKey) {
       fcmOptions: { link: summary.deepLink },
     },
   };
-}
-
-function loadServiceAccount() {
-  const configuredPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-  if (configuredPath && fs.existsSync(configuredPath)) {
-    try {
-      return JSON.parse(fs.readFileSync(configuredPath, 'utf8'));
-    } catch {
-      throw new Error('GOOGLE_APPLICATION_CREDENTIALS is not valid JSON');
-    }
-  }
-
-  const raw = requiredEnv('FIREBASE_SERVICE_ACCOUNT');
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error('FIREBASE_SERVICE_ACCOUNT is not valid JSON');
-  }
-}
-
-let firebaseMessaging;
-
-function getFirebaseMessaging() {
-  if (firebaseMessaging) return firebaseMessaging;
-  const { cert, getApps, initializeApp } = require('firebase-admin/app');
-  const { getMessaging } = require('firebase-admin/messaging');
-  const app = getApps()[0] || initializeApp({
-    credential: cert(loadServiceAccount()),
-    projectId: requiredEnv('FIREBASE_PROJECT_ID'),
-  });
-  firebaseMessaging = getMessaging(app);
-  return firebaseMessaging;
-}
-
-async function listActiveTokens(supabase) {
-  const tokens = [];
-  const pageSize = 1000;
-  for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from('notification_tokens')
-      .select('token')
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .range(from, from + pageSize - 1);
-    if (error) throw error;
-    const page = (data || []).map((row) => row.token).filter(Boolean);
-    tokens.push(...page);
-    if (page.length < pageSize) break;
-  }
-  return [...new Set(tokens)];
-}
-
-function isStaleTokenError(error) {
-  return error?.code === 'messaging/registration-token-not-registered'
-    || error?.code === 'messaging/invalid-registration-token';
-}
-
-async function markStaleTokensInactive(supabase, tokens) {
-  if (!tokens.length) return 0;
-  const { error } = await supabase
-    .from('notification_tokens')
-    .update({ is_active: false, updated_at: new Date().toISOString() })
-    .in('token', tokens);
-  if (error) throw error;
-  return tokens.length;
-}
-
-async function sendToActiveTokens({ supabase, message }) {
-  const tokens = await listActiveTokens(supabase);
-  if (!tokens.length) {
-    return { targeted: 0, successful: 0, failed: 0, stale: 0 };
-  }
-
-  const messaging = getFirebaseMessaging();
-  const stats = { targeted: tokens.length, successful: 0, failed: 0, stale: 0 };
-  const batchSize = 500;
-
-  for (let offset = 0; offset < tokens.length; offset += batchSize) {
-    const batch = tokens.slice(offset, offset + batchSize);
-    const response = await messaging.sendEachForMulticast({ ...message, tokens: batch });
-    const staleTokens = [];
-    response.responses.forEach((result, index) => {
-      if (result.success) {
-        stats.successful += 1;
-      } else {
-        stats.failed += 1;
-        if (isStaleTokenError(result.error)) staleTokens.push(batch[index]);
-      }
-    });
-    stats.stale += await markStaleTokensInactive(supabase, staleTokens);
-  }
-
-  return stats;
 }
 
 async function findExistingBroadcast(supabase, dedupeKey) {

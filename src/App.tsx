@@ -21,7 +21,7 @@ try {
 }
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled } from "./config/firebase";
+import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled, getWebPushAvailability } from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
@@ -142,6 +142,13 @@ function AppContent() {
       console.warn("[PWA] Service worker not supported in this browser");
       return;
     }
+    const pushAvailability = getWebPushAvailability();
+    if (!pushAvailability.supported) {
+      if (pushAvailability.reason === 'ios-home-screen-required') {
+        console.info("[PWA] iOS web push requires installing YoVibe on the Home Screen");
+      }
+      return;
+    }
 
     let mounted = true;
 
@@ -214,7 +221,7 @@ function AppContent() {
 
   // Notification permission + token flow
   useEffect(() => {
-    if (!notificationsEnabled) return;
+    if (!notificationsEnabled || !getWebPushAvailability().supported) return;
     let currentPermission = "default";
     if (typeof Notification !== 'undefined' && Notification.permission) {
       currentPermission = Notification.permission;
@@ -249,7 +256,7 @@ function AppContent() {
   // asynchronous initialization. FCM does not display system notifications
   // automatically while the page is focused, so display one explicitly.
   useEffect(() => {
-    if (!notificationsEnabled) return;
+    if (!notificationsEnabled || !getWebPushAvailability().supported) return;
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
 

@@ -13,6 +13,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { verifyCallbackSignature } = require('../shared/pawapaySignatures');
+const { notifyPayoutTerminal } = require('../shared/personalNotifications');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -70,17 +71,18 @@ exports.handler = async (event) => {
     // stored PawaPay payout id in metadata.
     const { data: matched } = await admin
       .from('payouts')
-      .select('id, ticket_ids, metadata')
+      .select('id, ticket_ids, metadata, status, amount, event_id, organizer_id')
       .or(`transaction_reference.eq.${payoutId},metadata->>pawapay_payout_id.eq.${payoutId}`)
       .limit(5);
 
     if (matched && matched.length > 0) {
       const now = new Date().toISOString();
       for (const payout of matched) {
+        const nextStatus = normalized === 'completed' ? 'completed'
+          : normalized === 'failed' ? 'failed'
+          : 'processing';
         const update = {
-          status: normalized === 'completed' ? 'completed'
-            : normalized === 'failed' ? 'failed'
-            : 'processing',
+          status: nextStatus,
           processed_date: normalized === 'completed' ? now : null,
           metadata: {
             ...(payout.metadata && typeof payout.metadata === 'object' ? payout.metadata : {}),
@@ -102,6 +104,13 @@ exports.handler = async (event) => {
             .update({ payout_status: 'pending', payout_eligible: true })
             .in('id', ticketIds).eq('payout_status', 'processing')
             .eq('status', 'used').eq('is_scanned', true).eq('refund_status', 'none');
+        }
+        if ((nextStatus === 'completed' || nextStatus === 'failed') && payout.status !== nextStatus) {
+          await notifyPayoutTerminal({
+            supabase: admin,
+            payout: { ...payout, status: nextStatus },
+            status: nextStatus,
+          }).catch((notificationError) => console.warn('[PawaPayPayoutCallback] Terminal notification skipped:', notificationError.message));
         }
       }
     } else {

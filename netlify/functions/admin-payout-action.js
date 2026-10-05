@@ -9,6 +9,7 @@
 // payout on pending_admin_review.
 
 const { requireUser, json } = require("../shared/supabaseAdmin");
+const { notifyPayoutTerminal } = require("../shared/personalNotifications");
 
 function isAdmin(profile) { return profile?.user_type === "admin"; }
 function money(value) { const n = Number(value); return Number.isFinite(n) ? n : 0; }
@@ -88,9 +89,8 @@ exports.handler = async (event) => {
           .in("id", ticketIds).eq("payout_status", "pending_review")
           .eq("status", "used").eq("is_scanned", true).eq("refund_status", "none");
       }
-      await sendPayoutNotification(admin, payout.organizer_id, "❌ Payout Rejected",
-        `Your payout of UGX ${money(payout.amount).toLocaleString()} was rejected. Reason: ${note}`,
-        payoutId, "rejected");
+      await notifyPayoutTerminal({ supabase: admin, payout, status: "rejected" })
+        .catch((notificationError) => console.warn("admin-payout-action: terminal notification skipped:", notificationError.message));
       return json(200, { payout: data });
     }
 
@@ -126,9 +126,8 @@ exports.handler = async (event) => {
           throw ticketError;
         }
       }
-      await sendPayoutNotification(admin, payout.organizer_id, "✅ Payout Completed",
-        `Your payout of UGX ${money(payout.amount).toLocaleString()} was processed through PesaPal.`,
-        payoutId, "completed");
+      await notifyPayoutTerminal({ supabase: admin, payout: { ...payout, status: "completed" }, status: "completed" })
+        .catch((notificationError) => console.warn("admin-payout-action: terminal notification skipped:", notificationError.message));
       return json(200, { payout: data });
     }
 

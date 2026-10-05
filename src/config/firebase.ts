@@ -69,29 +69,28 @@ let messagingSupported = false;
 // Store messaging promise to avoid duplicate initialization
 let messagingPromise: Promise<typeof messaging> | null = null;
 
-// Check if this is iOS Safari - special handling needed
-// iOS Safari 16.4+ supports web push but Firebase's isSupported() may not detect it correctly
-function isIOSSafari(): boolean {
-  if (typeof navigator === 'undefined') return false;
-  const ua = navigator.userAgent || '';
-  const isIOS = /iPad|iPhone|iPod/.test(ua);
-  const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|EdgiOS/.test(ua);
-  const isMac = /Macintosh/.test(ua);
-  
-  // Also check for macOS Safari
-  if (isMac && isSafari) {
-    return true;
-  }
-  
-  return isIOS && isSafari;
-}
+export type WebPushAvailability = {
+  supported: boolean;
+  reason: 'supported' | 'ios-home-screen-required' | 'unsupported';
+};
 
-// Check iOS version
-function getIOSVersion(): number | null {
-  if (typeof navigator === 'undefined') return null;
+export function getWebPushAvailability(): WebPushAvailability {
+  if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+    return { supported: false, reason: 'unsupported' };
+  }
+  if (!('serviceWorker' in navigator) || typeof Notification === 'undefined' || !('PushManager' in window)) {
+    return { supported: false, reason: 'unsupported' };
+  }
   const ua = navigator.userAgent || '';
-  const match = ua.match(/OS (\d+)_/);
-  return match ? parseInt(match[1], 10) : null;
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1);
+  const standalone = Boolean(
+    window.matchMedia?.('(display-mode: standalone)').matches
+      || (navigator as Navigator & { standalone?: boolean }).standalone,
+  );
+  if (isIOS && !standalone) {
+    return { supported: false, reason: 'ios-home-screen-required' };
+  }
+  return { supported: true, reason: 'supported' };
 }
 
 async function initializeMessaging(): Promise<typeof messaging> {
@@ -99,9 +98,11 @@ async function initializeMessaging(): Promise<typeof messaging> {
     // Server-side rendering - don't initialize
     return null;
   }
+
+  if (!getWebPushAvailability().supported) return null;
   
   try {
-    // Wait for service worker to be ready (important for iOS Safari)
+    // Wait for the notification service worker to be ready.
     if ('serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.ready;
@@ -111,50 +112,11 @@ async function initializeMessaging(): Promise<typeof messaging> {
       }
     }
     
-    // On iOS Safari 16.4+ or macOS Safari 16.1+, we need to try directly 
-    // since isSupported() might not detect it correctly
-    const isSafari = isIOSSafari();
-    const iosVersion = getIOSVersion();
-    
-    if (isSafari) {
-      /* console.log("[iOS-NOTIF] Safari detected (iOS version:", iosVersion, ")"); */
-      
-      // iOS Safari 16.4+ is required for push notifications
-      if (iosVersion !== null && iosVersion < 16) {
-        /* console.log("[iOS-NOTIF] iOS version", iosVersion, "is below 16.4 - push not supported"); */
-        return null;
-      }
-      
-      try {
-        messaging = getMessaging(app);
-        messagingSupported = true;
-        /* console.log("[iOS-NOTIF] FCM initialized successfully on iOS Safari"); */
-        return messaging;
-      } catch (e) {
-        /* console.log("[iOS-NOTIF] Direct FCM init failed on iOS Safari:", e); */
-      }
-    }
-    
     // Standard FCM support check
     messagingSupported = await isSupported();
-    
-    /* console.log("[iOS-NOTIF] isSupported() result:", messagingSupported); */
-    
-    if (messagingSupported) {
-      messaging = getMessaging(app);
-      return messaging;
-    } else {
-      /* console.log("[iOS-NOTIF] Firebase Messaging reported not supported, trying direct init..."); */
-      try {
-        messaging = getMessaging(app);
-        messagingSupported = true;
-        /* console.log("[iOS-NOTIF] Direct FCM init succeeded"); */
-        return messaging;
-      } catch (e) {
-        /* console.log("[iOS-NOTIF] Direct FCM init also failed:", e); */
-        return null;
-      }
-    }
+    if (!messagingSupported) return null;
+    messaging = getMessaging(app);
+    return messaging;
   } catch (err) {
     console.error("[iOS-NOTIF] Error checking messaging support:", err);
     return null;
@@ -178,6 +140,7 @@ export async function ensureMessagingInitialized(): Promise<typeof messaging> {
 // --- Notification helpers ---
 export async function requestNotificationPermission(): Promise<boolean> {
   if (!notificationsEnabled) return false;
+  if (!getWebPushAvailability().supported) return false;
   try {
     // Check if Notification API exists first (required for iOS Safari)
     if (typeof Notification === 'undefined' || !Notification.requestPermission) {
@@ -231,6 +194,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
 export async function getWebFcmToken(): Promise<string | null> {
   if (!notificationsEnabled) return null;
+  if (!getWebPushAvailability().supported) return null;
   try {
     /* console.log("[iOS-NOTIF] getWebFcmToken called, messaging:", !!messaging); */
     // Ensure messaging is initialized
