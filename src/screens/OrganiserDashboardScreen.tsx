@@ -315,6 +315,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [salePayoutEnabled, setSalePayoutEnabled] = useState(false)
   const [payoutEligibilityLoading, setPayoutEligibilityLoading] = useState(false)
   const [payoutEligibilityUpdating, setPayoutEligibilityUpdating] = useState(false)
+  const [payoutEligibilityError, setPayoutEligibilityError] = useState("")
 
   const confirmEventStatusChange = async () => {
     if (!event || !pendingEventAction) {
@@ -601,17 +602,28 @@ const OrganiserDashboardScreen: React.FC = () => {
   const fetchPayoutEligibility = useCallback(async () => {
     if (!eventId || !user) return
     setPayoutEligibilityLoading(true)
+    setPayoutEligibilityError("")
+    console.info("[SalePayoutEligibility] load:start", { eventId, userType: user.userType || null })
     try {
       const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      if (!session?.access_token) throw new Error("Session expired. Please sign in again.")
       const response = await fetch(`/.netlify/functions/event-payout-eligibility?eventId=${encodeURIComponent(eventId)}`, {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       const payload = await response.json().catch(() => ({}))
+      console.info("[SalePayoutEligibility] load:response", {
+        eventId,
+        status: response.status,
+        ok: response.ok,
+        canManage: payload.canManage === true,
+        salePayoutEnabled: payload.salePayoutEnabled === true,
+        error: payload.error || null,
+      })
       if (!response.ok) throw new Error(payload.error || "Unable to load payout eligibility")
       setSalePayoutEnabled(payload.salePayoutEnabled === true)
     } catch (error) {
       console.error("OrganiserDashboardScreen: Error loading payout eligibility:", error)
+      setPayoutEligibilityError(error instanceof Error ? error.message : "Unable to load payout eligibility")
       setSalePayoutEnabled(false)
     } finally {
       setPayoutEligibilityLoading(false)
@@ -619,8 +631,27 @@ const OrganiserDashboardScreen: React.FC = () => {
   }, [eventId, user])
 
   const updateSalePayoutEligibility = async (nextEnabled: boolean) => {
-    if (!eventId || user?.userType !== "admin") return
+    console.info("[SalePayoutEligibility] update:attempt", {
+      eventId: eventId || null,
+      nextEnabled,
+      userType: user?.userType || null,
+    })
+    if (!eventId) {
+      const message = "Event details are still loading. Please try again."
+      console.warn("[SalePayoutEligibility] update:blocked", { reason: "missing_event_id" })
+      setPayoutEligibilityError(message)
+      Alert.alert("Unable to Update", message)
+      return
+    }
+    if (user?.userType !== "admin") {
+      const message = "Administrator access is required to change payout eligibility."
+      console.warn("[SalePayoutEligibility] update:blocked", { reason: "non_admin_user", userType: user?.userType || null })
+      setPayoutEligibilityError(message)
+      Alert.alert("Unable to Update", message)
+      return
+    }
     setPayoutEligibilityUpdating(true)
+    setPayoutEligibilityError("")
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error("Session expired. Please sign in again.")
@@ -630,6 +661,13 @@ const OrganiserDashboardScreen: React.FC = () => {
         body: JSON.stringify({ eventId, salePayoutEnabled: nextEnabled }),
       })
       const payload = await response.json().catch(() => ({}))
+      console.info("[SalePayoutEligibility] update:response", {
+        eventId,
+        status: response.status,
+        ok: response.ok,
+        salePayoutEnabled: payload.salePayoutEnabled === true,
+        error: payload.error || null,
+      })
       if (!response.ok) throw new Error(payload.error || "Unable to update payout eligibility")
       setSalePayoutEnabled(payload.salePayoutEnabled === true)
       Alert.alert(
@@ -640,13 +678,27 @@ const OrganiserDashboardScreen: React.FC = () => {
       )
       await fetchTicketData()
     } catch (error: any) {
-      Alert.alert("Unable to Update", error?.message || "Please try again.")
+      const message = error?.message || "Please try again."
+      console.error("[SalePayoutEligibility] update:error", { eventId, nextEnabled, message })
+      setPayoutEligibilityError(message)
+      Alert.alert("Unable to Update", message)
     } finally {
       setPayoutEligibilityUpdating(false)
     }
   }
 
   const confirmSalePayoutEligibilityChange = () => {
+    console.info("[SalePayoutEligibility] button:pressed", {
+      eventId: eventId || null,
+      currentEnabled: salePayoutEnabled,
+      loading: payoutEligibilityLoading,
+      updating: payoutEligibilityUpdating,
+      userType: user?.userType || null,
+    })
+    if (!eventId || user?.userType !== "admin") {
+      void updateSalePayoutEligibility(!salePayoutEnabled)
+      return
+    }
     const nextEnabled = !salePayoutEnabled
     Alert.alert(
       nextEnabled ? "Enable Sale-Time Eligibility?" : "Disable Sale-Time Eligibility?",
@@ -1952,6 +2004,11 @@ const OrganiserDashboardScreen: React.FC = () => {
                 <Text style={{ color: "#F59E0B", fontSize: 11, lineHeight: 16, marginTop: 12 }}>
                   This changes future completed sales only. It never sends a payout automatically and does not change existing ticket eligibility.
                 </Text>
+                {payoutEligibilityError ? (
+                  <Text style={{ color: "#FCA5A5", fontSize: 12, lineHeight: 17, marginTop: 10 }}>
+                    {payoutEligibilityError}
+                  </Text>
+                ) : null}
                 <TouchableOpacity
                   style={[styles.withdrawBtn, { marginTop: 14, backgroundColor: salePayoutEnabled ? "#475569" : "#0F766E" }, (payoutEligibilityLoading || payoutEligibilityUpdating) && { opacity: 0.55 }]}
                   disabled={payoutEligibilityLoading || payoutEligibilityUpdating}

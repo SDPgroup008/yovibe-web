@@ -95,4 +95,8 @@ revoke all on function public.set_event_sale_payout_eligibility(text, boolean, u
 grant execute on function public.set_event_sale_payout_eligibility(text, boolean, uuid)
   to service_role;
 
+-- Make the newly created RPC visible to the Supabase REST schema cache now,
+-- rather than waiting for its automatic refresh.
+notify pgrst, 'reload schema';
+
 commit;
