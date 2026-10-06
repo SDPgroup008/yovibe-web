@@ -606,7 +606,6 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (!eventId || !user) return
     setPayoutEligibilityLoading(true)
     setPayoutEligibilityError("")
-    console.info("[SalePayoutEligibility] load:start", { eventId, userType: user.userType || null })
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error("Session expired. Please sign in again.")
@@ -614,14 +613,6 @@ const OrganiserDashboardScreen: React.FC = () => {
         headers: { Authorization: `Bearer ${session.access_token}` },
       })
       const payload = await response.json().catch(() => ({}))
-      console.info("[SalePayoutEligibility] load:response", {
-        eventId,
-        status: response.status,
-        ok: response.ok,
-        canManage: payload.canManage === true,
-        salePayoutEnabled: payload.salePayoutEnabled === true,
-        error: payload.error || null,
-      })
       if (!response.ok) throw new Error(payload.error || "Unable to load payout eligibility")
       setSalePayoutEnabled(payload.salePayoutEnabled === true)
     } catch (error) {
@@ -634,14 +625,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   }, [eventId, user])
 
   const updateSalePayoutEligibility = async (nextEnabled: boolean) => {
-    console.info("[SalePayoutEligibility] update:attempt", {
-      eventId: eventId || null,
-      nextEnabled,
-      userType: user?.userType || null,
-    })
     if (!eventId) {
       const message = "Event details are still loading. Please try again."
-      console.warn("[SalePayoutEligibility] update:blocked", { reason: "missing_event_id" })
       setPayoutEligibilityError(message)
       setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
@@ -649,7 +634,6 @@ const OrganiserDashboardScreen: React.FC = () => {
     }
     if (user?.userType !== "admin") {
       const message = "Administrator access is required to change payout eligibility."
-      console.warn("[SalePayoutEligibility] update:blocked", { reason: "non_admin_user", userType: user?.userType || null })
       setPayoutEligibilityError(message)
       setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
@@ -667,13 +651,6 @@ const OrganiserDashboardScreen: React.FC = () => {
         body: JSON.stringify({ eventId, salePayoutEnabled: nextEnabled }),
       })
       const payload = await response.json().catch(() => ({}))
-      console.info("[SalePayoutEligibility] update:response", {
-        eventId,
-        status: response.status,
-        ok: response.ok,
-        salePayoutEnabled: payload.salePayoutEnabled === true,
-        error: payload.error || null,
-      })
       if (!response.ok) throw new Error(payload.error || "Unable to update payout eligibility")
       setSalePayoutEnabled(payload.salePayoutEnabled === true)
       setPayoutEligibilityNotice(
@@ -690,7 +667,6 @@ const OrganiserDashboardScreen: React.FC = () => {
       await fetchTicketData()
     } catch (error: any) {
       const message = error?.message || "Please try again."
-      console.error("[SalePayoutEligibility] update:error", { eventId, nextEnabled, message })
       setPayoutEligibilityError(message)
       setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
@@ -700,13 +676,6 @@ const OrganiserDashboardScreen: React.FC = () => {
   }
 
   const confirmSalePayoutEligibilityChange = () => {
-    console.info("[SalePayoutEligibility] button:pressed", {
-      eventId: eventId || null,
-      currentEnabled: salePayoutEnabled,
-      loading: payoutEligibilityLoading,
-      updating: payoutEligibilityUpdating,
-      userType: user?.userType || null,
-    })
     if (!eventId || user?.userType !== "admin") {
       void updateSalePayoutEligibility(!salePayoutEnabled)
       return

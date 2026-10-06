@@ -73,25 +73,13 @@ exports.handler = async (event) => {
     const eventId = body.eventId || event.queryStringParameters?.eventId;
     const eventRow = await loadEvent(admin, eventId);
     const callerIsAdmin = isAdmin(profile);
-    console.info('[EventPayoutEligibility] request', {
-      method: event.httpMethod,
-      eventSlug: eventRow.slug,
-      callerRole: profile?.user_type || null,
-      callerIsAdmin,
-    });
 
     if (!callerIsAdmin && !ownsEvent(eventRow, authUser, profile)) {
-      console.warn('[EventPayoutEligibility] denied:not_owner', { eventSlug: eventRow.slug });
       return json(403, { error: 'You do not own this event' });
     }
 
     if (event.httpMethod === 'GET') {
       const policy = await getEventPayoutEligibility(admin, eventRow.slug);
-      console.info('[EventPayoutEligibility] read:success', {
-        eventSlug: eventRow.slug,
-        salePayoutEnabled: policy.salePayoutEnabled,
-        source: policy.source,
-      });
       return json(200, {
         eventId: eventRow.slug,
         salePayoutEnabled: policy.salePayoutEnabled,
@@ -101,7 +89,6 @@ exports.handler = async (event) => {
     }
 
     if (!callerIsAdmin) {
-      console.warn('[EventPayoutEligibility] denied:not_admin', { eventSlug: eventRow.slug });
       return json(403, { error: 'Admin access required' });
     }
     if (typeof body.salePayoutEnabled !== 'boolean') {
@@ -114,21 +101,11 @@ exports.handler = async (event) => {
       p_changed_by: authUser.id,
     });
     if (updateError) {
-      console.error('[EventPayoutEligibility] update:failed', {
-        eventSlug: eventRow.slug,
-        code: updateError.code || null,
-        message: updateError.message || 'Unknown database error',
-      });
       if (isMissingPolicyRpc(updateError)) {
         return json(503, { error: 'Payout eligibility migration has not been applied yet' });
       }
       throw updateError;
     }
-
-    console.info('[EventPayoutEligibility] update:success', {
-      eventSlug: eventRow.slug,
-      salePayoutEnabled: setting?.sale_payout_enabled === true,
-    });
 
     return json(200, {
       eventId: eventRow.slug,
@@ -137,10 +114,7 @@ exports.handler = async (event) => {
       canManage: true,
     });
   } catch (error) {
-    console.error('[EventPayoutEligibility] error', {
-      code: error?.code || null,
-      message: error?.message || 'Unable to manage payout eligibility',
-    });
+    console.error('[EventPayoutEligibility] Error:', error.message);
     return json(error.statusCode || 500, { error: error.message || 'Unable to manage payout eligibility' });
   }
 };
