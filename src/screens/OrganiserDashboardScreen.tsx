@@ -316,6 +316,9 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [payoutEligibilityLoading, setPayoutEligibilityLoading] = useState(false)
   const [payoutEligibilityUpdating, setPayoutEligibilityUpdating] = useState(false)
   const [payoutEligibilityError, setPayoutEligibilityError] = useState("")
+  const [payoutEligibilityNotice, setPayoutEligibilityNotice] = useState("")
+  const [showPayoutEligibilityConfirm, setShowPayoutEligibilityConfirm] = useState(false)
+  const [pendingSalePayoutEnabled, setPendingSalePayoutEnabled] = useState<boolean | null>(null)
 
   const confirmEventStatusChange = async () => {
     if (!event || !pendingEventAction) {
@@ -640,6 +643,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const message = "Event details are still loading. Please try again."
       console.warn("[SalePayoutEligibility] update:blocked", { reason: "missing_event_id" })
       setPayoutEligibilityError(message)
+      setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
       return
     }
@@ -647,11 +651,13 @@ const OrganiserDashboardScreen: React.FC = () => {
       const message = "Administrator access is required to change payout eligibility."
       console.warn("[SalePayoutEligibility] update:blocked", { reason: "non_admin_user", userType: user?.userType || null })
       setPayoutEligibilityError(message)
+      setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
       return
     }
     setPayoutEligibilityUpdating(true)
     setPayoutEligibilityError("")
+    setPayoutEligibilityNotice("")
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) throw new Error("Session expired. Please sign in again.")
@@ -670,6 +676,11 @@ const OrganiserDashboardScreen: React.FC = () => {
       })
       if (!response.ok) throw new Error(payload.error || "Unable to update payout eligibility")
       setSalePayoutEnabled(payload.salePayoutEnabled === true)
+      setPayoutEligibilityNotice(
+        nextEnabled
+          ? "Sale-time eligibility is enabled. Future verified sales can be paid out before scanning."
+          : "Scan-gated eligibility is enabled. Future tickets require a successful scan before payout.",
+      )
       Alert.alert(
         nextEnabled ? "Sale-Time Eligibility Enabled" : "Sale-Time Eligibility Disabled",
         nextEnabled
@@ -681,6 +692,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       const message = error?.message || "Please try again."
       console.error("[SalePayoutEligibility] update:error", { eventId, nextEnabled, message })
       setPayoutEligibilityError(message)
+      setPayoutEligibilityNotice("")
       Alert.alert("Unable to Update", message)
     } finally {
       setPayoutEligibilityUpdating(false)
@@ -700,20 +712,8 @@ const OrganiserDashboardScreen: React.FC = () => {
       return
     }
     const nextEnabled = !salePayoutEnabled
-    Alert.alert(
-      nextEnabled ? "Enable Sale-Time Eligibility?" : "Disable Sale-Time Eligibility?",
-      nextEnabled
-        ? "Future successfully paid tickets for this event will become eligible for payout without waiting to be scanned. Organisers must still request and authorise payouts with their OTP."
-        : "Future ticket sales will require scanning before payout eligibility. Tickets that were already eligible will remain eligible.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: nextEnabled ? "Enable" : "Disable",
-          style: nextEnabled ? "default" : "destructive",
-          onPress: () => { void updateSalePayoutEligibility(nextEnabled) },
-        },
-      ],
-    )
+    setPendingSalePayoutEnabled(nextEnabled)
+    setShowPayoutEligibilityConfirm(true)
   }
 
   const fetchScanLogs = useCallback(async () => {
@@ -2009,6 +2009,11 @@ const OrganiserDashboardScreen: React.FC = () => {
                     {payoutEligibilityError}
                   </Text>
                 ) : null}
+                {payoutEligibilityNotice ? (
+                  <Text style={{ color: "#6EE7B7", fontSize: 12, lineHeight: 17, marginTop: 10 }}>
+                    {payoutEligibilityNotice}
+                  </Text>
+                ) : null}
                 <TouchableOpacity
                   style={[styles.withdrawBtn, { marginTop: 14, backgroundColor: salePayoutEnabled ? "#475569" : "#0F766E" }, (payoutEligibilityLoading || payoutEligibilityUpdating) && { opacity: 0.55 }]}
                   disabled={payoutEligibilityLoading || payoutEligibilityUpdating}
@@ -2147,6 +2152,62 @@ const OrganiserDashboardScreen: React.FC = () => {
               </TouchableOpacity>
               <TouchableOpacity style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: pendingEventAction === "cancelled" ? "#DC2626" : "#F59E0B", alignItems: "center" }} onPress={confirmEventStatusChange} disabled={eventStatusUpdating}>
                 {eventStatusUpdating ? <ActivityIndicator size="small" color="#FFF" /> : <Text style={{ color: "#FFF", fontWeight: "700" }}>{pendingEventAction === "cancelled" ? "Confirm Cancellation" : "Confirm Postponement"}</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Sale-time payout eligibility confirmation. Native Alert is not reliable on web/PWA. */}
+      <Modal
+        visible={showPayoutEligibilityConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowPayoutEligibilityConfirm(false)
+          setPendingSalePayoutEnabled(null)
+        }}
+      >
+        <View style={styles.overlay}>
+          <View style={[styles.modalBox, { maxWidth: 430, alignItems: "stretch" }]}>
+            <View style={{ alignItems: "center", marginBottom: 12 }}>
+              <Ionicons
+                name={pendingSalePayoutEnabled ? "flash-outline" : "scan-outline"}
+                size={32}
+                color={pendingSalePayoutEnabled ? "#2DD4BF" : "#94A3B8"}
+              />
+            </View>
+            <Text style={[styles.modalTitle, { textAlign: "center", marginBottom: 10 }]}>
+              {pendingSalePayoutEnabled ? "Enable Sale-Time Eligibility?" : "Use Scan-Gated Eligibility?"}
+            </Text>
+            <Text style={[styles.modalSub, { marginBottom: 12 }]}>
+              {pendingSalePayoutEnabled
+                ? "Future successfully paid tickets for this event will become eligible for payout without waiting to be scanned."
+                : "Future ticket sales will require scanning before payout eligibility. Tickets already eligible will remain unchanged."}
+            </Text>
+            <Text style={{ color: "#FCD34D", fontSize: 12, textAlign: "center", lineHeight: 17, marginBottom: 20 }}>
+              No payout is sent automatically. Organisers must still request and authorise payouts with their OTP.
+            </Text>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: "#222", alignItems: "center" }}
+                onPress={() => {
+                  setShowPayoutEligibilityConfirm(false)
+                  setPendingSalePayoutEnabled(null)
+                }}
+              >
+                <Text style={{ color: "#A3A3A3", fontWeight: "700" }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, padding: 14, borderRadius: 10, backgroundColor: pendingSalePayoutEnabled ? "#0F766E" : "#475569", alignItems: "center" }}
+                onPress={() => {
+                  const nextEnabled = pendingSalePayoutEnabled
+                  setShowPayoutEligibilityConfirm(false)
+                  setPendingSalePayoutEnabled(null)
+                  if (typeof nextEnabled === "boolean") void updateSalePayoutEligibility(nextEnabled)
+                }}
+              >
+                <Text style={{ color: "#FFF", fontWeight: "800" }}>{pendingSalePayoutEnabled ? "Enable" : "Use Scan-Gated"}</Text>
               </TouchableOpacity>
             </View>
           </View>
