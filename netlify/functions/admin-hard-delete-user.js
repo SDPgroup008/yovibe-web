@@ -5,6 +5,11 @@ const crypto = require('crypto');
 const { requireUser, json } = require('../shared/supabaseAdmin');
 
 const PAGE_SIZE = 1000;
+const BLOCKER_IDENTITY_COLUMNS = Object.freeze({
+  events: 'slug',
+  venues: 'slug',
+  event_payout_eligibility_settings: 'event_slug',
+});
 const REVOCATION_TTL_HOURS = Math.max(
   1,
   Math.min(24 * 30, Number.parseInt(process.env.ACCOUNT_REVOCATION_TTL_HOURS || '48', 10) || 48),
@@ -38,15 +43,20 @@ function uniqueValues(values) {
   return [...new Set(values.filter(Boolean).map((value) => String(value)))];
 }
 
+function blockerIdentityColumn(table) {
+  return BLOCKER_IDENTITY_COLUMNS[table] || 'id';
+}
+
 async function idsForQuery(admin, table, applyFilter) {
   const ids = new Set();
+  const identityColumn = blockerIdentityColumn(table);
   let offset = 0;
   while (true) {
-    let query = admin.from(table).select('id').range(offset, offset + PAGE_SIZE - 1);
+    let query = admin.from(table).select(identityColumn).range(offset, offset + PAGE_SIZE - 1);
     query = applyFilter(query);
     const { data, error } = await query;
     if (error) throw error;
-    for (const row of data || []) ids.add(String(row.id));
+    for (const row of data || []) ids.add(String(row[identityColumn]));
     if (!data || data.length < PAGE_SIZE) break;
     offset += data.length;
   }
@@ -309,5 +319,6 @@ module.exports = {
   hasDeleteConfirmation,
   isMissingRelation,
   isAuthUserMissing,
+  blockerIdentityColumn,
   preflightResponse,
 };

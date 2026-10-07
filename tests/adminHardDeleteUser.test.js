@@ -3,6 +3,7 @@ const {
   hasDeleteConfirmation,
   isMissingRelation,
   isAuthUserMissing,
+  blockerIdentityColumn,
   preflightResponse,
 } = require('../netlify/functions/admin-hard-delete-user');
 
@@ -29,6 +30,13 @@ describe('administrator hard-delete safeguards', () => {
     expect(isAuthUserMissing({ status: 404 })).toBe(true);
     expect(isAuthUserMissing({ message: 'User not found' })).toBe(true);
     expect(isAuthUserMissing({ status: 500, message: 'provider unavailable' })).toBe(false);
+  });
+
+  test('uses real primary keys for blocker tables without an id column', () => {
+    expect(blockerIdentityColumn('events')).toBe('slug');
+    expect(blockerIdentityColumn('venues')).toBe('slug');
+    expect(blockerIdentityColumn('event_payout_eligibility_settings')).toBe('event_slug');
+    expect(blockerIdentityColumn('tickets')).toBe('id');
   });
 
   test('returns only safe preflight fields to the browser', () => {
