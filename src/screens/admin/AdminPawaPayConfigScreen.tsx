@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react"
+import React, { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   Alert,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native"
@@ -62,6 +63,17 @@ const AdminPawaPayConfigScreen: React.FC<AdminPawaPayConfigScreenProps> = ({ nav
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [countryQuery, setCountryQuery] = useState("")
+
+  const filteredCountries = useMemo(() => {
+    const query = countryQuery.trim().toLowerCase()
+    if (!configuration || !query) return []
+    return configuration.countries.filter((country) =>
+      [country.displayName, country.country]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query)),
+    )
+  }, [configuration, countryQuery])
 
   const loadConfiguration = useCallback(async (isRefresh = false) => {
     try {
@@ -136,9 +148,33 @@ const AdminPawaPayConfigScreen: React.FC<AdminPawaPayConfigScreenProps> = ({ nav
             </View>
           </View>
 
-          {configuration.countries.length === 0 ? (
-            <View style={styles.emptyCard}><Text style={styles.muted}>No active countries or providers were returned.</Text></View>
-          ) : configuration.countries.map((country) => (
+          <View style={styles.searchCard}>
+            <Text style={styles.sectionTitle}>Find a country</Text>
+            <TextInput
+              value={countryQuery}
+              onChangeText={setCountryQuery}
+              placeholder="Type a country name or ISO code"
+              placeholderTextColor="#64748B"
+              autoCapitalize="words"
+              autoCorrect={false}
+              returnKeyType="search"
+              style={styles.searchInput}
+              accessibilityLabel="Search pawaPay countries"
+            />
+            <Text style={styles.searchHint}>
+              {configuration.countries.length === 0
+                ? "No active countries or providers were returned."
+                : countryQuery.trim()
+                  ? `${filteredCountries.length} matching country${filteredCountries.length === 1 ? "" : "ies"}`
+                  : "Enter a country to view its providers, currencies, and limits."}
+            </Text>
+          </View>
+
+          {configuration.countries.length === 0 ? null : !countryQuery.trim() ? (
+            <View style={styles.emptyCard}><Text style={styles.muted}>Country results will appear here after you search.</Text></View>
+          ) : filteredCountries.length === 0 ? (
+            <View style={styles.emptyCard}><Text style={styles.muted}>No country matched “{countryQuery.trim()}”. Try the country name or three-letter ISO code.</Text></View>
+          ) : filteredCountries.map((country) => (
             <View key={country.country} style={styles.countryCard}>
               <View style={styles.countryHeader}>
                 <Text style={styles.countryTitle}>{country.displayName || country.country}</Text>
@@ -193,10 +229,13 @@ const styles = StyleSheet.create({
   errorCard: { flexDirection: "row", gap: 8, alignItems: "center", backgroundColor: "#451A1A", borderColor: "#7F1D1D", borderWidth: 1, borderRadius: 10, padding: 12 },
   errorText: { color: "#FCA5A5", flex: 1 },
   accountCard: { backgroundColor: "#0F2035", borderColor: "#1E3A56", borderWidth: 1, borderRadius: 12, padding: 16 },
+  searchCard: { backgroundColor: "#0F2035", borderColor: "#1E3A56", borderWidth: 1, borderRadius: 12, padding: 16 },
   sectionTitle: { color: "#CBD5E1", fontSize: 13, textTransform: "uppercase", letterSpacing: 1, fontWeight: "700" },
   companyName: { color: "#FFFFFF", fontSize: 20, fontWeight: "800", marginTop: 8 },
   badgeRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 12 },
   badge: { color: "#BAE6FD", backgroundColor: "#164E63", paddingHorizontal: 9, paddingVertical: 5, borderRadius: 999, fontSize: 12 },
+  searchInput: { marginTop: 10, borderWidth: 1, borderColor: "#2E4B68", borderRadius: 9, backgroundColor: "#081525", color: "#FFFFFF", paddingHorizontal: 12, paddingVertical: 11, fontSize: 15 },
+  searchHint: { color: "#94A3B8", marginTop: 8, fontSize: 12 },
   countryCard: { backgroundColor: "#0B1728", borderColor: "#20344D", borderWidth: 1, borderRadius: 12, padding: 16 },
   countryHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderBottomColor: "#20344D", borderBottomWidth: 1, paddingBottom: 10, marginBottom: 10 },
   countryTitle: { color: "#FFFFFF", fontSize: 18, fontWeight: "800" },
