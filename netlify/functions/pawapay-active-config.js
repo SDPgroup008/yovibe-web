@@ -13,26 +13,6 @@ function isAdmin(profile) {
   return String(profile?.user_type || '').toLowerCase() === 'admin';
 }
 
-// pawaPay may return display/status text as a locale map (for example
-// { en: 'Uganda', fr: 'Ouganda' }). Netlify returns this payload to React,
-// so reduce localized values to a scalar before they reach JSX.
-function displayText(value) {
-  if (value === null || value === undefined || value === '') return null;
-  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-    return String(value);
-  }
-  if (Array.isArray(value)) return value.map(displayText).filter(Boolean).join(', ') || null;
-  if (typeof value === 'object') {
-    for (const key of ['en', 'en-UG', 'default', 'name', 'value']) {
-      if (value[key] !== undefined && value[key] !== null) {
-        const text = displayText(value[key]);
-        if (text) return text;
-      }
-    }
-  }
-  return null;
-}
-
 function operationSummary(operationTypes) {
   const entries = Array.isArray(operationTypes) ? operationTypes : [];
   return entries.flatMap((entry) => {
@@ -40,13 +20,13 @@ function operationSummary(operationTypes) {
     const toSummary = (type, value) => {
       const details = value && typeof value === 'object' ? value : entry;
       return {
-        type: displayText(type) || 'UNKNOWN',
-        status: displayText(details.status),
-        minTransactionLimit: displayText(details.minTransactionLimit),
-        maxTransactionLimit: displayText(details.maxTransactionLimit),
-        decimalsInAmount: displayText(details.decimalsInAmount),
-        authType: displayText(details.authType),
-        pinPrompt: displayText(details.pinPrompt),
+        type,
+        status: details.status || null,
+        minTransactionLimit: details.minTransactionLimit ?? null,
+        maxTransactionLimit: details.maxTransactionLimit ?? null,
+        decimalsInAmount: details.decimalsInAmount ?? null,
+        authType: details.authType ?? null,
+        pinPrompt: details.pinPrompt ?? null,
         pinPromptRevivable: details.pinPromptRevivable ?? null,
       };
     };
@@ -57,18 +37,18 @@ function operationSummary(operationTypes) {
 
 function sanitizeConfiguration(payload) {
   return {
-    companyName: displayText(payload?.companyName),
+    companyName: payload?.companyName || null,
     signedRequestsOnly: Boolean(payload?.signatureConfiguration?.signedRequestsOnly),
     signedCallbacks: Boolean(payload?.signatureConfiguration?.signedCallbacks),
     countries: (Array.isArray(payload?.countries) ? payload.countries : []).map((country) => ({
       country: country.country,
-      displayName: displayText(country.displayName),
-      prefix: displayText(country.prefix),
+      displayName: country.displayName || null,
+      prefix: country.prefix || null,
       providers: (Array.isArray(country.providers) ? country.providers : []).map((provider) => ({
-        provider: displayText(provider.provider) || 'UNKNOWN',
-        displayName: displayText(provider.displayName),
+        provider: provider.provider,
+        displayName: provider.displayName,
         currencies: (Array.isArray(provider.currencies) ? provider.currencies : []).map((currency) => ({
-          currency: displayText(currency.currency) || 'UNKNOWN',
+          currency: currency.currency,
           operations: operationSummary(currency.operationTypes),
         })),
       })),
