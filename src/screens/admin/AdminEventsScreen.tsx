@@ -51,9 +51,10 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   const performDelete = async (eventId: string) => {
     try {
       setLoading(true)
-      await SupabaseService.deleteEvent(eventId)
+      await SupabaseService.adminDeleteEvent(eventId)
+      setEvents((current) => current.filter((item) => item.id !== eventId && item.slug !== eventId))
       Alert.alert("Success", "Event deleted successfully")
-      loadEvents()
+      await loadEvents()
     } catch (error) {
       console.error("Error deleting event:", error)
       Alert.alert("Error", "Failed to delete event")

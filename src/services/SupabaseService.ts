@@ -22,6 +22,27 @@ const resolveFunctionUrl = (functionName: string): string => {
   return base ? `${base}/.netlify/functions/${functionName}` : `/.netlify/functions/${functionName}`
 }
 
+type AdminDeleteResource = "user" | "venue" | "event"
+
+type AdminSoftDeleteResult = {
+  success: true
+  resource: AdminDeleteResource
+  id: string
+  deletedEventCount?: number
+}
+
+export type AdminHardDeleteBlocker = {
+  key: string
+  label: string
+  count: number
+}
+
+export type AdminHardDeletePreflight = {
+  canHardDelete: boolean
+  authAlreadyDeleted: boolean
+  blockers: AdminHardDeleteBlocker[]
+}
+
 // Responsive breakpoints for image loading optimization
 const { width: screenWidth } = Dimensions.get('window');
 const isSmallDevice = screenWidth < 380;
@@ -390,6 +411,74 @@ class SupabaseService {
     }
   }
 
+  async adminSoftDelete(resource: AdminDeleteResource, id: string): Promise<AdminSoftDeleteResult> {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+    if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.")
+
+    const response = await fetch(resolveFunctionUrl("admin-soft-delete"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ resource, id }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(payload?.error || "Unable to delete this item")
+    }
+    return payload as AdminSoftDeleteResult
+  }
+
+  async adminDeleteUser(userId: string): Promise<AdminSoftDeleteResult> {
+    return this.adminSoftDelete("user", userId)
+  }
+
+  private async adminHardDeleteRequest<T>(body: Record<string, unknown>): Promise<T> {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+    if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.")
+
+    const response = await fetch(resolveFunctionUrl("admin-hard-delete-user"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(body),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      const error = new Error(payload?.error || "Unable to permanently delete this user") as Error & {
+        blockers?: AdminHardDeleteBlocker[]
+        cleanupPending?: boolean
+      }
+      error.blockers = payload?.blockers
+      error.cleanupPending = payload?.cleanupPending === true
+      throw error
+    }
+    return payload as T
+  }
+
+  async getAdminHardDeletePreflight(userId: string): Promise<AdminHardDeletePreflight> {
+    return this.adminHardDeleteRequest<AdminHardDeletePreflight>({ action: "preflight", userId })
+  }
+
+  async adminHardDeleteUser(userId: string, confirmationPhrase: string): Promise<{ success: true; userId: string }> {
+    return this.adminHardDeleteRequest<{ success: true; userId: string }>({
+      action: "delete",
+      userId,
+      confirmationPhrase,
+    })
+  }
+
   // ============ Venue Methods ============
 
   async getVenues(): Promise<Venue[]> {
@@ -685,6 +774,10 @@ class SupabaseService {
       console.error("SupabaseService: Error deleting venue:", error);
       throw error;
     }
+  }
+
+  async adminDeleteVenue(venueId: string): Promise<AdminSoftDeleteResult> {
+    return this.adminSoftDelete("venue", venueId)
   }
 
   async updateVenuePrograms(venueId: string, programs: Record<string, WeeklyProgramValue>): Promise<void> {
@@ -1084,6 +1177,10 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       console.error("SupabaseService: Error deleting event:", error);
       throw error;
     }
+  }
+
+  async adminDeleteEvent(eventSlug: string): Promise<AdminSoftDeleteResult> {
+    return this.adminSoftDelete("event", eventSlug)
   }
 
   async updateEvent(eventSlug: string, data: Partial<Event>): Promise<void> {

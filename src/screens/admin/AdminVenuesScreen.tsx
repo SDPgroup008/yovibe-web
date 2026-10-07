@@ -51,19 +51,16 @@ const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => 
       setLoading(true)
       /* console.log("[AdminVenuesScreen] Deleting venue:", venueId) */
       
-      // Delete all events associated with this venue
-      const venueEvents = await SupabaseService.getEventsByVenue(venueId)
-      /* console.log("[AdminVenuesScreen] Found", venueEvents.length, "events to delete") */
-      
-      for (const event of venueEvents) {
-        await SupabaseService.deleteEvent(event.id)
-      }
-      
-      await SupabaseService.deleteVenue(venueId)
+      const result = await SupabaseService.adminDeleteVenue(venueId)
       /* console.log("[AdminVenuesScreen] Venue and events deleted successfully") */
 
-      Alert.alert("Success", "Venue and associated events deleted successfully")
-      loadVenues()
+      setVenues((current) => current.filter((venue) => venue.id !== venueId))
+      const deletedEvents = result.deletedEventCount || 0
+      Alert.alert(
+        "Success",
+        `Venue deleted successfully${deletedEvents === 1 ? "; 1 associated event was also deleted" : deletedEvents > 1 ? `; ${deletedEvents} associated events were also deleted` : ""}`,
+      )
+      await loadVenues()
     } catch (error) {
       console.error("[AdminVenuesScreen] Error deleting venue:", error)
       Alert.alert("Error", "Failed to delete venue")

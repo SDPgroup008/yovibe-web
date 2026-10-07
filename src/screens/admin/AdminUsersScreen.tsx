@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect } from "react"
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView } from "react-native"
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, ActivityIndicator, ScrollView, Modal, TextInput } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../../services/SupabaseService"
 import AnalyticsService, { type UserVisitData } from "../../services/AnalyticsService"
@@ -19,6 +19,13 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const [unauthenticatedVisitors, setUnauthenticatedVisitors] = useState<UserVisitData[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<UserCategoryTab>("all")
+  const [hardDeleteTarget, setHardDeleteTarget] = useState<User | null>(null)
+  const [hardDeleteModalVisible, setHardDeleteModalVisible] = useState(false)
+  const [hardDeleteChecking, setHardDeleteChecking] = useState(false)
+  const [hardDeleteSubmitting, setHardDeleteSubmitting] = useState(false)
+  const [hardDeleteConfirmation, setHardDeleteConfirmation] = useState("")
+  const [hardDeleteBlockers, setHardDeleteBlockers] = useState<Array<{ key: string; label: string; count: number }>>([])
+  const [hardDeleteError, setHardDeleteError] = useState("")
 
   useEffect(() => {
     if (currentUser?.userType !== "admin") {
@@ -81,15 +88,68 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
       setLoading(true)
       /* console.log("[AdminUsersScreen] Deleting user:", userId) */
       
-      await SupabaseService.deleteUser(userId)
+      await SupabaseService.adminDeleteUser(userId)
       /* console.log("[AdminUsersScreen] User deleted successfully") */
       
+      setUsers((current) => current.filter((user) => user.id !== userId))
       Alert.alert("Success", "User deleted successfully")
-      loadUsers()
+      await loadUsers()
     } catch (error) {
       console.error("[AdminUsersScreen] Error deleting user:", error)
       Alert.alert("Error", "Failed to delete user")
       setLoading(false)
+    }
+  }
+
+  const closeHardDeleteModal = (force = false) => {
+    if (hardDeleteSubmitting && !force) return
+    setHardDeleteModalVisible(false)
+    setHardDeleteTarget(null)
+    setHardDeleteConfirmation("")
+    setHardDeleteBlockers([])
+    setHardDeleteError("")
+  }
+
+  const handleHardDeleteUser = async (target: User) => {
+    setHardDeleteTarget(target)
+    setHardDeleteModalVisible(true)
+    setHardDeleteChecking(true)
+    setHardDeleteConfirmation("")
+    setHardDeleteBlockers([])
+    setHardDeleteError("")
+    try {
+      const result = await SupabaseService.getAdminHardDeletePreflight(target.id)
+      setHardDeleteBlockers(result.blockers || [])
+    } catch (error) {
+      console.error("[AdminUsersScreen] Hard-delete preflight failed:", error)
+      setHardDeleteError(error instanceof Error ? error.message : "Unable to check whether this user can be permanently deleted")
+    } finally {
+      setHardDeleteChecking(false)
+    }
+  }
+
+  const performHardDelete = async () => {
+    if (!hardDeleteTarget) return
+    if (hardDeleteConfirmation.trim() !== "DELETE") {
+      setHardDeleteError('Type DELETE exactly to confirm permanent deletion')
+      return
+    }
+    setHardDeleteSubmitting(true)
+    setHardDeleteError("")
+    try {
+      await SupabaseService.adminHardDeleteUser(hardDeleteTarget.id, hardDeleteConfirmation)
+      const deletedUserId = hardDeleteTarget.id
+      closeHardDeleteModal(true)
+      setUsers((current) => current.filter((user) => user.id !== deletedUserId))
+      Alert.alert("Permanently Deleted", "The user profile and authentication account were permanently deleted.")
+      await loadUsers()
+    } catch (error) {
+      console.error("[AdminUsersScreen] Hard delete failed:", error)
+      const detailedError = error as Error & { blockers?: Array<{ key: string; label: string; count: number }> }
+      if (detailedError.blockers) setHardDeleteBlockers(detailedError.blockers)
+      setHardDeleteError(detailedError.message || "Unable to permanently delete this user")
+    } finally {
+      setHardDeleteSubmitting(false)
     }
   }
 
@@ -185,6 +245,14 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
                 <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                 <Text style={styles.actionButtonText}>Delete</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.actionButton, styles.hardDeleteButton]}
+                onPress={() => { void handleHardDeleteUser(item) }}
+              >
+                <Ionicons name="trash" size={18} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Permanently Delete</Text>
+              </TouchableOpacity>
             </>
           )}
         </View>
@@ -258,6 +326,74 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
           </View>
         }
       />
+
+      <Modal
+        visible={hardDeleteModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeHardDeleteModal}
+      >
+        <View style={styles.hardDeleteOverlay}>
+          <View style={styles.hardDeleteModal}>
+            <Text style={styles.hardDeleteTitle}>Permanently delete user?</Text>
+            <Text style={styles.hardDeleteDescription}>
+              This permanently removes {hardDeleteTarget?.email || "this user"} from the YoVibe profile table and Supabase Auth. This cannot be undone.
+            </Text>
+
+            {hardDeleteChecking ? (
+              <View style={styles.hardDeleteChecking}>
+                <ActivityIndicator color="#FF625B" />
+                <Text style={styles.hardDeleteCheckingText}>Checking account records…</Text>
+              </View>
+            ) : hardDeleteBlockers.length > 0 ? (
+              <View style={styles.hardDeleteBlocked}>
+                <Text style={styles.hardDeleteBlockedTitle}>Permanent deletion is blocked</Text>
+                <Text style={styles.hardDeleteBlockedText}>Use the regular Delete action or transfer the listed records first.</Text>
+                {hardDeleteBlockers.map((blocker) => (
+                  <Text key={blocker.key} style={styles.hardDeleteBlocker}>• {blocker.label}: {blocker.count}</Text>
+                ))}
+              </View>
+            ) : (
+              <>
+                <Text style={styles.hardDeletePrompt}>Type DELETE to continue.</Text>
+                <TextInput
+                  value={hardDeleteConfirmation}
+                  onChangeText={(value) => {
+                    setHardDeleteConfirmation(value)
+                    setHardDeleteError("")
+                  }}
+                  placeholder="DELETE"
+                  placeholderTextColor="#777777"
+                  autoCapitalize="characters"
+                  editable={!hardDeleteSubmitting}
+                  style={styles.hardDeleteInput}
+                />
+              </>
+            )}
+
+            {!!hardDeleteError && <Text style={styles.hardDeleteError}>{hardDeleteError}</Text>}
+
+            <View style={styles.hardDeleteActions}>
+              <TouchableOpacity
+                style={[styles.hardDeleteAction, styles.hardDeleteCancel]}
+                onPress={closeHardDeleteModal}
+                disabled={hardDeleteSubmitting}
+              >
+                <Text style={styles.hardDeleteCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              {hardDeleteBlockers.length === 0 && !hardDeleteChecking && (
+                <TouchableOpacity
+                  style={[styles.hardDeleteAction, styles.hardDeleteConfirm, hardDeleteConfirmation.trim() !== "DELETE" && styles.hardDeleteConfirmDisabled]}
+                  onPress={() => { void performHardDelete() }}
+                  disabled={hardDeleteSubmitting || hardDeleteConfirmation.trim() !== "DELETE"}
+                >
+                  {hardDeleteSubmitting ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.hardDeleteConfirmText}>Permanently Delete</Text>}
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   )
 }
@@ -408,7 +544,9 @@ const styles = StyleSheet.create({
   },
   actionButtons: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
+    gap: 8,
   },
   actionButton: {
     flexDirection: "row",
@@ -416,7 +554,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4,
-    marginLeft: 8,
+    marginLeft: 0,
   },
   freezeButton: {
     backgroundColor: "#2196F3",
@@ -428,6 +566,11 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: "#FF3B30",
+  },
+  hardDeleteButton: {
+    backgroundColor: "#8E1818",
+    borderWidth: 1,
+    borderColor: "#FF625B",
   },
   actionButtonText: {
     color: "#FFFFFF",
@@ -441,6 +584,113 @@ const styles = StyleSheet.create({
   emptyText: {
     color: "#FFFFFF",
     fontSize: 16,
+  },
+  hardDeleteOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.72)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  hardDeleteModal: {
+    width: "100%",
+    maxWidth: 520,
+    backgroundColor: "#1E1E1E",
+    borderRadius: 14,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: "#56302F",
+  },
+  hardDeleteTitle: {
+    color: "#FFFFFF",
+    fontSize: 20,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  hardDeleteDescription: {
+    color: "#D0D0D0",
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  hardDeleteChecking: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 20,
+  },
+  hardDeleteCheckingText: {
+    color: "#BBBBBB",
+  },
+  hardDeleteBlocked: {
+    marginTop: 16,
+    backgroundColor: "#321F1E",
+    borderRadius: 8,
+    padding: 12,
+  },
+  hardDeleteBlockedTitle: {
+    color: "#FF8A80",
+    fontWeight: "700",
+    marginBottom: 4,
+  },
+  hardDeleteBlockedText: {
+    color: "#E7C2BF",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  hardDeleteBlocker: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  hardDeletePrompt: {
+    color: "#FFB4AE",
+    marginTop: 16,
+    marginBottom: 8,
+    fontWeight: "600",
+  },
+  hardDeleteInput: {
+    borderWidth: 1,
+    borderColor: "#9B3632",
+    borderRadius: 8,
+    color: "#FFFFFF",
+    backgroundColor: "#121212",
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  hardDeleteError: {
+    color: "#FF8A80",
+    fontSize: 13,
+    marginTop: 12,
+  },
+  hardDeleteActions: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 10,
+    marginTop: 20,
+  },
+  hardDeleteAction: {
+    minHeight: 42,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  hardDeleteCancel: {
+    backgroundColor: "#303030",
+  },
+  hardDeleteCancelText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+  },
+  hardDeleteConfirm: {
+    backgroundColor: "#B3261E",
+  },
+  hardDeleteConfirmDisabled: {
+    backgroundColor: "#5A3634",
+  },
+  hardDeleteConfirmText: {
+    color: "#FFFFFF",
+    fontWeight: "700",
   },
 })
 
