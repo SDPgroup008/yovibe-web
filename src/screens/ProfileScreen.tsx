@@ -265,6 +265,12 @@ const ProfileScreen: React.FC = () => {
     }
   };
 
+  const navigateToAdminPawaPayConfig = () => {
+    if (user?.userType === "admin") {
+      navigation.navigate("AdminPawaPayConfig");
+    }
+  };
+
   const handleUpgradeToClubOwner = async () => {
     if (!user) return;
 
@@ -518,6 +524,7 @@ const ProfileScreen: React.FC = () => {
         items: [
           { icon: "alert-circle-outline", label: "Stranded Purchases", accent: "#FF6B6B", onPress: navigateToAdminStrandedPurchases },
           { icon: "map-outline", label: "Venue Geocoding", accent: "#22d3ee", onPress: navigateToAdminGeocode },
+          { icon: "options-outline", label: "pawaPay Limits", description: "View active provider limits and availability", accent: "#22d3ee", onPress: navigateToAdminPawaPayConfig },
         ],
       }
     );

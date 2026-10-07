@@ -1,4 +1,5 @@
-const { appEnvironment, requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig');
+const { requiredEnv, assertPawaPayUrl } = require('../shared/runtimeConfig');
+const { requireUser } = require('../shared/supabaseAdmin');
 
 function json(statusCode, body) {
   return {
@@ -8,26 +9,41 @@ function json(statusCode, body) {
   };
 }
 
+function isAdmin(profile) {
+  return String(profile?.user_type || '').toLowerCase() === 'admin';
+}
+
 function operationSummary(operationTypes) {
   const entries = Array.isArray(operationTypes) ? operationTypes : [];
   return entries.flatMap((entry) => {
     if (!entry || typeof entry !== 'object') return [];
-    if (entry.operationType) {
-      return [{ type: entry.operationType, status: entry.status || null }];
-    }
-    return Object.entries(entry).map(([type, value]) => ({
-      type,
-      status: value && typeof value === 'object' ? value.status || null : null,
-    }));
+    const toSummary = (type, value) => {
+      const details = value && typeof value === 'object' ? value : entry;
+      return {
+        type,
+        status: details.status || null,
+        minTransactionLimit: details.minTransactionLimit ?? null,
+        maxTransactionLimit: details.maxTransactionLimit ?? null,
+        decimalsInAmount: details.decimalsInAmount ?? null,
+        authType: details.authType ?? null,
+        pinPrompt: details.pinPrompt ?? null,
+        pinPromptRevivable: details.pinPromptRevivable ?? null,
+      };
+    };
+    if (entry.operationType) return [toSummary(entry.operationType, entry)];
+    return Object.entries(entry).map(([type, value]) => toSummary(type, value));
   });
 }
 
 function sanitizeConfiguration(payload) {
   return {
+    companyName: payload?.companyName || null,
     signedRequestsOnly: Boolean(payload?.signatureConfiguration?.signedRequestsOnly),
     signedCallbacks: Boolean(payload?.signatureConfiguration?.signedCallbacks),
     countries: (Array.isArray(payload?.countries) ? payload.countries : []).map((country) => ({
       country: country.country,
+      displayName: country.displayName || null,
+      prefix: country.prefix || null,
       providers: (Array.isArray(country.providers) ? country.providers : []).map((provider) => ({
         provider: provider.provider,
         displayName: provider.displayName,
@@ -41,19 +57,24 @@ function sanitizeConfiguration(payload) {
 }
 
 exports.handler = async (event) => {
-  if (appEnvironment() !== 'staging') return json(404, { error: 'Not found' });
   if (event.httpMethod !== 'GET') return json(405, { error: 'Method not allowed' });
   try {
+    const { profile } = await requireUser(event);
+    if (!isAdmin(profile)) return json(403, { error: 'Admin access required' });
+
     const baseUrl = assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'));
     const apiKey = requiredEnv('PAWAPAY_API_KEY');
-    const country = String(event.queryStringParameters?.country || 'UGA').toUpperCase();
-    const operationType = String(event.queryStringParameters?.operationType || 'DEPOSIT').toUpperCase();
-    if (!/^[A-Z]{3}$/.test(country)) return json(400, { error: 'country must be an ISO alpha-3 code' });
-    if (!['DEPOSIT', 'PAYOUT', 'REFUND'].includes(operationType)) return json(400, { error: 'Unsupported operation type' });
+    const query = event.queryStringParameters || {};
+    const country = query.country ? String(query.country).toUpperCase() : '';
+    const operationType = query.operationType ? String(query.operationType).toUpperCase() : '';
+    if (country && !/^[A-Z]{3}$/.test(country)) return json(400, { error: 'country must be an ISO alpha-3 code' });
+    if (operationType && !['DEPOSIT', 'PAYOUT', 'REMITTANCE', 'PUSH_DEPOSIT', 'REFUND', 'NAME_LOOKUP'].includes(operationType)) {
+      return json(400, { error: 'Unsupported operation type' });
+    }
 
     const url = new URL(`${baseUrl}/active-conf`);
-    url.searchParams.set('country', country);
-    url.searchParams.set('operationType', operationType);
+    if (country) url.searchParams.set('country', country);
+    if (operationType) url.searchParams.set('operationType', operationType);
     const response = await fetch(url, { headers: { Authorization: `Bearer ${apiKey}` } });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {

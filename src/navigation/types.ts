@@ -90,6 +90,7 @@ export type ProfileStackParamList = {
   AdminWithdrawals: undefined
   AdminPayouts: undefined
   AdminGeocode: undefined
+  AdminPawaPayConfig: undefined
   Settings: undefined
   HelpSupport: undefined
   Notification: undefined
@@ -176,3 +177,4 @@ export type AdminOwnershipRequestsScreenProps = NativeStackScreenProps<ProfileSt
 export type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminDashboard">
 export type AdminStrandedPurchasesScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminStrandedPurchases">
 export type AdminGeocodeScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminGeocode">
+export type AdminPawaPayConfigScreenProps = NativeStackScreenProps<ProfileStackParamList, "AdminPawaPayConfig">
