@@ -34,7 +34,11 @@ function displayText(value) {
 }
 
 function operationSummary(operationTypes) {
-  const entries = Array.isArray(operationTypes) ? operationTypes : [];
+  const entries = Array.isArray(operationTypes)
+    ? operationTypes
+    : operationTypes && typeof operationTypes === 'object'
+      ? Object.entries(operationTypes).map(([type, value]) => ({ [type]: value }))
+      : [];
   return entries.flatMap((entry) => {
     if (!entry || typeof entry !== 'object') return [];
     const toSummary = (type, value) => {
