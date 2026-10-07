@@ -40,7 +40,6 @@ import AdminRefundsScreen from '../screens/admin/AdminRefundsScreen';
 import AdminWithdrawalsScreen from '../screens/admin/AdminWithdrawalsScreen';
 import AdminPayoutsScreen from '../screens/admin/AdminPayoutsScreen';
 import AdminGeocodeScreen from '../screens/admin/AdminGeocodeScreen';
-import AdminPawaPayConfigScreen from '../screens/admin/AdminPawaPayConfigScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import HelpSupportScreen from '../screens/HelpSupportScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
@@ -343,11 +342,6 @@ export const routes: RouteDefinition[] = [
   {
     path: '/profile/admin/geocode',
     component: withCompatNavigation(AdminGeocodeScreen),
-    exact: true
-  },
-  {
-    path: '/profile/admin/pawapay',
-    component: withCompatNavigation(AdminPawaPayConfigScreen),
     exact: true
   },
   {

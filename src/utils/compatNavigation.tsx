@@ -57,7 +57,6 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminWithdrawals': () => navigate('/profile/admin/withdrawals'),
         'AdminPayouts': () => navigate('/profile/admin/payouts'),
         'AdminGeocode': () => navigate('/profile/admin/geocode'),
-        'AdminPawaPayConfig': () => navigate('/profile/admin/pawapay'),
         'Settings': () => navigate('/profile/settings'),
         'HelpSupport': () => navigate('/profile/help'),
         'Auth': () => navigate('/login'),
