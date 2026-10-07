@@ -11,7 +11,13 @@ import type { User } from "../../models/User"
 import type { AdminUsersScreenProps } from "../../navigation/types"
 
 // User type for tab filtering
-type UserCategoryTab = "all" | "club_owner" | "user" | "admin" | "viber"
+type UserCategoryTab = "all" | "club_owner" | "regular_user" | "admin" | "viber"
+
+function isRegularUser(user: User): boolean {
+  // `regular_user` is the current stored value. Retain the legacy `user`
+  // value in this admin-only filter so historical profiles are not hidden.
+  return user.userType === "regular_user" || String(user.userType) === "user"
+}
 
 const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const { user: currentUser } = useAuth()
@@ -162,6 +168,9 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
       // Vibers are users without email (unauthenticated) - show visitors from analytics
       return []
     }
+    if (activeTab === "regular_user") {
+      return users.filter(isRegularUser)
+    }
     return users.filter(user => user.userType === activeTab)
   }
 
@@ -169,6 +178,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   const getCategoryCount = (category: UserCategoryTab): number => {
     if (category === "all") return users.length
     if (category === "viber") return unauthenticatedVisitors.length // Use visitor count for Vibers
+    if (category === "regular_user") return users.filter(isRegularUser).length
     return users.filter(user => user.userType === category).length
   }
 
@@ -309,7 +319,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
         >
           {renderTabButton("all", "All Users")}
           {renderTabButton("club_owner", "Club Owners")}
-          {renderTabButton("user", "Regular Users")}
+          {renderTabButton("regular_user", "Regular Users")}
           {renderTabButton("admin", "Admins")}
           {renderTabButton("viber", "Vibers")}
         </ScrollView>
