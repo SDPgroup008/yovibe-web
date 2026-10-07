@@ -348,18 +348,14 @@ const VenueDetailScreen: React.FC = () => {
       setLoading(true)
       /* console.log("[VenueDetailScreen] Deleting venue:", venueId) */
       
-      // Delete all events associated with this venue
-      const venueEvents = await SupabaseService.getEventsByVenue(venueId)
-      /* console.log("[VenueDetailScreen] Found", venueEvents.length, "events to delete") */
-      
-      for (const event of venueEvents) {
-        await SupabaseService.deleteEvent(event.id)
-      }
-      
-      await SupabaseService.deleteVenue(venueId)
+      const result = await SupabaseService.adminDeleteVenue(venueId)
       /* console.log("[VenueDetailScreen] Venue deleted successfully") */
       
-      Alert.alert("Success", "Venue and associated events deleted successfully")
+      const deletedEvents = result.deletedEventCount || 0
+      Alert.alert(
+        "Success",
+        `Venue deleted successfully${deletedEvents === 1 ? "; 1 associated event was also deleted" : deletedEvents > 1 ? `; ${deletedEvents} associated events were also deleted` : ""}`,
+      )
       navigation.goBack()
     } catch (error) {
       console.error("[VenueDetailScreen] Error deleting venue:", error)

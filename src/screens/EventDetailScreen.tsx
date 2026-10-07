@@ -214,8 +214,7 @@ const EventDetailScreen: React.FC = () => {
      if (!event) return
      
      try {
-       /* console.log("[EventDetailScreen] Deleting event:", event.id) */
-       await SupabaseService.deleteEvent(event.id)
+       await SupabaseService.adminDeleteEvent(event.slug || event.id)
        /* console.log("[EventDetailScreen] Event deleted successfully") */
        Alert.alert("Success", "Event deleted successfully")
        navigation.goBack()
