@@ -21,6 +21,7 @@ type Operation = {
   status: string | null
   minTransactionLimit: string | number | null
   maxTransactionLimit: string | number | null
+  decimalsInAmount: string | null
   authType: string | null
   pinPrompt: string | null
   pinPromptRevivable: boolean | null
@@ -195,6 +196,7 @@ const AdminPawaPayConfigScreen: React.FC<AdminPawaPayConfigScreenProps> = ({ nav
                           <View style={styles.limitGrid}>
                             <View style={styles.limitItem}><Text style={styles.limitLabel}>Minimum</Text><Text style={styles.limitValue}>{formatLimit(operation.minTransactionLimit)}</Text></View>
                             <View style={styles.limitItem}><Text style={styles.limitLabel}>Maximum</Text><Text style={styles.limitValue}>{formatLimit(operation.maxTransactionLimit)}</Text></View>
+                            <View style={styles.limitItem}><Text style={styles.limitLabel}>Decimals</Text><Text style={styles.limitValue}>{operation.decimalsInAmount || "—"}</Text></View>
                           </View>
                           {(operation.authType || operation.pinPrompt) && (
                             <Text style={styles.operationMeta}>Authorization: {operation.authType || "—"}{operation.pinPrompt ? ` · PIN prompt: ${operation.pinPrompt}` : ""}</Text>
