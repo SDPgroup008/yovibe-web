@@ -48,7 +48,6 @@ function operationSummary(operationTypes) {
         status: displayText(details.status),
         minTransactionLimit: displayText(details.minTransactionLimit),
         maxTransactionLimit: displayText(details.maxTransactionLimit),
-        decimalsInAmount: displayText(details.decimalsInAmount),
         authType: displayText(details.authType),
         pinPrompt: displayText(details.pinPrompt),
         pinPromptRevivable: details.pinPromptRevivable ?? null,
