@@ -11,16 +11,14 @@ import SupabaseService from "../services/SupabaseService"
 import { useAuth } from "../contexts/AuthContext"
 import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore"
 import { db } from "../config/firebase"
-import type { Venue } from "../models/Venue"
-import type { Event } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
-import type { VenueGalleryItem } from "../models/VenueGalleryItem"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { SEOMetadata } from "../components/SEOMetadata"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
+import { useCachedVenuePage } from "../hooks/useDataCache"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -36,12 +34,13 @@ const VenueDetailScreen: React.FC = () => {
 
   // Validate venueId
   const isValidVenueId = venueId && venueId.length > 0 && venueId !== 'add-event' && venueId !== 'programs' && venueId !== 'vibe' && venueId !== 'ticket-contacts' && venueId !== 'my-tickets'
+  const { data: venuePage, loading, refetch: refetchVenuePage } = useCachedVenuePage(isValidVenueId ? venueId : "")
 
-  const [venue, setVenue] = useState<Venue | null>(null)
-  const [events, setEvents] = useState<Event[]>([])
-  const [venueGallery, setVenueGallery] = useState<VenueGalleryItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const venue = venuePage?.venue ?? null
+  const events = venuePage?.events ?? []
+  const venueGallery = venuePage?.gallery ?? []
   const [refreshing, setRefreshing] = useState(false)
+  const [deletingVenue, setDeletingVenue] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isCustomVenue, setIsCustomVenue] = useState(false)
@@ -118,80 +117,26 @@ const VenueDetailScreen: React.FC = () => {
   }
 
   useEffect(() => {
-    const loadVenueAndEvents = async () => {
-      if (!isValidVenueId) {
-        setLoading(false)
-        return
-      }
+    const venueData = venuePage?.venue
+    if (!venueData) return
+    setIsCustomVenue(venuePage.events.length === 1 && venueData.ownerId === venuePage.events[0].createdBy)
+    applyLatestVibe(venuePage.vibes)
 
-      try {
-        setLoading(true)
-        /* console.log("[VenueDetailScreen] Loading venue details for venueSlug:", venueId) */
-        /* console.log("[VenueDetailScreen] User logged in:", !!user) */
-
-        const [venueData, venueEvents, galleryData] = await Promise.all([
-          SupabaseService.getVenueById(venueId),
-          SupabaseService.getEventsByVenue(venueId),
-          SupabaseService.getVenueGallery(venueId).catch((galleryError) => {
-            console.warn("[Gallery][VenueDetail] load:unavailable", { venueId, error: galleryError })
-            return [] as VenueGalleryItem[]
-          }),
-        ])
-
-        if (venueData) {
-          console.info("[Programs][VenueDetail] venue:loaded", {
-            venueId,
-            weeklyPrograms: venueData.weeklyPrograms || {},
-          })
-          setVenue(venueData)
-          setVenueGallery(galleryData)
-          /* console.log("[VenueDetailScreen] Venue data loaded:", !!venueData) */
-
-          /* console.log("[VenueDetailScreen] Events fetched:", venueEvents.length) */
-          setEvents(venueEvents)
-
-          // Check if venue is a custom venue (tied to one event and owned by event creator)
-          if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
-            setIsCustomVenue(true)
-          } else {
-            setIsCustomVenue(false)
-          }
-
-          // Vibes are public and must load for authenticated and guest visitors.
-          const vibeImagesPromise = SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date())
-
-          // Ownership requests and role flags remain authenticated-only.
-          if (user) {
-            /* console.log("[VenueDetailScreen] Setting owner/admin flags for user:", user.id) */
-            setIsOwner(venueData.ownerId === user.id)
-            setIsAdmin(user.userType === "admin")
-
-            const [existingRequest, vibeImages] = await Promise.all([
-              SupabaseService.getUserOwnershipRequest(venueId, user.id),
-              vibeImagesPromise,
-            ])
-
-            if (existingRequest) {
-              setExistingRequestStatus(existingRequest.status)
-            }
-            applyLatestVibe(vibeImages)
-          } else {
-            applyLatestVibe(await vibeImagesPromise)
-          }
-        }
-      } catch (error) {
-        console.error("Error loading venue details:", error)
-        setVibeRating(0.0) // Default to 0.0 on error
-        setCurrentVibeImage(null)
-      } finally {
-        setLoading(false)
-      }
+    if (!user) {
+      setIsOwner(false)
+      setIsAdmin(false)
+      setExistingRequestStatus(null)
+      return
     }
+    setIsOwner(venueData.ownerId === user.id)
+    setIsAdmin(user.userType === "admin")
+    void SupabaseService.getUserOwnershipRequest(venueId, user.id).then((request) => {
+      setExistingRequestStatus(request?.status || null)
+    }).catch(() => setExistingRequestStatus(null))
+  }, [venuePage, venueId, user, applyLatestVibe])
 
-    loadVenueAndEvents()
-
-    // Set up real-time listener for vibe ratings
-    if (!db) return
+  useEffect(() => {
+    if (!isValidVenueId || !db) return
     const vibeRatingsRef = collection(db, "YoVibe/data/vibeRatings")
     const today = new Date()
     today.setHours(0, 0, 0, 0)
@@ -228,11 +173,8 @@ const VenueDetailScreen: React.FC = () => {
       }
     )
 
-    // Cleanup listeners on unmount
-    return () => {
-      unsubscribeVibe()
-    }
-  }, [venueId, user, isValidVenueId, applyLatestVibe])
+    return () => unsubscribeVibe()
+  }, [venueId, isValidVenueId])
 
   // Inject JSON-LD structured data for SEO
   useEffect(() => {
@@ -290,42 +232,13 @@ const VenueDetailScreen: React.FC = () => {
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
     try {
-      /* console.log("[VenueDetailScreen] Refreshing venue details for venueId:", venueId) */
-      
-      const venueData = await SupabaseService.getVenueById(venueId)
-      setVenue(venueData)
-      
-      // Fetch events regardless of user authentication (events are public data)
-      if (venueData) {
-        /* console.log("[VenueDetailScreen] Refreshing events for venue:", venueId) */
-        const [venueEvents, vibeImages, galleryData] = await Promise.all([
-          SupabaseService.getEventsByVenue(venueId),
-          SupabaseService.getVibeImagesByVenueAndDate(venueId, new Date()),
-          SupabaseService.getVenueGallery(venueId).catch(() => [] as VenueGalleryItem[]),
-        ])
-        /* console.log("[VenueDetailScreen] Events refreshed:", venueEvents.length) */
-        setEvents(venueEvents)
-        setVenueGallery(galleryData)
-        applyLatestVibe(vibeImages)
-        
-        if (venueEvents.length === 1 && venueData.ownerId === venueEvents[0].createdBy) {
-          setIsCustomVenue(true)
-        } else {
-          setIsCustomVenue(false)
-        }
-      }
-
-      // Only set owner/admin flags if user is logged in
-      if (user && venueData) {
-        setIsOwner(venueData.ownerId === user.id)
-        setIsAdmin(user.userType === "admin")
-      }
+      await refetchVenuePage()
     } catch (error) {
       console.error("Error refreshing venue details:", error)
     } finally {
       setRefreshing(false)
     }
-  }, [venueId, user, applyLatestVibe])
+  }, [refetchVenuePage])
 
   const handleManagePrograms = () => {
     (navigation as any).navigate("ManagePrograms", { venueId, weeklyPrograms: venue?.weeklyPrograms || {} })
@@ -346,7 +259,7 @@ const VenueDetailScreen: React.FC = () => {
     if (!confirmed) return
     
     try {
-      setLoading(true)
+      setDeletingVenue(true)
       /* console.log("[VenueDetailScreen] Deleting venue:", venueId) */
       
       const result = await SupabaseService.adminDeleteVenue(venueId)
@@ -361,7 +274,7 @@ const VenueDetailScreen: React.FC = () => {
     } catch (error) {
       console.error("[VenueDetailScreen] Error deleting venue:", error)
       Alert.alert("Error", "Failed to delete venue")
-      setLoading(false)
+      setDeletingVenue(false)
     }
   }
 
@@ -442,7 +355,7 @@ const VenueDetailScreen: React.FC = () => {
 
   // Header menu is now handled within the screen content since we don't use React Navigation headers
 
-  if (loading) {
+  if (loading && !venue) {
     return <ResponsiveSkeleton variant="detail" />
   }
 
@@ -678,7 +591,7 @@ const VenueDetailScreen: React.FC = () => {
                   </View>
                 ) : null}
                 {isAdmin && (
-                  <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue}>
+                  <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue} disabled={deletingVenue}>
                     <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.actionButtonText}>Delete Venue</Text>
                   </TouchableOpacity>
@@ -874,7 +787,7 @@ const VenueDetailScreen: React.FC = () => {
                 </View>
               ) : null}
               {isAdmin && (
-                <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue}>
+                <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.deleteButton]} onPress={handleDeleteVenue} disabled={deletingVenue}>
                   <Ionicons name="trash-outline" size={20} color="#FFFFFF" />
                   <Text style={styles.actionButtonText}>Delete Venue</Text>
                 </TouchableOpacity>

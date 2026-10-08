@@ -340,10 +340,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   };
 
   return (
-    <View style={[
-      styles.container, 
-      activeTab === "recreation" && styles.recreationContainer
-    ]}>
+    <View style={styles.container}>
       {/* SEO Metadata for Venues page */}
       <SEOMetadata
         title={venueSeo.title}
@@ -381,10 +378,10 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
               style={[styles.tab, activeTab === "recreation" && styles.activeTab]}
               onPress={() => setActiveTab("recreation")}
               accessibilityRole="button"
-              accessibilityLabel="Recreation centers"
+              accessibilityLabel="Recreation centres"
               accessibilityState={{ selected: activeTab === "recreation" }}
             >
-              <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centers</Text>
+              <Text style={[styles.tabText, activeTab === "recreation" && styles.activeTabText]}>Recreation Centres</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={[styles.searchButton, showSearch && styles.searchButtonActive]} 
@@ -402,7 +399,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       {showSearch && (
         <View style={styles.searchContainer}>
           <TextInput
-            style={[styles.searchInput, activeTab === "recreation" && styles.recreationSearchInput]}
+            style={styles.searchInput}
             placeholder="Search venues by name or location..."
             placeholderTextColor="#888888"
             value={searchQuery}
@@ -431,8 +428,8 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         <ResponsiveSkeleton variant="list" />
       ) : displayedVenues.length === 0 ? (
         <View style={styles.emptyContainer}>
-          <Text style={[styles.emptyText, activeTab === "recreation" && styles.recreationText]}>No venues found</Text>
-          <Text style={[styles.emptySubtext, activeTab === "recreation" && styles.recreationSubtext]}>
+          <Text style={styles.emptyText}>No venues found</Text>
+          <Text style={styles.emptySubtext}>
             Check back later for new venues
           </Text>
         </View>
@@ -543,9 +540,7 @@ const styles = StyleSheet.create({
   tabContainerWide: {
     flex: 1,
   },
-  recreationContainer: {
-    backgroundColor: "#F5F5F5",
-  },  header: {
+  header: {
     padding: responsiveSize(12, 20, 8),
     paddingBottom: 0,
   },
@@ -612,19 +607,12 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 212, 255, 0.3)",
     paddingHorizontal: responsiveSize(12, 14, 16),
   },
-  recreationSearchContainer: {
-    backgroundColor: "rgba(245, 245, 245, 0.95)",
-    borderColor: "rgba(0, 0, 0, 0.1)",
-  },
   searchInput: {
     flex: 1,
     height: responsiveSize(40, 44, 48),
     color: "#FFFFFF",
     fontSize: responsiveSize(14, 15, 16),
     paddingVertical: 0,
-  },
-  recreationSearchInput: {
-    color: "#333333",
   },
   searchClearButton: {
     padding: responsiveSize(4, 6, 8),
@@ -640,9 +628,6 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     marginTop: responsiveSize(12, 16, 20),
     fontSize: responsiveSize(14, 16, 18),
-  },
-  recreationText: {
-    color: "#333333",
   },
   emptyContainer: {
     flex: 1,
@@ -661,9 +646,6 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(12, 14, 16),
     marginTop: responsiveSize(6, 8, 12),
     textAlign: "center",
-  },
-  recreationSubtext: {
-    color: "#666666",
   },
   venuesList: {
     padding: responsiveSize(12, 16, 20),

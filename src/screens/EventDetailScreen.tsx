@@ -19,11 +19,11 @@ import {
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
 import { useAuth } from "../contexts/AuthContext"
-import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
+import { useCachedEventDetails } from "../hooks/useDataCache"
 
 import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
@@ -55,47 +55,19 @@ const EventDetailScreen: React.FC = () => {
   const eventId = pathParts[1] // events/:eventId, so [events, eventId]
   const { user } = useAuth()
 
-  const [event, setEvent] = useState<Event | null>(null)
-  const [loading, setLoading] = useState(true)
-
   // Validate eventId
   const isValidEventId = eventId && eventId.length > 0 && eventId !== 'add' && eventId !== 'notifications' && eventId !== 'ticket-contacts' && eventId !== 'my-tickets'
+  const { data: event, loading, updateCachedData } = useCachedEventDetails(isValidEventId ? eventId : "")
   const [isGoing, setIsGoing] = useState(false)
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
 
   useEffect(() => {
-    const loadEvent = async () => {
-      if (!isValidEventId) {
-        setLoading(false)
-        return
-      }
-
-      try {
-        const eventData = await SupabaseService.getEventById(eventId)
-        if (eventData) {
-          setEvent(eventData)
-
-          // Check if current user is attending
-          if (user && eventData?.attendees) {
-            setIsGoing(eventData.attendees.includes(user.id))
-          }
-
-          // Set attendee count
-          setAttendeeCount(eventData?.attendees?.length || 0)
-        } else {
-          console.warn("Event not found:", eventId)
-        }
-      } catch (error) {
-        console.error("Error loading event details:", error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    loadEvent()
-  }, [eventId, user, isValidEventId])
+    if (!event) return
+    setIsGoing(Boolean(user && event.attendees?.includes(user.id)))
+    setAttendeeCount(event.attendees?.length || 0)
+  }, [event, user])
 
   const handleToggleGoing = async () => {
     if (!user) {
@@ -119,11 +91,7 @@ const EventDetailScreen: React.FC = () => {
 
       await SupabaseService.updateEvent(event.id, { attendees: updatedAttendees })
 
-      // Update local event state
-      setEvent({
-        ...event,
-        attendees: updatedAttendees,
-      })
+      updateCachedData((previous) => previous ? { ...previous, attendees: updatedAttendees } : previous)
     } catch (error) {
       console.error("Error updating attendance:", error)
       // Revert optimistic update on error

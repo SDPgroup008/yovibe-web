@@ -24,6 +24,7 @@ import { StatusDialog } from "../components/StatusDialog"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { blobToDataURL } from "../utils/expoHelpers"
+import { dataCache, CACHE_KEYS } from "../utils/cache"
 import {
   PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE,
   PAWAPAY_MOBILE_MONEY_MAX_UGX,
@@ -73,6 +74,7 @@ const TicketPurchaseScreen: React.FC = () => {
   const [showTicketTypeModal, setShowTicketTypeModal] = useState(false)
 
   const [soldCounts, setSoldCounts] = useState<Record<string, number>>({})
+  const [authoritativeConfigLoading, setAuthoritativeConfigLoading] = useState(true)
   const [availabilityChecking, setAvailabilityChecking] = useState(false)
   const [availabilityError, setAvailabilityError] = useState(false)
   const [showSeatMapModal, setShowSeatMapModal] = useState(false)
@@ -91,13 +93,25 @@ const TicketPurchaseScreen: React.FC = () => {
     const loadEvent = async () => {
       if (!eventId) {
         setInitialLoading(false)
+        setAuthoritativeConfigLoading(false)
         return
       }
+
+      const cachedEvent = dataCache.peek<Event>(CACHE_KEYS.EVENT_DETAILS(eventId))
+      if (cachedEvent?.data) {
+        setEvent(cachedEvent.data)
+        setInitialLoading(false)
+      }
+      setAuthoritativeConfigLoading(true)
 
       try {
         const eventData = await SupabaseService.getEventById(eventId)
         if (!eventData) return
         setEvent(eventData)
+        dataCache.set(CACHE_KEYS.EVENT_DETAILS(eventId), eventData, 5 * 60 * 1000)
+        if (eventData.slug && eventData.slug !== eventId) {
+          dataCache.set(CACHE_KEYS.EVENT_DETAILS(eventData.slug), eventData, 5 * 60 * 1000)
+        }
         setInitialLoading(false)
         const cappedFeeTypes = (eventData.entryFees || [])
           .filter((fee: any) => fee.maxTickets && fee.maxTickets > 0)
@@ -115,7 +129,10 @@ const TicketPurchaseScreen: React.FC = () => {
         }
       } catch (error) {
         console.error("Error loading event for ticket purchase:", error)
-      } finally { setInitialLoading(false) }
+      } finally {
+        setInitialLoading(false)
+        setAuthoritativeConfigLoading(false)
+      }
     }
 
     loadEvent()
@@ -128,7 +145,10 @@ const TicketPurchaseScreen: React.FC = () => {
     if (!fee.maxTickets || fee.maxTickets <= 0) return false
     return (soldCounts[fee.name] ?? 0) >= fee.maxTickets
   }
-  const isAvailabilityPending = (fee: any): boolean => Boolean(fee.maxTickets && fee.maxTickets > 0 && (availabilityChecking || availabilityError || soldCounts[fee.name] === undefined))
+  const isAvailabilityPending = (fee: any): boolean => Boolean(
+    authoritativeConfigLoading ||
+    (fee.maxTickets && fee.maxTickets > 0 && (availabilityChecking || availabilityError || soldCounts[fee.name] === undefined))
+  )
 
   const openSeatMap = async (fee: any, personIndex?: number, mode?: "seat" | "table") => {
     const m = mode || "seat"
@@ -376,7 +396,8 @@ const TicketPurchaseScreen: React.FC = () => {
       }
     }
     if (!selectedTicketType && ticketTypes.length > 0) errs.ticketType = "Please select a ticket type"
-    if (selectedTicketType && isAvailabilityPending(selectedEntryFee || selectedTicketType)) errs.ticketType = "Ticket availability is still being checked"
+    if (selectedTicketType && authoritativeConfigLoading) errs.ticketType = "Event details are still being verified"
+    else if (selectedTicketType && isAvailabilityPending(selectedEntryFee || selectedTicketType)) errs.ticketType = "Ticket availability is still being checked"
     if (!user && !buyerContactEmail.trim()) errs.buyerContactEmail = "Please enter your email address"
     else if (!user && !EMAIL_REGEX.test(buyerContactEmail.trim())) errs.buyerContactEmail = "Enter a valid email address"
     if (!paymentMethod) errs.paymentMethod = "Please select a payment method"
@@ -840,6 +861,10 @@ const updateBuyerName = (index: number, name: string) => {
   }
 
 const handleInstallmentPurchase = async () => {
+    if (authoritativeConfigLoading) {
+      Alert.alert("Checking event", "Event details are still being verified. Please wait a moment and try again.")
+      return
+    }
     if (paymentMethod === "mobile_money" && mobileMoneyLimitExceeded) {
       showMobileMoneyLimitMessage()
       return
@@ -989,6 +1014,11 @@ const handleInstallmentPurchase = async () => {
 
   const handlePurchase = async () => {
     /* console.log("[handlePurchase] START - user:", user?.id || "visitor", "paymentMethod:", paymentMethod) */
+
+    if (authoritativeConfigLoading) {
+      Alert.alert("Checking event", "Event details are still being verified. Please wait a moment and try again.")
+      return
+    }
 
     if (paymentMethod === "mobile_money" && mobileMoneyLimitExceeded) {
       showMobileMoneyLimitMessage()
@@ -1338,7 +1368,7 @@ const handleInstallmentPurchase = async () => {
                     <View style={styles.tierCardHeader}>
                       <Text style={[styles.tierCardName, soldOut && { color: "#666" }]}>{fee.name}</Text>
                       {availabilityPending ? (
-                        <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
+                        <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{authoritativeConfigLoading ? "VERIFYING" : availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
                       ) : soldOut ? (
                         <View style={styles.soldOutBadge}>
                           <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
@@ -1669,12 +1699,14 @@ const handleInstallmentPurchase = async () => {
           activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "mobile_money" && styles.paymentOptionSelected]}
           onPress={() => {
+            if (authoritativeConfigLoading) return
             if (mobileMoneyLimitExceeded) {
               showMobileMoneyLimitMessage()
               return
             }
             setPaymentMethod("mobile_money")
           }}
+          disabled={authoritativeConfigLoading}
         >
           <View style={styles.paymentOptionMain}>
             <View style={[styles.paymentOptionIcon, paymentMethod === "mobile_money" && styles.paymentOptionIconActive]}>
@@ -1694,7 +1726,10 @@ const handleInstallmentPurchase = async () => {
         <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "credit_card" && styles.paymentOptionSelected]}
-          onPress={() => setPaymentMethod("credit_card")}
+          onPress={() => {
+            if (!authoritativeConfigLoading) setPaymentMethod("credit_card")
+          }}
+          disabled={authoritativeConfigLoading}
         >
           <View style={styles.paymentOptionMain}>
             <View style={[styles.paymentOptionIcon, paymentMethod === "credit_card" && styles.paymentOptionIconActive]}>
@@ -1917,7 +1952,7 @@ const handleInstallmentPurchase = async () => {
         style={[
           styles.purchaseButton,
           isLargeScreen && styles.desktopPurchaseButton,
-          (!paymentMethod || loading || (!user && useInstallments) || (!user && !acceptedTerms)) && styles.purchaseButtonDisabled,
+          (!paymentMethod || loading || authoritativeConfigLoading || (!user && useInstallments) || (!user && !acceptedTerms)) && styles.purchaseButtonDisabled,
         ]}
         onPress={() => {
           if (!user && !acceptedTerms) {
@@ -1926,7 +1961,7 @@ const handleInstallmentPurchase = async () => {
           }
           useInstallments ? handleInstallmentPurchase() : handlePurchase()
         }}
-        disabled={!paymentMethod || loading || (!user && useInstallments) || (!user && !acceptedTerms)}
+        disabled={!paymentMethod || loading || authoritativeConfigLoading || (!user && useInstallments) || (!user && !acceptedTerms)}
         activeOpacity={0.85}
       >
         {loading ? (
@@ -1935,7 +1970,7 @@ const handleInstallmentPurchase = async () => {
           <>
             <Ionicons name="card" size={24} color="#FFFFFF" />
             <Text style={styles.purchaseButtonText}>
-              {useInstallments ? `Reserve & Pay First Installment` : "Purchase Tickets"}
+              {authoritativeConfigLoading ? "Checking event…" : useInstallments ? `Reserve & Pay First Installment` : "Purchase Tickets"}
             </Text>
           </>
         )}
@@ -1996,7 +2031,7 @@ const handleInstallmentPurchase = async () => {
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                         <Text style={[styles.ticketTypeItemName, soldOut && { color: "#666" }]}>{item.name}</Text>
                         {availabilityPending ? (
-                          <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
+                          <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{authoritativeConfigLoading ? "VERIFYING" : availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
                         ) : soldOut && (
                           <View style={styles.soldOutBadge}>
                             <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>

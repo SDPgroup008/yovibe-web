@@ -9,6 +9,7 @@ import type { Event, EventCreatorType } from "../models/Event"
 import type { VibeImage } from "../models/VibeImage"
 import type { VenueOwnershipRequest } from "../models/VenueOwnershipRequest"
 import { v4 as uuidv4 } from "uuid"
+import { dataCache } from "../utils/cache"
 
 const FUNCTIONS_BASE_URL =
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
@@ -723,6 +724,7 @@ class SupabaseService {
 
       if (error) throw error;
 
+      dataCache.invalidateVenue(data.slug)
       return data.slug;
     } catch (error) {
       console.error("SupabaseService: Error adding venue:", error);
@@ -751,6 +753,7 @@ class SupabaseService {
         .eq("slug", venueSlug);
 
       if (error) throw error;
+      dataCache.invalidateVenue(venueSlug)
     } catch (error) {
       console.error("SupabaseService: Error updating venue:", error);
       throw error;
@@ -769,6 +772,7 @@ class SupabaseService {
 
       if (error) throw error;
 
+      dataCache.invalidateVenue(venueId)
       /* console.log("SupabaseService: Venue soft deleted successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error deleting venue:", error);
@@ -777,7 +781,9 @@ class SupabaseService {
   }
 
   async adminDeleteVenue(venueId: string): Promise<AdminSoftDeleteResult> {
-    return this.adminSoftDelete("venue", venueId)
+    const result = await this.adminSoftDelete("venue", venueId)
+    dataCache.invalidateVenue(venueId)
+    return result
   }
 
   async updateVenuePrograms(venueId: string, programs: Record<string, WeeklyProgramValue>): Promise<void> {
@@ -802,6 +808,7 @@ class SupabaseService {
         throw new Error("No venue was updated. Check the venue slug and authenticated owner permissions.");
       }
 
+      dataCache.invalidateVenue(venueId)
       /* console.log("SupabaseService: Venue programs updated"); */
     } catch (error) {
       console.error("[Programs][Supabase] venue:update:error", { venueId, programs, error });
@@ -851,6 +858,7 @@ class SupabaseService {
         .single()
 
       if (error) throw error
+      dataCache.invalidateVenue(item.venueSlug)
       return data.id
     } catch (error) {
       console.error("SupabaseService: Error adding venue gallery item:", error)
@@ -867,6 +875,7 @@ class SupabaseService {
 
       if (error) throw error;
 
+      dataCache.invalidateVenue(venueId)
       /* console.log("SupabaseService: Venue restored successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error restoring venue:", error);
@@ -1137,6 +1146,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
         if (!error) {
           /* console.log(`[addEvent] ✅ Event created successfully with slug: ${data.slug}`); */
+          dataCache.invalidateEvent(data.slug)
+          if (eventData.venueSlug) dataCache.invalidateVenue(eventData.venueSlug)
           return data.slug
         }
 
@@ -1172,6 +1183,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       if (error) throw error;
 
+      dataCache.invalidateEvent(eventSlug)
       /* console.log("SupabaseService: Event soft deleted successfully"); */
     } catch (error) {
       console.error("SupabaseService: Error deleting event:", error);
@@ -1180,7 +1192,9 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
   }
 
   async adminDeleteEvent(eventSlug: string): Promise<AdminSoftDeleteResult> {
-    return this.adminSoftDelete("event", eventSlug)
+    const result = await this.adminSoftDelete("event", eventSlug)
+    dataCache.invalidateEvent(eventSlug)
+    return result
   }
 
   async updateEvent(eventSlug: string, data: Partial<Event>): Promise<void> {
@@ -1241,6 +1255,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           /* console.log("[SupabaseService.updateEvent] ❌ eventSlug is too short for UUID, likely not a valid id") */
         }
       }
+      dataCache.invalidateEvent(eventSlug)
     } catch (error) {
       console.error("[SupabaseService.updateEvent] ❌ ERROR:", error);
       throw error;
@@ -1785,6 +1800,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         console.warn("SupabaseService: Unable to sync venue vibe rating:", syncError);
       }
 
+      dataCache.invalidateVenue(vibeImageData.venueId)
       return data.id;
     } catch (error) {
       console.error("SupabaseService: Error adding vibe image:", error);

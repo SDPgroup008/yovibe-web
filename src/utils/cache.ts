@@ -9,6 +9,11 @@ interface CacheEntry<T> {
   ttl: number; // Time to live in milliseconds
 }
 
+export interface CacheSnapshot<T> {
+  data: T;
+  isFresh: boolean;
+}
+
 class Cache {
   private cache = new Map<string, CacheEntry<any>>();
 
@@ -21,12 +26,17 @@ class Cache {
 
     const now = Date.now();
     if (now - entry.timestamp > entry.ttl) {
-      // Entry expired, remove it
-      this.cache.delete(key);
       return null;
     }
 
     return entry.data;
+  }
+
+  /** Returns cached data even after its TTL so screens can refresh in place. */
+  peek<T>(key: string): CacheSnapshot<T> | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    return { data: entry.data as T, isFresh: Date.now() - entry.timestamp <= entry.ttl };
   }
 
   /**
@@ -45,6 +55,27 @@ class Cache {
    */
   delete(key: string): void {
     this.cache.delete(key);
+  }
+
+  deleteMatching(prefix: string): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
+    }
+  }
+
+  invalidateEvent(eventId: string): void {
+    this.delete(CACHE_KEYS.EVENT_DETAILS(eventId));
+    // Callers may hold an event UUID while public routes use its slug. Event
+    // details are small, so clear the detail group rather than risk stale data.
+    this.deleteMatching("event_");
+    this.delete(CACHE_KEYS.EVENTS);
+  }
+
+  invalidateVenue(venueId: string): void {
+    this.delete(CACHE_KEYS.VENUE_DETAILS(venueId));
+    this.delete(CACHE_KEYS.VENUE_PAGE(venueId));
+    this.deleteMatching("venue_");
+    this.delete(CACHE_KEYS.VENUES);
   }
 
   /**
@@ -83,6 +114,7 @@ export const CACHE_KEYS = {
   VENUES: 'venues',
   EVENT_DETAILS: (id: string) => `event_${id}`,
   VENUE_DETAILS: (id: string) => `venue_${id}`,
+  VENUE_PAGE: (id: string) => `venue_page_${id}`,
   USER_TICKETS: (userId: string) => `user_tickets_${userId}`,
   NOTIFICATIONS: (userId: string) => `notifications_${userId}`,
   VIBE_IMAGES: (venueId: string, date: string) => `vibe_images_${venueId}_${date}`,
