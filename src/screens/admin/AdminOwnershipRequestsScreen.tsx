@@ -8,6 +8,7 @@ import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { VenueOwnershipRequest } from "../../models/VenueOwnershipRequest"
 import type { AdminOwnershipRequestsScreenProps } from "../../navigation/types"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> = ({ navigation }) => {
   const { user: currentUser } = useAuth()
@@ -210,12 +211,7 @@ const AdminOwnershipRequestsScreen: React.FC<AdminOwnershipRequestsScreenProps> 
   )
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading ownership requests...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="table" />
   }
 
   return (

@@ -9,6 +9,7 @@ import { useRouter } from "../utils/URLRouter"
 import ImagePickerService from "../services/ImagePickerService"
 import SupabaseService from "../services/SupabaseService"
 import type { WeeklyProgramDetails, WeeklyProgramValue } from "../models/Venue"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 const DAYS_OF_WEEK = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 type ProgramDraft = WeeklyProgramDetails
@@ -104,6 +105,8 @@ const ManageProgramsScreen: React.FC = () => {
       Alert.alert("Save failed", "We could not update the weekly program. Please try again.")
     } finally { setLoading(false) }
   }
+
+  if (loadingPrograms) return <ResponsiveSkeleton variant="dashboard" />
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

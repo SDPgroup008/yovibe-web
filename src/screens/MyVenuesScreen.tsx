@@ -14,6 +14,7 @@ import {
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useCompatNavigation } from "../utils/compatNavigation"
 
@@ -105,12 +106,7 @@ const MyVenuesScreen: React.FC = () => {
   }
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading venues...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="gallery" />
   }
 
   return (

@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import EventsScreen from "./EventsScreen";
 import EventDetailScreen from "./EventDetailScreen";
 import SupabaseService from "../services/SupabaseService";
+import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 
 const EventDetailScreenCompat = EventDetailScreen as any;
 
@@ -135,11 +136,7 @@ const EventsRouteScreen: React.FC<Props> = ({ eventId, navigation, route }) => {
   }, [normalizedTerm]);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-      </View>
-    );
+    return <ResponsiveSkeleton variant="list" />;
   }
 
   if (shouldRenderDetail) {

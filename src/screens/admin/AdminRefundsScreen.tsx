@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react"
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, TextInput, Modal } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import RefundService from "../../services/RefundService"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 type StatusFilter = "all" | "pending_admin_review" | "approved" | "rejected" | "processing" | "submitted" | "completed" | "needs_attention" | "failed"
 
@@ -174,7 +175,7 @@ export default function AdminRefundsScreen() {
       />
 
       {loading && page === 0 ? (
-        <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 40 }} />
+        <ResponsiveSkeleton variant="table" />
       ) : (
         <FlatList data={refunds} keyExtractor={(item) => item.id} renderItem={renderItem} contentContainerStyle={styles.list}
           onRefresh={onRefresh} refreshing={refreshing} onEndReached={onLoadMore} onEndReachedThreshold={0.3}

@@ -9,6 +9,7 @@ import AnalyticsService, { type UserVisitData } from "../../services/AnalyticsSe
 import { useAuth } from "../../contexts/AuthContext"
 import type { User } from "../../models/User"
 import type { AdminUsersScreenProps } from "../../navigation/types"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 // User type for tab filtering
 type UserCategoryTab = "all" | "club_owner" | "regular_user" | "admin" | "viber"
@@ -290,12 +291,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
   }
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading users...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="table" />
   }
 
   const filteredUsers = getFilteredUsers()

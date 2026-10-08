@@ -15,6 +15,7 @@ import type { AppNotification, EventSummaryPreview } from "../models/Notificatio
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useCachedNotifications } from "../hooks/useDataCache"
 import { useNotificationsScroll } from "../hooks/useScrollPersistence"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 
 export default function NotificationScreen() {
@@ -236,12 +237,7 @@ export default function NotificationScreen() {
   )
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#FF6B6B" />
-        <Text style={styles.loadingText}>Loading notifications...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="list" />
   }
 
   const unreadCount = (notifications || []).filter(n => !n.isRead).length

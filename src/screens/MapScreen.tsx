@@ -9,6 +9,7 @@ import type { Venue } from "../models/Venue"
 import type { MapScreenProps } from "../navigation/types"
 import { useMapScroll } from "../hooks/useScrollPersistence"
 import { useIsFocused } from "../utils/compatNavigation"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 // This is a web-only implementation of the MapScreen
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
@@ -249,9 +250,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       </View>
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading venues...</Text>
-        </View>
+        <ResponsiveSkeleton variant="list" />
       ) : venues.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="location-outline" size={64} color="#666666" />

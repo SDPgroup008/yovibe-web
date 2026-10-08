@@ -21,6 +21,7 @@ import type { Event } from "../models/Event"
 import { ValidationDialog } from "../components/ValidationDialog"
 import { TicketCreationProgress } from "../components/TicketCreationProgress"
 import { StatusDialog } from "../components/StatusDialog"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { blobToDataURL } from "../utils/expoHelpers"
 import {
@@ -72,6 +73,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const [showTicketTypeModal, setShowTicketTypeModal] = useState(false)
 
   const [soldCounts, setSoldCounts] = useState<Record<string, number>>({})
+  const [availabilityChecking, setAvailabilityChecking] = useState(false)
+  const [availabilityError, setAvailabilityError] = useState(false)
   const [showSeatMapModal, setShowSeatMapModal] = useState(false)
   const [occupiedSeats, setOccupiedSeats] = useState<number[]>([])
   const [perPersonSeats, setPerPersonSeats] = useState<(number | null)[]>([])
@@ -93,23 +96,26 @@ const TicketPurchaseScreen: React.FC = () => {
 
       try {
         const eventData = await SupabaseService.getEventById(eventId)
-        if (eventData) {
-          setEvent(eventData)
-          const counts: Record<string, number> = {}
-          await Promise.all(
-            (eventData.entryFees || []).map(async (fee: any) => {
-              if (fee.maxTickets && fee.maxTickets > 0) {
-                counts[fee.name] = await SupabaseService.getSoldTicketCount(eventId, fee.name)
-              }
-            })
-          )
-          setSoldCounts(counts)
+        if (!eventData) return
+        setEvent(eventData)
+        setInitialLoading(false)
+        const cappedFeeTypes = (eventData.entryFees || [])
+          .filter((fee: any) => fee.maxTickets && fee.maxTickets > 0)
+          .map((fee: any) => fee.name)
+        if (cappedFeeTypes.length === 0) return
+        setAvailabilityChecking(true)
+        setAvailabilityError(false)
+        try {
+          setSoldCounts(await SupabaseService.getSoldTicketCounts(eventId, cappedFeeTypes))
+        } catch (availabilityLoadError) {
+          console.error("Error loading ticket capacity:", availabilityLoadError)
+          setAvailabilityError(true)
+        } finally {
+          setAvailabilityChecking(false)
         }
       } catch (error) {
         console.error("Error loading event for ticket purchase:", error)
-      } finally {
-        setInitialLoading(false)
-      }
+      } finally { setInitialLoading(false) }
     }
 
     loadEvent()
@@ -122,6 +128,7 @@ const TicketPurchaseScreen: React.FC = () => {
     if (!fee.maxTickets || fee.maxTickets <= 0) return false
     return (soldCounts[fee.name] ?? 0) >= fee.maxTickets
   }
+  const isAvailabilityPending = (fee: any): boolean => Boolean(fee.maxTickets && fee.maxTickets > 0 && (availabilityChecking || availabilityError || soldCounts[fee.name] === undefined))
 
   const openSeatMap = async (fee: any, personIndex?: number, mode?: "seat" | "table") => {
     const m = mode || "seat"
@@ -369,6 +376,7 @@ const TicketPurchaseScreen: React.FC = () => {
       }
     }
     if (!selectedTicketType && ticketTypes.length > 0) errs.ticketType = "Please select a ticket type"
+    if (selectedTicketType && isAvailabilityPending(selectedEntryFee || selectedTicketType)) errs.ticketType = "Ticket availability is still being checked"
     if (!user && !buyerContactEmail.trim()) errs.buyerContactEmail = "Please enter your email address"
     else if (!user && !EMAIL_REGEX.test(buyerContactEmail.trim())) errs.buyerContactEmail = "Enter a valid email address"
     if (!paymentMethod) errs.paymentMethod = "Please select a payment method"
@@ -1119,12 +1127,7 @@ const handleInstallmentPurchase = async () => {
   }, [selectedTicketType, actualTicketCount, buyerNames, buyerEmails, emailDistribution, visitorEmail])
 
   if (initialLoading) {
-    return (
-      <View style={styles.loaderContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={{ color: '#FFFFFF', marginTop: 12, fontSize: 16 }}>Loading event details...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="checkout" />
   }
 
   if (!event) {
@@ -1311,6 +1314,7 @@ const handleInstallmentPurchase = async () => {
               {ticketTypes.map((fee: any) => {
                 const isSelected = selectedTicketType?.name === fee.name
                 const soldOut = isSoldOut(fee)
+                const availabilityPending = isAvailabilityPending(fee)
                 const remaining = fee.maxTickets && fee.maxTickets > 0
                   ? Math.max(0, fee.maxTickets - (soldCounts[fee.name] ?? 0))
                   : null
@@ -1322,18 +1326,20 @@ const handleInstallmentPurchase = async () => {
                     style={[
                       styles.tierCard,
                       isSelected && styles.tierCardSelected,
-                      soldOut && styles.tierCardSoldOut,
+                      (soldOut || availabilityPending) && styles.tierCardSoldOut,
                     ]}
                     onPress={() => {
-                      if (soldOut) return
+                      if (soldOut || availabilityPending) return
                       setSelectedTicketType(fee)
                       setFieldErrors((prev: any) => { const n = { ...prev }; delete n.ticketType; return n })
                     }}
-                    disabled={soldOut}
+                    disabled={soldOut || availabilityPending}
                   >
                     <View style={styles.tierCardHeader}>
                       <Text style={[styles.tierCardName, soldOut && { color: "#666" }]}>{fee.name}</Text>
-                      {soldOut ? (
+                      {availabilityPending ? (
+                        <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
+                      ) : soldOut ? (
                         <View style={styles.soldOutBadge}>
                           <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
                         </View>
@@ -1348,7 +1354,7 @@ const handleInstallmentPurchase = async () => {
                     <Text style={[styles.tierCardPrice, soldOut && { color: "#555" }]}>
                       UGX {Number.parseInt(String(fee.amount || "0").replace(/[^0-9]/g, "") || "0").toLocaleString()}
                     </Text>
-                    {remaining !== null && !soldOut && (
+                    {remaining !== null && !soldOut && !availabilityPending && (
                       <Text style={styles.remainingText}>{remaining} left</Text>
                     )}
                   </TouchableOpacity>
@@ -1970,30 +1976,33 @@ const handleInstallmentPurchase = async () => {
               renderItem={({ item }: { item: any }) => {
                 const isSelected = selectedTicketType?.name === item.name
                 const soldOut = isSoldOut(item)
+                const availabilityPending = isAvailabilityPending(item)
                 const remaining = item.maxTickets && item.maxTickets > 0
                   ? Math.max(0, item.maxTickets - (soldCounts[item.name] ?? 0))
                   : null
                 const hasSeatMap = item.seatMap && item.seatMap.type !== "none"
                 return (
                   <TouchableOpacity
-                    style={[styles.ticketTypeItem, isSelected && styles.ticketTypeItemSelected, soldOut && styles.ticketTypeItemSoldOut]}
+                    style={[styles.ticketTypeItem, isSelected && styles.ticketTypeItemSelected, (soldOut || availabilityPending) && styles.ticketTypeItemSoldOut]}
                     onPress={() => {
-                      if (soldOut) return
+                      if (soldOut || availabilityPending) return
                       setSelectedTicketType(item)
                       setFieldErrors(prev => { const n = { ...prev }; delete n.ticketType; return n })
                       setShowTicketTypeModal(false)
                     }}
-                    disabled={soldOut}
+                    disabled={soldOut || availabilityPending}
                   >
                     <View style={styles.ticketTypeItemContent}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
                         <Text style={[styles.ticketTypeItemName, soldOut && { color: "#666" }]}>{item.name}</Text>
-                        {soldOut && (
+                        {availabilityPending ? (
+                          <View style={styles.soldOutBadge}><Text style={styles.soldOutBadgeText}>{availabilityError ? "UNAVAILABLE" : "CHECKING"}</Text></View>
+                        ) : soldOut && (
                           <View style={styles.soldOutBadge}>
                             <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
                           </View>
                         )}
-                        {hasSeatMap && !soldOut && (
+                        {hasSeatMap && !soldOut && !availabilityPending && (
                           <View style={styles.seatMapBadge}>
                             <Text style={styles.seatMapBadgeText}>PICK SEAT</Text>
                           </View>
@@ -2002,11 +2011,11 @@ const handleInstallmentPurchase = async () => {
                       <Text style={[styles.ticketTypeItemPrice, soldOut && { color: "#555" }]}>
                         UGX {Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0").toLocaleString()}
                       </Text>
-                      {remaining !== null && !soldOut && (
+                      {remaining !== null && !soldOut && !availabilityPending && (
                         <Text style={styles.remainingText}>{remaining} left</Text>
                       )}
                     </View>
-                    {isSelected && !soldOut && (
+                    {isSelected && !soldOut && !availabilityPending && (
                       <Ionicons name="checkmark-circle" size={24} style={styles.ticketTypeItemCheck} />
                     )}
                   </TouchableOpacity>

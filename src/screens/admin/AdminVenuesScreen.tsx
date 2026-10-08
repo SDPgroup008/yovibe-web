@@ -8,6 +8,7 @@ import SupabaseService from "../../services/SupabaseService"
 import { useAuth } from "../../contexts/AuthContext"
 import type { Venue } from "../../models/Venue"
 import type { AdminVenuesScreenProps } from "../../navigation/types"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => {
   const { user: currentUser } = useAuth()
@@ -99,12 +100,7 @@ const AdminVenuesScreen: React.FC<AdminVenuesScreenProps> = ({ navigation }) => 
   )
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading venues...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="table" />
   }
 
   return (

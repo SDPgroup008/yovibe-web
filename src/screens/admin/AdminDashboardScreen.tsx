@@ -9,6 +9,7 @@ import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary, VisitorAnalyticsResponse } from '../../services/AnalyticsService';
 import NotificationService from '../../services/NotificationService';
 import TokenService, { TokenAnalyticsSummary, DailyTokenStats } from '../../services/TokenService';
+import { ResponsiveSkeleton } from '../../components/SkeletonLoader';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
 
@@ -365,12 +366,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
 
   /* ── Loading ─────────────────────────────────────────────────────── */
   if (loading) {
-    return (
-      <View style={st.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={{ color: '#888', marginTop: 12 }}>Loading analytics…</Text>
-      </View>
-    );
+    return <ResponsiveSkeleton variant="dashboard" />;
   }
 
   return (

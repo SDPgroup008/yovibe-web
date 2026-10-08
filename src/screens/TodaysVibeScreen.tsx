@@ -21,6 +21,7 @@ import { useRouter } from "../utils/URLRouter"
 import SupabaseService from "../services/SupabaseService"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import type { VibeImage } from "../models/VibeImage"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 const TodaysVibeScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -199,12 +200,7 @@ const TodaysVibeScreen: React.FC = () => {
   )
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading vibe data...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="gallery" />
   }
 
   return (

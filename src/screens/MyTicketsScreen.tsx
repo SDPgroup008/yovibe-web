@@ -18,6 +18,7 @@ import { Platform } from "react-native"
 import type { Ticket } from "../models/Ticket"
 import type { InstallmentPlan, InstallmentPlanType } from "../models/InstallmentPlan"
 import { renderCanonicalTicketSvgWithEmbeddedAssets, svgDataUri, computeEmailHeroRect } from "../services/TicketCanonicalRenderer"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { computeTicketLayout } from "../services/TicketLayoutEngine"
 
 // Generate short ticket reference like YV-2026-X5RD or YVG-<event>-<timestamp> for table tickets
@@ -277,12 +278,7 @@ const MyTicketsScreen: React.FC = () => {
   }
 
   if (loading || cacheLoading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={styles.loadingText}>Loading your tickets...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="gallery" />
   }
 
   return (

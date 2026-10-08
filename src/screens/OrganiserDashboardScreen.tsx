@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { ValidationDialog } from "../components/ValidationDialog"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 import type { NativeStackScreenProps } from "@react-navigation/native-stack"
 import { supabase } from "../config/supabase"
@@ -1210,7 +1211,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   // Ensure payout amount never exceeds eligible total
   const cappedPayoutAmount = Math.min(totalPayoutAmount, eligiblePayoutTotal)
 
-  if (loading) return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Loading...</Text></View>
+  if (loading) return <ResponsiveSkeleton variant="dashboard" />
   if (!event) return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Event not found</Text></View>
 
   // ===========================================================================

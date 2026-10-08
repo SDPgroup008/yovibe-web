@@ -11,6 +11,7 @@ import type { Event } from "../models/Event"
 import type { CalendarScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { BREAKPOINTS, useResponsiveSize } from "../utils/ResponsiveDesign"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 type CalendarTheme = {
   backgroundColor?: string
@@ -297,10 +298,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
             </View>
 
             {loading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#2196F3" />
-                <Text style={styles.loadingText}>Loading events...</Text>
-              </View>
+              <ResponsiveSkeleton variant="list" />
             ) : filteredEvents.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="calendar-outline" size={64} color="#666666" />
@@ -396,10 +394,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
         </View>
 
         {loading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#2196F3" />
-            <Text style={styles.loadingText}>Loading events...</Text>
-          </View>
+          <ResponsiveSkeleton variant="list" />
         ) : filteredEvents.length === 0 ? (
           <View style={styles.emptyContainer}>
             <Ionicons name="calendar-outline" size={64} color="#666666" />

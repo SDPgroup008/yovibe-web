@@ -23,6 +23,7 @@ import type { Event } from "../models/Event"
 import { useCompatNavigation } from "../utils/compatNavigation"
 import { useRouter } from "../utils/URLRouter"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
@@ -389,11 +390,7 @@ const EventDetailScreen: React.FC = () => {
   }, [event])
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading event details...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="detail" />
   }
 
   if (!event) {

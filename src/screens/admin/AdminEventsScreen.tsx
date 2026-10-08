@@ -9,6 +9,7 @@ import { supabase } from "../../config/supabase"
 import { useAuth } from "../../contexts/AuthContext"
 import type { Event } from "../../models/Event"
 import type { AdminEventsScreenProps } from "../../navigation/types"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => {
   const { user: currentUser } = useAuth()
@@ -230,12 +231,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   }
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#2196F3" />
-        <Text style={styles.loadingText}>Loading events...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="table" />
   }
 
   return (

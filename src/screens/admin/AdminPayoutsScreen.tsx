@@ -3,6 +3,7 @@ import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndi
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../../services/SupabaseService"
 import AdminPayoutService from "../../services/AdminPayoutService"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 type StatusFilter = "all" | "pending_admin_review" | "approved" | "rejected" | "processing" | "completed"
 
@@ -166,7 +167,7 @@ export default function AdminPayoutsScreen() {
       />
 
       {loading ? (
-        <ActivityIndicator size="large" color="#3B82F6" style={{ marginTop: 40 }} />
+        <ResponsiveSkeleton variant="table" />
       ) : (
         <FlatList data={payouts} keyExtractor={(item) => item.id} renderItem={renderItem} contentContainerStyle={styles.list}
           ListEmptyComponent={

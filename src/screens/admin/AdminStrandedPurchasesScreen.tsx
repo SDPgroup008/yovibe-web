@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons"
 import { useAuth } from "../../contexts/AuthContext"
 import TicketService from "../../services/TicketService"
 import type { PendingFulfillment } from "../../models/PendingFulfillment"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 function formatDistanceToNow(date: Date): string {
   const now = new Date()
@@ -180,12 +181,7 @@ export const AdminStrandedPurchasesScreen: React.FC = () => {
   }
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-        <Text style={styles.loadingText}>Loading stranded purchases...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="table" />
   }
 
   return (

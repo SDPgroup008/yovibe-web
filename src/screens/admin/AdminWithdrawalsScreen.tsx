@@ -8,6 +8,7 @@ import { supabase } from "../../config/supabase"
 import SupabaseService from "../../services/SupabaseService"
 import PawaPayService from "../../services/PawaPayService"
 import { useAuth } from "../../contexts/AuthContext"
+import { ResponsiveSkeleton } from "../../components/SkeletonLoader"
 
 const COMMISSION_RATE = 0.15
 
@@ -326,7 +327,7 @@ export default function AdminWithdrawalsScreen() {
       </View>
 
       {loading ? (
-        <ActivityIndicator size="large" color="#00D4FF" style={{ marginTop: 40 }} />
+        <ResponsiveSkeleton variant="table" />
       ) : (
         <FlatList
           data={events}

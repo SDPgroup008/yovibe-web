@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import VenuesScreen from "./VenuesScreen";
 import VenueDetailScreen from "./VenueDetailScreen";
 import SupabaseService from "../services/SupabaseService";
+import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 
 const CURATED_VENUE_LOCATION_TERMS: Record<string, string> = {
   kampala: "kampala",
@@ -90,11 +91,7 @@ const VenuesRouteScreen: React.FC<Props> = ({ venueId, navigation, route }) => {
   }, [normalizedTerm]);
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#00D4FF" />
-      </View>
-    );
+    return <ResponsiveSkeleton variant="list" />;
   }
 
   if (shouldRenderDetail) {

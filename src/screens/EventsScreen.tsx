@@ -25,6 +25,7 @@ import type { Event } from "../models/Event";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { useEventsScroll } from "../hooks/useScrollPersistence";
 import { publicSiteUrl } from "../config/runtime";
+import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -380,10 +381,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       )}
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
-          <Text style={styles.loadingText}>Loading events...</Text>
-        </View>
+        <ResponsiveSkeleton variant="list" />
       ) : !filteredEvents || filteredEvents.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>

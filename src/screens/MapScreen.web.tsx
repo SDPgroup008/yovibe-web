@@ -15,6 +15,7 @@ import type { MapScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { useMapScroll } from "../hooks/useScrollPersistence";
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 // ─── Module-level cache: survives component remounts ─────────────
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
@@ -826,9 +827,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             </View>
 
             {loading ? (
-              <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Loading venues...</Text>
-              </View>
+              <ResponsiveSkeleton variant="list" />
             ) : venues.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="location-outline" size={64} color="#666666" />
@@ -1089,9 +1088,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                   )}
                 </View>
                 {loading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.loadingText}>Loading venues...</Text>
-                  </View>
+                  <ResponsiveSkeleton variant="list" />
                 ) : venues.length === 0 ? (
                   <View style={styles.emptyContainer}>
                     <Ionicons name="location-outline" size={64} color="#666666" />

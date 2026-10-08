@@ -20,6 +20,7 @@ import { useRouter } from "../utils/URLRouter"
 import { SEOMetadata } from "../components/SEOMetadata"
 import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -442,11 +443,7 @@ const VenueDetailScreen: React.FC = () => {
   // Header menu is now handled within the screen content since we don't use React Navigation headers
 
   if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <Text style={styles.loadingText}>Loading venue details...</Text>
-      </View>
-    )
+    return <ResponsiveSkeleton variant="detail" />
   }
 
   if (!venue) {

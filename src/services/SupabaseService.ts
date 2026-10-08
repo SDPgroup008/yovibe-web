@@ -2214,6 +2214,24 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     }
   }
 
+  async getSoldTicketCounts(eventSlug: string, feeTypeNames: string[]): Promise<Record<string, number>> {
+    const feeTypes = [...new Set(feeTypeNames.filter((name) => typeof name === "string" && name.trim()))]
+    if (feeTypes.length === 0) return {}
+    const response = await fetch(resolveFunctionUrl("ticket-availability"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventSlug, feeTypes }),
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok || !data.soldCounts || typeof data.soldCounts !== "object") {
+      throw new Error(data.error || "Unable to load ticket availability")
+    }
+    return Object.fromEntries(feeTypes.map((name) => {
+      const value = data.soldCounts[name]
+      return [name, Number.isInteger(value) && value >= 0 ? value : 0]
+    }))
+  }
+
   async getEligibleTicketsForPayout(organizerId: string): Promise<any[]> {
     void organizerId
     throw new Error("Browser payout ticket reads have been removed. Use the payout service.")

@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { publicSiteUrl } from "../config/runtime";
+import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -427,12 +428,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       )}
 
       {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#2196F3" />
-          <Text style={[styles.loadingText, activeTab === "recreation" && styles.recreationText]}>
-            Loading venues...
-          </Text>
-        </View>
+        <ResponsiveSkeleton variant="list" />
       ) : displayedVenues.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={[styles.emptyText, activeTab === "recreation" && styles.recreationText]}>No venues found</Text>

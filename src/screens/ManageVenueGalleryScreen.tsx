@@ -10,6 +10,7 @@ import { useAuth } from "../contexts/AuthContext"
 import ImagePickerService from "../services/ImagePickerService"
 import SupabaseService from "../services/SupabaseService"
 import type { VenueGalleryItem } from "../models/VenueGalleryItem"
+import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 
 const ManageVenueGalleryScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -84,7 +85,7 @@ const ManageVenueGalleryScreen: React.FC = () => {
 
       {error && <View style={styles.notice}><Ionicons name="information-circle-outline" size={20} color="#FFD166" /><Text style={styles.noticeText}>{error} Run the migration before publishing gallery images.</Text></View>}
       <Text style={styles.sectionTitle}>Published images</Text>
-      {loading ? <ActivityIndicator color="#D6A7FF" style={{ marginTop: 20 }} /> : items.length === 0 ? <Text style={styles.empty}>No gallery images yet. Add your first one above.</Text> : <View style={styles.grid}>{items.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryText}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}</View>}
+      {loading ? <ResponsiveSkeleton variant="gallery" /> : items.length === 0 ? <Text style={styles.empty}>No gallery images yet. Add your first one above.</Text> : <View style={styles.grid}>{items.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryText}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}</View>}
 
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}><Ionicons name="arrow-back" size={18} color="#D6A7FF" /><Text style={styles.backText}>Back to venue</Text></TouchableOpacity>
     </ScrollView>
