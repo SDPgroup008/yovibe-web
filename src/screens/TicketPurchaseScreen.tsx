@@ -424,7 +424,7 @@ const TicketPurchaseScreen: React.FC = () => {
       }
     }
     if (paymentMethod === "mobile_money") {
-      if (mobileMoneyLimitExceeded) errs.paymentMethod = PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE
+      if (mobileMoneyLimitExceeded) errs.paymentMethod = mobileMoneyLimitMessage
       if (!mobileMoneyNumber.trim()) errs.mobileMoneyNumber = "Please enter your mobile money number"
       else if (!PHONE_REGEX.test(mobileMoneyNumber.trim())) errs.mobileMoneyNumber = "Enter a valid Ugandan phone (e.g. 0772123456)"
     }
@@ -753,25 +753,35 @@ const TicketPurchaseScreen: React.FC = () => {
   }, [basePrice, actualTicketCount, event?.date])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
-  const mobileMoneyLimitExceeded = total > PAWAPAY_MOBILE_MONEY_MAX_UGX
-
-  const showMobileMoneyLimitMessage = () => {
-    setShowMobileMoneyLimitDialog(true)
-  }
-
-  // Clear a stale Mobile Money selection if checkout changes push the final
-  // amount above the provider limit.
-  useEffect(() => {
-    if (!mobileMoneyLimitExceeded || paymentMethod !== "mobile_money") return
-    setPaymentMethod(null)
-    showMobileMoneyLimitMessage()
-  }, [mobileMoneyLimitExceeded, paymentMethod])
 
   // Installment preview � recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
     if (!useInstallments || !event?.date) return []
     return InstallmentService.previewPlan(total, installmentPlanType, event.date)
   }, [useInstallments, installmentPlanType, total, event?.date])
+
+  // pawaPay limits one deposit, not the value of a whole installment plan.
+  // For Pay in Parts, the first displayed "Due today" amount is the deposit
+  // being initiated now; each later installment is validated independently.
+  const mobileMoneyChargeAmount = useInstallments
+    ? (installmentPreview[0]?.totalDue ?? 0)
+    : total
+  const mobileMoneyLimitExceeded = mobileMoneyChargeAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX
+  const mobileMoneyLimitMessage = useInstallments
+    ? "The limit for mobile money is 5,000,000 for the amount due today. Use Credit card or reduce the total due today and continue with mobile money"
+    : PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE
+
+  const showMobileMoneyLimitMessage = () => {
+    setShowMobileMoneyLimitDialog(true)
+  }
+
+  // Clear a stale Mobile Money selection when the amount charged now crosses
+  // the provider limit. Pay-in-full uses the total; installments use Due today.
+  useEffect(() => {
+    if (!mobileMoneyLimitExceeded || paymentMethod !== "mobile_money") return
+    setPaymentMethod(null)
+    showMobileMoneyLimitMessage()
+  }, [mobileMoneyLimitExceeded, paymentMethod])
   
 const updateBuyerName = (index: number, name: string) => {
     setBuyerNames(prev => {
@@ -1319,7 +1329,7 @@ const handleInstallmentPurchase = async () => {
         <View style={styles.mobileMoneyLimitOverlay}>
           <View style={styles.mobileMoneyLimitDialog}>
             <Text style={styles.mobileMoneyLimitTitle}>Mobile Money limit</Text>
-            <Text style={styles.mobileMoneyLimitMessage}>{PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE}</Text>
+            <Text style={styles.mobileMoneyLimitMessage}>{mobileMoneyLimitMessage}</Text>
             <TouchableOpacity
               style={styles.mobileMoneyLimitButton}
               onPress={() => setShowMobileMoneyLimitDialog(false)}
@@ -1715,7 +1725,11 @@ const handleInstallmentPurchase = async () => {
             <View>
               <Text style={[styles.paymentOptionText, paymentMethod === "mobile_money" && styles.paymentOptionTextSelected]}>Mobile Money</Text>
               <Text style={styles.paymentOptionSub}>
-                {mobileMoneyLimitExceeded ? "Unavailable above UGX 5,000,000" : "MTN & Airtel — instant"}
+                {mobileMoneyLimitExceeded
+                  ? useInstallments
+                    ? "Unavailable when Due today is above UGX 5,000,000"
+                    : "Unavailable above UGX 5,000,000"
+                  : "MTN & Airtel — instant"}
               </Text>
             </View>
           </View>
