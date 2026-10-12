@@ -1727,7 +1727,7 @@ const handleInstallmentPurchase = async () => {
               <Text style={styles.paymentOptionSub}>
                 {mobileMoneyLimitExceeded
                   ? useInstallments
-                    ? "Unavailable when Due today is above UGX 5,000,000"
+                    ? "Unavailable, Due today is above UGX 5,000,000"
                     : "Unavailable above UGX 5,000,000"
                   : "MTN & Airtel — instant"}
               </Text>
