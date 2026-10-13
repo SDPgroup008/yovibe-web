@@ -25,6 +25,34 @@ const capabilities = [
   },
 ];
 
+const organiserTools = [
+  {
+    icon: '01',
+    title: 'Get instant payouts',
+    copy: 'Access your eligible event earnings through instant payouts from your Organiser Dashboard.',
+  },
+  {
+    icon: '02',
+    title: 'Create a polished event',
+    copy: 'Set the venue, schedule, poster, ticket types, capacity, and branded ticket design in one flow.',
+  },
+  {
+    icon: '03',
+    title: 'Sell and measure',
+    copy: 'Track ticket sales by type in real time, manage event status, and download sales reports from the Organiser Dashboard.',
+  },
+  {
+    icon: '04',
+    title: 'Run a smooth door',
+    copy: 'Validate QR tickets, review scan logs, and give your team secure staff-scanner links.',
+  },
+  {
+    icon: '05',
+    title: 'Promote and get paid',
+    copy: 'Share an event link or promotion QR code to bring the right audience to your event.',
+  },
+];
+
 /** Public, indexable About page. Contact remains in Profile > Help & Support. */
 export const PublicInfoScreen: React.FC = () => (
   <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
@@ -76,12 +104,21 @@ export const PublicInfoScreen: React.FC = () => (
       </View>
     </View>
 
-    <View style={styles.footerCard}>
-      <Text style={styles.footerKicker}>THE YO VIBE</Text>
-      <Text style={styles.footerTitle}>Show up for something good.</Text>
-      <Text style={styles.footerCopy}>
-        YoVibe is for the artists, organisers, venues, and curious people who make Uganda’s culture feel alive.
+    <View style={styles.organiserPanel} accessibilityLabel="YoVibe tools for event organisers">
+      <Text style={styles.organiserKicker}>BUILT FOR EVENT ORGANISERS</Text>
+      <Text style={styles.organiserTitle}>Create, promote, sell, and manage—without switching platforms.</Text>
+      <Text style={styles.organiserCopy}>
+        YoVibe gives you the practical tools to take an event from idea to entry, while keeping sales, promotion, and payouts within reach.
       </Text>
+      <View style={styles.organiserGrid}>
+        {organiserTools.map((tool) => (
+          <View key={tool.icon} style={styles.organiserCard}>
+            <Text style={styles.organiserNumber}>{tool.icon}</Text>
+            <Text style={styles.organiserCardTitle}>{tool.title}</Text>
+            <Text style={styles.organiserCardCopy}>{tool.copy}</Text>
+          </View>
+        ))}
+      </View>
     </View>
   </ScrollView>
 );
@@ -110,10 +147,15 @@ const styles = StyleSheet.create({
   capabilityNumber: { color: '#6FE6FF', fontSize: 12, fontWeight: '800', letterSpacing: 1.5, marginBottom: 26 },
   capabilityTitle: { color: '#FFFFFF', fontSize: 18, fontWeight: '800', marginBottom: 9 },
   capabilityCopy: { color: '#A8B9D0', fontSize: 14, lineHeight: 21 },
-  footerCard: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 26, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(162, 103, 255, 0.3)', backgroundColor: 'rgba(47, 29, 84, 0.42)', marginBottom: 18 },
-  footerKicker: { color: '#D4B7FF', fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 10 },
-  footerTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', marginBottom: 8 },
-  footerCopy: { color: '#CFC7E6', fontSize: 15, lineHeight: 23 },
+  organiserPanel: { width: '100%', maxWidth: 920, alignSelf: 'center', padding: 26, borderRadius: 22, borderWidth: 1, borderColor: 'rgba(162, 103, 255, 0.3)', backgroundColor: 'rgba(47, 29, 84, 0.42)', marginBottom: 18 },
+  organiserKicker: { color: '#D4B7FF', fontSize: 11, fontWeight: '800', letterSpacing: 2, marginBottom: 10 },
+  organiserTitle: { color: '#FFFFFF', fontSize: 25, lineHeight: 32, fontWeight: '800', maxWidth: 680, marginBottom: 9 },
+  organiserCopy: { color: '#CFC7E6', fontSize: 15, lineHeight: 23, maxWidth: 720, marginBottom: 22 },
+  organiserGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  organiserCard: { flexGrow: 1, flexBasis: 190, minHeight: 164, padding: 18, borderRadius: 18, borderWidth: 1, borderColor: 'rgba(212, 183, 255, 0.18)', backgroundColor: 'rgba(13, 17, 39, 0.5)' },
+  organiserNumber: { color: '#D4B7FF', fontSize: 11, fontWeight: '800', letterSpacing: 1.5, marginBottom: 20 },
+  organiserCardTitle: { color: '#FFFFFF', fontSize: 16, fontWeight: '800', marginBottom: 8 },
+  organiserCardCopy: { color: '#CFC7E6', fontSize: 13, lineHeight: 20 },
 });
 
 export default PublicInfoScreen;
