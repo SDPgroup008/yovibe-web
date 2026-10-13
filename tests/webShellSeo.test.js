@@ -17,9 +17,10 @@ describe('web shell SEO source', () => {
   });
 
   test('provides all public fallback links and no longer injects duplicate global metadata', () => {
-    for (const route of ['/events', '/venues', '/calendar', '/map', '/about', '/contact']) {
+    for (const route of ['/events', '/venues', '/calendar', '/map', '/about']) {
       expect(patcher).toContain(route);
     }
+    expect(patcher).not.toContain('${siteUrl}/contact');
     expect(entry).not.toContain('SEO META TAGS INJECTION');
     expect(entry).not.toContain("document.title = 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda'");
   });

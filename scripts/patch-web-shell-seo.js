@@ -78,7 +78,6 @@ const noScriptReplacement = `
           <a href="${siteUrl}/calendar">Calendar</a>
           <a href="${siteUrl}/map">Map</a>
           <a href="${siteUrl}/about">About</a>
-          <a href="${siteUrl}/contact">Contact</a>
         </nav>
         <p style="margin:0;">YoVibe helps people discover and buy tickets for events, concerts, parties, and nightlife across Uganda.</p>
       </div>

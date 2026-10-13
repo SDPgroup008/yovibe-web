@@ -59,6 +59,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'AdminGeocode': () => navigate('/profile/admin/geocode'),
         'Settings': () => navigate('/profile/settings'),
         'HelpSupport': () => navigate('/profile/help'),
+        'About': () => navigate('/about'),
         'Auth': () => navigate('/login'),
         'Login': () => navigate('/login'),
         'SignUp': () => navigate('/signup'),

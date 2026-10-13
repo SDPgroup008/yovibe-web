@@ -91,12 +91,7 @@ export const routes: RouteDefinition[] = [
   },
   {
     path: '/about',
-    component: () => <PublicInfoScreen page="about" />,
-    exact: true
-  },
-  {
-    path: '/contact',
-    component: () => <PublicInfoScreen page="contact" />,
+    component: PublicInfoScreen,
     exact: true
   },
   {

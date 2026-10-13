@@ -25,11 +25,11 @@ describe('SEO crawl configuration', () => {
       'https://yovibe.net/',
       'https://yovibe.net/events',
       'https://yovibe.net/about',
-      'https://yovibe.net/contact',
       'https://yovibe.net/venues/torino-bar-restaurant',
       'https://yovibe.net/events/future-concert',
     ]));
     expect(urls).not.toEqual(expect.arrayContaining([
+      'https://yovibe.net/contact',
       'https://yovibe.net/events/kampala',
       'https://yovibe.net/events/past-concert',
       'https://yovibe.net/events/cancelled-concert',
