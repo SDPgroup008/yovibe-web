@@ -1,4 +1,6 @@
 const { buildRobotsTxt, buildSitemapUrls } = require('../netlify/shared/seoIndexing');
+const fs = require('fs');
+const path = require('path');
 
 describe('SEO crawl configuration', () => {
   test('allows crawling in production and blocks staging', () => {
@@ -30,5 +32,11 @@ describe('SEO crawl configuration', () => {
       'https://yovibe.net/events/past-concert',
       'https://yovibe.net/events/cancelled-concert',
     ]));
+  });
+
+  test('sitemap queries only columns available on each table', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../netlify/functions/sitemap.js'), 'utf8');
+    expect(source).toMatch(/table:\s*["']venues["'][\s\S]{0,120}select:\s*["']slug,created_at["']/);
+    expect(source).toMatch(/table:\s*["']events["'][\s\S]{0,120}select:\s*["']slug,created_at,date,event_status["']/);
   });
 });

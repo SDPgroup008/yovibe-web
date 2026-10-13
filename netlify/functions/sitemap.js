@@ -76,7 +76,7 @@ export async function handler() {
         supabaseUrl,
         supabaseAnonKey,
         table: "venues",
-        select: "slug,created_at,date,event_status",
+        select: "slug,created_at",
         filters: {
           is_deleted: "eq.false",
           slug: "not.is.null",
@@ -86,7 +86,7 @@ export async function handler() {
         supabaseUrl,
         supabaseAnonKey,
         table: "events",
-        select: "slug,created_at",
+        select: "slug,created_at,date,event_status",
         filters: {
           is_deleted: "eq.false",
           slug: "not.is.null",
