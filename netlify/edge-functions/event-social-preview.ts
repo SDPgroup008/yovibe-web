@@ -1,10 +1,14 @@
-const SOCIAL_CRAWLER = /facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|skypeuripreview|pinterestbot|googlebot/i;
 const DESCRIPTION_LIMIT = 160;
+const SOCIAL_CRAWLER = /facebookexternalhit|facebot|whatsapp|twitterbot|linkedinbot|slackbot|discordbot|telegrambot|skypeuripreview|pinterestbot/i;
 
 type EdgeRuntimeGlobals = typeof globalThis & {
   Netlify?: { env?: { get(name: string): string | undefined } };
   Deno?: { env?: { get(name: string): string | undefined } };
 };
+
+export function isSocialPreviewCrawler(userAgent: string): boolean {
+  return SOCIAL_CRAWLER.test(userAgent);
+}
 
 function getEdgeEnv(name: string): string | undefined {
   const runtime = globalThis as EdgeRuntimeGlobals;
@@ -120,7 +124,7 @@ function previewHtml({ canonicalUrl, title, description, imageUrl }: {
 
 export default async (request: Request, context: any) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') return context.next();
-  if (!SOCIAL_CRAWLER.test(request.headers.get('user-agent') || '')) return context.next();
+  if (!isSocialPreviewCrawler(request.headers.get('user-agent') || '')) return context.next();
 
   const requestUrl = new URL(request.url);
   const slug = eventSlugFromPath(requestUrl.pathname);

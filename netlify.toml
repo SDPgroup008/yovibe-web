@@ -28,8 +28,20 @@
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
 
 [[edge_functions]]
+function = "canonical-host"
+path = "/*"
+
+[[edge_functions]]
+function = "robots"
+path = "/robots.txt"
+
+[[edge_functions]]
   function = "staging-gate"
   path = "/*"
+
+[[edge_functions]]
+function = "public-seo-status"
+path = "/*"
 
 # Runs after staging-gate. Only recognised social crawlers receive an event's
 # server-rendered share card; regular visitors continue to the SPA.
@@ -75,6 +87,74 @@
     Cache-Control = "no-store"
     Referrer-Policy = "no-referrer"
     X-Content-Type-Options = "nosniff"
+    X-Robots-Tag = "noindex, nofollow"
+
+# These routes contain account, purchasing, or administration data. They remain
+# crawlable long enough for search engines to observe the noindex directive.
+[[headers]]
+  for = "/login"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/signup"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/profile/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/profile"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/events/tickets/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/events/organiser/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/events/scanner/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/events/payment-callback"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/events/ticket-contacts"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/venues/tickets/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/venues/scanner/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/map/tickets/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+
+[[headers]]
+  for = "/calendar/tickets/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
 
 [[headers]]
   # Cache TensorFlow.js model files for 1 year

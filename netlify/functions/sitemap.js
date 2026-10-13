@@ -1,40 +1,7 @@
 const { requiredEnv, assertSupabaseUrl, getSiteUrl } = require('../shared/runtimeConfig');
+const { buildSitemapUrls } = require('../shared/seoIndexing');
 const PAGE_SIZE = 1000;
-const SITEMAP_FUNCTION_VERSION = "2026-05-30-2";
-
-const POPULAR_LOCATION_SLUGS = ["kampala", "entebbe", "entebe", "mukono", "jinja", "wakiso", "mbarara", "gulu"];
-const POPULAR_ARTIST_SLUGS = [
-  "king-saha",
-  "jose-chameleone",
-  "chameleon",
-  "karole-kasita",
-  "carol-kasita",
-  "bobi-wine",
-  "bebe-cool",
-  "eddy-kenzo",
-  "fik-fameica",
-  "sheebah-karungi",
-  "spice-diana",
-  "lydia-jazmine",
-  "winnie-nwagi",
-  "vinka",
-  "rema-namakula",
-  "azawi",
-  "pallaso",
-  "gravity-omutujju",
-  "john-blaq",
-  "navio",
-  "ray-g",
-  "levixone",
-  "juliana-kanyomozi",
-  "irene-ntale",
-  "a-pass",
-  "ykee-benda",
-  "mun-g",
-  "chosen-becky",
-  "david-lutalo",
-  "grace-nakimera",
-];
+const SITEMAP_FUNCTION_VERSION = "2026-10-12-1";
 
 const xmlEscape = (value = "") =>
   String(value)
@@ -44,21 +11,16 @@ const xmlEscape = (value = "") =>
     .replace(/\"/g, "&quot;")
     .replace(/'/g, "&apos;");
 
-const normalizeLastMod = (...dates) => {
-  for (const dateValue of dates) {
-    if (!dateValue) continue;
-    const date = new Date(dateValue);
-    if (!Number.isNaN(date.getTime())) {
-      return date.toISOString().slice(0, 10);
-    }
-  }
-  return new Date().toISOString().slice(0, 10);
+const normalizeLastMod = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
 };
 
 const toUrlNode = ({ loc, lastmod, changefreq, priority }) => `
   <url>
     <loc>${xmlEscape(loc)}</loc>
-    <lastmod>${lastmod}</lastmod>
+    ${normalizeLastMod(lastmod) ? `<lastmod>${normalizeLastMod(lastmod)}</lastmod>` : ''}
     <changefreq>${changefreq}</changefreq>
     <priority>${priority}</priority>
   </url>`;
@@ -114,7 +76,7 @@ export async function handler() {
         supabaseUrl,
         supabaseAnonKey,
         table: "venues",
-        select: "slug,created_at",
+        select: "slug,created_at,date,event_status",
         filters: {
           is_deleted: "eq.false",
           slug: "not.is.null",
@@ -132,51 +94,7 @@ export async function handler() {
       }),
     ]);
 
-    const staticUrls = [
-      { loc: `${siteUrl}/`, changefreq: "daily", priority: "1.0", lastmod: normalizeLastMod() },
-      { loc: `${siteUrl}/events`, changefreq: "daily", priority: "0.95", lastmod: normalizeLastMod() },
-      { loc: `${siteUrl}/venues`, changefreq: "daily", priority: "0.95", lastmod: normalizeLastMod() },
-      { loc: `${siteUrl}/calendar`, changefreq: "daily", priority: "0.9", lastmod: normalizeLastMod() },
-      { loc: `${siteUrl}/map`, changefreq: "weekly", priority: "0.85", lastmod: normalizeLastMod() },
-      ...POPULAR_LOCATION_SLUGS.map((slug) => ({
-        loc: `${siteUrl}/events/${slug}`,
-        changefreq: "daily",
-        priority: "0.78",
-        lastmod: normalizeLastMod(),
-      })),
-      ...POPULAR_ARTIST_SLUGS.map((slug) => ({
-        loc: `${siteUrl}/events/${slug}`,
-        changefreq: "daily",
-        priority: "0.78",
-        lastmod: normalizeLastMod(),
-      })),
-      ...POPULAR_LOCATION_SLUGS.map((slug) => ({
-        loc: `${siteUrl}/venues/${slug}`,
-        changefreq: "daily",
-        priority: "0.76",
-        lastmod: normalizeLastMod(),
-      })),
-    ];
-
-    const venueUrls = venues
-      .filter((venue) => typeof venue.slug === "string" && venue.slug.trim().length > 0)
-      .map((venue) => ({
-        loc: `${siteUrl}/venues/${encodeURIComponent(venue.slug.trim())}`,
-        changefreq: "daily",
-        priority: "0.8",
-        lastmod: normalizeLastMod(venue.created_at),
-      }));
-
-    const eventUrls = events
-      .filter((event) => typeof event.slug === "string" && event.slug.trim().length > 0)
-      .map((event) => ({
-        loc: `${siteUrl}/events/${encodeURIComponent(event.slug.trim())}`,
-        changefreq: "daily",
-        priority: "0.8",
-        lastmod: normalizeLastMod(event.created_at),
-      }));
-
-    const allUrls = [...staticUrls, ...venueUrls, ...eventUrls];
+    const allUrls = buildSitemapUrls({ siteUrl, venues, events });
     const xmlBody = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${allUrls
       .map(toUrlNode)
