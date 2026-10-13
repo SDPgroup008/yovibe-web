@@ -6,6 +6,8 @@ const INDEXABLE_STATIC_PATHS = [
   { path: '/venues', changefreq: 'daily', priority: '0.95' },
   { path: '/calendar', changefreq: 'daily', priority: '0.9' },
   { path: '/map', changefreq: 'weekly', priority: '0.85' },
+  { path: '/about', changefreq: 'monthly', priority: '0.6' },
+  { path: '/contact', changefreq: 'monthly', priority: '0.6' },
 ];
 
 function buildRobotsTxt({ isStaging = false } = {}) {

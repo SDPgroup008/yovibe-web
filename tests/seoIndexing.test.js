@@ -24,6 +24,8 @@ describe('SEO crawl configuration', () => {
     expect(urls).toEqual(expect.arrayContaining([
       'https://yovibe.net/',
       'https://yovibe.net/events',
+      'https://yovibe.net/about',
+      'https://yovibe.net/contact',
       'https://yovibe.net/venues/torino-bar-restaurant',
       'https://yovibe.net/events/future-concert',
     ]));

@@ -19,6 +19,7 @@
     "test-meta": "node test-meta-server.js",
     "typecheck": "tsc --noEmit",
     "test": "node scripts/run-jest.js --silent",
+    "test:seo-artifact": "node scripts/verify-seo-artifact.js",
     "test:watch": "jest --watch",
     "staging:schema": "node scripts/generate-staging-schema.js",
     "staging:scan": "node scripts/staging-safety-scan.js",

@@ -27,6 +27,30 @@ const tabs: TabConfig[] = [
   { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/profile' }
 ];
 
+const publicLinks = [
+  { label: 'Events', href: '/events' },
+  { label: 'Venues', href: '/venues' },
+  { label: 'Calendar', href: '/calendar' },
+  { label: 'Map', href: '/map' },
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+];
+
+const publicFooterLinkStyle = { color: '#00D4FF', fontSize: 14, textDecoration: 'none' };
+
+const PublicNavigationFooter: React.FC = () => {
+  if (Platform.OS !== 'web') return null;
+  return (
+    <View style={styles.publicFooter} accessibilityLabel="YoVibe public navigation">
+      {publicLinks.map((link) => React.createElement(
+        'a',
+        { key: link.href, href: link.href, style: publicFooterLinkStyle },
+        link.label,
+      ))}
+    </View>
+  );
+};
+
 // Custom tab bar component
 export const TabBar: React.FC = () => {
   const { currentPath, navigateToEvents, navigateToVenues, navigateToMap, navigateToCalendar, navigateToProfile } = useNavigation();
@@ -249,6 +273,7 @@ export const DesktopLayout: React.FC<{ children: React.ReactNode }> = ({ childre
         <View style={styles.desktopMainContent}>
           {children}
         </View>
+        <PublicNavigationFooter />
         {/* Desktop doesn't need bottom tab bar */}
       </View>
     </View>
@@ -270,6 +295,7 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
       <View style={[styles.mobileContent, { paddingBottom: componentSizes.tabBarHeight }]}>
         {children}
       </View>
+      <PublicNavigationFooter />
       <TabBar />
     </View>
   );
@@ -277,6 +303,16 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
 
 // Styles
 const styles = StyleSheet.create({
+  publicFooter: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 14,
+    backgroundColor: '#121212',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 212, 255, 0.2)',
+  },
   // Bottom tab bar (mobile/tablet)
   bottomTabBar: {
     flexDirection: 'row',

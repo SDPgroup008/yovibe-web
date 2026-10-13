@@ -43,12 +43,6 @@ path = "/robots.txt"
 function = "public-seo-status"
 path = "/*"
 
-# Runs after staging-gate. Only recognised social crawlers receive an event's
-# server-rendered share card; regular visitors continue to the SPA.
-[[edge_functions]]
-  function = "event-social-preview"
-  path = "/events/*"
-
 [functions."process-stuck-fulfillments"]
   # Automatic retry/reconciliation of stranded purchases every minute.
   schedule = "* * * * *"

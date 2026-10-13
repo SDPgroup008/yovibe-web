@@ -15,10 +15,34 @@ const keywords =
 const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || process.env.SITE_URL || '').replace(/\/$/, '');
 if (!siteUrl) throw new Error('SITE_URL or NEXT_PUBLIC_SITE_URL is required to patch the web shell');
 const canonicalUrl = `${siteUrl}/`;
-const ogImage = `${siteUrl}/assets/og-image.png`;
-const robots = String(process.env.APP_ENV || '').toLowerCase() === 'staging'
+const ogImage = `${siteUrl}/assets/icon.png`;
+const isStaging = String(process.env.APP_ENV || '').toLowerCase() === 'staging';
+const robots = isStaging
   ? 'noindex, nofollow, noarchive'
   : 'index, follow';
+
+const structuredData = isStaging ? '' : `
+    <script id="yovibe-site-jsonld" type="application/ld+json">${JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'Organization',
+          '@id': `${canonicalUrl}#organization`,
+          name: 'YoVibe',
+          url: canonicalUrl,
+          logo: `${siteUrl}/assets/icon.png`,
+          email: 'reinolmartin0001@gmail.com',
+          telephone: '+256764336256',
+        },
+        {
+          '@type': 'WebSite',
+          '@id': `${canonicalUrl}#website`,
+          name: 'YoVibe',
+          url: canonicalUrl,
+          publisher: { '@id': `${canonicalUrl}#organization` },
+        },
+      ],
+    }).replace(/</g, '\\u003c')}</script>`;
 
 if (!fs.existsSync(indexPath)) {
   throw new Error(`Cannot patch SEO shell; file not found: ${indexPath}`);
@@ -40,7 +64,7 @@ const headInjection = `
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${ogImage}" />
-    <link rel="canonical" href="${canonicalUrl}" />`;
+    <link rel="canonical" href="${canonicalUrl}" />${structuredData}`;
 
 const noScriptReplacement = `
     <noscript>
@@ -48,12 +72,23 @@ const noScriptReplacement = `
         <h1 style="font-size:28px;margin-bottom:12px;">YoVibe</h1>
         <p style="margin:0 0 12px;">Discover nightlife events, concerts, parties, artists, and venues across Uganda.</p>
         <p style="margin:0 0 12px;">Browse upcoming events in Kampala, Entebbe, Mukono, and Jinja, or explore popular venues and live entertainment.</p>
-        <p style="margin:0;">Visit <a href="${siteUrl}/events">Events</a> or <a href="${siteUrl}/venues">Venues</a>.</p>
+        <nav aria-label="YoVibe public navigation" style="display:flex;gap:12px;flex-wrap:wrap;margin:0 0 12px;">
+          <a href="${siteUrl}/events">Events</a>
+          <a href="${siteUrl}/venues">Venues</a>
+          <a href="${siteUrl}/calendar">Calendar</a>
+          <a href="${siteUrl}/map">Map</a>
+          <a href="${siteUrl}/about">About</a>
+          <a href="${siteUrl}/contact">Contact</a>
+        </nav>
+        <p style="margin:0;">YoVibe helps people discover and buy tickets for events, concerts, parties, and nightlife across Uganda.</p>
       </div>
     </noscript>`;
 
 let html = fs.readFileSync(indexPath, "utf8");
 
+// The script can be run more than once locally or by Netlify build hooks.
+// Remove a previous site graph before injecting the single canonical graph.
+html = html.replace(/\s*<script id="yovibe-site-jsonld" type="application\/ld\+json">[\s\S]*?<\/script>/i, '');
 html = html.replace(/<title>[\s\S]*?<\/title>/i, headInjection.trim());
 html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, noScriptReplacement.trim());
 

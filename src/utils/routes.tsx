@@ -28,6 +28,7 @@ import NotificationScreen from '../screens/NotificationScreen';
 import PaymentCallbackScreen from '../screens/PaymentCallbackScreen';
 import ResendTicketScreen from '../screens/ResendTicketScreen';
 import AddPhotoScreen from '../screens/AddPhotoScreen';
+import { PublicInfoScreen } from '../screens/PublicInfoScreen';
 
 // Admin screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -86,6 +87,16 @@ export const routes: RouteDefinition[] = [
   {
     path: '/terms',
     component: TermsAndConditionsScreen,
+    exact: true
+  },
+  {
+    path: '/about',
+    component: () => <PublicInfoScreen page="about" />,
+    exact: true
+  },
+  {
+    path: '/contact',
+    component: () => <PublicInfoScreen page="contact" />,
     exact: true
   },
   {
