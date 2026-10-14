@@ -28,6 +28,7 @@ import NotificationScreen from '../screens/NotificationScreen';
 import PaymentCallbackScreen from '../screens/PaymentCallbackScreen';
 import ResendTicketScreen from '../screens/ResendTicketScreen';
 import AddPhotoScreen from '../screens/AddPhotoScreen';
+import { PublicInfoScreen } from '../screens/PublicInfoScreen';
 
 // Admin screens
 import AdminDashboardScreen from '../screens/admin/AdminDashboardScreen';
@@ -57,18 +58,11 @@ import { RouterProvider, RouteDefinition } from '../utils/URLRouter';
 
 // Route definitions - comprehensive mapping of all existing screens
 export const routes: RouteDefinition[] = [
-  // Root route - redirect to main events screen
+  // Root route is the public events landing page. Keeping it at `/` makes the
+  // featured-event links available to both people and crawlers.
   {
     path: '/',
-    component: () => {
-      // Redirect root to events
-      React.useEffect(() => {
-        if (typeof window !== 'undefined') {
-          window.location.href = '/events';
-        }
-      }, []);
-      return null;
-    },
+    component: withCompatNavigation(EventsScreen),
     exact: true
   },
 
@@ -86,6 +80,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/terms',
     component: TermsAndConditionsScreen,
+    exact: true
+  },
+  {
+    path: '/about',
+    component: PublicInfoScreen,
     exact: true
   },
   {

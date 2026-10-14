@@ -1,11 +1,12 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -74,16 +75,29 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const typography = useTypography();
   const spacing = useSpacing();
   const deviceType = useDeviceType();
+  const eventCardHorizontalMargin = deviceType.isLargeScreen ? 4 : deviceType.isTablet ? 16 : 12;
+  // The desktop navigation occupies space on both sides of the centred content area.
+  // Tablet and mobile cards run from the edge of the list, with their own card margins.
+  const gridHorizontalPadding = deviceType.isLargeScreen ? 80 : 0;
+  const gridAvailableWidth = layout.width - gridHorizontalPadding * 2;
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
-    // Account for navbar offset on desktop (80px)
-    const navbarOffset = deviceType.isLargeScreen ? 80 : 0;
-    const availableWidth = layout.width - navbarOffset;
-    const width = (availableWidth - (spacing.md * (gridColumns + 1))) / gridColumns;
+    // Include the visible card margins and the normal grid column gaps. This gives
+    // the featured carousel and the catalogue precisely the same row geometry.
+    const width = (
+      gridAvailableWidth
+      - eventCardHorizontalMargin * 2 * gridColumns
+      - spacing.md * (gridColumns - 1)
+    ) / gridColumns;
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
-  }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
+  }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen]);
+  const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
+  const featuredCardFootprint = cardWidth + eventCardHorizontalMargin * 2;
+  const featuredSlideWidth = featuredCardFootprint + spacing.md;
+  const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
+    + spacing.md * (featuredVisibleCards - 1);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -102,12 +116,14 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   }, [isFocused]);
 
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
-  const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const featuredCarouselRef = useRef<ScrollView | null>(null);
+  const featuredIndexRef = useRef(0);
+  const featuredDraggingRef = useRef(false);
 
   useEffect(() => {
     const normalized = initialSearchQuery.trim();
@@ -126,6 +142,46 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       setDisplayedEvents(events.slice(0, 20)); // Show first 20 events initially
     }
   }, [events]);
+
+  const featuredEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return events
+      .filter((event) => event.isFeatured && event.eventStatus !== "cancelled" && new Date(event.date).getTime() >= today.getTime())
+      .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
+      .slice(0, 6);
+  }, [events]);
+  const featuredMaxIndex = Math.max(0, featuredEvents.length - featuredVisibleCards);
+  const canScrollFeatured = featuredMaxIndex > 0;
+
+  // Keep the featured row moving slowly while preserving manual touch/drag.
+  useEffect(() => {
+    featuredIndexRef.current = 0;
+    featuredCarouselRef.current?.scrollTo({ x: 0, animated: false });
+    if (!canScrollFeatured) return;
+
+    const timer = setInterval(() => {
+      if (featuredDraggingRef.current) return;
+      featuredIndexRef.current = featuredIndexRef.current >= featuredMaxIndex
+        ? 0
+        : featuredIndexRef.current + 1;
+      featuredCarouselRef.current?.scrollTo({
+        x: featuredIndexRef.current * featuredSlideWidth,
+        animated: true,
+      });
+    }, 7000);
+
+    return () => clearInterval(timer);
+  }, [canScrollFeatured, featuredMaxIndex, featuredSlideWidth]);
+
+  const handleFeaturedScrollEnd = useCallback((event: any) => {
+    const offset = Number(event?.nativeEvent?.contentOffset?.x || 0);
+    featuredIndexRef.current = Math.max(
+      0,
+      Math.min(featuredMaxIndex, Math.round(offset / featuredSlideWidth)),
+    );
+    featuredDraggingRef.current = false;
+  }, [featuredMaxIndex, featuredSlideWidth]);
 
   // Update notification badge when screen is focused
   useEffect(() => {
@@ -271,12 +327,12 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   };
 
   // Memoize renderEventItem to prevent recreation on every render
-  const renderEventItem = useCallback(({ item }: { item: Event }) => {
+  const renderEventCard = useCallback((item: Event) => {
     const dateInfo = getDateLabel(item.date);
     
     return (
     <TouchableOpacity 
-      style={[styles.eventCard, { width: cardWidth }]} 
+      style={[styles.eventCard, { width: cardWidth, marginHorizontal: eventCardHorizontalMargin }]}
       onPress={() => handleEventSelect(item.slug || item.id)}
       accessibilityLabel={`View event: ${item.name}`}
       accessibilityRole="button"
@@ -333,7 +389,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       </ImageBackground>
     </TouchableOpacity>
   );
-  }, [cardWidth, cardHeight, spacing.md]);
+  }, [cardWidth, cardHeight, eventCardHorizontalMargin]);
+
+  const renderEventItem = useCallback(({ item }: { item: Event }) => renderEventCard(item), [renderEventCard]);
 
   return (
     <View style={styles.container}>
@@ -398,6 +456,40 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
           numColumns={gridColumns}
+          ListHeaderComponent={featuredEvents.length > 0 ? (
+            <View style={styles.featuredSection} accessibilityRole="summary" accessibilityLabel="YoVibe hot picks">
+              <ScrollView
+                ref={featuredCarouselRef}
+                style={[styles.featuredCarousel, { width: featuredViewportWidth }]}
+                horizontal
+                scrollEnabled={canScrollFeatured}
+                pagingEnabled={false}
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={featuredSlideWidth}
+                snapToAlignment="start"
+                disableIntervalMomentum
+                decelerationRate="fast"
+                nestedScrollEnabled
+                directionalLockEnabled
+                alwaysBounceHorizontal
+                scrollEventThrottle={16}
+                onScrollBeginDrag={() => { featuredDraggingRef.current = true; }}
+                onScrollEndDrag={handleFeaturedScrollEnd}
+                onMomentumScrollEnd={handleFeaturedScrollEnd}
+                contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}
+              >
+                {featuredEvents.map((event) => (
+                  <View
+                    key={event.id}
+                    style={{ width: featuredCardFootprint }}
+                  >
+                    {renderEventCard(event)}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+          ListHeaderComponentStyle={styles.featuredHeader}
           getItemLayout={(_: any, index: number) => ({
             length: cardHeight + spacing.md * 2,
             offset: (cardHeight + spacing.md * 2) * Math.floor(index / gridColumns),
@@ -407,9 +499,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           contentContainerStyle={[
             styles.eventsList,
             { 
-              paddingHorizontal: spacing.md,
-              paddingLeft: deviceType.isLargeScreen ? 80 : 0,
-              paddingRight: deviceType.isLargeScreen ? 80 : 0,
+              paddingLeft: gridHorizontalPadding,
+              paddingRight: gridHorizontalPadding,
               columnGap: gridColumns > 1 ? spacing.md : 0
             }
           ]}
@@ -531,9 +622,6 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   eventCard: {
-    // Keep the desktop horizontal gap (4px margins + 20px column gap)
-    // equal to the existing 28px vertical card gap.
-    marginHorizontal: responsiveSize(12, 16, 4),
     marginBottom: responsiveSize(16, 20, 28),
     borderRadius: responsiveSize(14, 18, 24),
     overflow: "hidden",
@@ -700,6 +788,23 @@ const styles = StyleSheet.create({
   eventsList: {
     paddingBottom: responsiveSize(80, 100, 120),
     alignItems: 'center',
+  },
+  featuredSection: {
+    width: "100%",
+    alignItems: "flex-start",
+    paddingTop: responsiveSize(4, 6, 8),
+    paddingBottom: responsiveSize(6, 8, 10),
+  },
+  featuredHeader: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  featuredCarousel: {
+    alignSelf: "flex-start",
+  },
+  featuredCarouselContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
   },
   floatingAddButton: {
     position: "absolute",

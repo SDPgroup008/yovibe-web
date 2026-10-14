@@ -32,6 +32,12 @@ type AdminSoftDeleteResult = {
   deletedEventCount?: number
 }
 
+type AdminEventFeatureResult = {
+  success: true
+  eventSlug: string
+  isFeatured: boolean
+}
+
 export type AdminHardDeleteBlocker = {
   key: string
   label: string
@@ -1195,6 +1201,31 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
     const result = await this.adminSoftDelete("event", eventSlug)
     dataCache.invalidateEvent(eventSlug)
     return result
+  }
+
+  async adminSetEventFeatured(eventSlug: string, isFeatured: boolean): Promise<AdminEventFeatureResult> {
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession()
+    if (sessionError) throw sessionError
+    if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.")
+
+    const response = await fetch(resolveFunctionUrl("admin-event-feature"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ eventSlug, isFeatured }),
+    })
+    const payload = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(payload?.error || "Unable to update event feature status")
+    }
+
+    dataCache.invalidateEvent(payload.eventSlug || eventSlug)
+    return payload as AdminEventFeatureResult
   }
 
   async updateEvent(eventSlug: string, data: Partial<Event>): Promise<void> {

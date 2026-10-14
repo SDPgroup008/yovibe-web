@@ -20,6 +20,7 @@ function getEdgeEnv(name: string): string | undefined {
 }
 
 const EXEMPT_PATHS = new Set([
+  '/robots.txt',
   '/staging-access.html',
   '/favicon.png',
   '/.netlify/functions/staging-access',
