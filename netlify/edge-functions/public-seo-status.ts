@@ -5,6 +5,7 @@ type EdgeRuntimeGlobals = typeof globalThis & {
 
 type PublicEntity = 'events' | 'venues';
 type PublicEntityPath = { entity: PublicEntity; slug: string } | null;
+type EntryFee = { name?: unknown; amount?: unknown; price?: unknown; maxTickets?: unknown };
 export type PublicEvent = {
   slug?: string;
   name?: string;
@@ -13,8 +14,11 @@ export type PublicEvent = {
   date?: string;
   time?: string;
   event_status?: string;
+  venue_slug?: string;
   venue_name?: string;
   location?: string;
+  artists?: unknown;
+  is_featured?: boolean;
   is_free_entry?: boolean;
   entry_fees?: unknown;
 };
@@ -23,7 +27,8 @@ type EventDocument = { head: string; summary: string };
 
 const RESERVED_EVENT_SLUGS = new Set(['add', 'ticket-contacts', 'payment-callback']);
 const RESERVED_VENUE_SLUGS = new Set(['add-event', 'ticket-contacts']);
-const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_name,location,is_free_entry,entry_fees';
+const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees';
+const FEATURED_EVENT_LIMIT = 6;
 
 function getEdgeEnv(name: string): string | undefined {
   const runtime = globalThis as EdgeRuntimeGlobals;
@@ -52,6 +57,10 @@ export function parsePublicEntityPath(pathname: string): PublicEntityPath {
   const entity = match[1] as PublicEntity;
   const reserved = entity === 'events' ? RESERVED_EVENT_SLUGS : RESERVED_VENUE_SLUGS;
   return !slug || reserved.has(slug) ? null : { entity, slug };
+}
+
+function isPublicEventsLanding(pathname: string): boolean {
+  return pathname === '/' || pathname === '/events' || pathname === '/events/';
 }
 
 function dayInKampala(value: unknown): string | null {
@@ -94,18 +103,48 @@ function publicImage(value: unknown): string | undefined {
   }
 }
 
-function eventPrice(event: PublicEvent): string | null {
-  if (event.is_free_entry) return '0';
+function numericPrice(value: unknown): string | null {
+  const match = String(value ?? '').replace(/,/g, '').match(/\d+(?:\.\d+)?/);
+  return match ? match[0] : null;
+}
+
+function ticketTiers(event: PublicEvent): Array<{ name: string; price: string; capacity: number | null }> {
+  if (event.is_free_entry) return [{ name: 'Free entry', price: '0', capacity: null }];
   let fees = event.entry_fees;
   if (typeof fees === 'string') {
-    try { fees = JSON.parse(fees); } catch { return null; }
+    try { fees = JSON.parse(fees); } catch { return []; }
   }
-  const candidate = Array.isArray(fees) ? fees[0] : fees;
-  const amount = candidate && typeof candidate === 'object'
-    ? (candidate as { amount?: unknown; price?: unknown }).amount ?? (candidate as { price?: unknown }).price
-    : candidate;
-  const match = String(amount ?? '').replace(/,/g, '').match(/\d+(?:\.\d+)?/);
-  return match ? match[0] : null;
+  if (!Array.isArray(fees)) return [];
+  return fees.flatMap((fee, index) => {
+    if (!fee || typeof fee !== 'object') return [];
+    const item = fee as EntryFee;
+    const price = numericPrice(item.amount ?? item.price);
+    if (price === null) return [];
+    const rawCapacity = Number(item.maxTickets);
+    return [{
+      name: textValue(item.name, 120) || `Ticket ${index + 1}`,
+      price,
+      capacity: Number.isInteger(rawCapacity) && rawCapacity > 0 ? rawCapacity : null,
+    }];
+  });
+}
+
+function performers(event: PublicEvent): string[] {
+  if (!Array.isArray(event.artists)) return [];
+  return [...new Set(event.artists.map((artist) => textValue(artist, 180)).filter(Boolean))].slice(0, 20);
+}
+
+function formatEventDate(date: Date, time: unknown): string {
+  const dateText = new Intl.DateTimeFormat('en-UG', {
+    timeZone: 'Africa/Kampala', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  }).format(date);
+  const timeText = textValue(time, 120);
+  return timeText ? `${dateText} · ${timeText}` : dateText;
+}
+
+function eventPurchaseUrl(canonicalUrl: string, slug: string): string {
+  const origin = new URL(canonicalUrl).origin;
+  return `${origin}/events/tickets/${encodeURIComponent(slug)}`;
 }
 
 /** Build truthful event metadata used by people, Google, and social crawlers alike. */
@@ -113,16 +152,26 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string): Ev
   if (eventIsGone(event)) return null;
   const start = new Date(String(event.date || ''));
   const name = textValue(event.name, 180);
-  if (!name || Number.isNaN(start.getTime())) return null;
+  const slug = textValue(event.slug, 240);
+  if (!name || !slug || Number.isNaN(start.getTime())) return null;
 
   const origin = new URL(canonicalUrl).origin;
   const description = textValue(event.description, 1000) || `Discover ${name} on YoVibe.`;
   const image = publicImage(event.poster_image_url);
   const venueName = textValue(event.venue_name, 180);
+  const venueSlug = textValue(event.venue_slug, 240);
   const locality = textValue(event.location, 180);
-  const price = eventPrice(event);
-  const schema: Record<string, unknown> = {
-    '@context': 'https://schema.org',
+  const eventPerformers = performers(event);
+  const tiers = ticketTiers(event);
+  const purchaseUrl = eventPurchaseUrl(canonicalUrl, slug);
+  const offers = tiers.map((tier) => ({
+    '@type': 'Offer',
+    name: tier.name,
+    price: tier.price,
+    priceCurrency: 'UGX',
+    url: purchaseUrl,
+  }));
+  const eventSchema: Record<string, unknown> = {
     '@type': 'Event',
     name,
     description,
@@ -130,27 +179,70 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string): Ev
     eventStatus: 'https://schema.org/EventScheduled',
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     url: canonicalUrl,
-    organizer: { '@type': 'Organization', name: 'YoVibe', url: `${origin}/` },
   };
   if (venueName) {
-    schema.location = {
+    eventSchema.location = {
       '@type': 'Place',
       name: venueName,
       address: { '@type': 'PostalAddress', addressLocality: locality || 'Kampala', addressCountry: 'UG' },
     };
   }
-  if (image) schema.image = [image];
-  if (price !== null) schema.offers = { '@type': 'Offer', url: canonicalUrl, price, priceCurrency: 'UGX' };
+  if (image) eventSchema.image = [image];
+  if (eventPerformers.length) eventSchema.performer = eventPerformers.map((artist) => ({ '@type': 'PerformingGroup', name: artist }));
+  if (offers.length) eventSchema.offers = offers;
 
+  const schema = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      eventSchema,
+      {
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: 'Home', item: `${origin}/` },
+          { '@type': 'ListItem', position: 2, name: 'Events', item: `${origin}/events` },
+          { '@type': 'ListItem', position: 3, name, item: canonicalUrl },
+        ],
+      },
+    ],
+  };
+
+  const venueMarkup = venueName
+    ? `<p><strong>Venue:</strong> ${venueSlug ? `<a href="${htmlEscape(`${origin}/venues/${encodeURIComponent(venueSlug)}`)}">${htmlEscape(venueName)}</a>` : htmlEscape(venueName)}${locality ? `, ${htmlEscape(locality)}` : ''}</p>`
+    : '';
+  const artistMarkup = eventPerformers.length
+    ? `<section><h2>Artists</h2><ul>${eventPerformers.map((artist) => `<li>${htmlEscape(artist)}</li>`).join('')}</ul></section>`
+    : '';
+  const ticketMarkup = tiers.length
+    ? `<section><h2>Tickets</h2><ul>${tiers.map((tier) => `<li><strong>${htmlEscape(tier.name)}</strong> — UGX ${htmlEscape(tier.price)}${tier.capacity ? ` (capacity: ${htmlEscape(tier.capacity)})` : ''}</li>`).join('')}</ul></section>`
+    : '';
+  const summary = `<main id="yovibe-event-summary"><article>${image ? `<img src="${htmlEscape(image)}" alt="${htmlEscape(`Poster for ${name}`)}">` : ''}<h1>${htmlEscape(name)}</h1><p>${htmlEscape(description)}</p><p><strong>Date and time:</strong> <time datetime="${htmlEscape(start.toISOString())}">${htmlEscape(formatEventDate(start, event.time))}</time></p>${venueMarkup}${artistMarkup}${ticketMarkup}<p><a href="${htmlEscape(purchaseUrl)}">Buy tickets for ${htmlEscape(name)}</a></p></article></main>`;
   const socialImage = image || `${origin}/assets/icon.png`;
-  const summary = `<main id="yovibe-event-summary"><article><h1>${htmlEscape(name)}</h1><p>${htmlEscape(description)}</p><p><strong>Date:</strong> ${htmlEscape(start.toISOString())}</p>${venueName ? `<p><strong>Venue:</strong> ${htmlEscape(venueName)}${locality ? `, ${htmlEscape(locality)}` : ''}</p>` : ''}<p><a href="${htmlEscape(canonicalUrl)}">View ${htmlEscape(name)} on YoVibe</a></p></article></main>`;
   const head = `<title>${htmlEscape(name)} | YoVibe</title><meta name="description" content="${htmlEscape(description.slice(0, 160))}"><link rel="canonical" href="${htmlEscape(canonicalUrl)}"><meta property="og:type" content="website"><meta property="og:url" content="${htmlEscape(canonicalUrl)}"><meta property="og:title" content="${htmlEscape(name)} | YoVibe"><meta property="og:description" content="${htmlEscape(description.slice(0, 160))}"><meta property="og:image" content="${htmlEscape(socialImage)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${htmlEscape(name)} | YoVibe"><meta name="twitter:description" content="${htmlEscape(description.slice(0, 160))}"><meta name="twitter:image" content="${htmlEscape(socialImage)}"><script id="yovibe-event-jsonld" type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
   return { head, summary };
 }
 
+export function featuredEvents(events: PublicEvent[], now = new Date()): PublicEvent[] {
+  return events
+    .filter((event) => event.is_featured === true && !eventIsGone(event, now) && String(event.event_status || '').toLowerCase() !== 'cancelled' && textValue(event.slug))
+    .sort((a, b) => new Date(String(a.date || '')).getTime() - new Date(String(b.date || '')).getTime())
+    .slice(0, FEATURED_EVENT_LIMIT);
+}
+
+export function buildFeaturedEventsMarkup(events: PublicEvent[], origin: string): string {
+  const selected = featuredEvents(events);
+  if (!selected.length) return '';
+  const links = selected.map((event) => {
+    const slug = textValue(event.slug, 240);
+    const name = textValue(event.name, 180) || 'Featured event';
+    const date = new Date(String(event.date || ''));
+    const venue = textValue(event.venue_name, 180);
+    const details = Number.isNaN(date.getTime()) ? venue : `${formatEventDate(date, event.time)}${venue ? ` · ${venue}` : ''}`;
+    return `<li><span>Hot Pick</span> <a href="${htmlEscape(`${origin}/events/${encodeURIComponent(slug)}`)}">${htmlEscape(name)}</a>${details ? `<p>${htmlEscape(details)}</p>` : ''}</li>`;
+  }).join('');
+  return `<section id="yovibe-hot-picks" aria-label="YoVibe hot picks"><ul>${links}</ul></section>`;
+}
+
 export function injectEventDocumentHtml(html: string, document: EventDocument): string {
-  // The static SPA shell has site-wide values. Replace them, rather than leave
-  // competing titles/canonicals for an individual event URL.
   const withoutSiteWideDocumentTags = html
     .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
     .replace(/<link\b[^>]*rel=["']canonical["'][^>]*>/gi, '')
@@ -160,6 +252,14 @@ export function injectEventDocumentHtml(html: string, document: EventDocument): 
     return withHead.replace(/(<div[^>]+id=["']root["'][^>]*>)/i, `$1${document.summary}`);
   }
   return withHead.replace(/<body[^>]*>/i, `$&${document.summary}`);
+}
+
+export function injectFeaturedEventsHtml(html: string, markup: string): string {
+  if (!markup) return html;
+  if (/<div[^>]+id=["']root["'][^>]*>/i.test(html)) {
+    return html.replace(/(<div[^>]+id=["']root["'][^>]*>)/i, `$1${markup}`);
+  }
+  return html.replace(/<body[^>]*>/i, `$&${markup}`);
 }
 
 function brandedErrorPage(status: 404 | 410, pathname: string): Response {
@@ -186,6 +286,23 @@ async function fetchPublicEntity(entity: PublicEntity, slug: string): Promise<Pu
   return Array.isArray(rows) ? rows[0] || null : null;
 }
 
+async function fetchFeaturedEvents(): Promise<PublicEvent[] | undefined> {
+  const supabaseUrl = getEdgeEnv('SUPABASE_URL') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const apiKey = getEdgeEnv('SUPABASE_PUBLISHABLE_KEY') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') || getEdgeEnv('SUPABASE_ANON_KEY') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !apiKey) return undefined;
+  const endpoint = new URL('/rest/v1/events', supabaseUrl);
+  endpoint.searchParams.set('select', EVENT_SELECT);
+  endpoint.searchParams.set('is_deleted', 'eq.false');
+  endpoint.searchParams.set('is_featured', 'eq.true');
+  endpoint.searchParams.set('event_status', 'neq.cancelled');
+  endpoint.searchParams.set('order', 'date.asc');
+  endpoint.searchParams.set('limit', String(FEATURED_EVENT_LIMIT));
+  const response = await fetch(endpoint, { headers: { apikey: apiKey, Authorization: `Bearer ${apiKey}`, Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Featured events lookup failed (${response.status})`);
+  const rows = await response.json();
+  return Array.isArray(rows) ? rows as PublicEvent[] : [];
+}
+
 export function publicEntityStatus(entity: PublicEntity, row: PublicEvent | Record<string, unknown> | null): 200 | 404 | 410 {
   if (!row) return 404;
   return entity === 'events' && eventIsGone(row as PublicEvent) ? 410 : 200;
@@ -195,16 +312,30 @@ export default async (request: Request, context: any) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') return context.next();
   const url = new URL(request.url);
   const entityPath = parsePublicEntityPath(url.pathname);
-  if (!entityPath) return context.next();
+  const landingPage = isPublicEventsLanding(url.pathname);
+  if (!entityPath && !landingPage) return context.next();
 
   try {
-    const row = await fetchPublicEntity(entityPath.entity, entityPath.slug);
+    if (landingPage) {
+      const featured = await fetchFeaturedEvents();
+      const upstream = await context.next();
+      if (!featured || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+      const markup = buildFeaturedEventsMarkup(featured, url.origin);
+      if (!markup) return upstream;
+      const headers = new Headers(upstream.headers);
+      headers.delete('content-length');
+      headers.delete('etag');
+      headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+      return new Response(injectFeaturedEventsHtml(await upstream.text(), markup), { status: upstream.status, statusText: upstream.statusText, headers });
+    }
+
+    const row = await fetchPublicEntity(entityPath!.entity, entityPath!.slug);
     if (row === undefined) return context.next();
-    const status = publicEntityStatus(entityPath.entity, row);
+    const status = publicEntityStatus(entityPath!.entity, row);
     if (status !== 200) return brandedErrorPage(status, url.pathname);
 
     const upstream = await context.next();
-    if (entityPath.entity !== 'events' || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging') return upstream;
+    if (entityPath!.entity !== 'events' || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging') return upstream;
     const document = buildEventDocument(row as PublicEvent, `${url.origin}${url.pathname}`);
     if (!document || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
     const headers = new Headers(upstream.headers);

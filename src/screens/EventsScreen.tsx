@@ -1,11 +1,12 @@
 "use client";
 
 import type React from "react";
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -102,12 +103,13 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   }, [isFocused]);
 
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
-  const [featuredEvents, setFeaturedEvents] = useState<Event[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const featuredCarouselRef = useRef<ScrollView | null>(null);
+  const featuredIndexRef = useRef(0);
 
   useEffect(() => {
     const normalized = initialSearchQuery.trim();
@@ -126,6 +128,33 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       setDisplayedEvents(events.slice(0, 20)); // Show first 20 events initially
     }
   }, [events]);
+
+  const featuredEvents = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return events
+      .filter((event) => event.isFeatured && event.eventStatus !== "cancelled" && new Date(event.date).getTime() >= today.getTime())
+      .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
+      .slice(0, 6);
+  }, [events]);
+
+  // Keep the featured row moving slowly while preserving manual touch/drag.
+  useEffect(() => {
+    featuredIndexRef.current = 0;
+    if (featuredEvents.length < 2) return;
+
+    const cardMargin = responsiveSize(12, 16, 4);
+    const slideWidth = cardWidth + cardMargin * 2;
+    const timer = setInterval(() => {
+      featuredIndexRef.current = (featuredIndexRef.current + 1) % featuredEvents.length;
+      featuredCarouselRef.current?.scrollTo({
+        x: featuredIndexRef.current * slideWidth,
+        animated: true,
+      });
+    }, 7000);
+
+    return () => clearInterval(timer);
+  }, [featuredEvents.length, cardWidth]);
 
   // Update notification badge when screen is focused
   useEffect(() => {
@@ -271,7 +300,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   };
 
   // Memoize renderEventItem to prevent recreation on every render
-  const renderEventItem = useCallback(({ item }: { item: Event }) => {
+  const renderEventCard = useCallback((item: Event, hotPick = false) => {
     const dateInfo = getDateLabel(item.date);
     
     return (
@@ -289,6 +318,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       >
         <View style={styles.eventOverlay}>
           <View style={styles.eventBottomOverlay} pointerEvents="none" />
+          {hotPick && (
+            <View style={styles.hotPickBadge}>
+              <Text style={styles.hotPickBadgeText}>Hot Pick</Text>
+            </View>
+          )}
           <View style={styles.eventHeader}>
             <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
               <Text style={[styles.dateChipText, dateInfo.isSpecial && styles.dateChipTextSpecial]}>{dateInfo.label}</Text>
@@ -333,7 +367,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       </ImageBackground>
     </TouchableOpacity>
   );
-  }, [cardWidth, cardHeight, spacing.md]);
+  }, [cardWidth, cardHeight]);
+
+  const renderEventItem = useCallback(({ item }: { item: Event }) => renderEventCard(item), [renderEventCard]);
 
   return (
     <View style={styles.container}>
@@ -398,6 +434,28 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
           numColumns={gridColumns}
+          ListHeaderComponent={featuredEvents.length > 0 ? (
+            <View style={styles.featuredSection} accessibilityRole="summary" accessibilityLabel="YoVibe hot picks">
+              <ScrollView
+                ref={featuredCarouselRef}
+                horizontal
+                pagingEnabled={false}
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={cardWidth + responsiveSize(24, 32, 8)}
+                decelerationRate="fast"
+                contentContainerStyle={styles.featuredCarouselContent}
+              >
+                {featuredEvents.map((event) => (
+                  <View
+                    key={event.id}
+                    style={{ width: cardWidth }}
+                  >
+                    {renderEventCard(event, true)}
+                  </View>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           getItemLayout={(_: any, index: number) => ({
             length: cardHeight + spacing.md * 2,
             offset: (cardHeight + spacing.md * 2) * Math.floor(index / gridColumns),
@@ -700,6 +758,29 @@ const styles = StyleSheet.create({
   eventsList: {
     paddingBottom: responsiveSize(80, 100, 120),
     alignItems: 'center',
+  },
+  featuredSection: {
+    width: "100%",
+    paddingTop: responsiveSize(4, 6, 8),
+    paddingBottom: responsiveSize(6, 8, 10),
+  },
+  featuredCarouselContent: {
+    alignItems: "flex-start",
+  },
+  hotPickBadge: {
+    position: "absolute",
+    top: responsiveSize(10, 12, 16),
+    left: responsiveSize(10, 12, 16),
+    zIndex: 2,
+    backgroundColor: "#FFD166",
+    borderRadius: responsiveSize(8, 9, 10),
+    paddingHorizontal: responsiveSize(7, 9, 10),
+    paddingVertical: responsiveSize(3, 4, 5),
+  },
+  hotPickBadgeText: {
+    color: "#101018",
+    fontSize: responsiveSize(9, 10, 11),
+    fontWeight: "800",
   },
   floatingAddButton: {
     position: "absolute",

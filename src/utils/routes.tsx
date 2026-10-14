@@ -58,18 +58,11 @@ import { RouterProvider, RouteDefinition } from '../utils/URLRouter';
 
 // Route definitions - comprehensive mapping of all existing screens
 export const routes: RouteDefinition[] = [
-  // Root route - redirect to main events screen
+  // Root route is the public events landing page. Keeping it at `/` makes the
+  // featured-event links available to both people and crawlers.
   {
     path: '/',
-    component: () => {
-      // Redirect root to events
-      React.useEffect(() => {
-        if (typeof window !== 'undefined') {
-          window.location.href = '/events';
-        }
-      }, []);
-      return null;
-    },
+    component: withCompatNavigation(EventsScreen),
     exact: true
   },
 
