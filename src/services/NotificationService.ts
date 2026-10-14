@@ -4,6 +4,7 @@ import { publicSiteUrl } from "../config/runtime"
 import type { Event } from "../models/Event"
 import type { Ticket, TicketValidation } from "../models/Ticket"
 import type { AppNotification, NotificationAnalytics, DailyNotificationStats, NotificationUserInteraction, NotificationDetailedAnalytics } from "../models/Notification"
+import { getNotificationInstallation, hasNotificationInstallation } from "./notificationInstallation"
 
 const GUEST_NOTIFICATION_STATE_KEY = "yovibe_guest_notification_state_v1"
 
@@ -11,6 +12,21 @@ type GuestNotificationState = {
   isRead?: boolean
   readAt?: string
   openedAt?: string
+}
+
+type NotificationFeedRow = {
+  id: string
+  user_id?: string | null
+  title: string
+  body: string
+  type: AppNotification["type"]
+  data?: Record<string, any> | null
+  image_url?: string | null
+  deep_link?: string | null
+  is_read?: boolean | null
+  created_at: string
+  read_at?: string | null
+  opened_at?: string | null
 }
 
 function readGuestNotificationStates(): Record<string, GuestNotificationState> {
@@ -49,6 +65,50 @@ export class NotificationService {
   async saveNotification(notification: Omit<AppNotification, "id" | "createdAt">): Promise<string> {
     void notification
     throw new Error("Notifications must be created by an authorized server function")
+  }
+
+  hasBroadcastSubscription(): boolean {
+    return hasNotificationInstallation()
+  }
+
+  notifyFeedChanged(): void {
+    this.notifyListeners()
+  }
+
+  private async loadNotificationFeed(limitCount: number): Promise<AppNotification[]> {
+    const installation = getNotificationInstallation()
+    const { data: { session } } = await supabase.auth.getSession()
+    const response = await fetch("/.netlify/functions/notification-feed", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        installationId: installation?.id,
+        installationSecret: installation?.secret,
+        limit: limitCount,
+      }),
+    })
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload?.error || "Unable to load notifications")
+    }
+    const payload = await response.json()
+    return ((payload?.notifications || []) as NotificationFeedRow[]).map((doc) => ({
+      id: doc.id,
+      userId: doc.user_id || undefined,
+      title: doc.title,
+      body: doc.body,
+      type: doc.type,
+      data: doc.data || undefined,
+      imageUrl: doc.image_url || undefined,
+      deepLink: doc.deep_link || undefined,
+      isRead: doc.is_read || false,
+      createdAt: new Date(doc.created_at),
+      readAt: doc.read_at ? new Date(doc.read_at) : undefined,
+      openedAt: doc.opened_at ? new Date(doc.opened_at) : undefined,
+    }))
   }
 
   private async applyUserReadStates(notifications: AppNotification[], userId?: string): Promise<AppNotification[]> {
@@ -92,67 +152,8 @@ export class NotificationService {
   // Get notifications for a specific user
   async getUserNotifications(userId?: string, limitCount: number = 50): Promise<AppNotification[]> {
     try {
-      let query = supabase
-        .from("notifications")
-        .select("*")
-        .is("user_id", null)
-        .order("created_at", { ascending: false })
-        .limit(limitCount)
-
-      const { data: broadcastData, error: broadcastError } = await query
-
-      if (broadcastError) throw broadcastError
-
-      const allNotifications: AppNotification[] = broadcastData?.map((doc) => ({
-        id: doc.id,
-        userId: doc.user_id,
-        title: doc.title,
-        body: doc.body,
-        type: doc.type,
-        data: doc.data,
-        imageUrl: doc.image_url,
-        deepLink: doc.deep_link,
-        isRead: doc.is_read || false,
-        createdAt: new Date(doc.created_at),
-        readAt: doc.read_at ? new Date(doc.read_at) : undefined,
-        openedAt: doc.opened_at ? new Date(doc.opened_at) : undefined,
-      })) || []
-
-      // If user is authenticated, also get their personal notifications
-      if (userId) {
-        const { data: userData, error: userError } = await supabase
-          .from("notifications")
-          .select("*")
-          .eq("user_id", userId)
-          .order("created_at", { ascending: false })
-          .limit(limitCount)
-
-        if (userError) throw userError
-
-        if (userData) {
-          userData.forEach((doc) => {
-            allNotifications.push({
-              id: doc.id,
-              userId: doc.user_id,
-              title: doc.title,
-              body: doc.body,
-              type: doc.type,
-              data: doc.data,
-              imageUrl: doc.image_url,
-              deepLink: doc.deep_link,
-              isRead: doc.is_read || false,
-              createdAt: new Date(doc.created_at),
-              readAt: doc.read_at ? new Date(doc.read_at) : undefined,
-              openedAt: doc.opened_at ? new Date(doc.opened_at) : undefined,
-            })
-          })
-        }
-      }
-
-      // Sort all notifications by date and limit
-      return this.applyUserReadStates(allNotifications
-        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-        .slice(0, limitCount), userId)
+      const notifications = await this.loadNotificationFeed(limitCount)
+      return this.applyUserReadStates(notifications, userId)
     } catch (error) {
       console.error("NotificationService: Error getting notifications:", error)
       return []
@@ -162,40 +163,22 @@ export class NotificationService {
   // Get unread count for a user
   async getUnreadCount(userId?: string): Promise<number> {
     try {
-      const { data: broadcastData, error: broadcastError } = await supabase
-        .from("notifications")
-        .select("id,is_read")
-        .is("user_id", null)
-
-      if (broadcastError) throw broadcastError
-
-      let personalData: Array<{ id: string; is_read: boolean | null }> = []
-      if (userId) {
-        const { data: userData, error: userError } = await supabase
-          .from("notifications")
-          .select("id,is_read")
-          .eq("user_id", userId)
-
-        if (userError) throw userError
-        personalData = userData || []
-      }
-
-      const allRows = [...(broadcastData || []), ...personalData]
-      if (!userId || allRows.length === 0) {
+      const allNotifications = await this.loadNotificationFeed(200)
+      if (!userId || allNotifications.length === 0) {
         const states = readGuestNotificationStates()
-        return allRows.filter((row) => states[row.id]?.isRead !== true && row.is_read !== true).length
+        return allNotifications.filter((row) => states[row.id]?.isRead !== true && row.isRead !== true).length
       }
 
       const { data: states, error: statesError } = await supabase
         .from("notification_user_states")
         .select("notification_id,is_read")
         .eq("user_id", userId)
-        .in("notification_id", allRows.map((row) => row.id))
+        .in("notification_id", allNotifications.map((row) => row.id))
 
       if (statesError) throw statesError
       const stateById = new Map((states || []).map((state) => [state.notification_id, state.is_read === true]))
 
-      return allRows.filter((row) => stateById.has(row.id) ? !stateById.get(row.id) : row.is_read !== true).length
+      return allNotifications.filter((row) => stateById.has(row.id) ? !stateById.get(row.id) : row.isRead !== true).length
     } catch (error) {
       console.error("NotificationService: Error getting unread count:", error)
       return 0
