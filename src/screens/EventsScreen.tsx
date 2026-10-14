@@ -53,9 +53,6 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
-// Keep the featured carousel aligned to the same card footprint as the event grid.
-const EVENT_CARD_HORIZONTAL_MARGIN = responsiveSize(12, 16, 4);
-
 type EventsScreenProps = {
   initialSearchQuery?: string;
 };
@@ -78,18 +75,26 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const typography = useTypography();
   const spacing = useSpacing();
   const deviceType = useDeviceType();
+  const eventCardHorizontalMargin = deviceType.isLargeScreen ? 4 : deviceType.isTablet ? 16 : 12;
+  // The desktop navigation occupies space on both sides of the centred content area.
+  // Tablet and mobile cards run from the edge of the list, with their own card margins.
+  const gridHorizontalPadding = deviceType.isLargeScreen ? 80 : 0;
+  const gridAvailableWidth = layout.width - gridHorizontalPadding * 2;
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
-    // Account for navbar offset on desktop (80px)
-    const navbarOffset = deviceType.isLargeScreen ? 80 : 0;
-    const availableWidth = layout.width - navbarOffset;
-    const width = (availableWidth - (spacing.md * (gridColumns + 1))) / gridColumns;
+    // Include the visible card margins and the normal grid column gaps. This gives
+    // the featured carousel and the catalogue precisely the same row geometry.
+    const width = (
+      gridAvailableWidth
+      - eventCardHorizontalMargin * 2 * gridColumns
+      - spacing.md * (gridColumns - 1)
+    ) / gridColumns;
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
-  }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
+  }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen]);
   const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
-  const featuredCardFootprint = cardWidth + EVENT_CARD_HORIZONTAL_MARGIN * 2;
+  const featuredCardFootprint = cardWidth + eventCardHorizontalMargin * 2;
   const featuredSlideWidth = featuredCardFootprint + spacing.md;
   const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
     + spacing.md * (featuredVisibleCards - 1);
@@ -327,7 +332,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     
     return (
     <TouchableOpacity 
-      style={[styles.eventCard, { width: cardWidth }]} 
+      style={[styles.eventCard, { width: cardWidth, marginHorizontal: eventCardHorizontalMargin }]}
       onPress={() => handleEventSelect(item.slug || item.id)}
       accessibilityLabel={`View event: ${item.name}`}
       accessibilityRole="button"
@@ -384,7 +389,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       </ImageBackground>
     </TouchableOpacity>
   );
-  }, [cardWidth, cardHeight]);
+  }, [cardWidth, cardHeight, eventCardHorizontalMargin]);
 
   const renderEventItem = useCallback(({ item }: { item: Event }) => renderEventCard(item), [renderEventCard]);
 
@@ -494,9 +499,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           contentContainerStyle={[
             styles.eventsList,
             { 
-              paddingHorizontal: spacing.md,
-              paddingLeft: deviceType.isLargeScreen ? 80 : 0,
-              paddingRight: deviceType.isLargeScreen ? 80 : 0,
+              paddingLeft: gridHorizontalPadding,
+              paddingRight: gridHorizontalPadding,
               columnGap: gridColumns > 1 ? spacing.md : 0
             }
           ]}
@@ -618,9 +622,6 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   eventCard: {
-    // Keep the desktop horizontal gap (4px margins + 20px column gap)
-    // equal to the existing 28px vertical card gap.
-    marginHorizontal: EVENT_CARD_HORIZONTAL_MARGIN,
     marginBottom: responsiveSize(16, 20, 28),
     borderRadius: responsiveSize(14, 18, 24),
     overflow: "hidden",

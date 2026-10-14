@@ -239,7 +239,10 @@ export function buildFeaturedEventsMarkup(events: PublicEvent[], origin: string)
     const details = Number.isNaN(date.getTime()) ? venue : `${formatEventDate(date, event.time)}${venue ? ` · ${venue}` : ''}`;
     return `<li><span>Hot Pick</span> <a href="${htmlEscape(`${origin}/events/${encodeURIComponent(slug)}`)}">${htmlEscape(name)}</a>${details ? `<p>${htmlEscape(details)}</p>` : ''}</li>`;
   }).join('');
-  return `<section id="yovibe-hot-picks" aria-label="YoVibe hot picks"><ul>${links}</ul></section>`;
+  // This is a crawlable pre-app fallback. React replaces the root with the real
+  // featured carousel after it loads, so keep the fallback out of the visual and
+  // accessibility trees to prevent a flash of unstyled event links.
+  return `<section id="yovibe-hot-picks" data-yovibe-seo-fallback="true" hidden aria-hidden="true"><ul>${links}</ul></section>`;
 }
 
 export function injectEventDocumentHtml(html: string, document: EventDocument): string {

@@ -98,6 +98,7 @@ describe('public SEO route handling', () => {
 
     const markup = buildFeaturedEventsMarkup([...candidates, { slug: 'past-featured', name: 'Past featured', date: '2020-12-31T18:00:00+03:00', is_featured: true }], 'https://yovibe.net');
     expect(markup).toContain('id="yovibe-hot-picks"');
+    expect(markup).toContain('data-yovibe-seo-fallback="true" hidden aria-hidden="true"');
     expect(markup).toContain('Hot Pick');
     expect(markup).toContain('href="https://yovibe.net/events/featured-1"');
     expect(markup).not.toContain('past-featured');

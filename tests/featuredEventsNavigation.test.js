@@ -10,7 +10,9 @@ describe('featured event navigation', () => {
     expect(screen).not.toContain('hotPickBadge');
     expect(screen).toContain('horizontal');
     expect(screen).toContain('setInterval');
-    expect(screen).toContain('EVENT_CARD_HORIZONTAL_MARGIN');
+    expect(screen).toContain('eventCardHorizontalMargin');
+    expect(screen).toContain('gridAvailableWidth');
+    expect(screen).toMatch(/gridAvailableWidth\s*- eventCardHorizontalMargin \* 2 \* gridColumns/);
     expect(screen).toContain('featuredCardFootprint');
     expect(screen).toContain('featuredSlideWidth = featuredCardFootprint + spacing.md');
     expect(screen).toContain('contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}');
