@@ -231,7 +231,9 @@ export default function NotificationScreen() {
       <Text style={styles.emptyIcon}>🔔</Text>
       <Text style={styles.emptyText}>No notifications yet</Text>
       <Text style={styles.emptySubtext}>
-        You'll receive notifications about events, tickets, and more
+        {NotificationService.hasBroadcastSubscription()
+          ? "You'll receive notifications about events, tickets, and more"
+          : "Enable notifications to start receiving future event updates on this device"}
       </Text>
     </View>
   )

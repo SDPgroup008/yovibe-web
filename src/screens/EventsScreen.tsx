@@ -95,9 +95,15 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen]);
   const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
   const featuredCardFootprint = cardWidth + eventCardHorizontalMargin * 2;
-  const featuredSlideWidth = featuredCardFootprint + spacing.md;
+  // Desktop cards already have 4px margins on each side. Do not add a second
+  // wrapper gap there; tablet and mobile retain their established grid gap.
+  const featuredCarouselGap = deviceType.isLargeScreen ? 0 : spacing.md;
+  // FlatList positions normal desktop card cells before their 4px card margin.
+  // Offset the compact carousel by that same margin so their visible left edges align.
+  const featuredDesktopOffset = deviceType.isLargeScreen ? -eventCardHorizontalMargin : 0;
+  const featuredSlideWidth = featuredCardFootprint + featuredCarouselGap;
   const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
-    + spacing.md * (featuredVisibleCards - 1);
+    + featuredCarouselGap * (featuredVisibleCards - 1);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -460,7 +466,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             <View style={styles.featuredSection} accessibilityRole="summary" accessibilityLabel="YoVibe hot picks">
               <ScrollView
                 ref={featuredCarouselRef}
-                style={[styles.featuredCarousel, { width: featuredViewportWidth }]}
+                style={[styles.featuredCarousel, { width: featuredViewportWidth, marginLeft: featuredDesktopOffset }]}
                 horizontal
                 scrollEnabled={canScrollFeatured}
                 pagingEnabled={false}
@@ -476,7 +482,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
                 onScrollBeginDrag={() => { featuredDraggingRef.current = true; }}
                 onScrollEndDrag={handleFeaturedScrollEnd}
                 onMomentumScrollEnd={handleFeaturedScrollEnd}
-                contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}
+                contentContainerStyle={[styles.featuredCarouselContent, { columnGap: featuredCarouselGap }]}
               >
                 {featuredEvents.map((event) => (
                   <View
