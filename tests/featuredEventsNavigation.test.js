@@ -7,9 +7,12 @@ describe('featured event navigation', () => {
   test('uses the existing admin-controlled featured field and preserves the full catalogue', () => {
     const screen = read('src/screens/EventsScreen.tsx');
     expect(screen).toContain('event.isFeatured');
-    expect(screen).toContain('Hot Pick');
+    expect(screen).not.toContain('hotPickBadge');
     expect(screen).toContain('horizontal');
     expect(screen).toContain('setInterval');
+    expect(screen).toContain('featuredCardGap');
+    expect(screen).toContain('onMomentumScrollEnd');
+    expect(screen).toContain('nestedScrollEnabled');
     expect(screen).toContain('data={displayedEvents || []}');
     expect(screen).toContain('accessibilityRole="button"');
   });

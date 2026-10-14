@@ -85,6 +85,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
   }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
+  const featuredCardGap = responsiveSize(12, 16, 8);
+  const featuredSlideWidth = cardWidth + featuredCardGap;
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -110,6 +112,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const [unreadCount, setUnreadCount] = useState(0);
   const featuredCarouselRef = useRef<ScrollView | null>(null);
   const featuredIndexRef = useRef(0);
+  const featuredDraggingRef = useRef(false);
 
   useEffect(() => {
     const normalized = initialSearchQuery.trim();
@@ -141,20 +144,29 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   // Keep the featured row moving slowly while preserving manual touch/drag.
   useEffect(() => {
     featuredIndexRef.current = 0;
+    featuredCarouselRef.current?.scrollTo({ x: 0, animated: false });
     if (featuredEvents.length < 2) return;
 
-    const cardMargin = responsiveSize(12, 16, 4);
-    const slideWidth = cardWidth + cardMargin * 2;
     const timer = setInterval(() => {
+      if (featuredDraggingRef.current) return;
       featuredIndexRef.current = (featuredIndexRef.current + 1) % featuredEvents.length;
       featuredCarouselRef.current?.scrollTo({
-        x: featuredIndexRef.current * slideWidth,
+        x: featuredIndexRef.current * featuredSlideWidth,
         animated: true,
       });
     }, 7000);
 
     return () => clearInterval(timer);
-  }, [featuredEvents.length, cardWidth]);
+  }, [featuredEvents.length, featuredSlideWidth]);
+
+  const handleFeaturedScrollEnd = useCallback((event: any) => {
+    const offset = Number(event?.nativeEvent?.contentOffset?.x || 0);
+    featuredIndexRef.current = Math.max(
+      0,
+      Math.min(featuredEvents.length - 1, Math.round(offset / featuredSlideWidth)),
+    );
+    featuredDraggingRef.current = false;
+  }, [featuredEvents.length, featuredSlideWidth]);
 
   // Update notification badge when screen is focused
   useEffect(() => {
@@ -300,7 +312,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   };
 
   // Memoize renderEventItem to prevent recreation on every render
-  const renderEventCard = useCallback((item: Event, hotPick = false) => {
+  const renderEventCard = useCallback((item: Event) => {
     const dateInfo = getDateLabel(item.date);
     
     return (
@@ -318,11 +330,6 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       >
         <View style={styles.eventOverlay}>
           <View style={styles.eventBottomOverlay} pointerEvents="none" />
-          {hotPick && (
-            <View style={styles.hotPickBadge}>
-              <Text style={styles.hotPickBadgeText}>Hot Pick</Text>
-            </View>
-          )}
           <View style={styles.eventHeader}>
             <View style={[styles.dateChip, dateInfo.isSpecial && styles.dateChipSpecial]}>
               <Text style={[styles.dateChipText, dateInfo.isSpecial && styles.dateChipTextSpecial]}>{dateInfo.label}</Text>
@@ -441,16 +448,25 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
                 horizontal
                 pagingEnabled={false}
                 showsHorizontalScrollIndicator={false}
-                snapToInterval={cardWidth + responsiveSize(24, 32, 8)}
+                snapToInterval={featuredSlideWidth}
+                snapToAlignment="start"
+                disableIntervalMomentum
                 decelerationRate="fast"
+                nestedScrollEnabled
+                directionalLockEnabled
+                alwaysBounceHorizontal
+                scrollEventThrottle={16}
+                onScrollBeginDrag={() => { featuredDraggingRef.current = true; }}
+                onScrollEndDrag={handleFeaturedScrollEnd}
+                onMomentumScrollEnd={handleFeaturedScrollEnd}
                 contentContainerStyle={styles.featuredCarouselContent}
               >
                 {featuredEvents.map((event) => (
                   <View
                     key={event.id}
-                    style={{ width: cardWidth }}
+                    style={{ width: cardWidth, marginRight: featuredCardGap }}
                   >
-                    {renderEventCard(event, true)}
+                    {renderEventCard(event)}
                   </View>
                 ))}
               </ScrollView>
@@ -766,21 +782,6 @@ const styles = StyleSheet.create({
   },
   featuredCarouselContent: {
     alignItems: "flex-start",
-  },
-  hotPickBadge: {
-    position: "absolute",
-    top: responsiveSize(10, 12, 16),
-    left: responsiveSize(10, 12, 16),
-    zIndex: 2,
-    backgroundColor: "#FFD166",
-    borderRadius: responsiveSize(8, 9, 10),
-    paddingHorizontal: responsiveSize(7, 9, 10),
-    paddingVertical: responsiveSize(3, 4, 5),
-  },
-  hotPickBadgeText: {
-    color: "#101018",
-    fontSize: responsiveSize(9, 10, 11),
-    fontWeight: "800",
   },
   floatingAddButton: {
     position: "absolute",
