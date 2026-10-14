@@ -11,7 +11,9 @@ describe('featured event navigation', () => {
     expect(screen).toContain('horizontal');
     expect(screen).toContain('setInterval');
     expect(screen).toContain('featuredCardGap');
+    expect(screen).toContain('featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1');
     expect(screen).toContain('featuredViewportWidth');
+    expect(screen).toContain('canScrollFeatured');
     expect(screen).toContain('onMomentumScrollEnd');
     expect(screen).toContain('nestedScrollEnabled');
     expect(screen).toContain('ListHeaderComponentStyle={styles.featuredHeader}');

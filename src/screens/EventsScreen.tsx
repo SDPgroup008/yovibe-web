@@ -87,10 +87,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
   const featuredCardGap = responsiveSize(12, 16, 8);
   const featuredSlideWidth = cardWidth + featuredCardGap;
-  const featuredViewportWidth = Math.min(
-    featuredSlideWidth,
-    Math.max(0, layout.width - spacing.md * 2),
-  );
+  const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
+  const featuredViewportWidth = cardWidth * featuredVisibleCards
+    + featuredCardGap * (featuredVisibleCards - 1);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -144,16 +143,20 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       .sort((left, right) => new Date(left.date).getTime() - new Date(right.date).getTime())
       .slice(0, 6);
   }, [events]);
+  const featuredMaxIndex = Math.max(0, featuredEvents.length - featuredVisibleCards);
+  const canScrollFeatured = featuredMaxIndex > 0;
 
   // Keep the featured row moving slowly while preserving manual touch/drag.
   useEffect(() => {
     featuredIndexRef.current = 0;
     featuredCarouselRef.current?.scrollTo({ x: 0, animated: false });
-    if (featuredEvents.length < 2) return;
+    if (!canScrollFeatured) return;
 
     const timer = setInterval(() => {
       if (featuredDraggingRef.current) return;
-      featuredIndexRef.current = (featuredIndexRef.current + 1) % featuredEvents.length;
+      featuredIndexRef.current = featuredIndexRef.current >= featuredMaxIndex
+        ? 0
+        : featuredIndexRef.current + 1;
       featuredCarouselRef.current?.scrollTo({
         x: featuredIndexRef.current * featuredSlideWidth,
         animated: true,
@@ -161,16 +164,16 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     }, 7000);
 
     return () => clearInterval(timer);
-  }, [featuredEvents.length, featuredSlideWidth]);
+  }, [canScrollFeatured, featuredMaxIndex, featuredSlideWidth]);
 
   const handleFeaturedScrollEnd = useCallback((event: any) => {
     const offset = Number(event?.nativeEvent?.contentOffset?.x || 0);
     featuredIndexRef.current = Math.max(
       0,
-      Math.min(featuredEvents.length - 1, Math.round(offset / featuredSlideWidth)),
+      Math.min(featuredMaxIndex, Math.round(offset / featuredSlideWidth)),
     );
     featuredDraggingRef.current = false;
-  }, [featuredEvents.length, featuredSlideWidth]);
+  }, [featuredMaxIndex, featuredSlideWidth]);
 
   // Update notification badge when screen is focused
   useEffect(() => {
@@ -451,7 +454,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
                 ref={featuredCarouselRef}
                 style={[styles.featuredCarousel, { width: featuredViewportWidth }]}
                 horizontal
-                scrollEnabled={featuredEvents.length > 1}
+                scrollEnabled={canScrollFeatured}
                 pagingEnabled={false}
                 showsHorizontalScrollIndicator={false}
                 snapToInterval={featuredSlideWidth}
@@ -793,7 +796,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   featuredCarousel: {
-    maxWidth: "100%",
+    alignSelf: "flex-start",
   },
   featuredCarouselContent: {
     flexDirection: "row",
