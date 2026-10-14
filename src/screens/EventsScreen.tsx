@@ -53,6 +53,9 @@ const responsiveSize = (mobile: number, tablet: number, desktop: number): number
   return mobile;
 };
 
+// Keep the featured carousel aligned to the same card footprint as the event grid.
+const EVENT_CARD_HORIZONTAL_MARGIN = responsiveSize(12, 16, 4);
+
 type EventsScreenProps = {
   initialSearchQuery?: string;
 };
@@ -85,11 +88,11 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
   }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
-  const featuredCardGap = responsiveSize(12, 16, 8);
-  const featuredSlideWidth = cardWidth + featuredCardGap;
   const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
-  const featuredViewportWidth = cardWidth * featuredVisibleCards
-    + featuredCardGap * (featuredVisibleCards - 1);
+  const featuredCardFootprint = cardWidth + EVENT_CARD_HORIZONTAL_MARGIN * 2;
+  const featuredSlideWidth = featuredCardFootprint + spacing.md;
+  const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
+    + spacing.md * (featuredVisibleCards - 1);
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -468,12 +471,12 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
                 onScrollBeginDrag={() => { featuredDraggingRef.current = true; }}
                 onScrollEndDrag={handleFeaturedScrollEnd}
                 onMomentumScrollEnd={handleFeaturedScrollEnd}
-                contentContainerStyle={styles.featuredCarouselContent}
+                contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}
               >
                 {featuredEvents.map((event) => (
                   <View
                     key={event.id}
-                    style={{ width: cardWidth, marginRight: featuredCardGap }}
+                    style={{ width: featuredCardFootprint }}
                   >
                     {renderEventCard(event)}
                   </View>
@@ -617,7 +620,7 @@ const styles = StyleSheet.create({
   eventCard: {
     // Keep the desktop horizontal gap (4px margins + 20px column gap)
     // equal to the existing 28px vertical card gap.
-    marginHorizontal: responsiveSize(12, 16, 4),
+    marginHorizontal: EVENT_CARD_HORIZONTAL_MARGIN,
     marginBottom: responsiveSize(16, 20, 28),
     borderRadius: responsiveSize(14, 18, 24),
     overflow: "hidden",

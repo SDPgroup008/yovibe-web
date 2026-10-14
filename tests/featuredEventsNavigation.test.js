@@ -10,7 +10,10 @@ describe('featured event navigation', () => {
     expect(screen).not.toContain('hotPickBadge');
     expect(screen).toContain('horizontal');
     expect(screen).toContain('setInterval');
-    expect(screen).toContain('featuredCardGap');
+    expect(screen).toContain('EVENT_CARD_HORIZONTAL_MARGIN');
+    expect(screen).toContain('featuredCardFootprint');
+    expect(screen).toContain('featuredSlideWidth = featuredCardFootprint + spacing.md');
+    expect(screen).toContain('contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}');
     expect(screen).toContain('featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1');
     expect(screen).toContain('featuredViewportWidth');
     expect(screen).toContain('canScrollFeatured');
