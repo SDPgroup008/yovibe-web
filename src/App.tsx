@@ -26,6 +26,8 @@ import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
 import { showForegroundNotification } from "./utils/browserNotifications";
+import { getOrCreateNotificationInstallation } from "./services/notificationInstallation";
+import { getCurrentSession } from "./config/supabase";
 
 type DeferredInstallPrompt = {
   prompt: () => Promise<void>;
@@ -99,10 +101,22 @@ function NotificationBanner({ title, body, onClose }) {
 // 🔔 Save the browser token server-side for direct broadcast delivery.
 async function saveTokenToRepo(token: string, userId: string | null = null, userEmail?: string, userName?: string) {
   try {
+    const installation = getOrCreateNotificationInstallation();
+    const session = await getCurrentSession();
     const res = await fetch("/.netlify/functions/save-token", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token, userId, userEmail, userName }),
+      headers: {
+        "Content-Type": "application/json",
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({
+        token,
+        userId,
+        userEmail,
+        userName,
+        installationId: installation?.id,
+        installationSecret: installation?.secret,
+      }),
     });
 
     if (!res.ok) {
@@ -110,6 +124,7 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
     } else {
       const result = await res.json();
       /* console.log("[App] Token saved for direct broadcast delivery:", result); */
+      if (result?.broadcastsFrom) NotificationService.notifyFeedChanged();
     }
   } catch (err) {
     console.error("Error calling Netlify function:", err);

@@ -14,8 +14,10 @@ describe('featured event navigation', () => {
     expect(screen).toContain('gridAvailableWidth');
     expect(screen).toMatch(/gridAvailableWidth\s*- eventCardHorizontalMargin \* 2 \* gridColumns/);
     expect(screen).toContain('featuredCardFootprint');
-    expect(screen).toContain('featuredSlideWidth = featuredCardFootprint + spacing.md');
-    expect(screen).toContain('contentContainerStyle={[styles.featuredCarouselContent, { columnGap: spacing.md }]}');
+    expect(screen).toContain('featuredCarouselGap = deviceType.isLargeScreen ? 0 : spacing.md');
+    expect(screen).toContain('featuredDesktopOffset = deviceType.isLargeScreen ? -eventCardHorizontalMargin : 0');
+    expect(screen).toContain('featuredSlideWidth = featuredCardFootprint + featuredCarouselGap');
+    expect(screen).toContain('contentContainerStyle={[styles.featuredCarouselContent, { columnGap: featuredCarouselGap }]}');
     expect(screen).toContain('featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1');
     expect(screen).toContain('featuredViewportWidth');
     expect(screen).toContain('canScrollFeatured');
