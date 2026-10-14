@@ -21,6 +21,7 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
   const [postponedDate, setPostponedDate] = useState("")
   const [statusUpdating, setStatusUpdating] = useState(false)
   const [reportDownloading, setReportDownloading] = useState<string | null>(null)
+  const [featureUpdatingEventId, setFeatureUpdatingEventId] = useState<string | null>(null)
 
   useEffect(() => {
     if (currentUser?.userType !== "admin") {
@@ -63,14 +64,24 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
     }
   }
 
-  const handleToggleFeature = async (eventId: string, isFeatured: boolean) => {
+  const handleToggleFeature = async (event: Event) => {
+    const eventId = event.slug || event.id
+    if (featureUpdatingEventId === eventId) return
+
     try {
-      await SupabaseService.updateEvent(eventId, { isFeatured: !isFeatured })
-      Alert.alert("Success", `Event ${isFeatured ? "unfeatured" : "featured"} successfully`)
-      loadEvents()
+      setFeatureUpdatingEventId(eventId)
+      const updated = await SupabaseService.adminSetEventFeatured(eventId, !event.isFeatured)
+      setEvents((current) => current.map((item) => (
+        item.id === updated.eventSlug || item.slug === updated.eventSlug
+          ? { ...item, isFeatured: updated.isFeatured }
+          : item
+      )))
+      Alert.alert("Success", `Event ${updated.isFeatured ? "featured" : "unfeatured"} successfully`)
     } catch (error) {
       console.error("Error updating event:", error)
-      Alert.alert("Error", "Failed to update event")
+      Alert.alert("Error", error instanceof Error ? error.message : "Failed to update event")
+    } finally {
+      setFeatureUpdatingEventId(null)
     }
   }
 
@@ -216,8 +227,17 @@ const AdminEventsScreen: React.FC<AdminEventsScreenProps> = ({ navigation }) => 
               )}
               <Text style={styles.actionButtonText}>Report</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.actionButton, item.isFeatured ? styles.unfeaturedButton : styles.featuredButton]} onPress={() => handleToggleFeature(item.id, item.isFeatured)}>
-              <Ionicons name={item.isFeatured ? "star-outline" : "star"} size={18} color="#FFFFFF" />
+            <TouchableOpacity
+              style={[styles.actionButton, item.isFeatured ? styles.unfeaturedButton : styles.featuredButton]}
+              onPress={() => handleToggleFeature(item)}
+              disabled={featureUpdatingEventId === (item.slug || item.id)}
+              accessibilityState={{ disabled: featureUpdatingEventId === (item.slug || item.id) }}
+            >
+              {featureUpdatingEventId === (item.slug || item.id) ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Ionicons name={item.isFeatured ? "star-outline" : "star"} size={18} color="#FFFFFF" />
+              )}
               <Text style={styles.actionButtonText}>{item.isFeatured ? "Unfeature" : "Feature"}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.actionButton, styles.deleteButton]} onPress={() => handleDeleteEvent(item.id)}>

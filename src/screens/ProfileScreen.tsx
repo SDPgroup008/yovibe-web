@@ -208,6 +208,10 @@ const ProfileScreen: React.FC = () => {
     navigation.navigate("HelpSupport");
   };
 
+  const navigateToAbout = () => {
+    navigation.navigate("About");
+  };
+
   // Phase 4 (4.2): DPPA right of access — download the user's personal data.
   const handleDownloadMyData = async () => {
     try {
@@ -438,6 +442,12 @@ const ProfileScreen: React.FC = () => {
   }
 
   const supportItems: MenuItemConfig[] = [
+    {
+      icon: "information-circle-outline",
+      label: "About YoVibe",
+      description: "Learn more about the YoVibe platform",
+      onPress: navigateToAbout,
+    },
     {
       icon: "notifications-outline",
       label: "Notifications",
