@@ -87,6 +87,10 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   }, [layout.width, layout.imageHeight, spacing.md, gridColumns, deviceType.isLargeScreen]);
   const featuredCardGap = responsiveSize(12, 16, 8);
   const featuredSlideWidth = cardWidth + featuredCardGap;
+  const featuredViewportWidth = Math.min(
+    featuredSlideWidth,
+    Math.max(0, layout.width - spacing.md * 2),
+  );
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
@@ -445,7 +449,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             <View style={styles.featuredSection} accessibilityRole="summary" accessibilityLabel="YoVibe hot picks">
               <ScrollView
                 ref={featuredCarouselRef}
+                style={[styles.featuredCarousel, { width: featuredViewportWidth }]}
                 horizontal
+                scrollEnabled={featuredEvents.length > 1}
                 pagingEnabled={false}
                 showsHorizontalScrollIndicator={false}
                 snapToInterval={featuredSlideWidth}
@@ -472,6 +478,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
               </ScrollView>
             </View>
           ) : null}
+          ListHeaderComponentStyle={styles.featuredHeader}
           getItemLayout={(_: any, index: number) => ({
             length: cardHeight + spacing.md * 2,
             offset: (cardHeight + spacing.md * 2) * Math.floor(index / gridColumns),
@@ -777,10 +784,19 @@ const styles = StyleSheet.create({
   },
   featuredSection: {
     width: "100%",
+    alignItems: "flex-start",
     paddingTop: responsiveSize(4, 6, 8),
     paddingBottom: responsiveSize(6, 8, 10),
   },
+  featuredHeader: {
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  featuredCarousel: {
+    maxWidth: "100%",
+  },
   featuredCarouselContent: {
+    flexDirection: "row",
     alignItems: "flex-start",
   },
   floatingAddButton: {

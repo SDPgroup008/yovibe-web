@@ -11,8 +11,10 @@ describe('featured event navigation', () => {
     expect(screen).toContain('horizontal');
     expect(screen).toContain('setInterval');
     expect(screen).toContain('featuredCardGap');
+    expect(screen).toContain('featuredViewportWidth');
     expect(screen).toContain('onMomentumScrollEnd');
     expect(screen).toContain('nestedScrollEnabled');
+    expect(screen).toContain('ListHeaderComponentStyle={styles.featuredHeader}');
     expect(screen).toContain('data={displayedEvents || []}');
     expect(screen).toContain('accessibilityRole="button"');
   });
