@@ -98,9 +98,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   // Desktop cards already have 4px margins on each side. Do not add a second
   // wrapper gap there; tablet and mobile retain their established grid gap.
   const featuredCarouselGap = deviceType.isLargeScreen ? 0 : spacing.md;
-  // FlatList positions normal desktop card cells before their 4px card margin.
-  // Offset the compact carousel by that same margin so their visible left edges align.
-  const featuredDesktopOffset = deviceType.isLargeScreen ? -eventCardHorizontalMargin : 0;
+  // Offset the compact carousel by 8px on desktop so its visible first card
+  // aligns with the normal event grid's first card.
+  const featuredDesktopOffset = deviceType.isLargeScreen ? -8 : 0;
   const featuredSlideWidth = featuredCardFootprint + featuredCarouselGap;
   const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
     + featuredCarouselGap * (featuredVisibleCards - 1);

@@ -21,13 +21,21 @@ try {
 }
 
 // 🔔 Import Firebase helpers for notifications
-import { requestNotificationPermission, getWebFcmToken, ensureMessagingInitialized, notificationsEnabled, getWebPushAvailability } from "./config/firebase";
+import {
+  requestNotificationPermission,
+  getWebFcmToken,
+  ensureMessagingInitialized,
+  notificationsEnabled,
+  getNotificationPermissionBannerMode,
+  getWebPushAvailability,
+} from "./config/firebase";
 import { onMessage } from "firebase/messaging";
 import NotificationService from "./services/NotificationService";
 import TokenService from "./services/TokenService";
 import { showForegroundNotification } from "./utils/browserNotifications";
 import { getOrCreateNotificationInstallation } from "./services/notificationInstallation";
 import { getCurrentSession } from "./config/supabase";
+import type { NotificationPermissionBannerMode } from "./utils/notificationPermissionBanner";
 
 type DeferredInstallPrompt = {
   prompt: () => Promise<void>;
@@ -38,8 +46,42 @@ type DeferredInstallPrompt = {
 let messagingInstance = null;
 
 // 🔔 Persistent Permission Banner that floats at the top
-function PermissionBanner({ onAllow, onBlock }) {
+type PermissionBannerProps = {
+  mode: Exclude<NotificationPermissionBannerMode, null>;
+  onPrimary: () => void;
+  onDismiss: () => void;
+};
+
+const permissionBannerContent: Record<Exclude<NotificationPermissionBannerMode, null>, {
+  title: string;
+  body: string;
+  primaryLabel: string;
+}> = {
+  request: {
+    title: "📢 Stay Updated!",
+    body: "Enable notifications to get updates about events and vibes.",
+    primaryLabel: "Allow",
+  },
+  "install-guidance": {
+    title: "📲 Install YoVibe for notifications",
+    body: "On iPhone and iPad, add YoVibe to your Home Screen first, then open the installed app to enable notifications.",
+    primaryLabel: "How to install",
+  },
+  "settings-guidance": {
+    title: "🔔 Notifications are blocked",
+    body: "Enable notifications in your browser or device settings to receive YoVibe updates.",
+    primaryLabel: "How to enable",
+  },
+  "unsupported-guidance": {
+    title: "🔔 Notifications unavailable here",
+    body: "Use a supported browser or install YoVibe to receive notification updates.",
+    primaryLabel: "Learn more",
+  },
+};
+
+function PermissionBanner({ mode, onPrimary, onDismiss }: PermissionBannerProps) {
   const [slideAnim, setSlideAnim] = useState(0);
+  const content = permissionBannerContent[mode];
 
   useEffect(() => {
     setSlideAnim(0); // Slide in
@@ -53,15 +95,15 @@ function PermissionBanner({ onAllow, onBlock }) {
   return (
     <View style={[styles.permissionBanner, { transform: [{ translateY: slideAnim }] }]}>
       <View style={styles.permissionContent}>
-        <Text style={styles.permissionTitle}>📢 Stay Updated!</Text>
-        <Text style={styles.permissionBody}>Enable notifications to get updates about events and vibes</Text>
+        <Text style={styles.permissionTitle}>{content.title}</Text>
+        <Text style={styles.permissionBody}>{content.body}</Text>
       </View>
       <View style={styles.permissionActions}>
-        <TouchableOpacity onPress={() => handleAction(onBlock)} style={styles.blockButton}>
-          <Text style={styles.blockButtonText}>Block</Text>
+        <TouchableOpacity onPress={() => handleAction(onDismiss)} style={styles.blockButton}>
+          <Text style={styles.blockButtonText}>Not now</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleAction(onAllow)} style={styles.allowButton}>
-          <Text style={styles.allowButtonText}>Allow</Text>
+        <TouchableOpacity onPress={() => handleAction(onPrimary)} style={styles.allowButton}>
+          <Text style={styles.allowButtonText}>{content.primaryLabel}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -137,7 +179,9 @@ function AppContent() {
   const { setHeaderRight } = useLayout();
   const [initializing, setInitializing] = useState(true);
   const [banner, setBanner] = useState<{ title: string; body: string } | null>(null);
-  const [showPermissionBanner, setShowPermissionBanner] = useState(false);
+  const [permissionBannerMode, setPermissionBannerMode] = useState<NotificationPermissionBannerMode>(null);
+  const dismissedPermissionBannerModeRef = useRef<NotificationPermissionBannerMode>(null);
+  const permissionBannerReadyRef = useRef(false);
   const [installPromptEvent, setInstallPromptEvent] = useState<DeferredInstallPrompt | null>(null);
   const installPromptRef = useRef<DeferredInstallPrompt | null>(null);
   const [showUpdatePrompt, setShowUpdatePrompt] = useState(false);
@@ -148,6 +192,18 @@ function AppContent() {
       setInitializing(false);
     }
   }, [loading]);
+
+  const refreshNotificationPermissionBanner = useCallback(() => {
+    const nextMode = getNotificationPermissionBannerMode();
+    if (nextMode === null) {
+      dismissedPermissionBannerModeRef.current = null;
+      setPermissionBannerMode(null);
+      return;
+    }
+    setPermissionBannerMode(
+      dismissedPermissionBannerModeRef.current === nextMode ? null : nextMode,
+    );
+  }, []);
 
   // Let the router handle all routes - authentication is managed by individual screens
 
@@ -234,21 +290,44 @@ function AppContent() {
     };
   }, []);
 
-  // Notification permission + token flow
+  // Show guidance or the native permission action whenever notifications are
+  // not enabled for this browser. Re-check when visitors return from settings.
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      setPermissionBannerMode(null);
+      return;
+    }
+
+    if (typeof window === "undefined") return;
+
+    permissionBannerReadyRef.current = false;
+    const bannerTimer = window.setTimeout(() => {
+      permissionBannerReadyRef.current = true;
+      refreshNotificationPermissionBanner();
+    }, 5000);
+
+    const onFocus = () => {
+      if (permissionBannerReadyRef.current) refreshNotificationPermissionBanner();
+    };
+    const onVisibilityChange = () => {
+      if (permissionBannerReadyRef.current && document.visibilityState === "visible") {
+        refreshNotificationPermissionBanner();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.clearTimeout(bannerTimer);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [refreshNotificationPermissionBanner]);
+
+  // Notification token flow remains limited to browsers that support web push.
   useEffect(() => {
     if (!notificationsEnabled || !getWebPushAvailability().supported) return;
-    let currentPermission = "default";
-    if (typeof Notification !== 'undefined' && Notification.permission) {
-      currentPermission = Notification.permission;
-    }
-
-    if (currentPermission === "default") {
-      const bannerTimer = setTimeout(() => {
-        setShowPermissionBanner(true);
-      }, 5000);
-      return () => clearTimeout(bannerTimer);
-    }
-
+    const currentPermission = typeof Notification === "undefined" ? "default" : Notification.permission;
     if (currentPermission === "granted") {
       (async () => {
         try {
@@ -302,7 +381,7 @@ function AppContent() {
 
   // 🔔 Handle permission banner actions
   const handleAllowNotifications = async () => {
-    setShowPermissionBanner(false);
+    setPermissionBannerMode(null);
     /* console.log("[iOS-NOTIF] User tapped Allow - requesting permission..."); */
     try {
       const granted = await requestNotificationPermission();
@@ -335,13 +414,15 @@ function AppContent() {
       }
     } catch (err) {
       console.error("[iOS-NOTIF] Unexpected error in permission flow:", err);
+    } finally {
+      refreshNotificationPermissionBanner();
     }
   };
 
-  const handleBlockNotifications = () => {
-    setShowPermissionBanner(false);
-    /* console.log("[iOS-NOTIF] User tapped Block"); */
-  };
+  const handleDismissNotificationBanner = useCallback(() => {
+    dismissedPermissionBannerModeRef.current = permissionBannerMode;
+    setPermissionBannerMode(null);
+  }, [permissionBannerMode]);
 
   // Detect iOS (all browsers on iOS use WebKit, even Chrome)
   const isIOS = useMemo(() => {
@@ -390,6 +471,44 @@ function AppContent() {
     }
   }, [isIOS, isStandalone]);
 
+  const handleNotificationSettingsGuidance = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const guidance = isIOS
+      ? "If YoVibe is installed, open iPhone Settings → Notifications → YoVibe and allow notifications. If it is not installed, add YoVibe to your Home Screen first."
+      : "Open your browser's site settings for yovibe.net and change Notifications to Allow, then return to YoVibe.";
+    window.alert(`Notifications are currently blocked.\n\n${guidance}`);
+  }, [isIOS]);
+
+  const handleUnsupportedNotificationGuidance = useCallback(() => {
+    if (typeof window === "undefined") return;
+    window.alert("Notifications are not available in this browser. Use a current supported browser or install YoVibe to receive updates.");
+  }, []);
+
+  const handlePermissionBannerPrimary = useCallback(() => {
+    if (permissionBannerMode === "request") {
+      void handleAllowNotifications();
+      return;
+    }
+    handleDismissNotificationBanner();
+    if (permissionBannerMode === "install-guidance") {
+      void handleInstallApp();
+      return;
+    }
+    if (permissionBannerMode === "settings-guidance") {
+      handleNotificationSettingsGuidance();
+      return;
+    }
+    if (permissionBannerMode === "unsupported-guidance") {
+      handleUnsupportedNotificationGuidance();
+    }
+  }, [
+    handleInstallApp,
+    handleNotificationSettingsGuidance,
+    handleUnsupportedNotificationGuidance,
+    handleDismissNotificationBanner,
+    permissionBannerMode,
+  ]);
+
   const handleApplyUpdate = () => {
     if (!waitingServiceWorker) return;
     waitingServiceWorker.postMessage({ type: "SKIP_WAITING" });
@@ -428,10 +547,11 @@ function AppContent() {
   return (
     <View style={{ flex: 1 }}>
       {/* Permission banner at the very top */}
-      {notificationsEnabled && showPermissionBanner && (
+      {permissionBannerMode && (
         <PermissionBanner
-          onAllow={handleAllowNotifications}
-          onBlock={handleBlockNotifications}
+          mode={permissionBannerMode}
+          onPrimary={handlePermissionBannerPrimary}
+          onDismiss={handleDismissNotificationBanner}
         />
       )}
 
