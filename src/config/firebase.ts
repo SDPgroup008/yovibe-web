@@ -3,6 +3,10 @@ import { getAuth, setPersistence, browserSessionPersistence } from "firebase/aut
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging, isSupported, getToken } from "firebase/messaging";
+import {
+  resolveNotificationPermissionBannerMode,
+  type NotificationPermissionBannerMode,
+} from "../utils/notificationPermissionBanner";
 
 const firebaseValue = (suffix: string): string | undefined => (
   process.env[`EXPO_PUBLIC_FIREBASE_${suffix}`] ||
@@ -91,6 +95,21 @@ export function getWebPushAvailability(): WebPushAvailability {
     return { supported: false, reason: 'ios-home-screen-required' };
   }
   return { supported: true, reason: 'supported' };
+}
+
+export function getNotificationPermissionBannerMode(): NotificationPermissionBannerMode {
+  if (typeof window === "undefined") return null;
+
+  const permission = typeof Notification === "undefined"
+    ? "unsupported"
+    : Notification.permission;
+  const availability = getWebPushAvailability();
+  return resolveNotificationPermissionBannerMode({
+    notificationsEnabled,
+    permission,
+    pushSupported: availability.supported,
+    pushReason: availability.reason,
+  });
 }
 
 async function initializeMessaging(): Promise<typeof messaging> {

@@ -62,6 +62,7 @@ describe('public SEO route handling', () => {
     expect(paid?.summary).toContain('/events/tickets/kampala-night-live');
     expect(paid?.summary).toContain('/venues/yovibe-arena');
     expect(paid?.summary).toContain('capacity: 100');
+    expect(paid?.summary).toContain('data-yovibe-seo-fallback="true" hidden aria-hidden="true"');
     expect(free?.head).toContain('"price":"0"');
     const rendered = injectEventDocumentHtml('<html><head><title>YoVibe</title><link rel="canonical" href="https://yovibe.net/"></head><body><div id="root"></div></body></html>', paid!);
     expect(rendered).toContain('yovibe-event-summary');
