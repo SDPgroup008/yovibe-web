@@ -1,5 +1,5 @@
 import { canonicalHostRedirect } from '../netlify/edge-functions/canonical-host';
-import { buildEventDocument, buildFeaturedEventsMarkup, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, publicEntityStatus } from '../netlify/edge-functions/public-seo-status';
+import { buildEventDocument, buildFeaturedEventsMarkup, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, publicEntityStatus, structuredEventTimes } from '../netlify/edge-functions/public-seo-status';
 import { robotsBody } from '../netlify/edge-functions/robots';
 import fs from 'fs';
 import path from 'path';
@@ -42,28 +42,45 @@ describe('public SEO route handling', () => {
       artists: ['Artist One', 'Artist Two'],
       poster_image_url: 'https://images.example.com/night-live.jpg',
       entry_fees: [{ name: 'Standard', amount: '25,000', maxTickets: 100 }, { name: 'VIP', amount: '80,000' }],
-    }, 'https://yovibe.net/events/kampala-night-live');
+      created_at: '2030-01-02T12:00:00+03:00',
+      organizer_name: 'Amina N.',
+      created_by_type: 'user',
+    }, 'https://yovibe.net/events/kampala-night-live', { Standard: 100 });
     const free = buildEventDocument({
       slug: 'free-sunday-session',
       name: 'Free Sunday Session',
       date: '2030-12-21T18:00:00+03:00',
       venue_name: 'YoVibe Arena',
       is_free_entry: true,
+      created_at: '2030-01-02T12:00:00+03:00',
+      organizer_name: 'YoVibe Events',
+      created_by_type: 'admin',
     }, 'https://yovibe.net/events/free-sunday-session');
 
     expect(paid?.head).toContain('"@type":"Event"');
-    expect(paid?.head).toContain('"price":"25000"');
-    expect(paid?.head).toContain('"price":"80000"');
     expect(paid?.head).toContain('"@type":"BreadcrumbList"');
-    expect(paid?.head).toContain('"name":"Artist One"');
-    expect(paid?.head).not.toContain('InStock');
-    expect(paid?.head).not.toContain('"organizer"');
     expect(paid?.head).toContain('https://yovibe.net/events/kampala-night-live');
     expect(paid?.summary).toContain('/events/tickets/kampala-night-live');
     expect(paid?.summary).toContain('/venues/yovibe-arena');
     expect(paid?.summary).toContain('capacity: 100');
     expect(paid?.summary).toContain('data-yovibe-seo-fallback="true" hidden aria-hidden="true"');
-    expect(free?.head).toContain('"price":"0"');
+    const paidGraph = JSON.parse(paid!.head.match(/<script[^>]*>(.*?)<\/script>/)?.[1] || '{}');
+    const paidEvent = paidGraph['@graph'].find((item: { '@type': string }) => item['@type'] === 'Event');
+    const paidOffers = paidEvent.offers as Array<Record<string, string>>;
+    expect(paidEvent.startDate).toBe('2030-12-20T15:00:00.000Z');
+    expect(paidEvent.endDate).toBe('2030-12-20T20:00:00.000Z');
+    expect(paidEvent.performer).toEqual(expect.arrayContaining([{ '@type': 'PerformingGroup', name: 'Artist One' }]));
+    expect(paidEvent.organizer).toEqual({ '@type': 'Person', name: 'Amina N.' });
+    expect(JSON.stringify(paidEvent.organizer)).not.toMatch(/email|phone|payment/i);
+    expect(paidOffers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Standard', price: '25000', validFrom: '2030-01-02T09:00:00.000Z', availability: 'https://schema.org/SoldOut' }),
+      expect.objectContaining({ name: 'VIP', price: '80000', validFrom: '2030-01-02T09:00:00.000Z', availability: 'https://schema.org/InStock' }),
+    ]));
+
+    const freeGraph = JSON.parse(free!.head.match(/<script[^>]*>(.*?)<\/script>/)?.[1] || '{}');
+    const freeEvent = freeGraph['@graph'].find((item: { '@type': string }) => item['@type'] === 'Event');
+    expect(freeEvent.offers).toEqual([expect.objectContaining({ price: '0', availability: 'https://schema.org/InStock', validFrom: '2030-01-02T09:00:00.000Z' })]);
+    expect(freeEvent.organizer).toEqual({ '@type': 'Organization', name: 'YoVibe Events' });
     const rendered = injectEventDocumentHtml('<html><head><title>YoVibe</title><link rel="canonical" href="https://yovibe.net/"></head><body><div id="root"></div></body></html>', paid!);
     expect(rendered).toContain('yovibe-event-summary');
     expect(rendered).not.toContain('<title>YoVibe</title>');
@@ -71,6 +88,45 @@ describe('public SEO route handling', () => {
 
     const source = fs.readFileSync(path.join(__dirname, '../netlify/edge-functions/public-seo-status.ts'), 'utf8');
     expect(source).not.toMatch(/user-agent/i);
+  });
+
+  test('uses actual stored time ranges for same-day and overnight end dates', () => {
+    const sameDay = structuredEventTimes({ date: '2030-12-20T18:00:00+03:00', time: '18:00 - 23:00' });
+    const overnight = structuredEventTimes({ date: '2030-12-20T18:00:00+03:00', time: '9:00 PM - 5:00 AM' });
+    const malformed = structuredEventTimes({ date: '2030-12-20T18:00:00+03:00', time: 'doors when ready' });
+    const missingEnd = structuredEventTimes({ date: '2030-12-20T18:00:00+03:00', time: '18:00' });
+    expect(sameDay?.end?.toISOString()).toBe('2030-12-20T20:00:00.000Z');
+    expect(overnight?.end?.toISOString()).toBe('2030-12-21T02:00:00.000Z');
+    expect(malformed?.end).toBeUndefined();
+    expect(missingEnd?.end).toBeUndefined();
+  });
+
+  test('omits unavailable facts instead of inventing performers, organisers, or capped-tier stock', () => {
+    const sparse = buildEventDocument({
+      slug: 'quiet-dinner',
+      name: 'Quiet Dinner',
+      date: '2030-12-20T18:00:00+03:00',
+      time: '18:00 - 20:00',
+      entry_fees: [{ name: 'Dinner', amount: 50000, maxTickets: 20 }],
+      created_at: '2030-01-02T12:00:00+03:00',
+    }, 'https://yovibe.net/events/quiet-dinner');
+    const graph = JSON.parse(sparse!.head.match(/<script[^>]*>(.*?)<\/script>/)?.[1] || '{}');
+    const event = graph['@graph'].find((item: { '@type': string }) => item['@type'] === 'Event');
+    expect(event.performer).toBeUndefined();
+    expect(event.organizer).toBeUndefined();
+    expect(event.offers[0]).toEqual(expect.objectContaining({ validFrom: '2030-01-02T09:00:00.000Z' }));
+    expect(event.offers[0].availability).toBeUndefined();
+  });
+
+  test('includes the public organiser snapshot in the edge query and migration only', () => {
+    const source = fs.readFileSync(path.join(__dirname, '../netlify/edge-functions/public-seo-status.ts'), 'utf8');
+    const migration = fs.readFileSync(path.join(__dirname, '../staging/event-organizer-seo-migration.sql'), 'utf8');
+    expect(source).toContain('created_at,organizer_name,created_by_type');
+    expect(migration).toContain('add column if not exists organizer_name text');
+    expect(migration).toContain('snapshot_event_organizer_name_before_insert');
+    expect(migration).toContain('set organizer_name = (');
+    expect(migration).not.toMatch(/from lateral/i);
+    expect(migration).not.toMatch(/email|payment_details|payout/i);
   });
 
   test('does not create Event markup for past, cancelled, or incomplete events', () => {

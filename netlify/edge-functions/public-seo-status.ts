@@ -21,13 +21,16 @@ export type PublicEvent = {
   is_featured?: boolean;
   is_free_entry?: boolean;
   entry_fees?: unknown;
+  created_at?: string;
+  organizer_name?: string;
+  created_by_type?: string;
 };
 
 type EventDocument = { head: string; summary: string };
 
 const RESERVED_EVENT_SLUGS = new Set(['add', 'ticket-contacts', 'payment-callback']);
 const RESERVED_VENUE_SLUGS = new Set(['add-event', 'ticket-contacts']);
-const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees';
+const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees,created_at,organizer_name,created_by_type';
 const FEATURED_EVENT_LIMIT = 6;
 
 function getEdgeEnv(name: string): string | undefined {
@@ -147,13 +150,87 @@ function eventPurchaseUrl(canonicalUrl: string, slug: string): string {
   return `${origin}/events/tickets/${encodeURIComponent(slug)}`;
 }
 
+type ClockTime = { hours: number; minutes: number };
+
+/** Parse the time formats emitted by YoVibe's event form (24-hour or AM/PM). */
+function parseClockTime(value: string): ClockTime | null {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})(?:\s*([ap])\.?m\.?)?$/i);
+  if (!match) return null;
+  let hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  const meridiem = match[3]?.toLowerCase();
+  if (minutes > 59) return null;
+  if (meridiem) {
+    if (hours < 1 || hours > 12) return null;
+    if (hours === 12) hours = 0;
+    if (meridiem === 'p') hours += 12;
+  } else if (hours > 23) {
+    return null;
+  }
+  return { hours, minutes };
+}
+
+function dateAtKampalaTime(day: string, time: ClockTime): Date | null {
+  const [year, month, date] = day.split('-').map(Number);
+  if (![year, month, date].every(Number.isInteger)) return null;
+  const value = new Date(Date.UTC(year, month - 1, date, time.hours - 3, time.minutes));
+  return Number.isNaN(value.getTime()) ? null : value;
+}
+
+/**
+ * Keep event dates in Kampala time and only emit an end when the stored time
+ * range actually contains one. An end before the start is an overnight event.
+ */
+export function structuredEventTimes(event: PublicEvent): { start: Date; end?: Date } | null {
+  const day = dayInKampala(event.date);
+  const storedDate = new Date(String(event.date || ''));
+  if (!day || Number.isNaN(storedDate.getTime())) return null;
+  const range = textValue(event.time, 120).replace(/[–—]/g, '-').split(/\s+(?:to)\s+|\s*-\s*/i);
+  const startClock = range[0] ? parseClockTime(range[0]) : null;
+  const endClock = range.length === 2 ? parseClockTime(range[1]) : null;
+  const start = startClock ? dateAtKampalaTime(day, startClock) : storedDate;
+  if (!start) return null;
+  const end = endClock ? dateAtKampalaTime(day, endClock) : null;
+  if (end && end.getTime() <= start.getTime()) end.setUTCDate(end.getUTCDate() + 1);
+  return end ? { start, end } : { start };
+}
+
+function validIsoDate(value: unknown): string | undefined {
+  const date = new Date(String(value || ''));
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+}
+
+function organizerSchema(event: PublicEvent): Record<string, string> | undefined {
+  const name = textValue(event.organizer_name, 180);
+  if (!name) return undefined;
+  const creatorType = String(event.created_by_type || '').toLowerCase();
+  const type = creatorType === 'user' || creatorType === 'regular_user'
+    ? 'Person'
+    : creatorType === 'club_owner' || creatorType === 'admin'
+      ? 'Organization'
+      : undefined;
+  if (!type) return undefined;
+  return {
+    '@type': type,
+    name,
+  };
+}
+
+function offerAvailability(tier: { name: string; capacity: number | null }, soldCounts?: Record<string, number>): string | undefined {
+  if (tier.capacity === null) return 'https://schema.org/InStock';
+  const sold = soldCounts?.[tier.name];
+  if (!Number.isInteger(sold) || sold < 0) return undefined;
+  return sold >= tier.capacity ? 'https://schema.org/SoldOut' : 'https://schema.org/InStock';
+}
+
 /** Build truthful event metadata used by people, Google, and social crawlers alike. */
-export function buildEventDocument(event: PublicEvent, canonicalUrl: string): EventDocument | null {
+export function buildEventDocument(event: PublicEvent, canonicalUrl: string, soldCounts?: Record<string, number>): EventDocument | null {
   if (eventIsGone(event)) return null;
-  const start = new Date(String(event.date || ''));
+  const eventTimes = structuredEventTimes(event);
   const name = textValue(event.name, 180);
   const slug = textValue(event.slug, 240);
-  if (!name || !slug || Number.isNaN(start.getTime())) return null;
+  if (!name || !slug || !eventTimes) return null;
+  const { start, end } = eventTimes;
 
   const origin = new URL(canonicalUrl).origin;
   const description = textValue(event.description, 1000) || `Discover ${name} on YoVibe.`;
@@ -164,13 +241,19 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string): Ev
   const eventPerformers = performers(event);
   const tiers = ticketTiers(event);
   const purchaseUrl = eventPurchaseUrl(canonicalUrl, slug);
-  const offers = tiers.map((tier) => ({
-    '@type': 'Offer',
-    name: tier.name,
-    price: tier.price,
-    priceCurrency: 'UGX',
-    url: purchaseUrl,
-  }));
+  const validFrom = validIsoDate(event.created_at);
+  const offers = tiers.map((tier) => {
+    const availability = offerAvailability(tier, soldCounts);
+    return {
+      '@type': 'Offer',
+      name: tier.name,
+      price: tier.price,
+      priceCurrency: 'UGX',
+      url: purchaseUrl,
+      ...(validFrom ? { validFrom } : {}),
+      ...(availability ? { availability } : {}),
+    };
+  });
   const eventSchema: Record<string, unknown> = {
     '@type': 'Event',
     name,
@@ -180,6 +263,7 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string): Ev
     eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode',
     url: canonicalUrl,
   };
+  if (end) eventSchema.endDate = end.toISOString();
   if (venueName) {
     eventSchema.location = {
       '@type': 'Place',
@@ -189,6 +273,8 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string): Ev
   }
   if (image) eventSchema.image = [image];
   if (eventPerformers.length) eventSchema.performer = eventPerformers.map((artist) => ({ '@type': 'PerformingGroup', name: artist }));
+  const organizer = organizerSchema(event);
+  if (organizer) eventSchema.organizer = organizer;
   if (offers.length) eventSchema.offers = offers;
 
   const schema = {
@@ -308,6 +394,36 @@ async function fetchFeaturedEvents(): Promise<PublicEvent[] | undefined> {
   return Array.isArray(rows) ? rows as PublicEvent[] : [];
 }
 
+/**
+ * The public inventory function exposes only aggregate counts for named ticket
+ * tiers. Never make structured data claim stock when that source is unavailable.
+ */
+async function fetchTicketAvailability(origin: string, event: PublicEvent): Promise<Record<string, number> | undefined> {
+  const slug = textValue(event.slug, 240);
+  const cappedFeeTypes = ticketTiers(event)
+    .filter((tier) => tier.capacity !== null)
+    .map((tier) => tier.name);
+  if (!slug || !cappedFeeTypes.length) return {};
+  try {
+    const response = await fetch(new URL('/.netlify/functions/ticket-availability', origin), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ eventSlug: slug, feeTypes: cappedFeeTypes }),
+    });
+    if (!response.ok) return undefined;
+    const data = await response.json();
+    if (!data || typeof data !== 'object' || !data.soldCounts || typeof data.soldCounts !== 'object') return undefined;
+    const soldCounts: Record<string, number> = {};
+    for (const name of cappedFeeTypes) {
+      const count = (data.soldCounts as Record<string, unknown>)[name];
+      if (Number.isInteger(count) && Number(count) >= 0) soldCounts[name] = Number(count);
+    }
+    return soldCounts;
+  } catch {
+    return undefined;
+  }
+}
+
 export function publicEntityStatus(entity: PublicEntity, row: PublicEvent | Record<string, unknown> | null): 200 | 404 | 410 {
   if (!row) return 404;
   return entity === 'events' && eventIsGone(row as PublicEvent) ? 410 : 200;
@@ -341,7 +457,9 @@ export default async (request: Request, context: any) => {
 
     const upstream = await context.next();
     if (entityPath!.entity !== 'events' || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging') return upstream;
-    const document = buildEventDocument(row as PublicEvent, `${url.origin}${url.pathname}`);
+    const event = row as PublicEvent;
+    const soldCounts = await fetchTicketAvailability(url.origin, event);
+    const document = buildEventDocument(event, `${url.origin}${url.pathname}`, soldCounts);
     if (!document || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
     const headers = new Headers(upstream.headers);
     headers.delete('content-length');
