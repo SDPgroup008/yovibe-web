@@ -77,8 +77,8 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const spacing = useSpacing();
   const deviceType = useDeviceType();
   const [eventListWidth, setEventListWidth] = useState(0);
-  const eventCardHorizontalMargin = deviceType.isLargeScreen ? 4 : deviceType.isTablet ? 16 : 12;
-  const gridHorizontalPadding = deviceType.isLargeScreen ? 80 : 0;
+  const eventCardHorizontalMargin = deviceType.isLargeScreen || deviceType.isTablet ? 4 : 12;
+  const gridHorizontalPadding = deviceType.isLargeScreen ? 24 : 0;
   const gridAvailableWidth = layout.width - gridHorizontalPadding * 2;
   const handleEventListLayout = useCallback((event: LayoutChangeEvent) => {
     const width = event.nativeEvent.layout.width;
@@ -94,21 +94,19 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       - eventCardHorizontalMargin * 2 * gridColumns
       - spacing.md * (gridColumns - 1)
     ) / gridColumns;
-    // On desktop the list sits beside the navigation, so its measured width
-    // can be smaller than the window used by the original size calculation.
+    // Fill the measured desktop list width while accounting for card margins.
     const availableListWidth = eventListWidth - gridHorizontalPadding * 2;
     const fittingWidth = (availableListWidth - eventCardHorizontalMargin * 2 * gridColumns) / gridColumns;
     const width = deviceType.isLargeScreen && availableListWidth > 0
-      ? Math.max(0, Math.min(preferredWidth, fittingWidth))
+      ? Math.max(0, fittingWidth)
       : preferredWidth;
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
   }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen, eventListWidth, gridHorizontalPadding]);
   const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
   const featuredCardFootprint = cardWidth + eventCardHorizontalMargin * 2;
-  // Desktop cards already have 4px margins on each side. Do not add a second
-  // wrapper gap there; tablet and mobile retain their established grid gap.
-  const featuredCarouselGap = deviceType.isLargeScreen ? 0 : spacing.md;
+  // Desktop and tablet card margins provide the same visible 8px gap.
+  const featuredCarouselGap = deviceType.isLargeScreen || deviceType.isTablet ? 0 : spacing.md;
   const featuredSlideWidth = featuredCardFootprint + featuredCarouselGap;
   const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
     + featuredCarouselGap * (featuredVisibleCards - 1);
