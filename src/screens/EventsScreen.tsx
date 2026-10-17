@@ -15,6 +15,7 @@ import {
   TextInput,
   RefreshControl,
   Dimensions,
+  type LayoutChangeEvent,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useIsFocused } from "../utils/compatNavigation";
@@ -75,32 +76,39 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
   const typography = useTypography();
   const spacing = useSpacing();
   const deviceType = useDeviceType();
+  const [eventListWidth, setEventListWidth] = useState(0);
   const eventCardHorizontalMargin = deviceType.isLargeScreen ? 4 : deviceType.isTablet ? 16 : 12;
-  // The desktop navigation occupies space on both sides of the centred content area.
-  // Tablet and mobile cards run from the edge of the list, with their own card margins.
   const gridHorizontalPadding = deviceType.isLargeScreen ? 80 : 0;
   const gridAvailableWidth = layout.width - gridHorizontalPadding * 2;
+  const handleEventListLayout = useCallback((event: LayoutChangeEvent) => {
+    const width = event.nativeEvent.layout.width;
+    if (width > 0) setEventListWidth(previous => previous === width ? previous : width);
+  }, []);
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
     // Include the visible card margins and the normal grid column gaps. This gives
     // the featured carousel and the catalogue precisely the same row geometry.
-    const width = (
+    const preferredWidth = (
       gridAvailableWidth
       - eventCardHorizontalMargin * 2 * gridColumns
       - spacing.md * (gridColumns - 1)
     ) / gridColumns;
+    // On desktop the list sits beside the navigation, so its measured width
+    // can be smaller than the window used by the original size calculation.
+    const availableListWidth = eventListWidth - gridHorizontalPadding * 2;
+    const fittingWidth = (availableListWidth - eventCardHorizontalMargin * 2 * gridColumns) / gridColumns;
+    const width = deviceType.isLargeScreen && availableListWidth > 0
+      ? Math.max(0, Math.min(preferredWidth, fittingWidth))
+      : preferredWidth;
     const height = deviceType.isLargeScreen ? layout.imageHeight.small : layout.imageHeight.medium;
     return { cardWidth: width, cardHeight: height };
-  }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen]);
+  }, [gridAvailableWidth, layout.imageHeight, spacing.md, gridColumns, eventCardHorizontalMargin, deviceType.isLargeScreen, eventListWidth, gridHorizontalPadding]);
   const featuredVisibleCards = deviceType.isLargeScreen ? 3 : deviceType.isTablet ? 2 : 1;
   const featuredCardFootprint = cardWidth + eventCardHorizontalMargin * 2;
   // Desktop cards already have 4px margins on each side. Do not add a second
   // wrapper gap there; tablet and mobile retain their established grid gap.
   const featuredCarouselGap = deviceType.isLargeScreen ? 0 : spacing.md;
-  // Shift the desktop carousel by the card margin plus 4px to align its first
-  // visible card with the normal event grid below.
-  const featuredDesktopOffset = deviceType.isLargeScreen ? -(eventCardHorizontalMargin + 4) : 0;
   const featuredSlideWidth = featuredCardFootprint + featuredCarouselGap;
   const featuredViewportWidth = featuredCardFootprint * featuredVisibleCards
     + featuredCarouselGap * (featuredVisibleCards - 1);
@@ -458,6 +466,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       ) : (
         <FlatList
           ref={scrollRef}
+          onLayout={handleEventListLayout}
           data={displayedEvents || []}
           keyExtractor={(item) => item.id}
           renderItem={renderEventItem}
@@ -466,7 +475,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             <View style={styles.featuredSection} accessibilityRole="summary" accessibilityLabel="YoVibe hot picks">
               <ScrollView
                 ref={featuredCarouselRef}
-                style={[styles.featuredCarousel, { width: featuredViewportWidth, marginLeft: featuredDesktopOffset }]}
+                style={[styles.featuredCarousel, { width: featuredViewportWidth }]}
                 horizontal
                 scrollEnabled={canScrollFeatured}
                 pagingEnabled={false}
@@ -504,6 +513,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           ListEmptyComponent={<Text style={styles.emptyText}>No upcoming events found</Text>}
           contentContainerStyle={[
             styles.eventsList,
+            deviceType.isLargeScreen && styles.desktopEventsList,
             { 
               paddingLeft: gridHorizontalPadding,
               paddingRight: gridHorizontalPadding,
@@ -794,6 +804,9 @@ const styles = StyleSheet.create({
   eventsList: {
     paddingBottom: responsiveSize(80, 100, 120),
     alignItems: 'center',
+  },
+  desktopEventsList: {
+    alignItems: 'stretch',
   },
   featuredSection: {
     width: "100%",
