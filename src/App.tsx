@@ -162,14 +162,15 @@ async function saveTokenToRepo(token: string, userId: string | null = null, user
     });
 
     if (!res.ok) {
-      console.error("Failed to save token:", await res.text());
+      throw new Error(`Notification registration failed (HTTP ${res.status})`);
     } else {
       const result = await res.json();
       /* console.log("[App] Token saved for direct broadcast delivery:", result); */
       if (result?.broadcastsFrom) NotificationService.notifyFeedChanged();
     }
   } catch (err) {
-    console.error("Error calling Netlify function:", err);
+    console.warn("[Notifications] Token registration failed", err);
+    throw err;
   }
 }
 
@@ -338,9 +339,12 @@ function AppContent() {
             const userEmail = user?.email;
             const userName = user?.displayName || null;
             await saveTokenToRepo(token, userId, userEmail ?? undefined, userName ?? undefined);
+          } else {
+            setBanner({ title: "Notifications not connected", body: "Please reopen YoVibe to retry notification registration." });
           }
         } catch (tokenErr) {
           console.warn("Error getting FCM token:", tokenErr);
+          setBanner({ title: "Notifications not connected", body: "Please reopen YoVibe to retry notification registration." });
         }
       })();
     }
@@ -402,12 +406,13 @@ function AppContent() {
             await saveTokenToRepo(token, userId, userEmail, userName);
             /* console.log("[iOS-NOTIF] Token saved successfully!"); */
 
-            await NotificationService.trackNewSubscription();
           } else {
             console.warn("[iOS-NOTIF] No FCM token received - browser permission was granted but FCM is not supported on this browser. In-app notifications will still work.");
+            setBanner({ title: "Notifications not connected", body: "Please reopen YoVibe to retry notification registration." });
           }
         } catch (tokenErr) {
           console.error("[iOS-NOTIF] Error getting/saving token:", tokenErr);
+          setBanner({ title: "Notifications not connected", body: "Please reopen YoVibe to retry notification registration." });
         }
       } else {
         console.error("[iOS-NOTIF] ERROR: Permission not granted");

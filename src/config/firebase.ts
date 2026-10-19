@@ -227,10 +227,13 @@ export async function getWebFcmToken(): Promise<string | null> {
       }
     }
     
+    // Use the same root worker for registration and FCM delivery.
+    let serviceWorkerRegistration: ServiceWorkerRegistration | undefined;
     // Ensure service worker is fully active before requesting token
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       try {
         const registration = await navigator.serviceWorker.ready;
+        serviceWorkerRegistration = registration;
         // If SW is not active yet, wait for it
         if (!registration.active) {
           /* console.log("[iOS-NOTIF] Service worker not active yet, waiting..."); */
@@ -268,6 +271,7 @@ export async function getWebFcmToken(): Promise<string | null> {
         if (!vapidKey) return null;
         const token = await getToken(messaging!, {
           vapidKey,
+          ...(serviceWorkerRegistration ? { serviceWorkerRegistration } : {}),
         });
         if (token) {
           /* console.log("[iOS-NOTIF] Token generated successfully: YES"); */

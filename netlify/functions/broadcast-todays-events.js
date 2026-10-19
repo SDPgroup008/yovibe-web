@@ -14,7 +14,8 @@ exports.handler = async () => {
     });
     return { statusCode: 200, body: JSON.stringify(result) };
   } catch (error) {
-    console.error('[broadcast-todays-events] failed:', error);
-    return { statusCode: 500, body: JSON.stringify({ error: error.message }) };
+    const code = /^[a-z0-9_\/-]{1,80}$/i.test(String(error.code || '')) ? error.code : 'delivery_error';
+    console.error('[broadcast-todays-events] failed', { code });
+    return { statusCode: 500, body: JSON.stringify({ error: 'Event broadcast failed' }) };
   }
 };

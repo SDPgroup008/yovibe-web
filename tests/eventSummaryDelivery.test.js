@@ -81,7 +81,7 @@ describe('event summary multicast delivery', () => {
     expect(mockSendEachForMulticast).toHaveBeenCalledTimes(2);
     expect(mockSendEachForMulticast.mock.calls[0][0].tokens).toHaveLength(500);
     expect(mockSendEachForMulticast.mock.calls[1][0].tokens).toHaveLength(1);
-    expect(result).toEqual({ targeted: 501, successful: 501, failed: 0, stale: 0 });
+    expect(result).toEqual({ targeted: 501, successful: 501, failed: 0, stale: 0, errorCodes: {} });
   });
 
   test('deactivates registration tokens rejected as stale', async () => {
@@ -94,7 +94,21 @@ describe('event summary multicast delivery', () => {
       message: { notification: { title: 'Test', body: 'Test' }, data: {} },
     });
 
-    expect(result).toEqual({ targeted: 1, successful: 0, failed: 1, stale: 1 });
+    expect(result).toEqual({ targeted: 1, successful: 0, failed: 1, stale: 1, errorCodes: { 'messaging/registration-token-not-registered': 1 } });
     expect(supabase.updates[0].is_active).toBe(false);
+  });
+
+  test('reports mixed failures by safe error code without exposing tokens', async () => {
+    mockSendEachForMulticast.mockResolvedValueOnce({ responses: [
+      { success: true },
+      { success: false, error: { code: 'messaging/invalid-registration-token' } },
+      { success: false, error: { code: 'unexpected sensitive text' } },
+    ] });
+    const result = await sendToActiveTokens({
+      supabase: createSupabase([{ token: 'one' }, { token: 'two' }, { token: 'three' }]),
+      message: { notification: { title: 'Test', body: 'Test' }, data: {} },
+    });
+    expect(result).toEqual({ targeted: 3, successful: 1, failed: 2, stale: 1, errorCodes: { 'messaging/invalid-registration-token': 1, unknown: 1 } });
+    expect(JSON.stringify(result)).not.toContain('two');
   });
 });

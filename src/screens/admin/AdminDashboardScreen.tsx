@@ -7,8 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { ProfileStackParamList } from '../../navigation/types';
 import AnalyticsService, { AnalyticsSummary, TrendData, UserVisitData, TodaySummary, VisitorAnalyticsResponse } from '../../services/AnalyticsService';
-import NotificationService from '../../services/NotificationService';
-import TokenService, { TokenAnalyticsSummary, DailyTokenStats } from '../../services/TokenService';
+import { getAdminNotificationAnalytics, TokenAnalytics, BroadcastAnalytics } from '../../services/AdminNotificationAnalytics';
 import { ResponsiveSkeleton } from '../../components/SkeletonLoader';
 
 type AdminDashboardScreenProps = NativeStackScreenProps<ProfileStackParamList, 'AdminDashboard'>;
@@ -113,10 +112,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'visitors' | 'notifications' | 'tokens'>('overview');
   const [selectedPeriod, setSelectedPeriod] = useState<'day' | 'week' | 'month' | 'year' | 'decade'>('day');
   const [frequentVisitors, setFrequentVisitors] = useState<UserVisitData[]>([]);
-  const [notificationData, setNotificationData] = useState<any[]>([]);
-  const [dailyNotifStats, setDailyNotifStats] = useState<any[]>([]);
-  const [tokenSummary, setTokenSummary] = useState<TokenAnalyticsSummary | null>(null);
-  const [dailyTokenStats, setDailyTokenStats] = useState<DailyTokenStats[]>([]);
+  const [notificationData, setNotificationData] = useState<BroadcastAnalytics | null>(null);
+  const [tokenSummary, setTokenSummary] = useState<TokenAnalytics | null>(null);
+  const [notificationError, setNotificationError] = useState<string | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const [granularLoading, setGranularLoading] = useState(false);
 
   // Granular visitor state (kept for period display)
@@ -235,36 +234,24 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
 
     // Notifications
     if (tab === 'notifications' || tab === 'all') {
-      if (!force && cacheValid(notifKey, 30000)) {
-        const n = cacheGet<{ notif: any[]; stats: any[] }>(notifKey);
-        if (n) { setNotificationData(n.notif); setDailyNotifStats(n.stats); }
-      } else if (!inflight.has(notifKey)) {
+      if (!inflight.has(notifKey)) {
         dedupedFetch(notifKey, async () => {
-          const [notif, stats] = await Promise.all([
-            NotificationService.getAllNotificationDetailedAnalytics(),
-            NotificationService.getDailyNotificationStats(30),
-          ]).catch(() => [[], []]);
-          setNotificationData(notif);
-          setDailyNotifStats(stats);
-          cacheSet(notifKey, { notif, stats });
+          try {
+            const result = await getAdminNotificationAnalytics<BroadcastAnalytics>('notifications');
+            setNotificationData(result); setNotificationError(null);
+          } catch (error) { setNotificationData(null); setNotificationError(error instanceof Error ? error.message : 'Unable to load notifications.'); }
         });
       }
     }
 
     // Tokens
     if (tab === 'tokens' || tab === 'all') {
-      if (!force && cacheValid(tokenKey, 30000)) {
-        const t = cacheGet<{ summary: any; stats: any[] }>(tokenKey);
-        if (t) { setTokenSummary(t.summary); setDailyTokenStats(t.stats); }
-      } else if (!inflight.has(tokenKey)) {
+      if (!inflight.has(tokenKey)) {
         dedupedFetch(tokenKey, async () => {
-          const [s, stats] = await Promise.all([
-            TokenService.getTokenAnalyticsSummaryWithAuth(),
-            TokenService.getDailyTokenStatsWithAuth(7),
-          ]).catch(() => [null, []] as [TokenAnalyticsSummary | null, DailyTokenStats[]]);
-          setTokenSummary(s);
-          setDailyTokenStats(stats);
-          cacheSet(tokenKey, { summary: s, stats });
+          try {
+            const result = await getAdminNotificationAnalytics<TokenAnalytics>('tokens');
+            setTokenSummary(result); setTokenError(null);
+          } catch (error) { setTokenSummary(null); setTokenError(error instanceof Error ? error.message : 'Unable to load tokens.'); }
         });
       }
     }
@@ -341,16 +328,10 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
   })), [prevTrendData]);
 
   const notificationBarData = useMemo((): BarItem[] =>
-    dailyNotifStats.slice(-7).map((d: any) => ({
-      label: new Date(d.date).toLocaleDateString('en-US', { weekday: 'short' }),
-      primary: d.sent || 0,
-    })), [dailyNotifStats]);
+    (notificationData?.daily || []).map(d => ({ label: d.date.slice(5), primary: d.count })), [notificationData]);
 
   const tokenBarData = useMemo((): BarItem[] =>
-    dailyTokenStats.map(d => ({
-      label: new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      primary: d.newTokens,
-    })), [dailyTokenStats]);
+    (tokenSummary?.daily || []).map(d => ({ label: d.date.slice(5), primary: d.count })), [tokenSummary]);
 
   /* ── Metric card component ────────────────────────────────────────── */
   const MetricCard: React.FC<{ icon: string; iconColor: string; value: string | number; label: string; delta?: { arrow: string; pct: string; color: string } | null }> = ({
@@ -552,25 +533,32 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
         {/* ── TAB: Notifications ────────────────────────────────────── */}
         {activeTab === 'notifications' && (
           <View style={st.pad}>
-            {notificationData.length === 0 && dailyNotifStats.length === 0 ? (
+            {notificationError ? (
+              <Text style={{ color: '#FF6B6B' }}>{notificationError}</Text>
+            ) : !notificationData ? (
+              <Text style={{ color: '#999' }}>Loading notification analytics…</Text>
+            ) : notificationData.broadcasts === 0 ? (
               <View style={{ padding: 40, alignItems: 'center' }}>
                 <Ionicons name="notifications-off-outline" size={48} color="#333" />
-                <Text style={{ color: '#666', marginTop: 12 }}>No notification data yet</Text>
+                <Text style={{ color: '#666', marginTop: 12 }}>No event-summary broadcasts in the last 7 days</Text>
               </View>
             ) : (
               <>
                 <View style={st.card}>
-                  <View style={st.cardHeader}><Ionicons name="notifications-outline" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Notification Summary</Text></View>
+                  <View style={st.cardHeader}><Ionicons name="notifications-outline" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Event Broadcasts · Last 7 Days</Text></View>
                   <View style={st.metricGrid}>
-                    <MetricCard icon="send" iconColor="#00D4FF" value={notificationData.reduce((s: number, n: any) => s + (n.sent || 0), 0)} label="Total Sent" />
-                    <MetricCard icon="eye" iconColor="#4CAF50" value={notificationData.reduce((s: number, n: any) => s + (n.opened || 0), 0)} label="Opened" />
-                    <MetricCard icon="close-circle" iconColor="#FF6B6B" value={notificationData.reduce((s: number, n: any) => s + (n.failed || 0), 0)} label="Failed" />
+                    <MetricCard icon="people" iconColor="#00D4FF" value={notificationData.withDeliveryData ? notificationData.targeted : 'Unavailable'} label="Targeted tokens" />
+                    <MetricCard icon="checkmark-circle" iconColor="#4CAF50" value={notificationData.withDeliveryData ? notificationData.accepted : 'Unavailable'} label="Accepted by FCM" />
+                    <MetricCard icon="close-circle" iconColor="#FF6B6B" value={notificationData.withDeliveryData ? notificationData.failed : 'Unavailable'} label="Failed" />
+                    <MetricCard icon="remove-circle" iconColor="#FF6B6B" value={notificationData.withDeliveryData ? notificationData.invalid : 'Unavailable'} label="Invalid tokens" />
+                    <MetricCard icon="eye" iconColor="#FFD700" value={notificationData.recordedOpens ?? 'Unavailable'} label="In-app opens" />
                   </View>
+                  <Text style={{ color: '#999', marginTop: 10 }}>FCM acceptance does not guarantee display. In-app opens count opted-in installations from when tracking was enabled; system-tray opens and earlier history are not counted. Delivery data available for {notificationData.withDeliveryData} of {notificationData.broadcasts} broadcasts. Timezone: Africa/Kampala.</Text>
                 </View>
 
-                {notificationBarData.length > 0 && (
+                {notificationData.withDeliveryData > 0 && notificationBarData.length > 0 && (
                   <View style={st.card}>
-                    <View style={st.cardHeader}><Ionicons name="bar-chart" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Last 7 Days</Text></View>
+                    <View style={st.cardHeader}><Ionicons name="bar-chart" size={20} color="#00D4FF" /><Text style={st.cardTitle}>FCM Acceptances by Day</Text></View>
                     <BarChart data={notificationBarData} height={100} color="#00D4FF" />
                   </View>
                 )}
@@ -582,14 +570,17 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
         {/* ── TAB: Access Tokens ────────────────────────────────────── */}
         {activeTab === 'tokens' && (
           <View style={st.pad}>
+            {tokenError ? <Text style={{ color: '#FF6B6B' }}>{tokenError}</Text> : !tokenSummary ? <Text style={{ color: '#999' }}>Loading token analytics…</Text> : <>
             <View style={st.card}>
               <View style={st.cardHeader}><Ionicons name="key-outline" size={20} color="#00D4FF" /><Text style={st.cardTitle}>Token Summary</Text></View>
               <View style={st.metricGrid}>
-                <MetricCard icon="key" iconColor="#00D4FF" value={tokenSummary?.totalTokens || 0} label="Total Tokens" />
-                <MetricCard icon="checkmark-circle" iconColor="#4CAF50" value={tokenSummary?.activeTokens || 0} label="Active" />
-                <MetricCard icon="time" iconColor="#FFD700" value={tokenSummary?.authenticatedCount || 0} label="Authenticated" />
-                <MetricCard icon="remove-circle" iconColor="#FF6B6B" value={tokenSummary?.unauthenticatedCount || 0} label="Expired" />
+                <MetricCard icon="key" iconColor="#00D4FF" value={tokenSummary.total} label="Total Tokens" />
+                <MetricCard icon="checkmark-circle" iconColor="#4CAF50" value={tokenSummary.active} label="Active" />
+                <MetricCard icon="remove-circle" iconColor="#FF6B6B" value={tokenSummary.inactive} label="Inactive" />
+                <MetricCard icon="person" iconColor="#FFD700" value={tokenSummary.authenticated} label="Authenticated" />
+                <MetricCard icon="people" iconColor="#00D4FF" value={tokenSummary.guest} label="Guest" />
               </View>
+              <Text style={{ color: '#999', marginTop: 10 }}>Unknown status: {tokenSummary.unknownStatus} · Unknown authentication: {tokenSummary.unknownAuth} · Missing registration date: {tokenSummary.missingSubscriptionDates}</Text>
             </View>
 
             {tokenBarData.length > 0 && (
@@ -600,6 +591,7 @@ const AdminDashboardScreen: React.FC<AdminDashboardScreenProps> = () => {
                 </ScrollView>
               </View>
             )}
+            </>}
           </View>
         )}
       </ScrollView>

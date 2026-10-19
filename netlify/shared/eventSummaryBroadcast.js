@@ -220,8 +220,9 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
     : ((new Date(now.getTime() + KAMPALA_OFFSET_MS)).getUTCHours() < 16 ? '11' : '20');
   const dedupeKey = `${mode}:${String(local.year).padStart(4, '0')}-${String(local.month + 1).padStart(2, '0')}-${String(local.day).padStart(2, '0')}:${slot || fallbackSlot}`;
   const existing = await findExistingBroadcast(supabase, dedupeKey);
-  if (existing?.data?.deliveryStatus === 'sent') {
-    return { skipped: true, reason: 'already_sent', notificationId: existing.id, dedupeKey, count: summary.events.length };
+  if (['sent', 'partial', 'failed'].includes(existing?.data?.deliveryStatus)) {
+    // Do not resend a partially completed or uncertain batch to every token.
+    return { skipped: true, reason: 'already_attempted', notificationId: existing.id, dedupeKey, count: summary.events.length };
   }
 
   let notificationId = existing?.id;
@@ -274,7 +275,9 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
     const delivery = await sendToActiveTokens({ supabase, message });
     notificationData = {
       ...notificationData,
-      deliveryStatus: delivery.successful > 0 ? 'sent' : 'no_active_tokens',
+      deliveryStatus: delivery.targeted === 0 ? 'no_active_tokens'
+        : delivery.failed === 0 ? 'sent'
+        : delivery.successful > 0 ? 'partial' : 'failed',
       delivery,
       sentAt: new Date().toISOString(),
       eventPreviews: summary.previews,
@@ -282,12 +285,14 @@ async function sendEventSummaryBroadcast({ supabase, mode, now = new Date(), slo
       totalEventCount: summary.events.length,
     };
     await updateNotificationData(supabase, notificationId, notificationData);
+    console.info('[EventSummaryDelivery]', { notificationId, dedupeKey, ...delivery });
     return { skipped: false, sent: delivery.successful > 0, notificationId, dedupeKey, count: summary.events.length, delivery };
   } catch (error) {
     notificationData = {
       ...notificationData,
       deliveryStatus: 'failed',
-      lastError: error.message,
+      lastError: /^messaging\/[a-z0-9-]{1,80}$/.test(String(error?.code || ''))
+        ? error.code : 'delivery_error',
       failedAt: new Date().toISOString(),
     };
     await updateNotificationData(supabase, notificationId, notificationData);

@@ -38,9 +38,14 @@ function getFirebaseMessaging() {
   if (firebaseMessaging) return firebaseMessaging;
   const { cert, getApps, initializeApp } = require('firebase-admin/app');
   const { getMessaging } = require('firebase-admin/messaging');
+  const projectId = requiredEnv('FIREBASE_PROJECT_ID');
+  const credentials = loadServiceAccount();
+  if (credentials.project_id && credentials.project_id !== projectId) {
+    throw new Error('Firebase service account and messaging project do not match');
+  }
   const app = getApps()[0] || initializeApp({
-    credential: cert(loadServiceAccount()),
-    projectId: requiredEnv('FIREBASE_PROJECT_ID'),
+    credential: cert(credentials),
+    projectId,
   });
   firebaseMessaging = getMessaging(app);
   return firebaseMessaging;
@@ -63,9 +68,9 @@ async function deactivateTokens(supabase, tokens) {
 
 async function sendToTokens(supabase, tokens, message) {
   const uniqueTokens = [...new Set((tokens || []).filter(Boolean))];
-  if (!uniqueTokens.length) return { targeted: 0, successful: 0, failed: 0, stale: 0 };
+  if (!uniqueTokens.length) return { targeted: 0, successful: 0, failed: 0, stale: 0, errorCodes: {} };
   const messaging = getFirebaseMessaging();
-  const stats = { targeted: uniqueTokens.length, successful: 0, failed: 0, stale: 0 };
+  const stats = { targeted: uniqueTokens.length, successful: 0, failed: 0, stale: 0, errorCodes: {} };
   for (let offset = 0; offset < uniqueTokens.length; offset += 500) {
     const batch = uniqueTokens.slice(offset, offset + 500);
     const response = await messaging.sendEachForMulticast({ ...message, tokens: batch });
@@ -74,6 +79,10 @@ async function sendToTokens(supabase, tokens, message) {
       if (result.success) stats.successful += 1;
       else {
         stats.failed += 1;
+        // Only retain a bounded provider error code, never token values or error messages.
+        const rawCode = String(result.error?.code || 'unknown');
+        const code = /^messaging\/[a-z0-9-]{1,80}$/.test(rawCode) ? rawCode : 'unknown';
+        stats.errorCodes[code] = (stats.errorCodes[code] || 0) + 1;
         if (isStaleTokenError(result.error)) stale.push(batch[index]);
       }
     });
@@ -90,6 +99,7 @@ async function sendToActiveTokens({ supabase, message }) {
       .select('token')
       .eq('is_active', true)
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, from + 999);
     if (error) throw error;
     tokens.push(...(data || []).map((row) => row.token).filter(Boolean));

@@ -65,7 +65,7 @@ export async function handler(event) {
   }
 
   try {
-    const { token, userId, userEmail, userName, installationId, installationSecret } = JSON.parse(event.body);
+    const { token, installationId, installationSecret } = JSON.parse(event.body);
 
     if (!token) {
       return { statusCode: 400, body: "Missing token" };
@@ -73,12 +73,24 @@ export async function handler(event) {
 
     const supabase = getAdminClient();
     const now = new Date().toISOString();
-    const isAuthenticated = userId !== null && userId !== undefined;
+    // The caller cannot claim another account by providing a userId in JSON.
+    const authorization = event.headers?.authorization || event.headers?.Authorization || '';
+    const bearer = authorization.replace(/^Bearer\s+/i, '').trim();
+    let authUser = null;
+    if (bearer) {
+      const { data, error } = await supabase.auth.getUser(bearer);
+      if (error || !data?.user) return { statusCode: 401, body: 'Invalid authentication token' };
+      authUser = data.user;
+    }
+    const userId = authUser?.id || null;
+    const isAuthenticated = Boolean(authUser);
+    const userEmail = authUser?.email;
+    const userName = authUser?.user_metadata?.full_name || authUser?.user_metadata?.name;
 
     // Check if token already exists in Supabase
     const { data: existingTokens, error: queryError } = await supabase
       .from("notification_tokens")
-      .select("id,subscribed_at")
+      .select("id,subscribed_at,installation_id")
       .eq("token", token)
       .limit(1);
 
@@ -110,6 +122,12 @@ export async function handler(event) {
         updateData.is_authenticated = true;
         if (userEmail) updateData.user_email = userEmail;
         if (userName) updateData.user_name = userName;
+      } else if (installation && existingTokens[0].installation_id === installation.id) {
+        // Signing out on the same installation must not retain the old account.
+        updateData.user_id = null;
+        updateData.is_authenticated = false;
+        updateData.user_email = null;
+        updateData.user_name = null;
       }
 
       const { error: updateError } = await supabase

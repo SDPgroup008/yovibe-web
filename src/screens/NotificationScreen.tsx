@@ -199,8 +199,9 @@ export default function NotificationScreen() {
                     <TouchableOpacity
                       key={event.slug}
                       style={styles.previewCard}
-                      onPress={(pressEvent) => {
+                      onPress={async (pressEvent) => {
                         pressEvent.stopPropagation()
+                        await NotificationService.markAsOpened(item.id, user?.uid)
                         if (typeof window !== "undefined") window.location.href = `/events/${event.slug}`
                       }}
                     >

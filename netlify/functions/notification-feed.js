@@ -114,4 +114,4 @@ exports.handler = async (event) => {
   }
 };
 
-module.exports = { handler: exports.handler, hashSecret, normalizeLimit, loadNotifications };
+module.exports = { handler: exports.handler, hashSecret, normalizeLimit, loadNotifications, optionalAuthUser, resolveInstallation };

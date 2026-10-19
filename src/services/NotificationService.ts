@@ -215,6 +215,10 @@ export class NotificationService {
 
   // Mark notification as opened
   async markAsOpened(notificationId: string, userId?: string): Promise<void> {
+    // Give the best-effort request a short head start before navigation unloads the page.
+    const openTracking = this.recordInstallationOpen(notificationId).catch(() => {
+      console.warn('[Notifications] Unable to record in-app open')
+    })
     try {
       if (!userId) {
         const states = readGuestNotificationStates()
@@ -222,6 +226,7 @@ export class NotificationService {
         states[notificationId] = { ...states[notificationId], isRead: true, readAt: now, openedAt: now }
         writeGuestNotificationStates(states)
         this.notifyListeners()
+        await Promise.race([openTracking, new Promise<void>(resolve => setTimeout(resolve, 1000))])
         return
       }
       const now = new Date().toISOString()
@@ -237,10 +242,28 @@ export class NotificationService {
 
       if (error) throw error
 
+      await Promise.race([openTracking, new Promise<void>(resolve => setTimeout(resolve, 1000))])
+
       /* console.log("NotificationService: Marked notification as opened:", notificationId) */
     } catch (error) {
       console.error("NotificationService: Error marking as opened:", error)
     }
+  }
+
+  private async recordInstallationOpen(notificationId: string): Promise<void> {
+    const installation = getNotificationInstallation()
+    if (!installation) return
+    const { data: { session } } = await supabase.auth.getSession()
+    const response = await fetch('/.netlify/functions/notification-open', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify({ notificationId, installationId: installation.id, installationSecret: installation.secret }),
+      keepalive: true,
+    })
+    if (!response.ok) throw new Error('Open tracking failed')
   }
 
   // Mark all notifications as read for a user
