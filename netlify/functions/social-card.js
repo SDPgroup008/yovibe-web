@@ -1,5 +1,3 @@
-const { Resvg } = require('@resvg/resvg-js');
-
 const CARD_WIDTH = 1200;
 const CARD_HEIGHT = 630;
 
@@ -72,6 +70,10 @@ function textLines(lines, x, y, size, lineHeight, color, weight) {
 }
 
 function renderCard(card) {
+  // Load the native renderer lazily. This keeps HEAD requests healthy and
+  // lets the handler provide a static fallback if a platform runtime cannot
+  // load its optional native binary.
+  const { Resvg } = require('@resvg/resvg-js');
   const titleLines = wrapLines(card.title, 28);
   const subtitleLines = wrapLines(card.subtitle, 56);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}">
@@ -123,7 +125,16 @@ exports.handler = async (event) => {
     return { statusCode: 200, headers, isBase64Encoded: true, body: image.toString('base64') };
   } catch (error) {
     console.error('[social-card] failed:', error);
-    return { statusCode: 500, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, body: JSON.stringify({ error: 'Unable to render social card' }) };
+    // A static wide card is published by the web build and remains a valid
+    // Open Graph image even when the optional native renderer is unavailable.
+    return {
+      statusCode: 302,
+      headers: {
+        Location: 'https://yovibe.net/assets/og-image.png',
+        'Cache-Control': 'public, max-age=0, s-maxage=86400',
+      },
+      body: '',
+    };
   }
 };
 

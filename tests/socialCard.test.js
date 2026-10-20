@@ -17,4 +17,10 @@ describe('social-card function', () => {
     expect(head.body).toBe('');
     expect(unknown.statusCode).toBe(404);
   });
+
+  test('keeps the fallback contract explicit for renderer failures', () => {
+    const source = require('fs').readFileSync(require('path').join(__dirname, '../netlify/functions/social-card.js'), 'utf8');
+    expect(source).toContain("Location: 'https://yovibe.net/assets/og-image.png'");
+    expect(source).toContain("require('@resvg/resvg-js')");
+  });
 });
