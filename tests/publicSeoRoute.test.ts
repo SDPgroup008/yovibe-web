@@ -1,5 +1,5 @@
 import { canonicalHostRedirect } from '../netlify/edge-functions/canonical-host';
-import { buildEventDocument, buildFeaturedEventsMarkup, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, publicEntityStatus, structuredEventTimes } from '../netlify/edge-functions/public-seo-status';
+import { buildEventDocument, buildFeaturedEventsMarkup, buildPageDocument, buildTicketPurchaseDocument, buildVenueDocument, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, parsePublicShareRoute, publicEntityStatus, structuredEventTimes } from '../netlify/edge-functions/public-seo-status';
 import { robotsBody } from '../netlify/edge-functions/robots';
 import fs from 'fs';
 import path from 'path';
@@ -10,6 +10,57 @@ describe('public SEO route handling', () => {
     expect(parsePublicEntityPath('/venues/torino-bar-restaurant/')).toEqual({ entity: 'venues', slug: 'torino-bar-restaurant' });
     expect(parsePublicEntityPath('/events/ticket-contacts')).toBeNull();
     expect(parsePublicEntityPath('/events/future-concert/tickets')).toBeNull();
+  });
+
+  test('maps public sharing pages and route aliases to their canonical resources', () => {
+    expect(parsePublicShareRoute('/')).toEqual({ kind: 'page', page: 'home' });
+    expect(parsePublicShareRoute('/events/')).toEqual({ kind: 'page', page: 'events' });
+    expect(parsePublicShareRoute('/about')).toEqual({ kind: 'page', page: 'about' });
+    expect(parsePublicShareRoute('/map/events/kampala-night')).toEqual({ kind: 'entity', entity: 'events', slug: 'kampala-night', purchase: false });
+    expect(parsePublicShareRoute('/calendar/venues/arena')).toEqual({ kind: 'entity', entity: 'venues', slug: 'arena', purchase: false });
+    expect(parsePublicShareRoute('/venues/tickets/kampala-night')).toEqual({ kind: 'entity', entity: 'events', slug: 'kampala-night', purchase: true });
+    expect(parsePublicShareRoute('/profile')).toBeNull();
+  });
+
+  test('renders one complete social metadata set for platform, venue, and ticket pages', () => {
+    const page = buildPageDocument('events', 'https://yovibe.net/events');
+    const venue = buildVenueDocument({
+      slug: 'yovibe-arena', name: 'YoVibe Arena', location: 'Kampala',
+      description: 'A live music venue.', background_image_url: 'https://images.example.com/arena.jpg',
+    }, 'https://yovibe.net/venues/yovibe-arena');
+    const fallbackVenue = buildVenueDocument({ slug: 'no-image', name: 'No Image', location: 'Jinja' }, 'https://yovibe.net/venues/no-image');
+    const eventWithPoster = {
+      slug: 'future-show', name: 'Future Show', date: '2030-12-20T18:00:00+03:00', time: '18:00 - 20:00',
+      poster_image_url: 'https://images.example.com/future-show-poster.jpg',
+    };
+    const detail = buildEventDocument(eventWithPoster, 'https://yovibe.net/events/future-show');
+    const ticket = buildTicketPurchaseDocument(eventWithPoster, 'https://yovibe.net/events/tickets/future-show');
+    const ticketWithoutPoster = buildTicketPurchaseDocument({
+      slug: 'no-poster', name: 'No Poster', date: '2030-12-20T18:00:00+03:00', poster_image_url: 'http://images.example.com/not-secure.jpg',
+    }, 'https://yovibe.net/events/tickets/no-poster');
+
+    for (const document of [page, venue, fallbackVenue, ticket, ticketWithoutPoster]) {
+      expect(document?.head.match(/<link rel="canonical"/g)).toHaveLength(1);
+      expect(document?.head).toContain('og:image:secure_url');
+      expect(document?.head).toContain('og:image:width" content="1200"');
+      expect(document?.head).toContain('og:image:height" content="630"');
+      expect(document?.head).toContain('twitter:card" content="summary_large_image"');
+      expect(document?.head).toMatch(/https:\/\//);
+    }
+    expect(page.head).toContain('/.netlify/functions/social-card?kind=events');
+    expect(venue?.head).toContain('https://images.example.com/arena.jpg');
+    expect(fallbackVenue?.head).toContain('/.netlify/functions/social-card?kind=venues');
+    expect(detail?.head).toContain('https://images.example.com/future-show-poster.jpg');
+    expect(ticket?.head).toContain('https://images.example.com/future-show-poster.jpg');
+    expect(ticket?.head).not.toContain('/.netlify/functions/social-card?kind=tickets');
+    expect(ticketWithoutPoster?.head).toContain('/.netlify/functions/social-card?kind=tickets');
+    expect(ticket?.head).toContain('noindex, nofollow');
+
+    const duplicateShell = '<html><head><title>Old</title><meta property="og:title" content="old"><meta name="twitter:image" content="old"><link rel="canonical" href="https://old.example"></head><body><div id="root"></div></body></html>';
+    const rendered = injectEventDocumentHtml(duplicateShell, page);
+    expect((rendered.match(/og:title/g) || [])).toHaveLength(1);
+    expect((rendered.match(/twitter:image/g) || [])).toHaveLength(2); // image and image:alt
+    expect((rendered.match(/rel="canonical"/g) || [])).toHaveLength(1);
   });
 
   test('marks unknown, past, and cancelled content correctly', () => {

@@ -14,6 +14,9 @@ describe('web shell SEO source', () => {
     expect(patcher).toContain('reinolmartin0001@gmail.com');
     expect(patcher).toContain('+256764336256');
     expect(patcher).toContain('/assets/icon.png');
+    expect(patcher).toContain('/assets/og-image.png');
+    expect(patcher).toContain('copyFileSync(sourceOgImagePath, publishedOgImagePath)');
+    expect(patcher).toContain('og:image:secure_url');
   });
 
   test('provides all public fallback links and no longer injects duplicate global metadata', () => {

@@ -418,6 +418,16 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
       <View style={styles.header}>
         <Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text>
         <View style={styles.headerActions}>
+          {deviceType.isLargeScreen && (!user || user.userType === "regular_user" || user.userType === "admin") && (
+            <TouchableOpacity
+              style={styles.desktopAddActionButton}
+              onPress={handleAddEvent}
+              accessibilityRole="button"
+              accessibilityLabel="Add event"
+            >
+              <Text style={styles.desktopAddActionText}>+ Event</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity 
             style={styles.notificationButton} 
             onPress={() => navigation.navigate("Notification" as never)}
@@ -543,7 +553,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
           - Visible to authenticated users of type 'user' or 'admin'
           - Hidden for authenticated 'club_owner' users
       */}
-      {(!user || user.userType === "regular_user" || user.userType === "admin") && (
+      {!deviceType.isLargeScreen && (!user || user.userType === "regular_user" || user.userType === "admin") && (
         <TouchableOpacity style={styles.floatingAddButton} onPress={handleAddEvent}>
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -594,6 +604,27 @@ const styles = StyleSheet.create({
   headerActions: {
     flexDirection: "row",
     gap: responsiveSize(6, 8, 5),
+  },
+  desktopAddActionButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 40,
+    borderRadius: 10,
+    backgroundColor: "rgba(0, 212, 255, 0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.45)",
+    // headerActions already contributes a 5px desktop gap; the remaining
+    // 35px makes the total add-to-notification spacing equal the 40px
+    // notification control width.
+    marginRight: 35,
+  },
+  desktopAddActionText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   notificationButton: {
     padding: responsiveSize(8, 12, 7),

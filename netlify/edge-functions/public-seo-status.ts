@@ -5,6 +5,10 @@ type EdgeRuntimeGlobals = typeof globalThis & {
 
 type PublicEntity = 'events' | 'venues';
 type PublicEntityPath = { entity: PublicEntity; slug: string } | null;
+type PublicShareRoute =
+  | { kind: 'page'; page: SocialCardKind }
+  | { kind: 'entity'; entity: PublicEntity; slug: string; purchase: boolean };
+type SocialCardKind = 'home' | 'events' | 'venues' | 'calendar' | 'map' | 'about' | 'tickets';
 type EntryFee = { name?: unknown; amount?: unknown; price?: unknown; maxTickets?: unknown };
 export type PublicEvent = {
   slug?: string;
@@ -26,12 +30,30 @@ export type PublicEvent = {
   created_by_type?: string;
 };
 
+export type PublicVenue = {
+  slug?: string;
+  name?: string;
+  description?: string;
+  location?: string;
+  background_image_url?: string;
+};
+
 type EventDocument = { head: string; summary: string };
 
 const RESERVED_EVENT_SLUGS = new Set(['add', 'ticket-contacts', 'payment-callback']);
 const RESERVED_VENUE_SLUGS = new Set(['add-event', 'ticket-contacts']);
 const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees,created_at,organizer_name,created_by_type';
+const VENUE_SELECT = 'slug,name,description,location,background_image_url';
 const FEATURED_EVENT_LIMIT = 6;
+const PAGE_SOCIAL_CONTENT: Record<SocialCardKind, { title: string; description: string }> = {
+  home: { title: 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda', description: 'Discover venues, upcoming events, nightlife, and tickets across Uganda with YoVibe.' },
+  events: { title: 'Events & Tickets in Uganda | YoVibe', description: 'Browse concerts, parties, live music, and upcoming events across Uganda.' },
+  venues: { title: 'Venues & Nightlife in Uganda | YoVibe', description: 'Discover clubs, bars, lounges, and venues worth showing up for across Uganda.' },
+  calendar: { title: 'Event Calendar | YoVibe', description: 'See upcoming events and plan your next moment with YoVibe.' },
+  map: { title: 'Explore Events & Venues on the Map | YoVibe', description: 'Find events, venues, and nightlife experiences around Uganda.' },
+  about: { title: 'About YoVibe', description: 'Your No.1 ticketing platform for discovering venues, events, and the vibe around you.' },
+  tickets: { title: 'Buy Event Tickets | YoVibe', description: 'Choose your ticket and join the experience with YoVibe.' },
+};
 
 function getEdgeEnv(name: string): string | undefined {
   const runtime = globalThis as EdgeRuntimeGlobals;
@@ -60,6 +82,39 @@ export function parsePublicEntityPath(pathname: string): PublicEntityPath {
   const entity = match[1] as PublicEntity;
   const reserved = entity === 'events' ? RESERVED_EVENT_SLUGS : RESERVED_VENUE_SLUGS;
   return !slug || reserved.has(slug) ? null : { entity, slug };
+}
+
+function publicSlug(value: string | undefined, entity: PublicEntity): string | null {
+  if (!value) return null;
+  try {
+    const slug = decodeURIComponent(value);
+    const reserved = entity === 'events' ? RESERVED_EVENT_SLUGS : RESERVED_VENUE_SLUGS;
+    return slug && !reserved.has(slug) ? slug : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Public routes that deserve a share card before the React app starts. */
+export function parsePublicShareRoute(pathname: string): PublicShareRoute | null {
+  const pages: Record<string, SocialCardKind> = {
+    '/': 'home', '/events': 'events', '/events/': 'events', '/venues': 'venues', '/venues/': 'venues',
+    '/calendar': 'calendar', '/calendar/': 'calendar', '/map': 'map', '/map/': 'map', '/about': 'about', '/about/': 'about',
+  };
+  if (pages[pathname]) return { kind: 'page', page: pages[pathname] };
+
+  const ticket = pathname.match(/^\/(?:events|venues|map|calendar)\/tickets\/([^/]+)\/?$/);
+  const ticketSlug = publicSlug(ticket?.[1], 'events');
+  if (ticketSlug) return { kind: 'entity', entity: 'events', slug: ticketSlug, purchase: true };
+
+  const canonical = parsePublicEntityPath(pathname);
+  if (canonical) return { kind: 'entity', ...canonical, purchase: false };
+
+  const alias = pathname.match(/^\/(?:map|calendar|venues)\/(events|venues)\/([^/]+)\/?$/);
+  if (!alias) return null;
+  const entity = alias[1] as PublicEntity;
+  const slug = publicSlug(alias[2], entity);
+  return slug ? { kind: 'entity', entity, slug, purchase: false } : null;
 }
 
 function isPublicEventsLanding(pathname: string): boolean {
@@ -104,6 +159,60 @@ function publicImage(value: unknown): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function socialCardUrl(origin: string, kind: SocialCardKind): string {
+  return `${origin}/.netlify/functions/social-card?kind=${encodeURIComponent(kind)}`;
+}
+
+/** Keep event-detail and ticket-purchase social images in lockstep. */
+function eventShareImage(event: PublicEvent, origin: string, fallback: SocialCardKind): { image: string; usesPoster: boolean } {
+  const poster = publicImage(event.poster_image_url);
+  return poster
+    ? { image: poster, usesPoster: true }
+    : { image: socialCardUrl(origin, fallback), usesPoster: false };
+}
+
+function imageMimeType(image: string): string | undefined {
+  try {
+    const extension = new URL(image).pathname.match(/\.([a-z0-9]+)$/i)?.[1]?.toLowerCase();
+    if (extension === 'png') return 'image/png';
+    if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+    if (extension === 'webp') return 'image/webp';
+    if (extension === 'gif') return 'image/gif';
+  } catch {
+    // A public image is already validated before this helper is used.
+  }
+  return undefined;
+}
+
+function socialDescription(value: unknown, fallback: string): string {
+  const text = textValue(value, 1000) || fallback;
+  return text.length > 160 ? `${text.slice(0, 157).trimEnd()}...` : text;
+}
+
+function buildSocialHead(options: {
+  title: string;
+  description: string;
+  canonicalUrl: string;
+  image: string;
+  imageAlt: string;
+  robots?: string;
+}): string {
+  const { title, description, canonicalUrl, image, imageAlt, robots } = options;
+  const imageType = imageMimeType(image);
+  const generatedCard = image.includes('/.netlify/functions/social-card?');
+  return `<title>${htmlEscape(title)}</title><meta name="description" content="${htmlEscape(description)}"><meta name="robots" content="${htmlEscape(robots || 'index, follow')}"><link rel="canonical" href="${htmlEscape(canonicalUrl)}"><meta property="og:type" content="website"><meta property="og:url" content="${htmlEscape(canonicalUrl)}"><meta property="og:title" content="${htmlEscape(title)}"><meta property="og:description" content="${htmlEscape(description)}"><meta property="og:image" content="${htmlEscape(image)}"><meta property="og:image:secure_url" content="${htmlEscape(image)}">${imageType || generatedCard ? `<meta property="og:image:type" content="${imageType || 'image/png'}">` : ''}<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${htmlEscape(imageAlt)}"><meta property="og:site_name" content="YoVibe"><meta property="og:locale" content="en_UG"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:url" content="${htmlEscape(canonicalUrl)}"><meta name="twitter:title" content="${htmlEscape(title)}"><meta name="twitter:description" content="${htmlEscape(description)}"><meta name="twitter:image" content="${htmlEscape(image)}"><meta name="twitter:image:alt" content="${htmlEscape(imageAlt)}">`;
+}
+
+export function buildPageDocument(page: SocialCardKind, canonicalUrl: string): EventDocument {
+  const origin = new URL(canonicalUrl).origin;
+  const content = PAGE_SOCIAL_CONTENT[page];
+  const image = socialCardUrl(origin, page);
+  return {
+    head: buildSocialHead({ title: content.title, description: content.description, canonicalUrl, image, imageAlt: `${content.title} — YoVibe social card` }),
+    summary: '',
+  };
 }
 
 function numericPrice(value: unknown): string | null {
@@ -304,9 +413,53 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
   // React replaces this server fallback with the full Event Detail screen after
   // startup. Keep it out of sight until then so visitors never see unstyled HTML.
   const summary = `<main id="yovibe-event-summary" data-yovibe-seo-fallback="true" hidden aria-hidden="true"><article>${image ? `<img src="${htmlEscape(image)}" alt="${htmlEscape(`Poster for ${name}`)}">` : ''}<h1>${htmlEscape(name)}</h1><p>${htmlEscape(description)}</p><p><strong>Date and time:</strong> <time datetime="${htmlEscape(start.toISOString())}">${htmlEscape(formatEventDate(start, event.time))}</time></p>${venueMarkup}${artistMarkup}${ticketMarkup}<p><a href="${htmlEscape(purchaseUrl)}">Buy tickets for ${htmlEscape(name)}</a></p></article></main>`;
-  const socialImage = image || `${origin}/assets/icon.png`;
-  const head = `<title>${htmlEscape(name)} | YoVibe</title><meta name="description" content="${htmlEscape(description.slice(0, 160))}"><link rel="canonical" href="${htmlEscape(canonicalUrl)}"><meta property="og:type" content="website"><meta property="og:url" content="${htmlEscape(canonicalUrl)}"><meta property="og:title" content="${htmlEscape(name)} | YoVibe"><meta property="og:description" content="${htmlEscape(description.slice(0, 160))}"><meta property="og:image" content="${htmlEscape(socialImage)}"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${htmlEscape(name)} | YoVibe"><meta name="twitter:description" content="${htmlEscape(description.slice(0, 160))}"><meta name="twitter:image" content="${htmlEscape(socialImage)}"><script id="yovibe-event-jsonld" type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
+  const socialPreview = eventShareImage(event, origin, 'events');
+  const socialImage = socialPreview.image;
+  const socialTitle = `${name} | YoVibe`;
+  const socialText = socialDescription(description, `Discover ${name} on YoVibe.`);
+  const head = `${buildSocialHead({ title: socialTitle, description: socialText, canonicalUrl, image: socialImage, imageAlt: image ? `Poster for ${name}` : `${name} — YoVibe event card` })}<script id="yovibe-event-jsonld" type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
   return { head, summary };
+}
+
+export function buildVenueDocument(venue: PublicVenue, canonicalUrl: string): EventDocument | null {
+  const name = textValue(venue.name, 180);
+  const slug = textValue(venue.slug, 240);
+  if (!name || !slug) return null;
+  const origin = new URL(canonicalUrl).origin;
+  const location = textValue(venue.location, 180) || 'Uganda';
+  const description = socialDescription(venue.description, `Discover ${name} in ${location} on YoVibe.`);
+  const image = publicImage(venue.background_image_url) || socialCardUrl(origin, 'venues');
+  return {
+    head: buildSocialHead({
+      title: `${name} | Venue in ${location} | YoVibe`,
+      description,
+      canonicalUrl,
+      image,
+      imageAlt: publicImage(venue.background_image_url) ? `${name} venue` : `${name} — YoVibe venue card`,
+    }),
+    summary: '',
+  };
+}
+
+export function buildTicketPurchaseDocument(event: PublicEvent, canonicalUrl: string): EventDocument | null {
+  if (eventIsGone(event)) return null;
+  const name = textValue(event.name, 180);
+  const slug = textValue(event.slug, 240);
+  if (!name || !slug) return null;
+  const origin = new URL(canonicalUrl).origin;
+  const socialPreview = eventShareImage(event, origin, 'tickets');
+  const description = socialDescription(event.description, `Get tickets for ${name} on YoVibe.`);
+  return {
+    head: buildSocialHead({
+      title: `Buy tickets for ${name} | YoVibe`,
+      description,
+      canonicalUrl,
+      image: socialPreview.image,
+      imageAlt: socialPreview.usesPoster ? `Poster for ${name}` : `${name} — YoVibe ticket card`,
+      robots: 'noindex, nofollow',
+    }),
+    summary: '',
+  };
 }
 
 export function featuredEvents(events: PublicEvent[], now = new Date()): PublicEvent[] {
@@ -337,7 +490,7 @@ export function injectEventDocumentHtml(html: string, document: EventDocument): 
   const withoutSiteWideDocumentTags = html
     .replace(/<title[^>]*>[\s\S]*?<\/title>/gi, '')
     .replace(/<link\b[^>]*rel=["']canonical["'][^>]*>/gi, '')
-    .replace(/<meta\b[^>]*(?:name|property)=["'](?:description|og:(?:type|url|title|description|image)|twitter:(?:card|title|description|image))["'][^>]*>/gi, '');
+    .replace(/<meta\b[^>]*(?:name|property)=["'](?:title|description|robots|og:[^"']+|twitter:[^"']+)["'][^>]*>/gi, '');
   const withHead = withoutSiteWideDocumentTags.replace(/<\/head>/i, `${document.head}</head>`);
   if (/<div[^>]+id=["']root["'][^>]*>/i.test(withHead)) {
     return withHead.replace(/(<div[^>]+id=["']root["'][^>]*>)/i, `$1${document.summary}`);
@@ -367,7 +520,7 @@ async function fetchPublicEntity(entity: PublicEntity, slug: string): Promise<Pu
   const apiKey = getEdgeEnv('SUPABASE_PUBLISHABLE_KEY') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY') || getEdgeEnv('SUPABASE_ANON_KEY') || getEdgeEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY');
   if (!supabaseUrl || !apiKey) return undefined;
   const endpoint = new URL(`/rest/v1/${entity}`, supabaseUrl);
-  endpoint.searchParams.set('select', entity === 'events' ? EVENT_SELECT : 'slug');
+  endpoint.searchParams.set('select', entity === 'events' ? EVENT_SELECT : VENUE_SELECT);
   endpoint.searchParams.set('slug', `eq.${slug}`);
   endpoint.searchParams.set('is_deleted', 'eq.false');
   endpoint.searchParams.set('limit', '1');
@@ -432,35 +585,52 @@ export function publicEntityStatus(entity: PublicEntity, row: PublicEvent | Reco
 export default async (request: Request, context: any) => {
   if (request.method !== 'GET' && request.method !== 'HEAD') return context.next();
   const url = new URL(request.url);
-  const entityPath = parsePublicEntityPath(url.pathname);
+  const shareRoute = parsePublicShareRoute(url.pathname);
   const landingPage = isPublicEventsLanding(url.pathname);
-  if (!entityPath && !landingPage) return context.next();
+  if (!shareRoute) return context.next();
 
   try {
-    if (landingPage) {
-      const featured = await fetchFeaturedEvents();
+    if (shareRoute.kind === 'page') {
       const upstream = await context.next();
-      if (!featured || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
-      const markup = buildFeaturedEventsMarkup(featured, url.origin);
-      if (!markup) return upstream;
+      if (request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+      const canonicalPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
+      let html = injectEventDocumentHtml(await upstream.text(), buildPageDocument(shareRoute.page, `${url.origin}${canonicalPath}`));
+
+      if (landingPage) {
+        const featured = await fetchFeaturedEvents();
+        const markup = featured ? buildFeaturedEventsMarkup(featured, url.origin) : '';
+        if (markup) html = injectFeaturedEventsHtml(html, markup);
+      }
       const headers = new Headers(upstream.headers);
       headers.delete('content-length');
       headers.delete('etag');
       headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
-      return new Response(injectFeaturedEventsHtml(await upstream.text(), markup), { status: upstream.status, statusText: upstream.statusText, headers });
+      return new Response(html, { status: upstream.status, statusText: upstream.statusText, headers });
     }
 
-    const row = await fetchPublicEntity(entityPath!.entity, entityPath!.slug);
+    const row = await fetchPublicEntity(shareRoute.entity, shareRoute.slug);
     if (row === undefined) return context.next();
-    const status = publicEntityStatus(entityPath!.entity, row);
+    const status = publicEntityStatus(shareRoute.entity, row);
     if (status !== 200) return brandedErrorPage(status, url.pathname);
 
     const upstream = await context.next();
-    if (entityPath!.entity !== 'events' || request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging') return upstream;
-    const event = row as PublicEvent;
-    const soldCounts = await fetchTicketAvailability(url.origin, event);
-    const document = buildEventDocument(event, `${url.origin}${url.pathname}`, soldCounts);
-    if (!document || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+    if (request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+
+    const canonicalPath = shareRoute.entity === 'events'
+      ? (shareRoute.purchase ? `/events/tickets/${encodeURIComponent(shareRoute.slug)}` : `/events/${encodeURIComponent(shareRoute.slug)}`)
+      : `/venues/${encodeURIComponent(shareRoute.slug)}`;
+    const canonicalUrl = `${url.origin}${canonicalPath}`;
+    let document: EventDocument | null;
+    if (shareRoute.entity === 'venues') {
+      document = buildVenueDocument(row as PublicVenue, canonicalUrl);
+    } else if (shareRoute.purchase) {
+      document = buildTicketPurchaseDocument(row as PublicEvent, canonicalUrl);
+    } else {
+      const event = row as PublicEvent;
+      const soldCounts = await fetchTicketAvailability(url.origin, event);
+      document = buildEventDocument(event, canonicalUrl, soldCounts);
+    }
+    if (!document) return upstream;
     const headers = new Headers(upstream.headers);
     headers.delete('content-length');
     headers.delete('etag');

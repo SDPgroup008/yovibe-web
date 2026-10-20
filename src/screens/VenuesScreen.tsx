@@ -57,6 +57,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   // Desktop (>=1024px) and tablet (768-1023px): title + tabs align in one row.
   // Mobile keeps the stacked layout.
   const isWide = deviceType.isLargeScreen || deviceType.isTablet;
+  const isDesktop = deviceType.isLargeScreen;
 
   // Memoize card dimensions to prevent recalculation on every render
   const { cardWidth, cardHeight } = useMemo(() => {
@@ -394,6 +395,16 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
             </TouchableOpacity>
           </View>
         </View>
+        {isDesktop && (!user || user.userType === "club_owner" || user.userType === "admin") && (
+          <TouchableOpacity
+            style={styles.desktopAddVenueButton}
+            onPress={handleAddVenue}
+            accessibilityRole="button"
+            accessibilityLabel="Add venue"
+          >
+            <Text style={styles.desktopAddVenueText}>+ Venue</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {showSearch && (
@@ -480,7 +491,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
           - Visible to authenticated 'club_owner' and 'admin'
           - Hidden for authenticated 'user' type
       */}
-      {(!user || user.userType === "club_owner" || user.userType === "admin") && (
+      {!isDesktop && (!user || user.userType === "club_owner" || user.userType === "admin") && (
         <TouchableOpacity 
           style={styles.floatingAddButton}
           onPress={handleAddVenue}
@@ -536,6 +547,24 @@ const styles = StyleSheet.create({
     padding: 0,
     paddingBottom: 0,
     flex: 1,
+  },
+  desktopAddVenueButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    minHeight: 40,
+    marginLeft: 12,
+    borderRadius: 10,
+    backgroundColor: "rgba(0, 212, 255, 0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.45)",
+  },
+  desktopAddVenueText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
   tabContainerWide: {
     flex: 1,

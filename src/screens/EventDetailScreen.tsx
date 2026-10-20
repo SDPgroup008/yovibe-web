@@ -27,6 +27,7 @@ import { useCachedEventDetails } from "../hooks/useDataCache"
 
 import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
+import { buildEventSharePayload } from "../utils/eventShare"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -126,15 +127,13 @@ const EventDetailScreen: React.FC = () => {
        // Check if we're in development and provide helpful message
        const isDevelopment = typeof window !== 'undefined' && window.location.hostname === 'localhost'
 
-       const shareMessage = isDevelopment
-         ? `${event.name}\n${description}\n\n${eventUrl}\n\nRich previews require a public URL.`
-         : `${event.name}\n${description}\n\n${eventUrl}`
-
-       const result = await Share.share({
+       const result = await Share.share(buildEventSharePayload({
+         platform: Platform.OS,
          title: event.name,
-         message: shareMessage,
+         description,
          url: eventUrl,
-       })
+         isDevelopment,
+       }))
 
        if (result.action === Share.sharedAction) {
          if (result.activityType) {

@@ -3,6 +3,8 @@ const path = require("path");
 
 const indexPath = path.join(__dirname, "..", "dist", "index.html");
 const messagingWorkerPath = path.join(__dirname, "..", "dist", "firebase-messaging-sw.js");
+const sourceOgImagePath = path.join(__dirname, "..", "assets", "og-image.png");
+const publishedOgImagePath = path.join(__dirname, "..", "dist", "assets", "og-image.png");
 
 const title = "YoVibe | Buy Tickets, Discover Events & Venues in Uganda";
 const description =
@@ -15,7 +17,7 @@ const keywords =
 const siteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || process.env.SITE_URL || '').replace(/\/$/, '');
 if (!siteUrl) throw new Error('SITE_URL or NEXT_PUBLIC_SITE_URL is required to patch the web shell');
 const canonicalUrl = `${siteUrl}/`;
-const ogImage = `${siteUrl}/assets/icon.png`;
+const ogImage = `${siteUrl}/assets/og-image.png`;
 const isStaging = String(process.env.APP_ENV || '').toLowerCase() === 'staging';
 const robots = isStaging
   ? 'noindex, nofollow, noarchive'
@@ -47,6 +49,11 @@ const structuredData = isStaging ? '' : `
 if (!fs.existsSync(indexPath)) {
   throw new Error(`Cannot patch SEO shell; file not found: ${indexPath}`);
 }
+if (!fs.existsSync(sourceOgImagePath)) {
+  throw new Error(`Cannot publish SEO social image; source file not found: ${sourceOgImagePath}`);
+}
+fs.mkdirSync(path.dirname(publishedOgImagePath), { recursive: true });
+fs.copyFileSync(sourceOgImagePath, publishedOgImagePath);
 
 const headInjection = `
     <title>${title}</title>
@@ -58,12 +65,18 @@ const headInjection = `
     <meta property="og:title" content="${title}" />
     <meta property="og:description" content="${description}" />
     <meta property="og:image" content="${ogImage}" />
+    <meta property="og:image:secure_url" content="${ogImage}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="YoVibe — Discover events and tickets in Uganda" />
     <meta property="og:site_name" content="YoVibe" />
     <meta property="og:locale" content="en_UG" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${title}" />
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${ogImage}" />
+    <meta name="twitter:image:alt" content="YoVibe — Discover events and tickets in Uganda" />
     <link rel="canonical" href="${canonicalUrl}" />${structuredData}`;
 
 const noScriptReplacement = `
