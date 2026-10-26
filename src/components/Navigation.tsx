@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import VibeUpdateHub from './VibeUpdateHub';
 
 // Import responsive utilities
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from '../utils/ResponsiveDesign';
@@ -97,6 +98,7 @@ export const TabBar: React.FC = () => {
           </TouchableOpacity>
         );
       })}
+      <VibeUpdateHub placement="mobile" iconSize={componentSizes.iconSize} barHeight={componentSizes.tabBarHeight} />
     </View>
   );
 };
@@ -147,9 +149,8 @@ const DesktopTabBar: React.FC<{ currentPath: string }> = ({ currentPath }) => {
             ? tab.icon.replace('-outline', '') as keyof typeof Ionicons.glyphMap
             : tab.icon;
 
-          return (
+          const item = (
             <TouchableOpacity
-              key={tab.key}
               style={[
                 styles.desktopNavItem,
                 isActive && styles.desktopNavItemActive
@@ -169,6 +170,14 @@ const DesktopTabBar: React.FC<{ currentPath: string }> = ({ currentPath }) => {
                 {tab.label}
               </Text>
             </TouchableOpacity>
+          );
+
+          if (tab.key !== 'map') return <React.Fragment key={tab.key}>{item}</React.Fragment>;
+          return (
+            <View key={tab.key} style={styles.desktopMapSlot}>
+              {item}
+              <VibeUpdateHub placement="desktop" iconSize={componentSizes.iconSize} barHeight={72} />
+            </View>
           );
         })}
       </View>
@@ -339,6 +348,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   desktopNavItem: {
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
@@ -347,6 +357,10 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     width: '90%',
     alignSelf: 'center',
+  },
+  desktopMapSlot: {
+    position: 'relative',
+    width: '100%',
   },
   desktopNavItemActive: {
     backgroundColor: 'rgba(33, 150, 243, 0.15)',

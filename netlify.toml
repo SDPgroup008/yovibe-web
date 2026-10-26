@@ -58,6 +58,10 @@ path = "/*"
   # Phase 4 (4.3): daily photo/QR retention purge at 04:00
   schedule = "0 4 * * *"
 
+[functions."purge-expired-vibe-updates"]
+  # Remove expired Vibe Update media after its one-day recovery grace period.
+  schedule = "20 4 * * *"
+
 [functions."broadcast-todays-events"]
   # 09:00 and 18:00 Africa/Kampala (UTC+3)
   schedule = "0 6,15 * * *"

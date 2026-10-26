@@ -1,10 +1,11 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
-import { useEffect, useState, useCallback } from "react"
+import { Fragment, useEffect, useState, useCallback } from "react"
 import { useNavigation, useNavigationState } from "@react-navigation/native"
 import { View, ActivityIndicator, Dimensions, Platform, useWindowDimensions, TouchableOpacity, Text, StyleSheet, Image } from "react-native"
 import SkeletonLoader from "../components/SkeletonLoader"
+import VibeUpdateHub from "../components/VibeUpdateHub"
 
 // Import responsive hooks
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from "../utils/ResponsiveDesign"
@@ -692,6 +693,7 @@ function CustomTabBar({ state, descriptors, navigation }: any) {
           </TouchableOpacity>
         );
       })}
+      <VibeUpdateHub placement="mobile" iconSize={iconSize} barHeight={tabBarHeight} />
     </View>
   );
 }
@@ -964,9 +966,8 @@ function DesktopLeftNavWrapper() {
           { name: "profile", label: "Profile", icon: "person", iconOutline: "person-outline" },
         ].map((route, index) => {
           const isFocused = route.name === currentRouteName;
-          return (
+          const item = (
             <TouchableOpacity
-              key={route.name}
               onPress={() => handleNavigate(route.name)}
               style={[
                 styles.navItem,
@@ -990,6 +991,9 @@ function DesktopLeftNavWrapper() {
               </Text>
             </TouchableOpacity>
           );
+
+          if (route.name !== "map") return <Fragment key={route.name}>{item}</Fragment>;
+          return <View key={route.name} style={styles.navMapSlot}>{item}<VibeUpdateHub placement="desktop" iconSize={iconSize} barHeight={72} /></View>;
         })}
       </View>
     </View>
@@ -1060,6 +1064,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   navItem: {
+    position: 'relative',
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 16,
@@ -1067,6 +1072,11 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     borderRadius: 12,
     width: '90%',
+  },
+  navMapSlot: {
+    position: 'relative',
+    width: '100%',
+    alignItems: 'center',
   },
   navItemActive: {
     backgroundColor: 'rgba(33, 150, 243, 0.15)',

@@ -37,6 +37,7 @@ support@yovibe.net.
 ### Database (Supabase)
 - [ ] Migration `202608291200_inventory_integrity.sql` applied (create_tickets_batch RPC).
 - [ ] Migration `202608291300_payout_integrity.sql` applied (payout_config, payouts.event_id, clawback_amount).
+- [ ] Migration `202610260001_vibe_updates.sql` applied (Vibe Update table, active-update cap, and RLS policies).
 - [ ] `payout_otps` table exists (used by the OTP edge function).
 - [ ] Confirm `create_tickets_batch` executes: `select public.create_tickets_batch('test-event', '[]'::jsonb);`
 
@@ -49,6 +50,7 @@ support@yovibe.net.
 - [ ] Cloudflare WAF Skip rule for `/.netlify/functions/` active (bot fight/managed rules bypassed); SSL = Full (strict).
 - [ ] `https://yovibe.net/.netlify/functions/health` returns 200 and all env vars SET.
 - [ ] Netlify env vars match the inventory: PesaPal live keys + `PESAPAL_API_URL=https://pay.pesapal.com/v3/api`, `PESAPAL_NOTIFICATION_ID`, `PAWAPAY_API_KEY`, `QR_HMAC_SECRET`, `R2_*`, `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `ZEPTOMAIL_TOKEN`, `SITE_URL=https://yovibe.net`, `SENTRY_DSN`.
+- [ ] R2 bucket CORS permits browser `PUT` uploads from the production (and any staging) site origin, with the `content-type` request header. This is required for Vibe Update's authenticated direct-media upload flow.
 - [ ] Sentry DSN set; one test error visible in Sentry.
 
 ### HMA event configuration
