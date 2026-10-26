@@ -72,25 +72,76 @@ function getImageMetadata(file: Blob): Promise<{ width: number; height: number }
   })
 }
 
+type BrowserFfmpeg = {
+  load: (options: { coreURL: string; wasmURL: string; classWorkerURL: string }) => Promise<void>
+  on: (event: "progress", listener: (event: { progress: number }) => void) => void
+  off: (event: "progress", listener: (event: { progress: number }) => void) => void
+  writeFile: (name: string, data: Uint8Array) => Promise<void>
+  exec: (args: string[]) => Promise<number>
+  readFile: (name: string) => Promise<Uint8Array | string>
+  deleteFile: (name: string) => Promise<void>
+}
+
+type FfmpegWindow = Window & typeof globalThis & {
+  FFmpegWASM?: { FFmpeg: new () => BrowserFfmpeg }
+}
+
+const FFMPEG_VERSION = "0.12.15"
+const FFMPEG_CORE_VERSION = "0.12.10"
+const FFMPEG_CDN = "https://unpkg.com"
+
+async function toBlobUrl(url: string, contentType: string) {
+  const response = await fetch(url)
+  if (!response.ok) throw new Error("The video preparation component could not be downloaded.")
+  return URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: contentType }))
+}
+
+function loadScript(url: string) {
+  return new Promise<void>((resolve, reject) => {
+    const script = document.createElement("script")
+    script.src = url
+    script.async = true
+    script.onload = () => { script.remove(); resolve() }
+    script.onerror = () => { script.remove(); reject(new Error("The video preparation component could not be loaded.")) }
+    document.head.appendChild(script)
+  })
+}
+
+async function loadFfmpegConstructor() {
+  const runtime = window as FfmpegWindow
+  if (runtime.FFmpegWASM?.FFmpeg) return runtime.FFmpegWASM.FFmpeg
+
+  const wrapperUrl = await toBlobUrl(`${FFMPEG_CDN}/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd/ffmpeg.js`, "text/javascript")
+  try {
+    await loadScript(wrapperUrl)
+  } finally {
+    URL.revokeObjectURL(wrapperUrl)
+  }
+  if (!runtime.FFmpegWASM?.FFmpeg) throw new Error("The video preparation component is unavailable.")
+  return runtime.FFmpegWASM.FFmpeg
+}
+
 let ffmpegLoader: Promise<{ trim: (file: File, onProgress?: (progress: number) => void) => Promise<Blob> }> | null = null
 
 async function getTrimmer() {
   if (ffmpegLoader) return ffmpegLoader
   ffmpegLoader = (async () => {
-    const [{ FFmpeg }, { fetchFile, toBlobURL }] = await Promise.all([
-      import("@ffmpeg/ffmpeg"),
-      import("@ffmpeg/util"),
+    const [FFmpeg, coreURL, wasmURL, classWorkerURL] = await Promise.all([
+      loadFfmpegConstructor(),
+      toBlobUrl(`${FFMPEG_CDN}/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.js`, "text/javascript"),
+      toBlobUrl(`${FFMPEG_CDN}/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.wasm`, "application/wasm"),
+      toBlobUrl(`${FFMPEG_CDN}/@ffmpeg/ffmpeg@${FFMPEG_VERSION}/dist/umd/814.ffmpeg.js`, "text/javascript"),
     ])
     const ffmpeg = new FFmpeg()
-    const coreBase = "https://unpkg.com/@ffmpeg/core@0.12.10/dist/umd"
     let loaded = false
 
     return {
       async trim(file: File, onProgress?: (progress: number) => void) {
         if (!loaded) {
           await ffmpeg.load({
-            coreURL: await toBlobURL(`${coreBase}/ffmpeg-core.js`, "text/javascript"),
-            wasmURL: await toBlobURL(`${coreBase}/ffmpeg-core.wasm`, "application/wasm"),
+            coreURL,
+            wasmURL,
+            classWorkerURL,
           })
           loaded = true
         }
@@ -100,7 +151,7 @@ async function getTrimmer() {
         const onFfmpegProgress = ({ progress }: { progress: number }) => onProgress?.(Math.max(0, Math.min(1, progress)))
         ffmpeg.on("progress", onFfmpegProgress)
         try {
-          await ffmpeg.writeFile(inputName, await fetchFile(file))
+          await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer()))
           const result = await ffmpeg.exec(["-i", inputName, "-t", "60", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac", "-movflags", "+faststart", outputName])
           if (result !== 0) throw new Error("Video trimming could not be completed.")
           const output = await ffmpeg.readFile(outputName)
