@@ -34,6 +34,7 @@ describe('SEO crawl configuration', () => {
       'https://yovibe.net/events/past-concert',
       'https://yovibe.net/events/cancelled-concert',
     ]));
+    expect(urls.some((url) => /\/(events|venues|map|calendar)\/tickets\//.test(url))).toBe(false);
   });
 
   test('sitemap queries only columns available on each table', () => {

@@ -139,6 +139,7 @@ describe('public SEO route handling', () => {
 
     const source = fs.readFileSync(path.join(__dirname, '../netlify/edge-functions/public-seo-status.ts'), 'utf8');
     expect(source).not.toMatch(/user-agent/i);
+    expect(source).toContain("headers.set('X-Robots-Tag', 'noindex, nofollow')");
   });
 
   test('uses actual stored time ranges for same-day and overnight end dates', () => {

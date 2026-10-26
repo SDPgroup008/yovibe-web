@@ -117,9 +117,9 @@ async function uploadObject(kind, { key, body, contentType }) {
   return kind === 'public' ? publicUrlForKey(key) : privateReference(key);
 }
 
-async function getObject(kind, key) {
+async function getObject(kind, key, options = {}) {
   const { client, config } = getR2Client(kind);
-  return client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+  return client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }), options);
 }
 
 async function deleteObject(kind, key) {

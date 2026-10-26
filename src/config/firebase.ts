@@ -8,13 +8,42 @@ import {
   type NotificationPermissionBannerMode,
 } from "../utils/notificationPermissionBanner";
 
-const firebaseValue = (suffix: string): string | undefined => (
-  process.env[`EXPO_PUBLIC_FIREBASE_${suffix}`] ||
-  process.env[`NEXT_PUBLIC_FIREBASE_${suffix}`] ||
-  process.env[`FIREBASE_${suffix}`]
-);
+// Keep these environment references statically named. Expo Web only inlines
+// statically accessed EXPO_PUBLIC_* variables; dynamically constructed
+// process.env keys remain undefined in the browser bundle.
+const firebaseConfigValues: Record<string, string | undefined> = {
+  API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY
+    || process.env.NEXT_PUBLIC_FIREBASE_API_KEY
+    || process.env.FIREBASE_API_KEY,
+  AUTH_DOMAIN: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN
+    || process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    || process.env.FIREBASE_AUTH_DOMAIN,
+  PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID
+    || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    || process.env.FIREBASE_PROJECT_ID,
+  STORAGE_BUCKET: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET
+    || process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    || process.env.FIREBASE_STORAGE_BUCKET,
+  MESSAGING_SENDER_ID: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    || process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    || process.env.FIREBASE_MESSAGING_SENDER_ID,
+  APP_ID: process.env.EXPO_PUBLIC_FIREBASE_APP_ID
+    || process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+    || process.env.FIREBASE_APP_ID,
+  MEASUREMENT_ID: process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID
+    || process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
+    || process.env.FIREBASE_MEASUREMENT_ID,
+  VAPID_KEY: process.env.EXPO_PUBLIC_FIREBASE_VAPID_KEY
+    || process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    || process.env.FIREBASE_VAPID_KEY,
+};
+
+const firebaseValue = (suffix: string): string | undefined => firebaseConfigValues[suffix];
 const firebaseEnabled = String(
-  process.env.EXPO_PUBLIC_FIREBASE_ENABLED || process.env.NEXT_PUBLIC_FIREBASE_ENABLED || 'true'
+  process.env.EXPO_PUBLIC_FIREBASE_ENABLED
+    || process.env.NEXT_PUBLIC_FIREBASE_ENABLED
+    || process.env.FIREBASE_ENABLED
+    || 'true'
 ).toLowerCase() === 'true';
 const requiredFirebaseValues = [
   firebaseValue('API_KEY'), firebaseValue('AUTH_DOMAIN'), firebaseValue('PROJECT_ID'),
@@ -24,7 +53,10 @@ const requiredFirebaseValues = [
 export const hasFirebaseConfig = firebaseEnabled && requiredFirebaseValues.every(Boolean);
 export const notificationsEnabled =
   String(
-    process.env.EXPO_PUBLIC_NOTIFICATIONS_ENABLED || process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED || 'true'
+    process.env.EXPO_PUBLIC_NOTIFICATIONS_ENABLED
+      || process.env.NEXT_PUBLIC_NOTIFICATIONS_ENABLED
+      || process.env.NOTIFICATIONS_ENABLED
+      || 'true'
   ).toLowerCase() === 'true' && hasFirebaseConfig;
 
 const firebaseConfig = {

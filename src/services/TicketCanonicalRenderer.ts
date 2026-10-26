@@ -454,10 +454,9 @@ export function svgDataUri(svg: string) {
  */
 export async function renderCanonicalTicketSvgWithEmbeddedAssets(ticket: Ticket, event?: Event, designOverride?: TicketDesignInput, opts: RenderTicketOptions = {}) {
   let svg = renderCanonicalTicketSvg(ticket, event, designOverride, opts)
-  // When the poster is rendered as a real overlay (not embedded in the SVG), skip
-  // fetching it so a CORS-limited poster URL doesn't break the embed loop.
-  const posterUrl = opts?.posterOverlay ? undefined : event?.posterImageUrl
-  const assets = [ticket.qrCodeDataUrl, posterUrl, designOverride?.background_url || resolveTicketDesign(event, ticket).background_url]
+  // Posters are displayed by MyTicketsScreen as normal image overlays. Fetching
+  // them here is unnecessary and is blocked by CORS for public R2 media URLs.
+  const assets = [ticket.qrCodeDataUrl, designOverride?.background_url || resolveTicketDesign(event, ticket).background_url]
     .filter((value): value is string => !!value && !value.startsWith("data:"))
 
   for (const asset of Array.from(new Set(assets))) {

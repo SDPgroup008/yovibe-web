@@ -24,6 +24,7 @@ import { useRouter } from "../utils/URLRouter"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { useCachedEventDetails } from "../hooks/useDataCache"
+import type { Event } from "../models/Event"
 
 import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
@@ -42,6 +43,71 @@ const socialShareDescription = (description: string | undefined, eventName: stri
   return value.length > SOCIAL_DESCRIPTION_LIMIT
     ? `${value.slice(0, SOCIAL_DESCRIPTION_LIMIT - 3).trimEnd()}...`
     : value
+}
+
+type EventEntryFee = Event["entryFees"][number]
+
+const formatTicketAmount = (amount: unknown): string => {
+  const rawAmount = String(amount ?? "").trim()
+  const numericAmount = Number.parseInt(rawAmount.replace(/[^0-9]/g, ""), 10)
+  return Number.isFinite(numericAmount) ? `UGX ${numericAmount.toLocaleString()}` : rawAmount || "Price on request"
+}
+
+const getTicketPriceLabel = (event: Event): string => {
+  if (event.isFreeEntry) return "Free entry"
+  const amounts = (event.entryFees || [])
+    .map((fee) => Number.parseInt(String(fee.amount || "").replace(/[^0-9]/g, ""), 10))
+    .filter(Number.isFinite)
+
+  if (!amounts.length) return "Tickets available"
+  const lowestAmount = Math.min(...amounts)
+  return event.entryFees.length > 1
+    ? `From UGX ${lowestAmount.toLocaleString()}`
+    : `UGX ${lowestAmount.toLocaleString()}`
+}
+
+const TicketOptions: React.FC<{ event: Event; desktop?: boolean }> = ({ event, desktop = false }) => {
+  const fees = Array.isArray(event.entryFees) ? event.entryFees : []
+
+  return (
+    <View
+      style={[styles.ticketOptionsCard, desktop && styles.desktopTicketOptionsCard]}
+      accessibilityLabel={event.isFreeEntry ? "Free entry" : "Ticket options"}
+    >
+      <View style={styles.ticketOptionsHeader}>
+        <View>
+          <Text style={styles.ticketOptionsEyebrow}>TICKETS</Text>
+          <Text style={styles.ticketOptionsTitle}>{event.isFreeEntry ? "Entry is free" : "Choose your experience"}</Text>
+        </View>
+        <View style={styles.ticketOptionsIcon}>
+          <Ionicons name="ticket-outline" size={18} color={COLORS.primary} />
+        </View>
+      </View>
+
+      {event.isFreeEntry ? (
+        <View style={styles.freeEntryRow}>
+          <Ionicons name="checkmark-circle" size={18} color="#68D391" />
+          <Text style={styles.freeEntryText}>No ticket payment required</Text>
+        </View>
+      ) : fees.length > 0 ? (
+        <View style={styles.ticketTierGrid}>
+          {fees.map((fee: EventEntryFee, index: number) => (
+            <View key={`${fee.name}-${fee.amount}-${index}`} style={[styles.ticketTier, desktop && styles.desktopTicketTier]}>
+              <Text style={styles.ticketTierName} numberOfLines={1}>{fee.name || "General admission"}</Text>
+              {fee.isTable && (
+                <Text style={styles.ticketTierDetail} numberOfLines={1}>
+                  Table{fee.tableSize ? ` · up to ${fee.tableSize}` : ""}
+                </Text>
+              )}
+              <Text style={styles.ticketTierAmount}>{formatTicketAmount(fee.amount)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : (
+        <Text style={styles.ticketOptionsEmpty}>Prices are available at checkout.</Text>
+      )}
+    </View>
+  )
 }
 
 /* console.log("[v0] EventDetailScreen responsiveness initialized - Screen width:", screenWidth, "px | Device type:", isLargeScreen ? "Large/Desktop" : isTablet ? "Tablet" : "Mobile"); */
@@ -244,9 +310,10 @@ const EventDetailScreen: React.FC = () => {
                           <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
                         </View>
                       )}
-                      <Text style={styles.entryFee}>
-                        {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
-                      </Text>
+                      <View style={styles.heroPriceBadge}>
+                        <Ionicons name="ticket-outline" size={15} color="#FFD166" />
+                        <Text style={styles.heroPriceText}>{getTicketPriceLabel(event)}</Text>
+                      </View>
                     </View>
                   </View>
                 </View>
@@ -292,6 +359,8 @@ const EventDetailScreen: React.FC = () => {
                 <Ionicons name="calendar" size={20} color="#FFFFFF" />
                 <Text style={styles.desktopDateText}>{event.date.toDateString()}</Text>
               </View>
+
+              <TicketOptions event={event} desktop />
 
               {/* Buy Tickets Button - For all featured events */}
               {event.isFeatured && (
@@ -378,9 +447,10 @@ const EventDetailScreen: React.FC = () => {
                         <Text style={styles.attendeeCountText}>{attendeeCount} going</Text>
                       </View>
                     )}
-                    <Text style={styles.entryFee}>
-                      {event.isFreeEntry ? "Free" : event.entryFees.map((fee) => `${fee.name}: ${fee.amount}`).join(", ")}
-                    </Text>
+                    <View style={styles.heroPriceBadge}>
+                      <Ionicons name="ticket-outline" size={15} color="#FFD166" />
+                      <Text style={styles.heroPriceText}>{getTicketPriceLabel(event)}</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -454,6 +524,8 @@ const EventDetailScreen: React.FC = () => {
               <Ionicons name="calendar" size={20} color="#FFFFFF" />
               <Text style={styles.dateText}>{event.date.toDateString()}</Text>
             </View>
+
+            <TicketOptions event={event} />
 
             <Text style={styles.sectionTitle}>About this event</Text>
             <Text style={styles.description}>{event.description}</Text>
@@ -615,6 +687,113 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0,0,0,0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
+  },
+  heroPriceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    gap: 6,
+    paddingHorizontal: responsiveSize(10, 12, 14),
+    paddingVertical: responsiveSize(6, 7, 8),
+    borderRadius: 999,
+    backgroundColor: "rgba(10, 13, 20, 0.74)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 209, 102, 0.58)",
+  },
+  heroPriceText: {
+    color: "#FFF3C4",
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "800",
+    letterSpacing: 0.1,
+  },
+  ticketOptionsCard: {
+    marginBottom: responsiveSize(4, 6, 8),
+    padding: responsiveSize(14, 16, 18),
+    borderRadius: responsiveSize(12, 14, 16),
+    backgroundColor: "rgba(23, 30, 42, 0.96)",
+    borderWidth: 1,
+    borderColor: "rgba(0, 212, 255, 0.2)",
+  },
+  desktopTicketOptionsCard: {
+    marginBottom: 20,
+  },
+  ticketOptionsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  ticketOptionsEyebrow: {
+    color: "#76E4FF",
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  ticketOptionsTitle: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(16, 17, 18),
+    fontWeight: "800",
+    marginTop: 2,
+  },
+  ticketOptionsIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0, 212, 255, 0.12)",
+  },
+  ticketTierGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  ticketTier: {
+    flexGrow: 1,
+    flexBasis: "47%",
+    minWidth: 128,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.055)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.08)",
+  },
+  desktopTicketTier: {
+    flexBasis: "100%",
+    minWidth: "100%",
+  },
+  ticketTierName: {
+    color: "#E9F8FC",
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "700",
+  },
+  ticketTierDetail: {
+    color: "#92A1B5",
+    fontSize: responsiveSize(10, 11, 11),
+    marginTop: 3,
+  },
+  ticketTierAmount: {
+    color: "#FFD166",
+    fontSize: responsiveSize(14, 15, 16),
+    fontWeight: "800",
+    marginTop: 6,
+  },
+  freeEntryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 4,
+  },
+  freeEntryText: {
+    color: "#D8F8E4",
+    fontSize: responsiveSize(12, 13, 14),
+    fontWeight: "600",
+  },
+  ticketOptionsEmpty: {
+    color: "#B8C3D2",
+    fontSize: responsiveSize(12, 13, 14),
+    lineHeight: 20,
   },
   fullImageModal: {
     flex: 1,

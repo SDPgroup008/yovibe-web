@@ -5,8 +5,21 @@ const esbuild = require("esbuild")
 const projectRoot = path.resolve(__dirname, "..")
 const legacyFunctionsDirectory = path.join(projectRoot, "netlify", "functions")
 const modernFunctionsDirectory = path.join(projectRoot, "netlify", "modern-functions")
+const linuxResvgBinding = path.join(
+  projectRoot,
+  "node_modules",
+  "@resvg",
+  "resvg-js-linux-x64-gnu",
+  "resvgjs.linux-x64-gnu.node",
+)
 
 const hasLambdaHandler = (source) => /(?:exports\.handler|module\.exports\.handler)\s*=|export\s+(?:async\s+)?function\s+handler/.test(source)
+
+// Netlify runs on Linux x64. The ticket PDF and email functions load resvg at
+// runtime, so fail the build before deployment if its native binding is absent.
+if (process.platform === "linux" && !fs.existsSync(linuxResvgBinding)) {
+  throw new Error(`Missing Netlify resvg runtime binding: ${linuxResvgBinding}`)
+}
 
 fs.rmSync(modernFunctionsDirectory, { recursive: true, force: true })
 fs.mkdirSync(modernFunctionsDirectory, { recursive: true })

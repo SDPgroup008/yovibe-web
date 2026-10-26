@@ -76,6 +76,9 @@
     "stream-browserify": "^3.0.0",
     "uuid": "^11.1.1"
   },
+  "optionalDependencies": {
+    "@resvg/resvg-js-linux-x64-gnu": "2.6.2"
+  },
   "devDependencies": {
     "@babel/core": "^7.23.9",
     "@expo/server": "^0.7.5",

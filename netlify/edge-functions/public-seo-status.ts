@@ -635,6 +635,7 @@ export default async (request: Request, context: any) => {
     headers.delete('content-length');
     headers.delete('etag');
     headers.set('Cache-Control', 'public, max-age=0, s-maxage=300');
+    if (shareRoute.purchase) headers.set('X-Robots-Tag', 'noindex, nofollow');
     return new Response(injectEventDocumentHtml(await upstream.text(), document), { status: upstream.status, statusText: upstream.statusText, headers });
   } catch (error) {
     console.error('[public-seo-status] Public entity lookup failed; passing through to avoid false errors', error);

@@ -26,6 +26,9 @@
   # Use esbuild to bundle function dependencies (including firebase-admin)
   node_bundler = "esbuild"
   external_node_modules = ["@resvg/resvg-js", "@resvg/resvg-js-linux-x64-gnu"]
+  # resvg loads a platform-native binary dynamically. These explicit inclusions
+  # keep the shared ticket PDF/email renderer available at Lambda runtime.
+  included_files = ["node_modules/@resvg/resvg-js/**", "node_modules/@resvg/resvg-js-linux-x64-gnu/**"]
 
 [[edge_functions]]
 function = "canonical-host"

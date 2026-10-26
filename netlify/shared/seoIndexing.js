@@ -9,6 +9,16 @@ const INDEXABLE_STATIC_PATHS = [
   { path: '/about', changefreq: 'monthly', priority: '0.6' },
 ];
 
+// Ticket checkout is intentionally crawlable long enough to expose noindex,
+// but it is never an indexable sitemap destination. Keep this guard here as a
+// second line of defence if another sitemap source is added later.
+const NON_INDEXABLE_SITEMAP_PREFIXES = [
+  '/events/tickets/',
+  '/venues/tickets/',
+  '/map/tickets/',
+  '/calendar/tickets/',
+];
+
 function buildRobotsTxt({ isStaging = false } = {}) {
   if (isStaging) {
     return '# Staging is intentionally excluded from search engines.\nUser-agent: *\nDisallow: /\n';
@@ -80,7 +90,8 @@ function buildSitemapUrls({ siteUrl, venues = [], events = [], now = new Date() 
       lastmod: normalizeLastMod(event.created_at),
     }));
 
-  return [...staticUrls, ...venueUrls, ...eventUrls];
+  return [...staticUrls, ...venueUrls, ...eventUrls]
+    .filter(({ loc }) => !NON_INDEXABLE_SITEMAP_PREFIXES.some((prefix) => loc.startsWith(`${origin}${prefix}`)));
 }
 
 module.exports = {

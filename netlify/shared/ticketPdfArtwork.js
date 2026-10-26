@@ -1,7 +1,7 @@
 const { computeTicketLayout } = require('../functions/ticketLayoutEngine');
 const { Resvg } = require('@resvg/resvg-js');
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
-const { privateKeyFromReference, getObject } = require('./r2');
+const { privateKeyFromReference, getObject, getR2Config } = require('./r2');
 
 const esc = (v) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const href = (v) => esc(v).replace(/#/g, '%23');
@@ -18,6 +18,53 @@ function sniffImageMime(bytes) {
   if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return 'image/gif';
   if (bytes.length > 0 && bytes.subarray(0, 256).toString('latin1').toLowerCase().includes('<svg')) return 'image/svg+xml';
   return null;
+}
+
+const MAX_ARTWORK_BYTES = 5 * 1024 * 1024;
+const ARTWORK_TIMEOUT_MS = 8000;
+const SAFE_ARTWORK_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
+const TRANSPARENT_PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL5JwAAAABJRU5ErkJggg==';
+
+function safeAssetKey(value) {
+  const key = String(value || '').replace(/^\/+/, '');
+  if (!key || key.includes('..') || key.includes('\\')) return null;
+  return key;
+}
+
+function dataUrlFromImageBytes(bytes, fallbackMime) {
+  if (!bytes?.length || bytes.length > MAX_ARTWORK_BYTES) return null;
+  const mime = sniffImageMime(bytes) || String(fallbackMime || '').split(';')[0].toLowerCase();
+  if (!SAFE_ARTWORK_MIMES.has(mime)) return null;
+  return `data:${mime};base64,${bytes.toString('base64')}`;
+}
+
+async function readR2Image(kind, key) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ARTWORK_TIMEOUT_MS);
+  try {
+    const object = await getObject(kind, key, { abortSignal: controller.signal });
+    if (Number(object.ContentLength || 0) > MAX_ARTWORK_BYTES) return null;
+    const bytes = object.Body?.transformToByteArray
+      ? Buffer.from(await object.Body.transformToByteArray())
+      : Buffer.from(await object.Body.transformToString('base64'), 'base64');
+    return dataUrlFromImageBytes(bytes, object.ContentType);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function publicR2KeyFromUrl(value) {
+  try {
+    const url = new URL(value);
+    const configured = new URL(getR2Config('public').publicUrl);
+    if (url.origin !== configured.origin) return null;
+    const basePath = configured.pathname.replace(/\/$/, '');
+    const path = decodeURIComponent(url.pathname);
+    if (basePath && !path.startsWith(`${basePath}/`)) return null;
+    return safeAssetKey(path.slice(basePath.length));
+  } catch {
+    return null;
+  }
 }
 const TEMPLATE_COLORS = {
   midnight: ['#111827', '#7c3aed', '#ffffff', '#a78bfa', '#1e1b4b', 'rgba(167,139,250,0.25)'],
@@ -216,7 +263,7 @@ function renderSvg(data, options = {}) {
 }
 
 async function asData(value) {
-  if (!value) return value;
+  if (!value) return null;
   // Already a data URL: re-label it when the declared MIME mismatches the real
   // bytes (e.g. a background stored as data:image/png whose bytes are JPEG), so
   // resvg can decode it regardless of how it was stored.
@@ -224,48 +271,38 @@ async function asData(value) {
     const match = /^data:([^;,]*);base64,(.+)$/.exec(value);
     if (match && match[2]) {
       const bytes = Buffer.from(match[2], 'base64');
-      const sniffed = sniffImageMime(bytes);
-      if (sniffed && sniffed !== String(match[1] || '').toLowerCase()) {
-        return `data:${sniffed};base64,${bytes.toString('base64')}`;
-      }
+      return dataUrlFromImageBytes(bytes, match[1]);
     }
-    return value;
+    return null;
   }
   const privateKey = privateKeyFromReference(value);
   if (privateKey) {
     try {
-      const object = await getObject('private', privateKey);
-      const bytes = object.Body?.transformToByteArray
-        ? Buffer.from(await object.Body.transformToByteArray())
-        : Buffer.from(await object.Body.transformToString('base64'), 'base64');
-      const mime = sniffImageMime(bytes) || String(object.ContentType || 'image/png').split(';')[0];
-      return `data:${mime};base64,${bytes.toString('base64')}`;
+      return await readR2Image('private', privateKey);
     } catch (error) {
       console.warn(`asData: private asset read failed for ${privateKey}: ${error.message || error}`);
-      return value;
+      return null;
     }
   }
-  if (!/^https?:\/\//i.test(value)) return value;
-  let response;
+  if (!/^https?:\/\//i.test(value)) return null;
+  const publicKey = publicR2KeyFromUrl(value);
+  if (!publicKey) {
+    console.warn('asData: rejected non-public-R2 artwork reference');
+    return null;
+  }
   try {
-    response = await fetch(value, { signal: AbortSignal.timeout(15000) });
+    return await readR2Image('public', publicKey);
   } catch (error) {
-    console.warn(`asData: fetch failed for ${value.slice(0, 120)}: ${error.message || error}`);
-    return value;
+    console.warn(`asData: public asset read failed for ${publicKey}: ${error.message || error}`);
+    return null;
   }
-  if (!response.ok) {
-    console.warn(`asData: fetch returned ${response.status} for ${value.slice(0, 120)}`);
-    return value;
-  }
-  const bytes = Buffer.from(await response.arrayBuffer());
-  const mime = sniffImageMime(bytes) || response.headers.get('content-type') || 'image/jpeg';
-  return `data:${mime};base64,${bytes.toString('base64')}`;
 }
 
 async function renderTicketPng(data, options = {}) {
   let svg = renderSvg(data, options);
   for (const asset of [data.qrCodeDataUrl, data.posterUrl, data.ticketDesign?.background_url].filter(Boolean)) {
-    svg = svg.replaceAll(`href="${href(asset)}"`, `href="${await asData(asset)}"`);
+    const embedded = await asData(asset);
+    svg = svg.replaceAll(`href="${href(asset)}"`, `href="${embedded || TRANSPARENT_PIXEL}"`);
   }
   const layout = computeTicketLayout(data.ticketDesign || {}, { hasPoster: !!data.posterUrl });
   return {

@@ -591,6 +591,18 @@ export function generateTicketHTML(ticket: Ticket, event?: Event, overrideQrData
 export class TicketPDFService {
   static generateTicketHTML(ticket: Ticket, event?: Event): string { return generateTicketHTML(ticket, event) }
 
+  private static async readPdfError(response: Response): Promise<string> {
+    const fallback = "Ticket PDF generation is temporarily unavailable. Please try again shortly."
+    const body = await response.text()
+    try {
+      const parsed = JSON.parse(body)
+      if (typeof parsed?.error === "string" && parsed.error.trim()) return parsed.error
+    } catch {
+      // Gateway and edge failures can return HTML instead of the JSON function contract.
+    }
+    return response.status >= 500 ? fallback : "The ticket PDF request could not be completed. Please try again."
+  }
+
   static async downloadTicketPDF(ticket: Ticket, event?: Event): Promise<{ success: boolean; error?: string }> {
     try {
       // Web expo-print prints the current browser document in some runtimes.
@@ -617,7 +629,7 @@ export class TicketPDFService {
             ticketDesign: feeDesign || event?.ticket_design || undefined,
           }),
         })
-        if (!response.ok) throw new Error("The ticket PDF service could not generate this ticket")
+        if (!response.ok) throw new Error(await this.readPdfError(response))
         const blob = await response.blob()
         const url = URL.createObjectURL(blob)
         const anchor = document.createElement("a")
