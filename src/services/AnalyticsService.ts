@@ -180,6 +180,15 @@ class AnalyticsService {
   private readonly analyticsDisabledKey = 'yovibe_analytics_disabled';
   private readonly visitorIdKey = 'yovibe_visitor_id';
 
+  private functionsAreCrossOrigin(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URL(functionUrl('analytics-session'), window.location.href).origin !== window.location.origin;
+    } catch {
+      return true;
+    }
+  }
+
   private async functionRequest<T>(name: string, body: Record<string, unknown>): Promise<T> {
     const { data } = await supabase.auth.getSession();
     const response = await fetch(functionUrl(name), {
@@ -190,7 +199,8 @@ class AnalyticsService {
       },
       body: JSON.stringify(body),
     });
-    const payload = await response.json().catch(() => ({}));
+    const isJson = response.headers.get('content-type')?.includes('application/json');
+    const payload = isJson ? await response.json().catch(() => ({})) : {};
     if (!response.ok) throw new Error(payload.error || `Analytics request failed (${response.status})`);
     this.enableAnalytics();
     return payload as T;
@@ -373,6 +383,10 @@ class AnalyticsService {
    * Start a new session
    */
   async startSession(userId: string | null, platform: 'web' | 'mobile'): Promise<string> {
+    // `npm start` serves the Expo app from localhost while staging functions
+    // are intentionally protected by a same-origin cookie. Do not make a
+    // browser request that the staging gate must reject in that configuration.
+    if (this.functionsAreCrossOrigin()) return '';
     try {
       void userId; // The function derives account identity from the verified access token.
       const result = await this.functionRequest<{ sessionId: string }>('analytics-session', {

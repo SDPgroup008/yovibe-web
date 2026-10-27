@@ -226,7 +226,9 @@ async function getTrimmer() {
           let result: number
           // Input seeking avoids decoding the discarded beginning of a long
           // source while retaining frame-accurate output because we re-encode.
-          try { result = await ffmpeg.exec(["-ss", startSeconds.toFixed(3), "-i", inputName, "-t", durationSeconds.toFixed(3), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "27", "-c:a", "aac", "-movflags", "+faststart", outputName]) }
+          // R2 serves range requests, so the browser can load the MP4 index
+          // without a separate in-browser faststart relocation pass.
+          try { result = await ffmpeg.exec(["-ss", startSeconds.toFixed(3), "-i", inputName, "-t", durationSeconds.toFixed(3), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "27", "-c:a", "aac", outputName]) }
           catch (error) { throw trimError("ffmpeg-transcode", error) }
           if (result !== 0) throw trimError("ffmpeg-transcode-exit", new Error(`FFmpeg exited with code ${result}`), { exitCode: result })
           trimLog("ffmpeg-transcode-complete")

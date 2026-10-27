@@ -7,6 +7,24 @@ import type { AppNotification, NotificationAnalytics, DailyNotificationStats, No
 import { getNotificationInstallation, hasNotificationInstallation } from "./notificationInstallation"
 
 const GUEST_NOTIFICATION_STATE_KEY = "yovibe_guest_notification_state_v1"
+const FUNCTIONS_BASE_URL = (
+  process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
+  process.env.EXPO_PUBLIC_SITE_URL ||
+  process.env.NEXT_PUBLIC_SITE_URL ||
+  ""
+).replace(/\/$/, "").replace(/\/\.netlify\/functions$/, "")
+
+const notificationFunctionUrl = (name: string) => `${FUNCTIONS_BASE_URL}/.netlify/functions/${name}`
+
+function notificationFunctionsAreSameOrigin(name: string): boolean {
+  if (typeof window === "undefined") return true
+  try {
+    return new URL(notificationFunctionUrl(name), window.location.href).origin === window.location.origin
+  } catch {
+    return false
+  }
+}
 
 type GuestNotificationState = {
   isRead?: boolean
@@ -76,9 +94,13 @@ export class NotificationService {
   }
 
   private async loadNotificationFeed(limitCount: number): Promise<AppNotification[]> {
+    // Expo's local web server only serves the application shell. Staging
+    // functions are cookie-protected and cannot be called cross-origin, so
+    // avoid receiving that HTML shell and attempting to parse it as JSON.
+    if (!notificationFunctionsAreSameOrigin("notification-feed")) return []
     const installation = getNotificationInstallation()
     const { data: { session } } = await supabase.auth.getSession()
-    const response = await fetch("/.netlify/functions/notification-feed", {
+    const response = await fetch(notificationFunctionUrl("notification-feed"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -90,11 +112,11 @@ export class NotificationService {
         limit: limitCount,
       }),
     })
+    const isJson = response.headers.get("content-type")?.includes("application/json")
+    const payload = isJson ? await response.json().catch(() => ({})) : {}
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({}))
       throw new Error(payload?.error || "Unable to load notifications")
     }
-    const payload = await response.json()
     return ((payload?.notifications || []) as NotificationFeedRow[]).map((doc) => ({
       id: doc.id,
       userId: doc.user_id || undefined,
@@ -251,10 +273,11 @@ export class NotificationService {
   }
 
   private async recordInstallationOpen(notificationId: string): Promise<void> {
+    if (!notificationFunctionsAreSameOrigin("notification-open")) return
     const installation = getNotificationInstallation()
     if (!installation) return
     const { data: { session } } = await supabase.auth.getSession()
-    const response = await fetch('/.netlify/functions/notification-open', {
+    const response = await fetch(notificationFunctionUrl("notification-open"), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

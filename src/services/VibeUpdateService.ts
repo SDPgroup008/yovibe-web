@@ -4,6 +4,7 @@ import type { Venue } from "../models/Venue"
 import type { VibeUpdate, VibeUpdateMediaType, VibeUpdateVenue } from "../models/VibeUpdate"
 
 const SEEN_STORAGE_KEY = "yovibe_vibe_update_seen_v1"
+const VIEW_TOKEN_STORAGE_KEY = "yovibe_vibe_update_view_tokens_v1"
 const FUNCTIONS_BASE_URL =
   process.env.EXPO_PUBLIC_FUNCTIONS_BASE_URL ||
   process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL ||
@@ -21,6 +22,7 @@ const toUpdate = (row: any): VibeUpdate => ({
   mediaUrl: row.media_url,
   mediaKey: row.media_key,
   caption: row.caption || "",
+  viewsCount: Number(row.view_count || 0),
   createdAt: new Date(row.created_at),
   expiresAt: new Date(row.expires_at),
 })
@@ -98,11 +100,32 @@ export const VibeUpdateService = {
     await AsyncStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(seen))
   },
 
+  async recordView(updateId: string): Promise<void> {
+    try {
+      const tokens = JSON.parse((await AsyncStorage.getItem(VIEW_TOKEN_STORAGE_KEY)) || "{}") as Record<string, string>
+      const viewToken = tokens[updateId] || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`
+      if (!tokens[updateId]) {
+        tokens[updateId] = viewToken
+        await AsyncStorage.setItem(VIEW_TOKEN_STORAGE_KEY, JSON.stringify(tokens))
+      }
+      await supabase.rpc("record_vibe_update_view", { target_update_id: updateId, device_view_key: viewToken })
+    } catch {
+      // View counting is intentionally best-effort and must not disrupt viewing.
+    }
+  },
+
   async pruneSeen(activeUpdates: VibeUpdate[]): Promise<Record<string, number>> {
     const activeIds = new Set(activeUpdates.map((update) => update.id))
     const seen = await this.getSeen()
     const pruned = Object.fromEntries(Object.entries(seen).filter(([id]) => activeIds.has(id))) as Record<string, number>
     if (Object.keys(pruned).length !== Object.keys(seen).length) await AsyncStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(pruned))
+    try {
+      const tokens = JSON.parse((await AsyncStorage.getItem(VIEW_TOKEN_STORAGE_KEY)) || "{}") as Record<string, string>
+      const activeTokens = Object.fromEntries(Object.entries(tokens).filter(([id]) => activeIds.has(id)))
+      if (Object.keys(activeTokens).length !== Object.keys(tokens).length) await AsyncStorage.setItem(VIEW_TOKEN_STORAGE_KEY, JSON.stringify(activeTokens))
+    } catch {
+      // A malformed local cache must not block the live update rail.
+    }
     return pruned
   },
 }

@@ -8,6 +8,7 @@ export interface VibeUpdate {
   mediaUrl: string
   mediaKey: string
   caption: string
+  viewsCount: number
   createdAt: Date
   expiresAt: Date
 }
