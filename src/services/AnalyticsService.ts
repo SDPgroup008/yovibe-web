@@ -134,7 +134,7 @@ const FUNCTIONS_BASE_URL = (
   process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL ||
   ''
-).replace(/\/$/, '');
+).replace(/\/$/, '').replace(/\/\.netlify\/functions$/, '');
 
 const functionUrl = (name: string) => `${FUNCTIONS_BASE_URL}/.netlify/functions/${name}`;
 

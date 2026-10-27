@@ -10,7 +10,15 @@ import type { VibeUpdate, VibeUpdateVenue } from "../models/VibeUpdate"
 
 type Placement = "mobile" | "desktop"
 type ViewerPosition = { venueIndex: number; updateIndex: number } | null
+type ComposerMediaState = "idle" | "picking" | "preparing" | "ready" | "error"
 const IMAGE_DURATION_MS = 5000
+const USE_NATIVE_DRIVER = Platform.OS !== "web"
+
+function vibeMediaDiagnosticsEnabled() {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false
+  const host = window.location.hostname.toLowerCase()
+  return host === "localhost" || host === "127.0.0.1" || host.includes("staging") || host.includes("stagging")
+}
 
 function usePulse(active: boolean) {
   const pulse = useRef(new Animated.Value(0)).current
@@ -82,6 +90,8 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const plusPressVenueRef = useRef<string | null>(null)
   const [preparingMedia, setPreparingMedia] = useState(false)
   const [trimProgress, setTrimProgress] = useState<number | null>(null)
+  const [composerMediaState, setComposerMediaState] = useState<ComposerMediaState>("idle")
+  const [mediaError, setMediaError] = useState<string | null>(null)
 
   const isAdmin = user?.userType === "admin"
   const ownVenue = useCallback((venue: VibeUpdateVenue) => Boolean(user && venue.ownerId === user.id), [user])
@@ -95,14 +105,14 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const openPanel = useCallback(() => {
     if (panelMounted) return
     setPanelMounted(true)
-    requestAnimationFrame(() => Animated.spring(panelMotion, { toValue: 1, useNativeDriver: true, tension: 80, friction: 12 }).start())
+    requestAnimationFrame(() => Animated.spring(panelMotion, { toValue: 1, useNativeDriver: USE_NATIVE_DRIVER, tension: 80, friction: 12 }).start())
   }, [panelMounted, panelMotion])
   const closePanel = useCallback(() => {
-    Animated.timing(panelMotion, { toValue: 0, duration: 220, useNativeDriver: true }).start(({ finished }) => { if (finished) setPanelMounted(false) })
+    Animated.timing(panelMotion, { toValue: 0, duration: 220, useNativeDriver: USE_NATIVE_DRIVER }).start(({ finished }) => { if (finished) setPanelMounted(false) })
   }, [panelMotion])
   const clearSelectedMedia = useCallback(() => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
-    setFile(null); setFileName(""); setContentType(""); setPreviewUrl(null); setPreviewAspectRatio(null); setDuration(undefined); setTrimProgress(null)
+    setFile(null); setFileName(""); setContentType(""); setPreviewUrl(null); setPreviewAspectRatio(null); setDuration(undefined); setTrimProgress(null); setMediaError(null); setComposerMediaState("idle")
   }, [previewUrl])
 
   const openVenue = (card: VibeUpdateVenue) => {
@@ -155,18 +165,35 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   useEffect(() => { if (!current || current.update.mediaType !== "video" || !videoRef.current) return; if (paused) videoRef.current.pause(); else void videoRef.current.play().catch(() => undefined) }, [current, paused])
 
   const chooseMedia = async (source: VibeMediaSource) => {
-    const targetVenue = sourceVenue || composerVenue
-    const openedFromPlus = Boolean(sourceVenue)
+    const targetVenue = sourceVenue || composerVenue || { venueSlug: "", venueName: "Select a venue", ownerId: "", updates: [] }
+    setComposerVenue(targetVenue)
     setSourcePickerOpen(false)
+    setSourceVenue(null)
+    setMediaError(null)
+    setComposerMediaState("preparing")
     try {
       setPreparingMedia(true); setTrimProgress(null)
       const selected = await selectVibeMedia(source, setTrimProgress)
-      if (!selected) { if (openedFromPlus) setComposerVenue(null); setSourceVenue(null); return }
+      if (!selected) { setComposerMediaState(file ? "ready" : "idle"); return }
       if (previewUrl) URL.revokeObjectURL(previewUrl)
       setFile(selected.file); setFileName(selected.fileName); setContentType(selected.contentType); setPreviewUrl(selected.previewUrl); setPreviewAspectRatio(selected.width / selected.height); setDuration(selected.durationSeconds)
-      setComposerVenue(targetVenue || { venueSlug: "", venueName: "Select a venue", ownerId: "", updates: [] }); setSourceVenue(null)
+      setComposerMediaState("ready")
       if (selected.wasTrimmed) Alert.alert("Video prepared", "The first 60 seconds are ready to publish.")
-    } catch (error: any) { Alert.alert("Could not prepare media", error?.message || "Please choose another photo or video.") } finally { setPreparingMedia(false); setTrimProgress(null) }
+    } catch (error: any) {
+      const stage = error?.vibeMediaStage || "composer-boundary"
+      if (vibeMediaDiagnosticsEnabled()) {
+        console.error("[VibeMediaComposer]", {
+          stage,
+          errorName: error?.name || "Error",
+          errorMessage: error?.message || "Unknown media preparation error",
+          source,
+        })
+      }
+      setMediaError(error?.userMessage || (vibeMediaDiagnosticsEnabled()
+        ? `We could not prepare this media (diagnostic step: ${stage}). Try another file or send this step to support.`
+        : "We could not prepare this media. Choose another photo or video."))
+      setComposerMediaState("error")
+    } finally { setPreparingMedia(false); setTrimProgress(null) }
   }
   const publish = async () => {
     if (!user || !composerVenue?.venueSlug || !file) return
@@ -177,25 +204,23 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
       clearSelectedMedia(); setComposerVenue(null); setCaption(""); await load()
     } catch (error: any) { Alert.alert("Could not publish", error?.message || "Please try again.") } finally { setPublishing(false) }
   }
-  const closeComposer = () => { clearSelectedMedia(); setComposerVenue(null); setSourceVenue(null); setCaption("") }
+  const closeComposer = () => { clearSelectedMedia(); setComposerVenue(null); setSourceVenue(null); setSourcePickerOpen(false); setCaption("") }
   const openMediaOptions = (venue: VibeUpdateVenue) => {
     plusPressVenueRef.current = venue.venueSlug
+    setComposerVenue(venue)
     setSourceVenue(venue)
+    setMediaError(null)
+    setComposerMediaState("picking")
     setSourcePickerOpen(true)
     setTimeout(() => { plusPressVenueRef.current = null }, 0)
   }
-  const closeSourcePicker = () => {
-    const openedFromPlus = Boolean(sourceVenue)
-    setSourcePickerOpen(false)
-    setSourceVenue(null)
-    if (openedFromPlus) setComposerVenue(null)
-  }
+  const closeSourcePicker = () => { setSourcePickerOpen(false); setSourceVenue(null); setComposerMediaState(file ? "ready" : "idle") }
   const handleVenuePress = (card: VibeUpdateVenue) => {
     if (plusPressVenueRef.current === card.venueSlug) return
     if (card.updates.length) openVenue(card)
     else if (canPublish && ownVenue(card)) openMediaOptions(card)
   }
-  const openAdminMediaOptions = () => { setComposerVenue(null); setSourceVenue(null); setSourcePickerOpen(true) }
+  const openAdminMediaOptions = () => { setComposerVenue({ venueSlug: "", venueName: "Select a venue", ownerId: "", updates: [] }); setSourceVenue(null); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }
   const deleteCurrent = () => {
     if (!current || !user || (!isAdmin && current.update.authorId !== user.id)) return
     Alert.alert("Delete Vibe Update?", "This will immediately remove it from the Vibe Update feed.", [{ text: "Cancel", style: "cancel" }, { text: "Delete", style: "destructive", onPress: async () => { try { await VibeUpdateService.delete(current.update.id, user.id); setViewer(null); await load() } catch (error: any) { Alert.alert("Could not delete", error?.message || "Please try again.") } } }])
@@ -234,10 +259,11 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
             {composerVenue?.venueSlug ? <Text style={styles.composerVenue}>{composerVenue.venueName}</Text> : <View style={styles.venueSelectSection}>
               {venues.map((venue) => <TouchableOpacity key={venue.slug || venue.id} style={styles.pickerItem} onPress={() => setComposerVenue({ venueSlug: venue.slug || venue.id, venueName: venue.name, posterUrl: venue.backgroundImageUrl, ownerId: venue.ownerId, updates: cards.find((card) => card.venueSlug === (venue.slug || venue.id))?.updates || [] })}><Text style={styles.pickerText}>{venue.name}</Text><Ionicons name="chevron-forward" color="#75E9FF" size={18} /></TouchableOpacity>)}
             </View>}
-            <TouchableOpacity style={[styles.mediaPicker, previewAspectRatio !== null && styles.selectedMediaPicker, previewAspectRatio !== null ? { aspectRatio: previewAspectRatio } : null]} onPress={() => setSourcePickerOpen(true)} disabled={preparingMedia}>
+            <TouchableOpacity style={[styles.mediaPicker, previewAspectRatio !== null && styles.selectedMediaPicker, previewAspectRatio !== null ? { aspectRatio: previewAspectRatio } : null]} onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }} disabled={preparingMedia}>
               {previewUrl ? (contentType.startsWith("video/") ? React.createElement("video", { src: previewUrl, muted: true, controls: true, style: styles.previewVideo as any }) : <Image source={{ uri: previewUrl }} style={styles.previewImage} />) : <><Ionicons name="camera-outline" size={34} color="#62E6FF" /><Text style={styles.mediaPickerText}>Add photo or video</Text><Text style={styles.mediaPickerHint}>Camera or gallery · Videos are trimmed to 60 sec / 50 MB</Text></>}
-              {preparingMedia && <View style={styles.preparingOverlay}><ActivityIndicator color="#63E9FF" /><Text style={styles.preparingText}>{trimProgress === null ? "Preparing media…" : `Trimming video ${Math.round(trimProgress * 100)}%`}</Text></View>}
+              {composerMediaState === "preparing" && <View style={styles.preparingOverlay}><ActivityIndicator color="#63E9FF" /><Text style={styles.preparingText}>{trimProgress === null ? "Preparing media…" : `Trimming video ${Math.round(trimProgress * 100)}%`}</Text></View>}
             </TouchableOpacity>
+            {mediaError && <View style={styles.mediaError}><Ionicons name="alert-circle-outline" color="#FFB4C3" size={18} /><View style={styles.mediaErrorCopy}><Text style={styles.mediaErrorText}>{mediaError}</Text><TouchableOpacity onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }}><Text style={styles.mediaRetry}>TRY ANOTHER FILE</Text></TouchableOpacity></View></View>}
             <TextInput value={caption} onChangeText={setCaption} maxLength={220} multiline placeholder="Add Caption..." placeholderTextColor="#7B859B" style={styles.captionInput} />
             <Text style={styles.characterCount}>{caption.length}/220</Text>
             <TouchableOpacity disabled={!file || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7} style={[styles.publishButton, (!file || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7) && styles.publishDisabled]} onPress={publish}>{publishing ? <ActivityIndicator color="#06101B" /> : <><Ionicons name="flash" size={18} color="#06101B" /><Text style={styles.publishText}>PUBLISH PULSE</Text></>}</TouchableOpacity>
@@ -246,7 +272,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
       </View>
     </Modal>
 
-    <Modal visible={sourcePickerOpen} transparent animationType="fade" onRequestClose={closeSourcePicker}><Pressable style={styles.sourceOverlay} onPress={closeSourcePicker}><Pressable style={styles.sourceSheet} onPress={() => undefined}><Text style={styles.sourceTitle}>ADD TO VIBE PULSE</Text><TouchableOpacity style={styles.sourceOption} onPress={() => void chooseMedia("camera-photo")}><Ionicons name="camera-outline" color="#65E7FF" size={22} /><Text style={styles.sourceOptionText}>Take photo</Text></TouchableOpacity><TouchableOpacity style={styles.sourceOption} onPress={() => void chooseMedia("camera-video")}><Ionicons name="videocam-outline" color="#B984FF" size={22} /><Text style={styles.sourceOptionText}>Record video</Text></TouchableOpacity><TouchableOpacity style={styles.sourceOption} onPress={() => void chooseMedia("gallery")}><Ionicons name="images-outline" color="#72F1B8" size={22} /><Text style={styles.sourceOptionText}>Choose from gallery</Text></TouchableOpacity></Pressable></Pressable></Modal>
+    <Modal visible={sourcePickerOpen} transparent animationType="fade" onRequestClose={closeSourcePicker}><Pressable style={styles.sourceOverlay} onPress={closeSourcePicker}><Pressable style={styles.sourceSheet} onPress={(event) => event.stopPropagation()}><Text style={styles.sourceTitle}>ADD TO VIBE PULSE</Text><TouchableOpacity style={styles.sourceOption} onPress={(event) => { event.stopPropagation(); void chooseMedia("camera-photo") }}><Ionicons name="camera-outline" color="#65E7FF" size={22} /><Text style={styles.sourceOptionText}>Take photo</Text></TouchableOpacity><TouchableOpacity style={styles.sourceOption} onPress={(event) => { event.stopPropagation(); void chooseMedia("camera-video") }}><Ionicons name="videocam-outline" color="#B984FF" size={22} /><Text style={styles.sourceOptionText}>Record video</Text></TouchableOpacity><TouchableOpacity style={styles.sourceOption} onPress={(event) => { event.stopPropagation(); void chooseMedia("gallery") }}><Ionicons name="images-outline" color="#72F1B8" size={22} /><Text style={styles.sourceOptionText}>Choose from gallery</Text></TouchableOpacity></Pressable></Pressable></Modal>
   </>
 }
 
@@ -255,6 +281,6 @@ const styles = StyleSheet.create({
   panel: { position: "absolute", backgroundColor: "rgba(10, 18, 36, 0.97)", borderWidth: 1, borderColor: "rgba(89, 224, 255, 0.55)", borderRadius: 0, shadowColor: "#4BD8FF", shadowOpacity: 0.25, shadowRadius: 20, elevation: 20, overflow: "hidden" }, panelHeader: { height: 30, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", borderBottomWidth: 1, borderBottomColor: "rgba(167, 103, 255, 0.22)" }, panelTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center" }, titleV: { width: 28, height: 18, alignItems: "center", justifyContent: "center", marginRight: 3 }, panelTitle: { color: "#E8F8FF", fontSize: 13, letterSpacing: 1.5, fontWeight: "900", textTransform: "uppercase" },
   venueRail: { alignItems: "center", paddingHorizontal: 14, gap: 14, flexGrow: 1 }, venueCard: { width: 66, alignItems: "center" }, posterFrame: { width: 54, height: 54, alignItems: "center", justifyContent: "center", position: "relative" }, venuePoster: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#21304A" }, posterFallback: { alignItems: "center", justifyContent: "center" }, venueName: { color: "#D9E6FF", fontSize: 9, marginTop: 5, width: 68, textAlign: "center" }, emptyRail: { flex: 1, minWidth: 185, alignItems: "center", justifyContent: "center", gap: 5 }, emptyRailText: { color: "#8C9AB2", fontSize: 11 }, singleRing: { position: "absolute", width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: "#60708D" }, ringFrame: { position: "absolute", width: 54, height: 54 }, ringArc: { position: "absolute", width: 54, height: 54, borderRadius: 27, borderWidth: 2, borderColor: "#64738B", borderRightColor: "transparent", borderBottomColor: "transparent" }, unseenRing: { borderColor: "#55E4FF", shadowColor: "#A565FF", shadowOpacity: 0.7, shadowRadius: 5 }, addBadge: { position: "absolute", right: 1, bottom: 0, width: 19, height: 19, borderRadius: 10, backgroundColor: "#69EDFF", borderWidth: 2, borderColor: "#0D1629", alignItems: "center", justifyContent: "center" }, adminAdd: { borderWidth: 1.5, borderStyle: "dashed", borderColor: "#4DD8FF", borderRadius: 27, backgroundColor: "rgba(39, 65, 113, 0.34)" },
   viewer: { flex: 1, backgroundColor: "#050A12" }, mediaPress: { ...StyleSheet.absoluteFill }, viewerMedia: { width: "100%", height: "100%" }, video: { width: "100%", height: "100%", objectFit: "cover" }, viewerShade: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.1)" }, progressRow: { position: "absolute", top: 16, left: 13, right: 13, flexDirection: "row", gap: 4 }, progressSegment: { flex: 1, height: 3, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.38)" }, progressDone: { backgroundColor: "#D5FAFF" }, progressActive: { backgroundColor: "#61E8FF" }, viewerHeader: { position: "absolute", top: 34, left: 15, right: 15, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, viewerIdentity: { flexDirection: "row", alignItems: "center", gap: 9 }, viewerAvatar: { width: 34, height: 34, borderRadius: 17 }, viewerVenue: { color: "#FFF", fontWeight: "800", fontSize: 14 }, viewerMeta: { color: "rgba(255,255,255,0.72)", fontSize: 10, marginTop: 2 }, viewerActions: { flexDirection: "row", gap: 16, alignItems: "center" }, captionShell: { position: "absolute", bottom: 45, left: 24, right: 24, backgroundColor: "rgba(3,9,19,0.70)", borderWidth: 1, borderColor: "rgba(163,102,255,0.3)", borderRadius: 14, padding: 14 }, caption: { color: "#F4F8FF", fontSize: 14, textAlign: "center", lineHeight: 20 }, viewerZones: { ...StyleSheet.absoluteFill, flexDirection: "row" }, zone: { flex: 1 },
-  composerOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.63)", justifyContent: "flex-end" }, composer: { height: "90%", minHeight: 480, maxHeight: "90%", width: "100%", backgroundColor: "#0B1425", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: "rgba(96,224,255,0.45)", padding: 20 }, composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexShrink: 0 }, composerBody: { flexGrow: 1, paddingBottom: 8 }, composerTitle: { color: "#E6F8FF", letterSpacing: 1.5, fontWeight: "900", fontSize: 14 }, composerVenue: { color: "#64E8FF", fontWeight: "800", marginBottom: 10 }, venueSelectSection: { gap: 8, marginBottom: 14 }, mediaPicker: { width: "100%", minHeight: 190, borderRadius: 18, borderWidth: 1, borderColor: "rgba(98,230,255,0.48)", backgroundColor: "rgba(27,48,86,0.35)", alignItems: "center", justifyContent: "center", overflow: "hidden" }, selectedMediaPicker: { minHeight: 0 }, mediaPickerText: { color: "#D8F8FF", fontSize: 14, fontWeight: "700", marginTop: 8 }, mediaPickerHint: { color: "#8294B4", fontSize: 10, marginTop: 5, textAlign: "center", paddingHorizontal: 15 }, previewImage: { width: "100%", height: "100%" }, previewVideo: { width: "100%", height: "100%", objectFit: "cover" }, preparingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(4, 12, 25, 0.78)", alignItems: "center", justifyContent: "center", gap: 9 }, preparingText: { color: "#DDF9FF", fontSize: 12, fontWeight: "700" }, captionInput: { color: "#F5F8FF", minHeight: 65, marginTop: 14, borderRadius: 13, padding: 12, backgroundColor: "#101E35", borderWidth: 1, borderColor: "rgba(143,161,199,0.28)", textAlignVertical: "top" }, characterCount: { color: "#7E8BA2", fontSize: 10, textAlign: "right", marginTop: 5 }, publishButton: { height: 48, borderRadius: 14, marginTop: 12, backgroundColor: "#64E8FF", flexDirection: "row", gap: 8, justifyContent: "center", alignItems: "center" }, publishDisabled: { opacity: 0.45 }, publishText: { color: "#07111F", fontWeight: "900", fontSize: 12, letterSpacing: 1 }, pickerItem: { minHeight: 52, borderRadius: 12, paddingHorizontal: 14, backgroundColor: "#11213A", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, pickerText: { color: "#E7F4FF", fontWeight: "700" },
+  composerOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.63)", justifyContent: "flex-end" }, composer: { height: "90%", minHeight: 480, maxHeight: "90%", width: "100%", backgroundColor: "#0B1425", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: "rgba(96,224,255,0.45)", padding: 20 }, composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexShrink: 0 }, composerBody: { flexGrow: 1, paddingBottom: 8 }, composerTitle: { color: "#E6F8FF", letterSpacing: 1.5, fontWeight: "900", fontSize: 14 }, composerVenue: { color: "#64E8FF", fontWeight: "800", marginBottom: 10 }, venueSelectSection: { gap: 8, marginBottom: 14 }, mediaPicker: { width: "100%", minHeight: 190, borderRadius: 18, borderWidth: 1, borderColor: "rgba(98,230,255,0.48)", backgroundColor: "rgba(27,48,86,0.35)", alignItems: "center", justifyContent: "center", overflow: "hidden" }, selectedMediaPicker: { minHeight: 0 }, mediaPickerText: { color: "#D8F8FF", fontSize: 14, fontWeight: "700", marginTop: 8 }, mediaPickerHint: { color: "#8294B4", fontSize: 10, marginTop: 5, textAlign: "center", paddingHorizontal: 15 }, previewImage: { width: "100%", height: "100%" }, previewVideo: { width: "100%", height: "100%", objectFit: "cover" }, preparingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(4, 12, 25, 0.78)", alignItems: "center", justifyContent: "center", gap: 9 }, preparingText: { color: "#DDF9FF", fontSize: 12, fontWeight: "700" }, mediaError: { marginTop: 10, flexDirection: "row", gap: 9, padding: 11, backgroundColor: "rgba(125, 30, 58, 0.32)", borderWidth: 1, borderColor: "rgba(255, 132, 161, 0.48)", borderRadius: 12 }, mediaErrorCopy: { flex: 1, gap: 7 }, mediaErrorText: { color: "#FFD7E1", fontSize: 12, lineHeight: 17 }, mediaRetry: { color: "#89F0FF", fontSize: 11, fontWeight: "900", letterSpacing: 0.8 }, captionInput: { color: "#F5F8FF", minHeight: 65, marginTop: 14, borderRadius: 13, padding: 12, backgroundColor: "#101E35", borderWidth: 1, borderColor: "rgba(143,161,199,0.28)", textAlignVertical: "top" }, characterCount: { color: "#7E8BA2", fontSize: 10, textAlign: "right", marginTop: 5 }, publishButton: { height: 48, borderRadius: 14, marginTop: 12, backgroundColor: "#64E8FF", flexDirection: "row", gap: 8, justifyContent: "center", alignItems: "center" }, publishDisabled: { opacity: 0.45 }, publishText: { color: "#07111F", fontWeight: "900", fontSize: 12, letterSpacing: 1 }, pickerItem: { minHeight: 52, borderRadius: 12, paddingHorizontal: 14, backgroundColor: "#11213A", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, pickerText: { color: "#E7F4FF", fontWeight: "700" },
   sourceOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.58)", justifyContent: "flex-end" }, sourceSheet: { backgroundColor: "#0D182B", borderTopWidth: 1, borderColor: "rgba(98,230,255,0.5)", padding: 20, gap: 8 }, sourceTitle: { color: "#B9F6FF", fontSize: 11, fontWeight: "900", letterSpacing: 1.4, marginBottom: 6 }, sourceOption: { height: 54, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 12, backgroundColor: "#12233E" }, sourceOptionText: { color: "#EFFAFF", fontWeight: "700", fontSize: 14 },
 })

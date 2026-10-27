@@ -10,7 +10,8 @@ const FUNCTIONS_BASE_URL =
   process.env.EXPO_PUBLIC_SITE_URL ||
   process.env.NEXT_PUBLIC_SITE_URL || ""
 
-const functionUrl = (name: string) => `${FUNCTIONS_BASE_URL.replace(/\/$/, "")}/.netlify/functions/${name}`.replace(/^\/.netlify/, "/.netlify")
+const NORMALIZED_FUNCTIONS_BASE_URL = FUNCTIONS_BASE_URL.replace(/\/$/, "").replace(/\/\.netlify\/functions$/, "")
+const functionUrl = (name: string) => `${NORMALIZED_FUNCTIONS_BASE_URL}/.netlify/functions/${name}`.replace(/^\/.netlify/, "/.netlify")
 
 const toUpdate = (row: any): VibeUpdate => ({
   id: row.id,

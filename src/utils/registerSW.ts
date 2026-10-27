@@ -6,7 +6,7 @@
 
 const SW_PATH = "/firebase-messaging-sw.js"
 const SW_VERSION_KEY = "yovibe-sw-version"
-const CURRENT_SW_VERSION = "v1.0.0"
+const CURRENT_SW_VERSION = "v3.0.0"
 
 export type SWStatus = {
   registered: boolean

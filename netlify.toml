@@ -165,6 +165,14 @@ path = "/*"
     Content-Type = "application/json"
 
 [[headers]]
+  # The FFmpeg UMD wrapper and its classic worker must be served from the
+  # same origin so the browser does not create a Metro-resolved module worker.
+  for = "/vibe-ffmpeg/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Type = "text/javascript"
+
+[[headers]]
   # Cache TensorFlow.js weight files for 1 year
   for = "/vibe_model_tfjs/*.bin"
   [headers.values]

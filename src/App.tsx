@@ -214,14 +214,6 @@ function AppContent() {
       console.warn("[PWA] Service worker not supported in this browser");
       return;
     }
-    const pushAvailability = getWebPushAvailability();
-    if (!pushAvailability.supported) {
-      if (pushAvailability.reason === 'ios-home-screen-required') {
-        console.info("[PWA] iOS web push requires installing YoVibe on the Home Screen");
-      }
-      return;
-    }
-
     let mounted = true;
 
     const registerServiceWorker = async () => {

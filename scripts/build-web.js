@@ -5,6 +5,7 @@ const path = require("path");
 
 const projectRoot = path.join(__dirname, "..");
 const patchScript = path.join(__dirname, "patch-web-shell-seo.js");
+require("./prepare-ffmpeg-web-assets")();
 
 // Local staging builds intentionally load the ignored dotenv files here because
 // Expo's own dotenv loading is disabled below. Existing shell/Netlify values

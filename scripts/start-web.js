@@ -11,6 +11,7 @@ const { spawnSync } = require('node:child_process');
 const dotenv = require('dotenv');
 
 const root = path.resolve(__dirname, '..');
+require('./prepare-ffmpeg-web-assets')();
 for (const file of ['.env.local', '.env']) {
   const filename = path.join(root, file);
   if (fs.existsSync(filename)) dotenv.config({ path: filename, override: false, quiet: true });

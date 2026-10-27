@@ -1,8 +1,8 @@
 /* eslint-disable no-undef */
 
-const APP_CACHE = "yovibe-app-v2";
-const RUNTIME_CACHE = "yovibe-runtime-v2";
-const DYNAMIC_CACHE = "yovibe-dynamic-v2";
+const APP_CACHE = "yovibe-app-v3";
+const RUNTIME_CACHE = "yovibe-runtime-v3";
+const DYNAMIC_CACHE = "yovibe-dynamic-v3";
 const OFFLINE_URL = "/offline.html";
 
 // Maximum items in runtime cache before eviction

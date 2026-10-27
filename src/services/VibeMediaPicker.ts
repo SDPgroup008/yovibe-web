@@ -12,5 +12,13 @@ export type PreparedVibeMedia = {
 }
 
 export async function selectVibeMedia(_source: VibeMediaSource, _onTrimProgress?: (progress: number) => void): Promise<PreparedVibeMedia | null> {
-  throw new Error("Vibe Update media publishing is available in the web app.")
+  const host = typeof window === "undefined" ? "" : window.location.hostname.toLowerCase()
+  const diagnosticsEnabled = host === "localhost" || host === "127.0.0.1" || host.includes("staging") || host.includes("stagging")
+  const error = new Error("Vibe Update media publishing is available in the web app.") as Error & { vibeMediaStage?: string; userMessage?: string }
+  if (diagnosticsEnabled) {
+    error.vibeMediaStage = "non-web-picker-resolved"
+    error.userMessage = "The web media picker was not loaded (diagnostic step: non-web-picker-resolved). Send this step to support."
+    console.error("[VibeMediaPicker]", { stage: error.vibeMediaStage, source: _source })
+  }
+  throw error
 }
