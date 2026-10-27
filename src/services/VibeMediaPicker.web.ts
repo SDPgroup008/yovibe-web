@@ -106,10 +106,9 @@ type FfmpegWindow = Window & typeof globalThis & {
   FFmpegWASM?: { FFmpeg: new () => BrowserFfmpeg }
 }
 
-const FFMPEG_VERSION = "0.12.15"
-const FFMPEG_CORE_VERSION = "0.12.10"
-const FFMPEG_CDN = "https://unpkg.com"
 const FFMPEG_WRAPPER_PATH = "/vibe-ffmpeg/ffmpeg.js"
+const FFMPEG_CORE_PATH = "/vibe-ffmpeg/ffmpeg-core.js"
+const FFMPEG_WASM_PATH = "/vibe-ffmpeg/ffmpeg-core.wasm"
 
 type TrimDebugContext = Record<string, string | number | boolean | undefined>
 type StagedMediaError = Error & { vibeMediaStage?: string; userMessage?: string }
@@ -147,19 +146,6 @@ function mediaDebugContext(source: VibeMediaSource, file: Blob, durationSeconds?
     mimeType: file.type || "unknown",
     sizeMb: Math.round((file.size / (1024 * 1024)) * 10) / 10,
     ...(durationSeconds === undefined ? {} : { durationSeconds: Math.round(durationSeconds * 10) / 10 }),
-  }
-}
-
-async function toBlobUrl(asset: string, url: string, contentType: string) {
-  trimLog("ffmpeg-asset-download-start", { asset })
-  try {
-    const response = await fetch(url)
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const blob = new Blob([await response.arrayBuffer()], { type: contentType })
-    trimLog("ffmpeg-asset-download-complete", { asset, sizeKb: Math.round(blob.size / 1024) })
-    return URL.createObjectURL(blob)
-  } catch (error) {
-    throw trimError(`ffmpeg-asset:${asset}`, error, { asset })
   }
 }
 
@@ -201,12 +187,10 @@ async function getTrimmer() {
     return ffmpegLoader
   }
   const loader = (async () => {
-    const [FFmpeg, coreURL, wasmURL] = await Promise.all([
-      loadFfmpegConstructor(),
-      toBlobUrl("core-js", `${FFMPEG_CDN}/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.js`, "text/javascript"),
-      toBlobUrl("core-wasm", `${FFMPEG_CDN}/@ffmpeg/core@${FFMPEG_CORE_VERSION}/dist/umd/ffmpeg-core.wasm`, "application/wasm"),
-    ])
-    trimLog("ffmpeg-assets-ready")
+    const FFmpeg = await loadFfmpegConstructor()
+    const coreURL = new URL(FFMPEG_CORE_PATH, window.location.origin).toString()
+    const wasmURL = new URL(FFMPEG_WASM_PATH, window.location.origin).toString()
+    trimLog("ffmpeg-assets-ready", { assetSource: "same-origin-cache" })
     const ffmpeg = new FFmpeg()
     let loaded = false
 
@@ -240,7 +224,9 @@ async function getTrimmer() {
           trimLog("ffmpeg-input-write-complete")
           trimLog("ffmpeg-transcode-start", { startSeconds: Math.round(startSeconds * 10) / 10, durationSeconds: Math.round(durationSeconds * 10) / 10 })
           let result: number
-          try { result = await ffmpeg.exec(["-i", inputName, "-ss", startSeconds.toFixed(3), "-t", durationSeconds.toFixed(3), "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac", "-movflags", "+faststart", outputName]) }
+          // Input seeking avoids decoding the discarded beginning of a long
+          // source while retaining frame-accurate output because we re-encode.
+          try { result = await ffmpeg.exec(["-ss", startSeconds.toFixed(3), "-i", inputName, "-t", durationSeconds.toFixed(3), "-c:v", "libx264", "-preset", "ultrafast", "-crf", "27", "-c:a", "aac", "-movflags", "+faststart", outputName]) }
           catch (error) { throw trimError("ffmpeg-transcode", error) }
           if (result !== 0) throw trimError("ffmpeg-transcode-exit", new Error(`FFmpeg exited with code ${result}`), { exitCode: result })
           trimLog("ffmpeg-transcode-complete")

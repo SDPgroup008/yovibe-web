@@ -64,12 +64,12 @@ function formatClipTime(value: number) {
   return `${minutes}:${seconds}`
 }
 
-function VideoTrimEditor({ candidate, preparing, onProgress, error, onCancel, onUse }: { candidate: VibeVideoTrimCandidate; preparing: boolean; onProgress: number | null; error: string | null; onCancel: () => void; onUse: (startSeconds: number, durationSeconds: number) => void }) {
+function VideoTrimEditor({ candidate, startSeconds, endSeconds, preparing, onProgress, error, onChange, onCancel }: { candidate: VibeVideoTrimCandidate; startSeconds: number; endSeconds: number; preparing: boolean; onProgress: number | null; error: string | null; onChange: (startSeconds: number, endSeconds: number) => void; onCancel: () => void }) {
   const videoRef = useRef<HTMLVideoElement | null>(null)
-  const [startSeconds, setStartSeconds] = useState(0)
-  const [endSeconds, setEndSeconds] = useState(Math.min(60, candidate.durationSeconds))
   const [playhead, setPlayhead] = useState(0)
   const [thumbnails, setThumbnails] = useState<string[]>([])
+  const [timelineWidth, setTimelineWidth] = useState(0)
+  const activeDrag = useRef<{ kind: "start" | "end" | "window"; originX: number; startSeconds: number; endSeconds: number } | null>(null)
   const clipDuration = Math.max(0, endSeconds - startSeconds)
 
   useEffect(() => {
@@ -114,16 +114,29 @@ function VideoTrimEditor({ candidate, preparing, onProgress, error, onCancel, on
     video.currentTime = seconds
     setPlayhead(seconds)
   }
-  const updateStart = (value: number) => {
-    const next = Math.max(0, Math.min(value, endSeconds - 1))
-    setStartSeconds(next)
-    seek(next)
-  }
-  const updateEnd = (value: number) => {
-    const next = Math.min(candidate.durationSeconds, Math.max(value, startSeconds + 1))
-    if (next - startSeconds > 60) setStartSeconds(next - 60)
-    setEndSeconds(next)
-    seek(Math.max(startSeconds, next - 60))
+  const updateFromPosition = (locationX: number, preferredHandle?: "start" | "end") => {
+    if (!timelineWidth || preparing) return
+    const active = activeDrag.current
+    if (active?.kind === "window") {
+      const duration = active.endSeconds - active.startSeconds
+      const delta = ((locationX - active.originX) / timelineWidth) * candidate.durationSeconds
+      const nextStart = Math.max(0, Math.min(candidate.durationSeconds - duration, active.startSeconds + delta))
+      onChange(nextStart, nextStart + duration)
+      seek(nextStart)
+      return
+    }
+    const value = Math.max(0, Math.min(candidate.durationSeconds, (locationX / timelineWidth) * candidate.durationSeconds))
+    const handle = preferredHandle || active?.kind || (Math.abs(value - startSeconds) <= Math.abs(value - endSeconds) ? "start" : "end")
+    if (handle === "start") {
+      const nextStart = Math.max(0, Math.min(value, endSeconds - 1))
+      onChange(nextStart, endSeconds)
+      seek(nextStart)
+      return
+    }
+    const nextEnd = Math.min(candidate.durationSeconds, Math.max(value, startSeconds + 1))
+    const nextStart = nextEnd - startSeconds > 60 ? nextEnd - 60 : startSeconds
+    onChange(nextStart, nextEnd)
+    seek(nextStart)
   }
   const onTimeUpdate = (event: any) => {
     const currentTime = event?.currentTarget?.currentTime || 0
@@ -137,22 +150,20 @@ function VideoTrimEditor({ candidate, preparing, onProgress, error, onCancel, on
   const selectedWidth = `${(clipDuration / candidate.durationSeconds) * 100}%`
 
   return <View style={styles.trimEditor}>
-    <Text style={styles.trimHeading}>CHOOSE VIDEO CLIP</Text>
-    <Text style={styles.trimSubheading}>Select up to 60 seconds to publish</Text>
     <View style={styles.trimPreviewStage}>
       {Platform.OS === "web" && React.createElement("video", { ref: videoRef, src: candidate.previewUrl, muted: true, playsInline: true, controls: true, onLoadedMetadata: () => seek(startSeconds), onTimeUpdate, style: styles.trimPreviewVideo as any })}
+      <View style={styles.trimTimelineShell}>
+        <View style={styles.trimTimingRow}><Text style={styles.trimTime}>{formatClipTime(startSeconds)}</Text><Text style={styles.trimDuration}>{formatClipTime(clipDuration)} selected</Text><Text style={styles.trimTime}>{formatClipTime(endSeconds)}</Text></View>
+        <View style={styles.trimFilmstrip} onLayout={(event) => setTimelineWidth(event.nativeEvent.layout.width)} onStartShouldSetResponder={() => !preparing} onResponderGrant={(event) => { const locationX = event.nativeEvent.locationX; const startX = (startSeconds / candidate.durationSeconds) * timelineWidth; const endX = (endSeconds / candidate.durationSeconds) * timelineWidth; const kind = locationX > startX + 14 && locationX < endX - 14 ? "window" : Math.abs(locationX - startX) <= Math.abs(locationX - endX) ? "start" : "end"; activeDrag.current = { kind, originX: locationX, startSeconds, endSeconds }; if (kind !== "window") updateFromPosition(locationX, kind) }} onResponderMove={(event) => updateFromPosition(event.nativeEvent.locationX)} onResponderRelease={() => { activeDrag.current = null }} onResponderTerminate={() => { activeDrag.current = null }}>
+          {thumbnails.length ? thumbnails.map((uri, index) => <Image key={`${uri.slice(-10)}-${index}`} source={{ uri }} style={styles.trimThumbnail} resizeMode="cover" />) : <View style={styles.trimFilmstripFallback} />}
+          <View pointerEvents="none" style={[styles.trimSelectedRange, { left: selectedLeft, width: selectedWidth } as any]}><View style={styles.trimHandleLeft} /><View style={styles.trimHandleRight} /></View>
+          <View pointerEvents="none" style={[styles.trimPlayhead, { left: `${(Math.min(Math.max(playhead, startSeconds), endSeconds) / candidate.durationSeconds) * 100}%` } as any]} />
+        </View>
+      </View>
     </View>
-    <View style={styles.trimTimingRow}><Text style={styles.trimTime}>{formatClipTime(startSeconds)}</Text><Text style={styles.trimDuration}>{formatClipTime(clipDuration)} selected</Text><Text style={styles.trimTime}>{formatClipTime(endSeconds)}</Text></View>
-    <View style={styles.trimFilmstrip}>
-      {thumbnails.length ? thumbnails.map((uri, index) => <Image key={`${uri.slice(-10)}-${index}`} source={{ uri }} style={styles.trimThumbnail} resizeMode="cover" />) : <View style={styles.trimFilmstripFallback} />}
-      <View pointerEvents="none" style={[styles.trimSelectedRange, { left: selectedLeft, width: selectedWidth } as any]} />
-      <View pointerEvents="none" style={[styles.trimPlayhead, { left: `${(Math.min(Math.max(playhead, startSeconds), endSeconds) / candidate.durationSeconds) * 100}%` } as any]} />
-    </View>
-    <View style={styles.trimControl}><Text style={styles.trimLabel}>START · {formatClipTime(startSeconds)}</Text>{React.createElement("input", { type: "range", min: 0, max: Math.max(0, endSeconds - 1), step: 0.1, value: startSeconds, disabled: preparing, onChange: (event: any) => updateStart(Number(event.target.value)), style: { ...styles.trimRange, accentColor: "#63E9FF" } as any })}</View>
-    <View style={styles.trimControl}><Text style={styles.trimLabel}>END · {formatClipTime(endSeconds)}</Text>{React.createElement("input", { type: "range", min: Math.min(candidate.durationSeconds, startSeconds + 1), max: candidate.durationSeconds, step: 0.1, value: endSeconds, disabled: preparing, onChange: (event: any) => updateEnd(Number(event.target.value)), style: { ...styles.trimRange, accentColor: "#63E9FF" } as any })}</View>
     {preparing && <View style={styles.trimPreparing}><ActivityIndicator color="#63E9FF" /><Text style={styles.preparingText}>{onProgress === null ? "Preparing clip…" : `Preparing clip ${Math.round(onProgress * 100)}%`}</Text></View>}
     {error && <View style={styles.trimError}><Ionicons name="alert-circle-outline" color="#FFB4C3" size={17} /><Text style={styles.mediaErrorText}>{error}</Text></View>}
-    <View style={styles.trimActions}><TouchableOpacity disabled={preparing} style={styles.trimCancelButton} onPress={onCancel}><Text style={styles.trimCancelText}>CHOOSE ANOTHER</Text></TouchableOpacity><TouchableOpacity disabled={preparing || clipDuration < 1 || clipDuration > 60} style={[styles.trimUseButton, (preparing || clipDuration < 1 || clipDuration > 60) && styles.publishDisabled]} onPress={() => onUse(startSeconds, clipDuration)}>{preparing ? <ActivityIndicator color="#06101B" /> : <Text style={styles.trimUseText}>USE CLIP</Text>}</TouchableOpacity></View>
+    <TouchableOpacity disabled={preparing} style={styles.trimChangeButton} onPress={onCancel}><Text style={styles.trimCancelText}>CHANGE VIDEO</Text></TouchableOpacity>
   </View>
 }
 
@@ -191,6 +202,8 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const [composerMediaState, setComposerMediaState] = useState<ComposerMediaState>("idle")
   const [mediaError, setMediaError] = useState<string | null>(null)
   const [trimCandidate, setTrimCandidate] = useState<VibeVideoTrimCandidate | null>(null)
+  const [trimStartSeconds, setTrimStartSeconds] = useState(0)
+  const [trimEndSeconds, setTrimEndSeconds] = useState(0)
 
   const isAdmin = user?.userType === "admin"
   const ownVenue = useCallback((venue: VibeUpdateVenue) => Boolean(user && venue.ownerId === user.id), [user])
@@ -212,7 +225,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const clearSelectedMedia = useCallback(() => {
     if (previewUrl) URL.revokeObjectURL(previewUrl)
     if (trimCandidate) URL.revokeObjectURL(trimCandidate.previewUrl)
-    setFile(null); setFileName(""); setContentType(""); setPreviewUrl(null); setPreviewAspectRatio(null); setDuration(undefined); setTrimProgress(null); setMediaError(null); setTrimCandidate(null); setComposerMediaState("idle")
+    setFile(null); setFileName(""); setContentType(""); setPreviewUrl(null); setPreviewAspectRatio(null); setDuration(undefined); setTrimProgress(null); setMediaError(null); setTrimCandidate(null); setTrimStartSeconds(0); setTrimEndSeconds(0); setComposerMediaState("idle")
   }, [previewUrl, trimCandidate])
 
   const openVenue = (card: VibeUpdateVenue) => {
@@ -286,6 +299,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
         if (previewUrl) URL.revokeObjectURL(previewUrl)
         setFile(null); setFileName(""); setContentType(""); setPreviewUrl(null); setPreviewAspectRatio(null); setDuration(undefined)
         setTrimCandidate(selected.candidate)
+        setTrimStartSeconds(0); setTrimEndSeconds(Math.min(60, selected.candidate.durationSeconds))
         setComposerMediaState("idle")
         return
       }
@@ -306,34 +320,36 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
       setComposerMediaState("error")
     } finally { setPreparingMedia(false); setTrimProgress(null) }
   }
-  const prepareSelectedClip = async (startSeconds: number, durationSeconds: number) => {
-    if (!trimCandidate) return
-    try {
-      setPreparingMedia(true); setTrimProgress(null); setMediaError(null); setComposerMediaState("preparing")
-      const prepared = await prepareVibeVideoClip(trimCandidate, startSeconds, durationSeconds, setTrimProgress)
-      URL.revokeObjectURL(trimCandidate.previewUrl)
-      setTrimCandidate(null)
-      applyPreparedMedia(prepared)
-      Alert.alert("Video prepared", "Your selected clip is ready to publish.")
-    } catch (error: any) {
-      const stage = error?.vibeMediaStage || "clip-preparation"
-      if (vibeMediaDiagnosticsEnabled()) console.error("[VibeMediaComposer]", { stage, errorName: error?.name || "Error", errorMessage: error?.message || "Unknown clip preparation error", source: trimCandidate.source })
-      setMediaError(error?.userMessage || "We could not prepare this clip. Choose another video or try again.")
-      setComposerMediaState("error")
-    } finally { setPreparingMedia(false); setTrimProgress(null) }
-  }
   const cancelTrimSelection = () => {
     if (trimCandidate) URL.revokeObjectURL(trimCandidate.previewUrl)
-    setTrimCandidate(null); setSourceVenue(composerVenue); setComposerMediaState("picking"); setSourcePickerOpen(true)
+    setTrimCandidate(null); setTrimStartSeconds(0); setTrimEndSeconds(0); setSourceVenue(composerVenue); setComposerMediaState("picking"); setSourcePickerOpen(true)
   }
   const publish = async () => {
-    if (!user || !composerVenue?.venueSlug || !file) return
+    if (!user || !composerVenue?.venueSlug || (!file && !trimCandidate)) return
     if (composerVenue.updates.length >= 7) { Alert.alert("Limit reached", "A venue can have a maximum of seven active Vibe Updates."); return }
+    let clipPrepared = false
     try {
       setPublishing(true)
-      await VibeUpdateService.publish({ venueSlug: composerVenue.venueSlug, authorId: user.id, file, fileName, contentType, durationSeconds: duration, caption })
+      let media = file ? { file, fileName, contentType, durationSeconds: duration } : null
+      if (trimCandidate) {
+        setPreparingMedia(true); setTrimProgress(null); setMediaError(null); setComposerMediaState("preparing")
+        const prepared = await prepareVibeVideoClip(trimCandidate, trimStartSeconds, trimEndSeconds - trimStartSeconds, setTrimProgress)
+        clipPrepared = true
+        URL.revokeObjectURL(trimCandidate.previewUrl)
+        setTrimCandidate(null); setTrimStartSeconds(0); setTrimEndSeconds(0)
+        applyPreparedMedia(prepared)
+        media = { file: prepared.file, fileName: prepared.fileName, contentType: prepared.contentType, durationSeconds: prepared.durationSeconds }
+      }
+      if (!media) return
+      await VibeUpdateService.publish({ venueSlug: composerVenue.venueSlug, authorId: user.id, file: media.file, fileName: media.fileName, contentType: media.contentType, durationSeconds: media.durationSeconds, caption })
       clearSelectedMedia(); setComposerVenue(null); setCaption(""); await load()
-    } catch (error: any) { Alert.alert("Could not publish", error?.message || "Please try again.") } finally { setPublishing(false) }
+    } catch (error: any) {
+      const stage = error?.vibeMediaStage || "publish"
+      if (trimCandidate && !clipPrepared && vibeMediaDiagnosticsEnabled()) console.error("[VibeMediaComposer]", { stage, errorName: error?.name || "Error", errorMessage: error?.message || "Unknown clip preparation error", source: trimCandidate.source })
+      if (trimCandidate && !clipPrepared) setMediaError(error?.userMessage || "We could not prepare this clip. Adjust the selection or choose another video.")
+      else Alert.alert("Could not publish", error?.message || "Please try again.")
+      setComposerMediaState("error")
+    } finally { setPublishing(false); setPreparingMedia(false); setTrimProgress(null) }
   }
   const closeComposer = () => { clearSelectedMedia(); setComposerVenue(null); setSourceVenue(null); setSourcePickerOpen(false); setCaption("") }
   const openMediaOptions = (venue: VibeUpdateVenue) => {
@@ -383,22 +399,22 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
       <View style={styles.composerOverlay}>
         <View style={styles.composer}>
           <View style={styles.composerHeader}>
-            <Text style={styles.composerTitle}>{trimCandidate ? "CHOOSE VIDEO CLIP" : "CREATE VIBE UPDATE"}</Text>
+            <Text style={styles.composerTitle}>CREATE VIBE UPDATE</Text>
             <TouchableOpacity onPress={closeComposer}><Ionicons name="close" color="#E7EEFF" size={24} /></TouchableOpacity>
           </View>
-          {trimCandidate ? <ScrollView contentContainerStyle={styles.composerBody} showsVerticalScrollIndicator={false}><VideoTrimEditor candidate={trimCandidate} preparing={preparingMedia} onProgress={trimProgress} error={mediaError} onCancel={cancelTrimSelection} onUse={(startSeconds, durationSeconds) => void prepareSelectedClip(startSeconds, durationSeconds)} /></ScrollView> : <ScrollView contentContainerStyle={styles.composerBody} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={styles.composerBody} showsVerticalScrollIndicator={false}>
             {composerVenue?.venueSlug ? <Text style={styles.composerVenue}>{composerVenue.venueName}</Text> : <View style={styles.venueSelectSection}>
               {venues.map((venue) => <TouchableOpacity key={venue.slug || venue.id} style={styles.pickerItem} onPress={() => setComposerVenue({ venueSlug: venue.slug || venue.id, venueName: venue.name, posterUrl: venue.backgroundImageUrl, ownerId: venue.ownerId, updates: cards.find((card) => card.venueSlug === (venue.slug || venue.id))?.updates || [] })}><Text style={styles.pickerText}>{venue.name}</Text><Ionicons name="chevron-forward" color="#75E9FF" size={18} /></TouchableOpacity>)}
             </View>}
-            <TouchableOpacity style={[styles.mediaPicker, previewAspectRatio !== null && styles.selectedMediaPicker, previewAspectRatio !== null ? { aspectRatio: previewAspectRatio } : null]} onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }} disabled={preparingMedia}>
+            {trimCandidate ? <VideoTrimEditor candidate={trimCandidate} startSeconds={trimStartSeconds} endSeconds={trimEndSeconds} preparing={preparingMedia} onProgress={trimProgress} error={mediaError} onChange={(startSeconds, endSeconds) => { setTrimStartSeconds(startSeconds); setTrimEndSeconds(endSeconds); setMediaError(null) }} onCancel={cancelTrimSelection} /> : <TouchableOpacity style={[styles.mediaPicker, previewAspectRatio !== null && styles.selectedMediaPicker, previewAspectRatio !== null ? { aspectRatio: previewAspectRatio } : null]} onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }} disabled={preparingMedia}>
               {previewUrl ? (contentType.startsWith("video/") ? React.createElement("video", { src: previewUrl, muted: true, controls: true, style: styles.previewVideo as any }) : <Image source={{ uri: previewUrl }} style={styles.previewImage} resizeMode="contain" />) : <><Ionicons name="camera-outline" size={34} color="#62E6FF" /><Text style={styles.mediaPickerText}>Add photo or video</Text><Text style={styles.mediaPickerHint}>Camera or gallery · Videos are trimmed to 60 sec / 50 MB</Text></>}
               {composerMediaState === "preparing" && <View style={styles.preparingOverlay}><ActivityIndicator color="#63E9FF" /><Text style={styles.preparingText}>{trimProgress === null ? "Preparing media…" : `Trimming video ${Math.round(trimProgress * 100)}%`}</Text></View>}
-            </TouchableOpacity>
-            {mediaError && <View style={styles.mediaError}><Ionicons name="alert-circle-outline" color="#FFB4C3" size={18} /><View style={styles.mediaErrorCopy}><Text style={styles.mediaErrorText}>{mediaError}</Text><TouchableOpacity onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }}><Text style={styles.mediaRetry}>TRY ANOTHER FILE</Text></TouchableOpacity></View></View>}
+            </TouchableOpacity>}
+            {mediaError && !trimCandidate && <View style={styles.mediaError}><Ionicons name="alert-circle-outline" color="#FFB4C3" size={18} /><View style={styles.mediaErrorCopy}><Text style={styles.mediaErrorText}>{mediaError}</Text><TouchableOpacity onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }}><Text style={styles.mediaRetry}>TRY ANOTHER FILE</Text></TouchableOpacity></View></View>}
             <TextInput value={caption} onChangeText={setCaption} maxLength={220} multiline placeholder="Add Caption..." placeholderTextColor="#7B859B" style={styles.captionInput} />
             <Text style={styles.characterCount}>{caption.length}/220</Text>
-            <TouchableOpacity disabled={!file || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7} style={[styles.publishButton, (!file || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7) && styles.publishDisabled]} onPress={publish}>{publishing ? <ActivityIndicator color="#06101B" /> : <><Ionicons name="flash" size={18} color="#06101B" /><Text style={styles.publishText}>PUBLISH PULSE</Text></>}</TouchableOpacity>
-          </ScrollView>}
+            <TouchableOpacity disabled={(!file && !trimCandidate) || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7} style={[styles.publishButton, ((!file && !trimCandidate) || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7) && styles.publishDisabled]} onPress={publish}>{publishing ? <ActivityIndicator color="#06101B" /> : <><Ionicons name="flash" size={18} color="#06101B" /><Text style={styles.publishText}>PUBLISH PULSE</Text></>}</TouchableOpacity>
+          </ScrollView>
         </View>
       </View>
     </Modal>
@@ -414,5 +430,6 @@ const styles = StyleSheet.create({
   viewer: { flex: 1, backgroundColor: "#050A12" }, mediaPress: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", backgroundColor: "#03070D" }, viewerMedia: { width: "100%", height: "100%", backgroundColor: "#03070D" }, video: { width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#03070D" }, viewerShade: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.1)" }, progressRow: { position: "absolute", top: 16, left: 13, right: 13, flexDirection: "row", gap: 4 }, progressSegment: { flex: 1, height: 3, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.38)" }, progressDone: { backgroundColor: "#D5FAFF" }, progressActive: { backgroundColor: "#61E8FF" }, viewerHeader: { position: "absolute", top: 34, left: 15, right: 15, flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, viewerIdentity: { flexDirection: "row", alignItems: "center", gap: 9 }, viewerAvatar: { width: 34, height: 34, borderRadius: 17 }, viewerVenue: { color: "#FFF", fontWeight: "800", fontSize: 14 }, viewerMeta: { color: "rgba(255,255,255,0.72)", fontSize: 10, marginTop: 2 }, viewerActions: { flexDirection: "row", gap: 16, alignItems: "center" }, captionShell: { position: "absolute", bottom: 45, left: 24, right: 24, backgroundColor: "rgba(3,9,19,0.70)", borderWidth: 1, borderColor: "rgba(163,102,255,0.3)", borderRadius: 14, padding: 14 }, caption: { color: "#F4F8FF", fontSize: 14, textAlign: "center", lineHeight: 20 }, viewerZones: { ...StyleSheet.absoluteFill, flexDirection: "row" }, zone: { flex: 1 },
   composerOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.63)", justifyContent: "flex-end" }, composer: { height: "90%", minHeight: 480, maxHeight: "90%", width: "100%", backgroundColor: "#0B1425", borderTopLeftRadius: 28, borderTopRightRadius: 28, borderWidth: 1, borderColor: "rgba(96,224,255,0.45)", padding: 20 }, composerHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12, flexShrink: 0 }, composerBody: { flexGrow: 1, paddingBottom: 8 }, composerTitle: { color: "#E6F8FF", letterSpacing: 1.5, fontWeight: "900", fontSize: 14 }, composerVenue: { color: "#64E8FF", fontWeight: "800", marginBottom: 10 }, venueSelectSection: { gap: 8, marginBottom: 14 }, mediaPicker: { width: "100%", minHeight: 190, borderRadius: 18, borderWidth: 1, borderColor: "rgba(98,230,255,0.48)", backgroundColor: "#03070D", alignItems: "center", justifyContent: "center", overflow: "hidden" }, selectedMediaPicker: { minHeight: 0 }, mediaPickerText: { color: "#D8F8FF", fontSize: 14, fontWeight: "700", marginTop: 8 }, mediaPickerHint: { color: "#8294B4", fontSize: 10, marginTop: 5, textAlign: "center", paddingHorizontal: 15 }, previewImage: { width: "100%", height: "100%", backgroundColor: "#03070D" }, previewVideo: { width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#03070D" }, preparingOverlay: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(4, 12, 25, 0.78)", alignItems: "center", justifyContent: "center", gap: 9 }, preparingText: { color: "#DDF9FF", fontSize: 12, fontWeight: "700" }, mediaError: { marginTop: 10, flexDirection: "row", gap: 9, padding: 11, backgroundColor: "rgba(125, 30, 58, 0.32)", borderWidth: 1, borderColor: "rgba(255, 132, 161, 0.48)", borderRadius: 12 }, mediaErrorCopy: { flex: 1, gap: 7 }, mediaErrorText: { color: "#FFD7E1", fontSize: 12, lineHeight: 17 }, mediaRetry: { color: "#89F0FF", fontSize: 11, fontWeight: "900", letterSpacing: 0.8 }, captionInput: { color: "#F5F8FF", minHeight: 65, marginTop: 14, borderRadius: 13, padding: 12, backgroundColor: "#101E35", borderWidth: 1, borderColor: "rgba(143,161,199,0.28)", textAlignVertical: "top" }, characterCount: { color: "#7E8BA2", fontSize: 10, textAlign: "right", marginTop: 5 }, publishButton: { height: 48, borderRadius: 14, marginTop: 12, backgroundColor: "#64E8FF", flexDirection: "row", gap: 8, justifyContent: "center", alignItems: "center" }, publishDisabled: { opacity: 0.45 }, publishText: { color: "#07111F", fontWeight: "900", fontSize: 12, letterSpacing: 1 }, pickerItem: { minHeight: 52, borderRadius: 12, paddingHorizontal: 14, backgroundColor: "#11213A", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, pickerText: { color: "#E7F4FF", fontWeight: "700" },
   trimEditor: { gap: 13, paddingBottom: 8 }, trimHeading: { color: "#DDF9FF", fontWeight: "900", fontSize: 13, letterSpacing: 1.2, textAlign: "center" }, trimSubheading: { color: "#8FA4C6", fontSize: 11, textAlign: "center", marginTop: -8 }, trimPreviewStage: { width: "100%", height: 250, backgroundColor: "#03070D", borderRadius: 14, overflow: "hidden", alignSelf: "center" }, trimPreviewVideo: { width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#03070D" }, trimTimingRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, trimTime: { color: "#D9E8FF", fontSize: 11, fontVariant: ["tabular-nums"] }, trimDuration: { color: "#67E7FF", fontWeight: "800", fontSize: 11 }, trimFilmstrip: { height: 72, borderRadius: 10, overflow: "hidden", flexDirection: "row", backgroundColor: "#14233B", position: "relative" }, trimThumbnail: { flex: 1, height: "100%" }, trimFilmstripFallback: { flex: 1, backgroundColor: "#1B3150" }, trimSelectedRange: { position: "absolute", top: 0, bottom: 0, borderWidth: 2, borderColor: "#69E9FF", backgroundColor: "rgba(76, 212, 255, 0.12)" }, trimPlayhead: { position: "absolute", top: 0, bottom: 0, width: 2, backgroundColor: "#FFFFFF" }, trimControl: { gap: 4 }, trimLabel: { color: "#BFD1EF", fontSize: 10, fontWeight: "800", letterSpacing: 0.7 }, trimRange: { width: "100%", height: 24 }, trimPreparing: { alignItems: "center", gap: 7, paddingVertical: 8 }, trimError: { flexDirection: "row", gap: 8, alignItems: "center", padding: 10, backgroundColor: "rgba(125, 30, 58, 0.32)", borderWidth: 1, borderColor: "rgba(255, 132, 161, 0.48)", borderRadius: 10 }, trimActions: { flexDirection: "row", gap: 10, marginTop: 4 }, trimCancelButton: { flex: 1, height: 46, borderWidth: 1, borderColor: "rgba(150, 179, 222, 0.5)", alignItems: "center", justifyContent: "center", borderRadius: 12 }, trimCancelText: { color: "#D6E4FA", fontSize: 11, fontWeight: "900", letterSpacing: 0.6 }, trimUseButton: { flex: 1, height: 46, backgroundColor: "#64E8FF", alignItems: "center", justifyContent: "center", borderRadius: 12 }, trimUseText: { color: "#06101B", fontSize: 11, fontWeight: "900", letterSpacing: 0.8 },
+  trimTimelineShell: { position: "absolute", left: 10, right: 10, bottom: 10, padding: 8, gap: 5, backgroundColor: "rgba(4, 10, 21, 0.78)", borderWidth: 1, borderColor: "rgba(121, 228, 255, 0.55)", borderRadius: 10 }, trimHandleLeft: { position: "absolute", width: 7, top: -3, bottom: -3, left: -4, backgroundColor: "#DFFBFF", borderRadius: 4 }, trimHandleRight: { position: "absolute", width: 7, top: -3, bottom: -3, right: -4, backgroundColor: "#DFFBFF", borderRadius: 4 }, trimChangeButton: { height: 38, borderWidth: 1, borderColor: "rgba(150, 179, 222, 0.5)", alignItems: "center", justifyContent: "center", borderRadius: 10 },
   sourceOverlay: { flex: 1, backgroundColor: "rgba(0, 0, 0, 0.58)", justifyContent: "flex-end" }, sourceSheet: { backgroundColor: "#0D182B", borderTopWidth: 1, borderColor: "rgba(98,230,255,0.5)", padding: 20, gap: 8 }, sourceTitle: { color: "#B9F6FF", fontSize: 11, fontWeight: "900", letterSpacing: 1.4, marginBottom: 6 }, sourceOption: { height: 54, flexDirection: "row", alignItems: "center", gap: 14, paddingHorizontal: 12, backgroundColor: "#12233E" }, sourceOptionText: { color: "#EFFAFF", fontWeight: "700", fontSize: 14 },
 })

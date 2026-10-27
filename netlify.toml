@@ -173,6 +173,12 @@ path = "/*"
     Content-Type = "text/javascript"
 
 [[headers]]
+  for = "/vibe-ffmpeg/*.wasm"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    Content-Type = "application/wasm"
+
+[[headers]]
   # Cache TensorFlow.js weight files for 1 year
   for = "/vibe_model_tfjs/*.bin"
   [headers.values]
