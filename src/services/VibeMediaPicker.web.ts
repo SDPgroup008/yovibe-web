@@ -11,6 +11,21 @@ export type PreparedVibeMedia = {
   wasTrimmed: boolean
 }
 
+export type VibeVideoTrimCandidate = {
+  file: File
+  source: VibeMediaSource
+  fileName: string
+  previewUrl: string
+  durationSeconds: number
+  width: number
+  height: number
+  requiresConversion: boolean
+}
+
+export type VibeMediaSelection =
+  | { kind: "prepared"; media: PreparedVibeMedia }
+  | { kind: "trim"; candidate: VibeVideoTrimCandidate }
+
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_VIDEO_BYTES = 50 * 1024 * 1024
 const MAX_SOURCE_VIDEO_BYTES = 200 * 1024 * 1024
@@ -178,7 +193,7 @@ async function loadFfmpegConstructor() {
   return runtime.FFmpegWASM.FFmpeg
 }
 
-let ffmpegLoader: Promise<{ trim: (file: File, onProgress?: (progress: number) => void) => Promise<Blob> }> | null = null
+let ffmpegLoader: Promise<{ trim: (file: File, startSeconds: number, durationSeconds: number, onProgress?: (progress: number) => void) => Promise<Blob> }> | null = null
 
 async function getTrimmer() {
   if (ffmpegLoader) {
@@ -196,7 +211,7 @@ async function getTrimmer() {
     let loaded = false
 
     return {
-      async trim(file: File, onProgress?: (progress: number) => void) {
+      async trim(file: File, startSeconds: number, durationSeconds: number, onProgress?: (progress: number) => void) {
         if (!loaded) {
           trimLog("ffmpeg-worker-initialize-start")
           try {
@@ -223,9 +238,9 @@ async function getTrimmer() {
           try { await ffmpeg.writeFile(inputName, new Uint8Array(await file.arrayBuffer())) }
           catch (error) { throw trimError("ffmpeg-input-write", error) }
           trimLog("ffmpeg-input-write-complete")
-          trimLog("ffmpeg-transcode-start")
+          trimLog("ffmpeg-transcode-start", { startSeconds: Math.round(startSeconds * 10) / 10, durationSeconds: Math.round(durationSeconds * 10) / 10 })
           let result: number
-          try { result = await ffmpeg.exec(["-i", inputName, "-t", "60", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac", "-movflags", "+faststart", outputName]) }
+          try { result = await ffmpeg.exec(["-i", inputName, "-ss", startSeconds.toFixed(3), "-t", durationSeconds.toFixed(3), "-c:v", "libx264", "-preset", "veryfast", "-crf", "24", "-c:a", "aac", "-movflags", "+faststart", outputName]) }
           catch (error) { throw trimError("ffmpeg-transcode", error) }
           if (result !== 0) throw trimError("ffmpeg-transcode-exit", new Error(`FFmpeg exited with code ${result}`), { exitCode: result })
           trimLog("ffmpeg-transcode-complete")
@@ -250,7 +265,28 @@ async function getTrimmer() {
   return loader
 }
 
-export async function selectVibeMedia(source: VibeMediaSource, onTrimProgress?: (progress: number) => void): Promise<PreparedVibeMedia | null> {
+export async function prepareVibeVideoClip(candidate: VibeVideoTrimCandidate, requestedStartSeconds: number, requestedDurationSeconds: number, onTrimProgress?: (progress: number) => void): Promise<PreparedVibeMedia> {
+  const stage = "clip-preparation"
+  try {
+    const startSeconds = Math.max(0, Math.min(requestedStartSeconds, candidate.durationSeconds - 1))
+    const durationSeconds = Math.max(1, Math.min(requestedDurationSeconds, 60, candidate.durationSeconds - startSeconds))
+    if (!Number.isFinite(startSeconds) || !Number.isFinite(durationSeconds) || durationSeconds < 1) throw new Error("Choose a clip between 1 and 60 seconds.")
+    trimLog("clip-selection-confirmed", { ...mediaDebugContext(candidate.source, candidate.file, candidate.durationSeconds), startSeconds: Math.round(startSeconds * 10) / 10, durationSeconds: Math.round(durationSeconds * 10) / 10 })
+    const trimmer = await getTrimmer()
+    const file = await trimmer.trim(candidate.file, startSeconds, durationSeconds, onTrimProgress)
+    const metadata = await getVideoMetadata(file)
+    if (file.size > MAX_VIDEO_BYTES) throw new Error("The prepared video is larger than 50 MB. Choose a shorter or lower-resolution video.")
+    if (metadata.duration > 60.25) throw new Error("The prepared video is longer than 60 seconds.")
+    const wasTrimmed = startSeconds > 0 || candidate.durationSeconds - durationSeconds > 0.25
+    trimLog("prepared-metadata-complete", { ...mediaDebugContext(candidate.source, file, metadata.duration), width: metadata.width, height: metadata.height, wasTrimmed })
+    return { file, fileName: `vibe-pulse-${Date.now()}.mp4`, contentType: "video/mp4", previewUrl: URL.createObjectURL(file), durationSeconds: Math.min(metadata.duration, 60), width: metadata.width, height: metadata.height, wasTrimmed }
+  } catch (error) {
+    const stagedError = error as StagedMediaError
+    throw stagedError.vibeMediaStage ? stagedError : trimError(stage, error, mediaDebugContext(candidate.source, candidate.file, candidate.durationSeconds))
+  }
+}
+
+export async function selectVibeMedia(source: VibeMediaSource, onTrimProgress?: (progress: number) => void): Promise<VibeMediaSelection | null> {
   let stage = "file-selection"
   let selected: File | null = null
   try {
@@ -267,38 +303,25 @@ export async function selectVibeMedia(source: VibeMediaSource, onTrimProgress?: 
       stage = "image-metadata"
       const { width, height } = await getImageMetadata(selected)
       trimLog("image-metadata-complete", { ...mediaDebugContext(source, selected), width, height })
-      return { file: selected, fileName: selected.name || `vibe-image.${extensionFor(selected.type)}`, contentType: selected.type, previewUrl: URL.createObjectURL(selected), width, height, wasTrimmed: false }
+      return { kind: "prepared", media: { file: selected, fileName: selected.name || `vibe-image.${extensionFor(selected.type)}`, contentType: selected.type, previewUrl: URL.createObjectURL(selected), width, height, wasTrimmed: false } }
     }
 
     if (selected.size > MAX_SOURCE_VIDEO_BYTES) throw new Error("Choose a video no larger than 200 MB so it can be safely prepared in this browser.")
     stage = "source-metadata"
     const sourceMetadata = await getVideoMetadata(selected)
     trimLog("source-metadata-complete", { ...mediaDebugContext(source, selected, sourceMetadata.duration), width: sourceMetadata.width, height: sourceMetadata.height })
-    let file: Blob = selected
-    let contentType = selected.type
-    let durationSeconds = sourceMetadata.duration
-    let width = sourceMetadata.width
-    let height = sourceMetadata.height
-    let wasTrimmed = false
-    if (durationSeconds > 60 || isCameraQuickTime) {
-      stage = "ffmpeg-loader"
-      const trimmer = await getTrimmer()
-      stage = "ffmpeg-trim"
-      file = await trimmer.trim(selected, onTrimProgress)
-      contentType = "video/mp4"
-      stage = "prepared-metadata"
-      const preparedMetadata = await getVideoMetadata(file)
-      durationSeconds = preparedMetadata.duration
-      width = preparedMetadata.width
-      height = preparedMetadata.height
-      wasTrimmed = sourceMetadata.duration > 60
-      trimLog("prepared-metadata-complete", { ...mediaDebugContext(source, file, durationSeconds), width, height, wasTrimmed })
+    const candidate: VibeVideoTrimCandidate = { file: selected, source, fileName: selected.name || `vibe-video.${extensionFor(selected.type)}`, previewUrl: URL.createObjectURL(selected), durationSeconds: sourceMetadata.duration, width: sourceMetadata.width, height: sourceMetadata.height, requiresConversion: isCameraQuickTime }
+    if (candidate.durationSeconds > 60) return { kind: "trim", candidate }
+    if (candidate.requiresConversion) {
+      stage = "quicktime-conversion"
+      const media = await prepareVibeVideoClip(candidate, 0, candidate.durationSeconds, onTrimProgress)
+      URL.revokeObjectURL(candidate.previewUrl)
+      return { kind: "prepared", media }
     }
     stage = "output-validation"
-    if (file.size > MAX_VIDEO_BYTES) throw new Error("The prepared video is larger than 50 MB. Choose a shorter or lower-resolution video.")
-    if (durationSeconds > 60.25) throw new Error("The prepared video is longer than 60 seconds.")
-    trimLog("media-preparation-complete", { ...mediaDebugContext(source, file, durationSeconds), wasTrimmed })
-    return { file, fileName: wasTrimmed ? `vibe-pulse-${Date.now()}.mp4` : selected.name || `vibe-video.${extensionFor(contentType)}`, contentType, previewUrl: URL.createObjectURL(file), durationSeconds: Math.min(durationSeconds, 60), width, height, wasTrimmed }
+    if (selected.size > MAX_VIDEO_BYTES) throw new Error("Videos may not exceed 50 MB.")
+    trimLog("media-preparation-complete", { ...mediaDebugContext(source, selected, candidate.durationSeconds), wasTrimmed: false })
+    return { kind: "prepared", media: { file: selected, fileName: candidate.fileName, contentType: selected.type, previewUrl: candidate.previewUrl, durationSeconds: candidate.durationSeconds, width: candidate.width, height: candidate.height, wasTrimmed: false } }
   } catch (error) {
     const stagedError = error as StagedMediaError
     const failedStage = stagedError.vibeMediaStage || stage
