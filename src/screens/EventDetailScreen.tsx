@@ -761,8 +761,10 @@ const styles = StyleSheet.create({
     borderColor: "rgba(255, 255, 255, 0.08)",
   },
   desktopTicketTier: {
-    flexBasis: "100%",
-    minWidth: "100%",
+    // A row fits at most three tiers. Because each tier grows, a final row
+    // with one or two options expands just like the current mobile layout.
+    flexBasis: "30%",
+    minWidth: 140,
   },
   ticketTierName: {
     color: "#E9F8FC",
