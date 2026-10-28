@@ -47,12 +47,6 @@ function PulseGlyph({ active, iconSize, direction = "down", upright = false }: {
   </View>
 }
 
-function PulseDigit({ count }: { count: number }) {
-  const pulse = usePulse(count > 0)
-  const borderColor = pulse.interpolate({ inputRange: [0, 0.5, 1], outputRange: ["#55E1FF", "#B15CFF", "#2EF2B1"] })
-  return <Animated.View style={[styles.unseenDigit, { borderColor, shadowColor: borderColor }]}><Text style={styles.unseenText}>{count > 99 ? "99+" : count}</Text></Animated.View>
-}
-
 function UpdateRing({ count, unseen }: { count: number; unseen: boolean }) {
   const safeCount = Math.min(Math.max(count, 1), 7)
   if (safeCount === 1) return <View style={[styles.singleRing, unseen && styles.unseenRing]} />
@@ -238,8 +232,9 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const viewableCards = useMemo(() => cards.filter((card) => card.updates.length > 0), [cards])
   const unseenVenueCount = useMemo(() => viewableCards.filter((card) => card.updates.some((update) => !seen[update.id])).length, [seen, viewableCards])
   const canPublish = Boolean(user && (user.userType === "club_owner" || isAdmin))
-  const panelHeight = barHeight * 2
-  const panelWidth = Math.min(width - 24, 560)
+  const shouldShowHub = canPublish || viewableCards.length > 0
+  const panelHeight = barHeight * 2 + 3
+  const panelWidth = width
   const desktopPanelWidth = Math.min(panelWidth, 460)
 
   const openPanel = useCallback(() => {
@@ -435,7 +430,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const titleVTransform = placement === "mobile" ? [{ translateY: panelMotion.interpolate({ inputRange: [0, 1], outputRange: [panelHeight - 42, 0] }) }, { rotate: panelMotion.interpolate({ inputRange: [0, 1], outputRange: ["180deg", "0deg"] }) }] : [{ translateX: panelMotion.interpolate({ inputRange: [0, 1], outputRange: [-desktopPanelWidth / 2, 0] }) }, { rotate: panelMotion.interpolate({ inputRange: [0, 1], outputRange: ["90deg", "0deg"] }) }]
 
   return <>
-    <View pointerEvents="box-none" style={[rootStyle, placement === "desktop" && styles.desktopHidden]}>
+    <View pointerEvents="box-none" style={[rootStyle, (placement === "desktop" || !shouldShowHub) && styles.desktopHidden]}>
       {panelMounted && <Animated.View style={[styles.panel, panelPosition, { transform: panelTransform }]}>
         <View style={styles.panelHeader}><View style={styles.panelTitleRow}><Animated.View style={{ opacity: titleOpacity, transform: titleVTransform }}><TouchableOpacity onPress={closePanel} accessibilityLabel="Close Vibe Pulse" style={styles.titleV}><PulseGlyph active={unseenVenueCount > 0} iconSize={13} upright /></TouchableOpacity></Animated.View><Animated.Text style={[styles.panelTitle, { opacity: titleOpacity }]}>ibe Pulse</Animated.Text></View></View>
         {loading ? <ActivityIndicator color="#53E4FF" style={{ flex: 1 }} /> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.venueRail}>
@@ -444,7 +439,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
           {!cards.length && <View style={styles.emptyRail}><Ionicons name="pulse-outline" size={21} color="#6B7C98" /><Text style={styles.emptyRailText}>No live venue updates yet</Text></View>}
         </ScrollView>}
       </Animated.View>}
-      <Animated.View pointerEvents={panelMounted ? "none" : "auto"} style={{ opacity: triggerOpacity }}><TouchableOpacity style={styles.trigger} onPress={openPanel} accessibilityLabel="Open Vibe Pulse"><PulseGlyph active={unseenVenueCount > 0} iconSize={iconSize} direction={placement === "desktop" ? "left" : "down"} />{unseenVenueCount > 0 && <PulseDigit count={unseenVenueCount} />}</TouchableOpacity></Animated.View>
+      <Animated.View pointerEvents={panelMounted ? "none" : "auto"} style={{ opacity: triggerOpacity }}><TouchableOpacity style={styles.trigger} onPress={openPanel} accessibilityLabel="Open Vibe Pulse"><PulseGlyph active={unseenVenueCount > 0} iconSize={iconSize} direction={placement === "desktop" ? "left" : "down"} /></TouchableOpacity></Animated.View>
     </View>
 
     <Modal visible={Boolean(viewer && current)} animationType="fade" transparent={false} onRequestClose={() => setViewer(null)}>
@@ -499,7 +494,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
 
 const styles = StyleSheet.create({
   desktopHidden: { display: "none" },
-  trigger: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }, chevronLine: { height: 3, position: "absolute", borderRadius: 1.5, shadowOpacity: 1, shadowRadius: 3, elevation: 7 }, unseenDigit: { position: "absolute", top: "84%", minWidth: 18, height: 16, borderRadius: 8, paddingHorizontal: 4, backgroundColor: "#192B51", borderWidth: 1, shadowOpacity: 0.9, shadowRadius: 7, alignItems: "center", justifyContent: "center" }, unseenText: { color: "#A9F4FF", fontSize: 9, fontWeight: "900" },
+  trigger: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center" }, chevronLine: { height: 3, position: "absolute", borderRadius: 1.5, shadowOpacity: 1, shadowRadius: 3, elevation: 7 },
   panel: { position: "absolute", backgroundColor: "rgba(10, 18, 36, 0.97)", borderWidth: 1, borderColor: "rgba(89, 224, 255, 0.55)", borderRadius: 0, shadowColor: "#4BD8FF", shadowOpacity: 0.25, shadowRadius: 20, elevation: 20, overflow: "hidden" }, panelHeader: { height: 30, paddingHorizontal: 16, alignItems: "center", justifyContent: "center", borderBottomWidth: 1, borderBottomColor: "rgba(167, 103, 255, 0.22)" }, panelTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "center" }, titleV: { width: 28, height: 18, alignItems: "center", justifyContent: "center", marginRight: 3 }, panelTitle: { color: "#E8F8FF", fontSize: 13, letterSpacing: 1.5, fontWeight: "900", textTransform: "uppercase" },
   venueRail: { alignItems: "center", paddingHorizontal: 14, gap: 14, flexGrow: 1 }, venueCard: { width: 66, alignItems: "center" }, posterFrame: { width: 54, height: 54, alignItems: "center", justifyContent: "center", position: "relative" }, venuePoster: { width: 44, height: 44, borderRadius: 22, backgroundColor: "#21304A" }, posterFallback: { alignItems: "center", justifyContent: "center" }, venueName: { color: "#D9E6FF", fontSize: 9, marginTop: 5, width: 68, textAlign: "center" }, emptyRail: { flex: 1, minWidth: 185, alignItems: "center", justifyContent: "center", gap: 5 }, emptyRailText: { color: "#8C9AB2", fontSize: 11 }, singleRing: { position: "absolute", width: 54, height: 54, borderRadius: 27, borderWidth: 1.5, borderColor: "#60708D" }, ringFrame: { position: "absolute", width: 54, height: 54 }, ringArc: { position: "absolute", width: 54, height: 54, borderRadius: 27, borderWidth: 2, borderColor: "#64738B", borderRightColor: "transparent", borderBottomColor: "transparent" }, unseenRing: { borderColor: "#55E4FF", shadowColor: "#A565FF", shadowOpacity: 0.7, shadowRadius: 5 }, addBadge: { position: "absolute", right: 1, bottom: 0, width: 19, height: 19, borderRadius: 10, backgroundColor: "#69EDFF", borderWidth: 2, borderColor: "#0D1629", alignItems: "center", justifyContent: "center" }, adminAdd: { borderWidth: 1.5, borderStyle: "dashed", borderColor: "#4DD8FF", borderRadius: 27, backgroundColor: "rgba(39, 65, 113, 0.34)" },
   viewer: { flex: 1, backgroundColor: "#050A12" }, mediaPress: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", backgroundColor: "#03070D" }, viewerMedia: { width: "100%", height: "100%", backgroundColor: "#03070D" }, video: { width: "100%", height: "100%", objectFit: "contain", backgroundColor: "#03070D" }, viewerShade: { ...StyleSheet.absoluteFill, backgroundColor: "rgba(0,0,0,0.1)" }, progressRow: { position: "absolute", top: 16, left: 13, right: 13, flexDirection: "row", gap: 4 }, progressSegment: { flex: 1, height: 3, borderRadius: 3, backgroundColor: "rgba(255,255,255,0.38)" }, progressDone: { backgroundColor: "#D5FAFF" }, progressActive: { backgroundColor: "#61E8FF" }, viewerHeader: { position: "absolute", top: 34, left: 15, right: 15, flexDirection: "row", justifyContent: "space-between", alignItems: "center", zIndex: 3 }, viewerIdentity: { flexDirection: "row", alignItems: "center", gap: 9 }, viewerAvatar: { width: 34, height: 34, borderRadius: 17 }, viewerVenue: { color: "#FFF", fontWeight: "800", fontSize: 14 }, viewerMeta: { color: "rgba(255,255,255,0.72)", fontSize: 10, marginTop: 2 }, viewerActions: { flexDirection: "row", gap: 16, alignItems: "center" }, viewerFooter: { position: "absolute", left: 16, right: 16, bottom: 20, gap: 9, zIndex: 3 }, captionShell: { paddingHorizontal: 8, paddingBottom: 4 }, caption: { color: "#F4F8FF", fontSize: 14, textAlign: "center", lineHeight: 20 }, viewerVenueActions: { minHeight: 42, flexDirection: "row", alignItems: "center", gap: 7, paddingTop: 9, paddingHorizontal: 8, borderTopWidth: 1, borderTopColor: "rgba(218, 239, 255, 0.45)" }, viewerVenueAction: { height: 30, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 5, paddingHorizontal: 9 }, viewerVenueActionText: { color: "#DDF9FF", fontSize: 11, fontWeight: "800" }, viewerViews: { marginLeft: "auto", flexDirection: "row", alignItems: "center", gap: 4 }, viewerViewsText: { color: "#B9C8E2", fontSize: 10, fontWeight: "700" }, viewerZones: { ...StyleSheet.absoluteFill, flexDirection: "row" }, zone: { flex: 1 }, pendingFooter: { position: "absolute", left: 16, right: 16, bottom: 24, alignItems: "center", gap: 10 }, addingLabel: { color: "#6DEBFF", fontSize: 10, fontWeight: "900", letterSpacing: 1.4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: "rgba(3, 12, 25, 0.82)" },
