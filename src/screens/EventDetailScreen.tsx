@@ -330,6 +330,8 @@ const EventDetailScreen: React.FC = () => {
               </View>
             </Modal>
 
+            <TicketOptions event={event} desktop />
+
             <View style={styles.desktopLeftContent}>
               <Text style={styles.sectionTitle}>About this event</Text>
               <Text style={styles.description}>{event.description}</Text>
@@ -359,8 +361,6 @@ const EventDetailScreen: React.FC = () => {
                 <Ionicons name="calendar" size={20} color="#FFFFFF" />
                 <Text style={styles.desktopDateText}>{event.date.toDateString()}</Text>
               </View>
-
-              <TicketOptions event={event} desktop />
 
               {/* Buy Tickets Button - For all featured events */}
               {event.isFeatured && (
@@ -715,7 +715,8 @@ const styles = StyleSheet.create({
     borderColor: "rgba(0, 212, 255, 0.2)",
   },
   desktopTicketOptionsCard: {
-    marginBottom: 20,
+    marginTop: 20,
+    marginBottom: 0,
   },
   ticketOptionsHeader: {
     flexDirection: "row",
@@ -1122,7 +1123,8 @@ const styles = StyleSheet.create({
     flex: 0.65,
   },
   desktopLeftContent: {
-    paddingVertical: 20,
+    paddingTop: 10,
+    paddingBottom: 20,
     paddingHorizontal: 8,
   },
   desktopHeaderImage: {
