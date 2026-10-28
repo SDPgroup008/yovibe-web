@@ -7,6 +7,8 @@ const INDEXABLE_STATIC_PATHS = [
   { path: '/calendar', changefreq: 'daily', priority: '0.9' },
   { path: '/map', changefreq: 'weekly', priority: '0.85' },
   { path: '/about', changefreq: 'monthly', priority: '0.6' },
+  { path: '/privacy', changefreq: 'monthly', priority: '0.4' },
+  { path: '/terms', changefreq: 'monthly', priority: '0.4' },
 ];
 
 // Ticket checkout is intentionally crawlable long enough to expose noindex,

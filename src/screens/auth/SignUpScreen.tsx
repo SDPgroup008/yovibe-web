@@ -11,12 +11,15 @@ import {
   ActivityIndicator,
   ImageBackground,
   Dimensions,
+  Linking,
+  Platform,
 } from "react-native"
 import { useAuth } from "../../contexts/AuthContext"
 import type { UserType } from "../../models/User"
 import { Ionicons } from "@expo/vector-icons"
 import { useCompatNavigation } from "../../utils/compatNavigation"
 import { supabase } from "../../config/supabase"
+import { publicSiteUrl } from "../../config/runtime"
 
 // Responsive breakpoints for signup screen
 const { width } = Dimensions.get('window');
@@ -133,6 +136,17 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
     }
   }
 
+  const openLegalPage = async (path: "/privacy" | "/terms") => {
+    const url = `${publicSiteUrl()}${path}`
+
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.assign(url)
+      return
+    }
+
+    await Linking.openURL(url)
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.scrollView}>
       <ImageBackground
@@ -231,25 +245,40 @@ const SignUpScreen: React.FC<SignUpScreenProps> = ({ navigation: propNavigation 
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity
+            <View
               style={[styles.termsContainer, !termsAgreed && styles.termsContainerInactive]}
-              onPress={() => setTermsAgreed(!termsAgreed)}
             >
-              <View style={[styles.checkbox, termsAgreed && styles.checkboxActive]}>
+              <TouchableOpacity
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: termsAgreed }}
+                accessibilityLabel="Agree to the Terms of Service and Privacy Policy"
+                onPress={() => setTermsAgreed(!termsAgreed)}
+              >
+                <View style={[styles.checkbox, termsAgreed && styles.checkboxActive]}>
                 {termsAgreed && (
                   <Ionicons name="checkmark" size={20} color="#FFFFFF" />
                 )}
-              </View>
+                </View>
+              </TouchableOpacity>
               <Text style={[styles.termsText, !termsAgreed && styles.termsTextInactive]}>
                 I agree to the{" "}
                 <Text
                   style={styles.termsLink}
-                  onPress={() => navigation.navigate("TermsAndConditions")}
+                  accessibilityRole="link"
+                  onPress={() => void openLegalPage("/terms")}
                 >
-                  Terms and Conditions
+                  Terms of Service
+                </Text>
+                {" and the "}
+                <Text
+                  style={styles.termsLink}
+                  accessibilityRole="link"
+                  onPress={() => void openLegalPage("/privacy")}
+                >
+                  Privacy Policy
                 </Text>
               </Text>
-            </TouchableOpacity>
+            </View>
 
             <TouchableOpacity 
               style={[styles.button, !termsAgreed && styles.buttonDisabled]} 

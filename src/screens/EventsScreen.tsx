@@ -28,6 +28,7 @@ import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { useEventsScroll } from "../hooks/useScrollPersistence";
 import { publicSiteUrl } from "../config/runtime";
 import { ResponsiveSkeleton } from "../components/SkeletonLoader";
+import LegalLinks from "../components/LegalLinks";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -519,6 +520,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             index,
           })}
           ListEmptyComponent={<Text style={styles.emptyText}>No upcoming events found</Text>}
+          ListFooterComponent={<LegalLinks />}
           contentContainerStyle={[
             styles.eventsList,
             deviceType.isLargeScreen && styles.desktopEventsList,

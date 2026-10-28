@@ -92,6 +92,11 @@ const noScriptReplacement = `
           <a href="${siteUrl}/map">Map</a>
           <a href="${siteUrl}/about">About</a>
         </nav>
+        <footer aria-label="YoVibe legal information" style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0 0;font-size:14px;">
+          <a href="${siteUrl}/privacy">Privacy Policy</a>
+          <a href="${siteUrl}/terms">Terms of Service</a>
+          <a href="mailto:reinolmartin0001@gmail.com">Contact</a>
+        </footer>
         <p style="margin:0;">YoVibe helps people discover and buy tickets for events, concerts, parties, and nightlife across Uganda.</p>
       </div>
     </noscript>`;
