@@ -19,6 +19,8 @@ import VibeAnalysisService from "../services/VibeAnalysisService"
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { useCachedVenuePage } from "../hooks/useDataCache"
+import ImagePickerService from "../services/ImagePickerService"
+import LocationService from "../services/LocationService"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -48,6 +50,16 @@ const VenueDetailScreen: React.FC = () => {
   const [currentVibeImage, setCurrentVibeImage] = useState<string | null>(null)
   const [showVibeImageFull, setShowVibeImageFull] = useState(false)
   const [showOwnershipModal, setShowOwnershipModal] = useState(false)
+  const [showEditVenue, setShowEditVenue] = useState(false)
+  const [editVenueName, setEditVenueName] = useState("")
+  const [editVenueLocation, setEditVenueLocation] = useState("")
+  const [editVenueDescription, setEditVenueDescription] = useState("")
+  const [editVenueCategories, setEditVenueCategories] = useState("")
+  const [editVenueLatitude, setEditVenueLatitude] = useState("")
+  const [editVenueLongitude, setEditVenueLongitude] = useState("")
+  const [editVenueImageUri, setEditVenueImageUri] = useState<string | null>(null)
+  const [locatingVenue, setLocatingVenue] = useState(false)
+  const [savingVenue, setSavingVenue] = useState(false)
   const [ownershipRequest, setOwnershipRequest] = useState<{
     userPhone: string
     reason: string
@@ -250,6 +262,87 @@ const VenueDetailScreen: React.FC = () => {
 
   const handleAddEvent = () => {
     (navigation as any).navigate("AddEvent", { venueId, venueName: venue?.name || "" })
+  }
+
+  const openEditVenue = () => {
+    if (!venue) return
+    setEditVenueName(venue.name || "")
+    setEditVenueLocation(venue.location || "")
+    setEditVenueDescription(venue.description || "")
+    setEditVenueCategories((venue.categories || []).join(", "))
+    setEditVenueLatitude(String(venue.latitude ?? ""))
+    setEditVenueLongitude(String(venue.longitude ?? ""))
+    setEditVenueImageUri(null)
+    setShowEditVenue(true)
+  }
+
+  const chooseVenueImage = async () => {
+    try {
+      await ImagePickerService.requestMediaLibraryPermissionsAsync()
+      const result = await ImagePickerService.launchImageLibraryAsync({ mediaTypes: "Images", allowsEditing: true, aspect: [16, 9], quality: 0.8 })
+      if (!result.canceled && result.assets?.[0]?.uri) setEditVenueImageUri(result.assets[0].uri)
+    } catch (error) {
+      console.error("[VenueDetailScreen] Unable to select replacement image:", error)
+      Alert.alert("Error", "Unable to select a replacement image")
+    }
+  }
+
+  const useCurrentVenuePosition = async () => {
+    setLocatingVenue(true)
+    try {
+      const hasPermission = await LocationService.requestPermissions()
+      if (!hasPermission) throw new Error("Location is not available in this browser.")
+
+      const position = await LocationService.getCurrentPositionStrict()
+      setEditVenueLatitude(String(position.latitude))
+      setEditVenueLongitude(String(position.longitude))
+      Alert.alert("Location updated", "Your current coordinates have been added to the form.")
+    } catch (error) {
+      console.error("[VenueDetailScreen] Unable to get current position:", error)
+      const message = error instanceof Error ? error.message : "Unable to get your current location."
+      Alert.alert("Location unavailable", `${message} Your existing coordinates have not been changed.`)
+    } finally {
+      setLocatingVenue(false)
+    }
+  }
+
+  const saveVenueDetails = async () => {
+    if (!venue || !user || !(venue.ownerId === user.id || user.userType === "admin")) return
+    if (!editVenueName.trim() || !editVenueLocation.trim() || !editVenueDescription.trim()) {
+      Alert.alert("Missing information", "Enter the venue name, location, and description.")
+      return
+    }
+
+    const latitude = Number(editVenueLatitude.trim())
+    const longitude = Number(editVenueLongitude.trim())
+    if (!editVenueLatitude.trim() || !editVenueLongitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      Alert.alert("Invalid coordinates", "Enter a latitude from -90 to 90 and a longitude from -180 to 180.")
+      return
+    }
+
+    setSavingVenue(true)
+    try {
+      let backgroundImageUrl = venue.backgroundImageUrl
+      if (editVenueImageUri) backgroundImageUrl = await SupabaseService.uploadVenueImage(editVenueImageUri)
+
+      await SupabaseService.updateVenue(venue.slug || venueId, {
+        name: editVenueName.trim(),
+        location: editVenueLocation.trim(),
+        description: editVenueDescription.trim(),
+        categories: editVenueCategories.split(",").map((category) => category.trim()).filter(Boolean),
+        backgroundImageUrl,
+        latitude,
+        longitude,
+      })
+      await refetchVenuePage()
+      setShowEditVenue(false)
+      Alert.alert("Saved", "Venue details updated successfully.")
+    } catch (error) {
+      console.error("[VenueDetailScreen] Unable to update venue:", error)
+      Alert.alert("Error", "Unable to update venue details. Please try again.")
+    } finally {
+      setSavingVenue(false)
+    }
   }
 
   const handleDeleteVenue = async () => {
@@ -559,6 +652,10 @@ const VenueDetailScreen: React.FC = () => {
           <View style={styles.stickyCard}>
             {(isOwner || isAdmin) && (
               <View style={[styles.actionButtonsContainer, { marginVertical: 0, marginBottom: 20 }]}>
+                <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.editButton]} onPress={openEditVenue}>
+                  <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.actionButtonText}>Edit Venue</Text>
+                </TouchableOpacity>
                 {isOwner && !isCustomVenue ? (
                   <>
                     <View style={styles.actionButtonRow}>
@@ -755,6 +852,10 @@ const VenueDetailScreen: React.FC = () => {
 
           {(isOwner || isAdmin) && (
             <View style={styles.actionButtonsContainer}>
+              <TouchableOpacity style={[styles.actionButton, styles.actionButtonFullWidth, styles.editButton]} onPress={openEditVenue}>
+                <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.actionButtonText}>Edit Venue</Text>
+              </TouchableOpacity>
               {isOwner && !isCustomVenue ? (
                 <>
                   <View style={styles.actionButtonRow}>
@@ -986,6 +1087,57 @@ const VenueDetailScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
+      <Modal
+        visible={showEditVenue}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowEditVenue(false)}
+      >
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={[styles.modalOverlay, isLargeScreen && styles.modalOverlayDesktop]}>
+          <View style={[styles.modalContent, isLargeScreen && styles.modalContentDesktop]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Edit Venue</Text>
+              <TouchableOpacity onPress={() => setShowEditVenue(false)} accessibilityLabel="Close venue editor">
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.editVenueModalBody} keyboardShouldPersistTaps="handled">
+              <Text style={styles.inputLabel}>Venue name *</Text>
+              <TextInput style={styles.input} value={editVenueName} onChangeText={setEditVenueName} placeholder="Venue name" placeholderTextColor="#666666" />
+
+              <Text style={styles.inputLabel}>Location *</Text>
+              <TextInput style={styles.input} value={editVenueLocation} onChangeText={setEditVenueLocation} placeholder="Venue location" placeholderTextColor="#666666" />
+
+              <Text style={styles.inputLabel}>Description *</Text>
+              <TextInput style={[styles.input, styles.textArea]} value={editVenueDescription} onChangeText={setEditVenueDescription} placeholder="Describe your venue" placeholderTextColor="#666666" multiline textAlignVertical="top" />
+
+              <Text style={styles.inputLabel}>Categories (comma-separated)</Text>
+              <TextInput style={styles.input} value={editVenueCategories} onChangeText={setEditVenueCategories} placeholder="Nightlife, Bar, Restaurant" placeholderTextColor="#666666" />
+
+              <Text style={styles.inputLabel}>Venue coordinates *</Text>
+              <View style={styles.coordinateRow}>
+                <TextInput style={[styles.input, styles.coordinateInput]} value={editVenueLatitude} onChangeText={setEditVenueLatitude} placeholder="Latitude" placeholderTextColor="#666666" keyboardType="numeric" />
+                <TextInput style={[styles.input, styles.coordinateInput]} value={editVenueLongitude} onChangeText={setEditVenueLongitude} placeholder="Longitude" placeholderTextColor="#666666" keyboardType="numeric" />
+              </View>
+              <TouchableOpacity style={[styles.currentLocationButton, locatingVenue && styles.currentLocationButtonDisabled]} onPress={useCurrentVenuePosition} disabled={locatingVenue}>
+                {locatingVenue ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Ionicons name="locate-outline" size={20} color="#FFFFFF" />}
+                <Text style={styles.currentLocationButtonText}>{locatingVenue ? "Getting current position..." : "Use Current Position"}</Text>
+              </TouchableOpacity>
+
+              <Text style={styles.inputLabel}>Cover image</Text>
+              <TouchableOpacity style={styles.imagePickerButton} onPress={chooseVenueImage}>
+                <Ionicons name="image-outline" size={20} color="#FFFFFF" />
+                <Text style={styles.imagePickerButtonText}>{editVenueImageUri ? "Image selected" : "Replace cover image"}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.submitButton, savingVenue && styles.submitButtonDisabled]} onPress={saveVenueDetails} disabled={savingVenue}>
+                {savingVenue ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Text style={styles.submitButtonText}>Save Changes</Text>}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
       {/* Full-screen vibe image viewer */}
       <Modal
         visible={showVibeImageFull}
@@ -1117,6 +1269,9 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: "#FF3B30",
+  },
+  editButton: {
+    backgroundColor: "#4CAF50",
   },
   actionButtonText: {
     color: "#FFFFFF",
@@ -1465,11 +1620,21 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.8)",
     justifyContent: "flex-end",
   },
+  modalOverlayDesktop: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
   modalContent: {
     backgroundColor: "#1E1E1E",
     borderTopLeftRadius: responsiveSize(20, 24, 28),
     borderTopRightRadius: responsiveSize(20, 24, 28),
     maxHeight: "90%",
+  },
+  modalContentDesktop: {
+    borderRadius: 16,
+    maxWidth: 640,
+    width: "100%",
   },
   modalHeader: {
     flexDirection: "row",
@@ -1516,6 +1681,46 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: responsiveSize(80, 90, 100),
     textAlignVertical: "top",
+  },
+  editVenueModalBody: {
+    paddingBottom: responsiveSize(20, 24, 28),
+  },
+  imagePickerButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#444444",
+    borderRadius: responsiveSize(6, 8, 10),
+    paddingVertical: responsiveSize(11, 12, 14),
+  },
+  imagePickerButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  coordinateRow: {
+    flexDirection: "row",
+    gap: responsiveSize(8, 10, 12),
+  },
+  coordinateInput: {
+    flex: 1,
+  },
+  currentLocationButton: {
+    alignItems: "center",
+    backgroundColor: "#3B82F6",
+    borderRadius: responsiveSize(6, 8, 10),
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: responsiveSize(10, 12, 14),
+    paddingVertical: responsiveSize(11, 12, 14),
+  },
+  currentLocationButtonDisabled: {
+    backgroundColor: "#666666",
+  },
+  currentLocationButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
   },
   submitButton: {
     flexDirection: "row",

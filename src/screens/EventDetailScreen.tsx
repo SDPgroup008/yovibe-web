@@ -15,6 +15,7 @@ import {
   Modal,
   Image,
   Dimensions,
+  TextInput,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import SupabaseService from "../services/SupabaseService"
@@ -29,6 +30,7 @@ import type { Event } from "../models/Event"
 import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
 import { buildEventSharePayload } from "../utils/eventShare"
+import ImagePickerService from "../services/ImagePickerService"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -129,6 +131,15 @@ const EventDetailScreen: React.FC = () => {
   const [attendeeCount, setAttendeeCount] = useState(0)
   const [showFullImage, setShowFullImage] = useState(false)
   const [showLoginPrompt, setShowLoginPrompt] = useState(false)
+  const [showEditEvent, setShowEditEvent] = useState(false)
+  const [editName, setEditName] = useState("")
+  const [editDescription, setEditDescription] = useState("")
+  const [editDate, setEditDate] = useState("")
+  const [editTime, setEditTime] = useState("")
+  const [editArtists, setEditArtists] = useState("")
+  const [editLocation, setEditLocation] = useState("")
+  const [editPosterUri, setEditPosterUri] = useState<string | null>(null)
+  const [savingEvent, setSavingEvent] = useState(false)
 
   useEffect(() => {
     if (!event) return
@@ -220,6 +231,63 @@ const EventDetailScreen: React.FC = () => {
     setShowFullImage(true)
   }
 
+  const openEditEvent = () => {
+    if (!event) return
+    setEditName(event.name || "")
+    setEditDescription(event.description || "")
+    setEditDate(new Date(event.date).toISOString().slice(0, 10))
+    setEditTime(event.time || "")
+    setEditArtists((event.artists || []).join(", "))
+    setEditLocation(event.location || "")
+    setEditPosterUri(null)
+    setShowEditEvent(true)
+  }
+
+  const chooseEventPoster = async () => {
+    try {
+      await ImagePickerService.requestMediaLibraryPermissionsAsync()
+      const result = await ImagePickerService.launchImageLibraryAsync({ mediaTypes: "Images", allowsEditing: true, aspect: [16, 9], quality: 0.8 })
+      if (!result.canceled && result.assets?.[0]?.uri) setEditPosterUri(result.assets[0].uri)
+    } catch (error) {
+      console.error("[EventDetailScreen] Unable to select replacement poster:", error)
+      Alert.alert("Error", "Unable to select a replacement poster")
+    }
+  }
+
+  const saveEventDetails = async () => {
+    if (!event || !user || !(event.createdBy === user.id || event.createdByAuth === user.id || user.userType === "admin")) return
+    const parsedDate = new Date(`${editDate}T12:00:00`)
+    if (!editName.trim() || !editDescription.trim() || Number.isNaN(parsedDate.getTime())) {
+      Alert.alert("Missing information", "Enter an event name, description, and valid date (YYYY-MM-DD).")
+      return
+    }
+
+    setSavingEvent(true)
+    try {
+      let posterImageUrl = event.posterImageUrl
+      if (editPosterUri) posterImageUrl = await SupabaseService.uploadEventImage(editPosterUri)
+
+      const updatedDetails: Partial<Event> = {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        date: parsedDate,
+        time: editTime.trim(),
+        artists: editArtists.split(",").map((artist) => artist.trim()).filter(Boolean),
+        location: editLocation.trim(),
+        posterImageUrl,
+      }
+      await SupabaseService.updateEvent(event.slug || event.id, updatedDetails)
+      updateCachedData((previous) => previous ? { ...previous, ...updatedDetails } : previous)
+      setShowEditEvent(false)
+      Alert.alert("Saved", "Event details updated successfully.")
+    } catch (error) {
+      console.error("[EventDetailScreen] Unable to update event:", error)
+      Alert.alert("Error", "Unable to update event details. Please try again.")
+    } finally {
+      setSavingEvent(false)
+    }
+  }
+
   const formatDateRange = (date: Date) => {
     const options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }
     return date.toLocaleDateString("en-US", options).toUpperCase()
@@ -281,7 +349,7 @@ const EventDetailScreen: React.FC = () => {
     )
   }
 
-  const isEventOwner = user && event && (event.createdBy === user.id)
+  const isEventOwner = user && event && (event.createdBy === user.id || event.createdByAuth === user.id)
   const canManageEvent = isEventOwner || user?.userType === "admin"
 
   return (
@@ -399,6 +467,10 @@ const EventDetailScreen: React.FC = () => {
               {/* Organiser Dashboard - Show for event owners AND admins */}
               {canManageEvent && (
                 <View style={styles.ownerControls}>
+                  <TouchableOpacity style={styles.ownerButton} onPress={openEditEvent}>
+                    <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.ownerButtonText}>Edit Event</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.ownerButton} onPress={() => navigation.navigate("OrganiserDashboard", { eventId })}>
                     <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
                     <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
@@ -489,6 +561,10 @@ const EventDetailScreen: React.FC = () => {
             {/* Organiser Dashboard - Show for event owners AND admins */}
             {canManageEvent && (
               <View style={styles.ownerControls}>
+                <TouchableOpacity style={styles.ownerButton} onPress={openEditEvent}>
+                  <Ionicons name="create-outline" size={20} color="#FFFFFF" />
+                  <Text style={styles.ownerButtonText}>Edit Event</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={styles.ownerButton} onPress={() => navigation.navigate("OrganiserDashboard", { eventId })}>
                   <Ionicons name="settings-outline" size={20} color="#FFFFFF" />
                   <Text style={styles.ownerButtonText}>Organiser Dashboard</Text>
@@ -558,6 +634,53 @@ const EventDetailScreen: React.FC = () => {
         </ScrollView>
       )}
     </View>
+
+    <Modal
+      visible={showEditEvent}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowEditEvent(false)}
+    >
+      <View style={[styles.editOverlay, isLargeScreen && styles.editOverlayDesktop]}>
+        <View style={[styles.editCard, isLargeScreen && styles.editCardDesktop]}>
+          <View style={styles.editHeader}>
+            <Text style={styles.editTitle}>Edit Event</Text>
+            <TouchableOpacity onPress={() => setShowEditEvent(false)} accessibilityLabel="Close event editor">
+              <Ionicons name="close" size={24} color="#FFFFFF" />
+            </TouchableOpacity>
+          </View>
+          <ScrollView contentContainerStyle={styles.editBody} keyboardShouldPersistTaps="handled">
+            <Text style={styles.editLabel}>Event name *</Text>
+            <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="Event name" placeholderTextColor="#777777" />
+
+            <Text style={styles.editLabel}>Description *</Text>
+            <TextInput style={[styles.editInput, styles.editTextArea]} value={editDescription} onChangeText={setEditDescription} placeholder="Describe your event" placeholderTextColor="#777777" multiline textAlignVertical="top" />
+
+            <Text style={styles.editLabel}>Date * (YYYY-MM-DD)</Text>
+            <TextInput style={styles.editInput} value={editDate} onChangeText={setEditDate} placeholder="2026-12-31" placeholderTextColor="#777777" autoCapitalize="none" />
+
+            <Text style={styles.editLabel}>Time</Text>
+            <TextInput style={styles.editInput} value={editTime} onChangeText={setEditTime} placeholder="7:00 PM" placeholderTextColor="#777777" />
+
+            <Text style={styles.editLabel}>Artists (comma-separated)</Text>
+            <TextInput style={styles.editInput} value={editArtists} onChangeText={setEditArtists} placeholder="Artist one, Artist two" placeholderTextColor="#777777" />
+
+            <Text style={styles.editLabel}>Location</Text>
+            <TextInput style={styles.editInput} value={editLocation} onChangeText={setEditLocation} placeholder="Event location" placeholderTextColor="#777777" />
+
+            <Text style={styles.editLabel}>Poster</Text>
+            <TouchableOpacity style={styles.posterPickerButton} onPress={chooseEventPoster}>
+              <Ionicons name="image-outline" size={20} color="#FFFFFF" />
+              <Text style={styles.posterPickerText}>{editPosterUri ? "Poster selected" : "Replace poster"}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={[styles.saveButton, savingEvent && styles.saveButtonDisabled]} onPress={saveEventDetails} disabled={savingEvent}>
+              <Text style={styles.saveButtonText}>{savingEvent ? "Saving..." : "Save Changes"}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
 
     <Modal
       visible={showLoginPrompt}
@@ -994,6 +1117,91 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginLeft: responsiveSize(6, 8, 10),
     fontSize: responsiveSize(13, 14, 15),
+  },
+  editOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.78)",
+    justifyContent: "flex-end",
+  },
+  editOverlayDesktop: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  editCard: {
+    backgroundColor: "#1E1E1E",
+    borderTopLeftRadius: responsiveSize(20, 24, 28),
+    borderTopRightRadius: responsiveSize(20, 24, 28),
+    maxHeight: "90%",
+  },
+  editCardDesktop: {
+    borderRadius: 16,
+    maxWidth: 640,
+    width: "100%",
+  },
+  editHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: responsiveSize(16, 18, 20),
+    borderBottomWidth: 1,
+    borderBottomColor: "#333333",
+  },
+  editTitle: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(18, 20, 22),
+    fontWeight: "bold",
+  },
+  editBody: {
+    padding: responsiveSize(16, 18, 20),
+  },
+  editLabel: {
+    color: "#DDDDDD",
+    fontSize: responsiveSize(13, 14, 15),
+    marginBottom: responsiveSize(6, 8, 10),
+    marginTop: responsiveSize(12, 14, 16),
+  },
+  editInput: {
+    backgroundColor: "#2A2A2A",
+    borderColor: "#444444",
+    borderRadius: responsiveSize(6, 8, 10),
+    borderWidth: 1,
+    color: "#FFFFFF",
+    fontSize: responsiveSize(14, 15, 16),
+    paddingHorizontal: responsiveSize(12, 14, 16),
+    paddingVertical: responsiveSize(10, 12, 14),
+  },
+  editTextArea: {
+    minHeight: responsiveSize(100, 110, 120),
+  },
+  posterPickerButton: {
+    alignItems: "center",
+    backgroundColor: "#444444",
+    borderRadius: responsiveSize(6, 8, 10),
+    flexDirection: "row",
+    justifyContent: "center",
+    paddingVertical: responsiveSize(11, 12, 14),
+  },
+  posterPickerText: {
+    color: "#FFFFFF",
+    fontWeight: "600",
+    marginLeft: responsiveSize(6, 8, 10),
+  },
+  saveButton: {
+    alignItems: "center",
+    backgroundColor: COLORS.primary,
+    borderRadius: responsiveSize(8, 10, 12),
+    marginBottom: responsiveSize(10, 12, 16),
+    marginTop: responsiveSize(22, 24, 28),
+    paddingVertical: responsiveSize(14, 16, 18),
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#666666",
+  },
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontSize: responsiveSize(15, 16, 18),
+    fontWeight: "bold",
   },
   scannerButton: {
     alignItems: "center",

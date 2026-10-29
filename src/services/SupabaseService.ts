@@ -748,8 +748,8 @@ class SupabaseService {
       if (data.backgroundImageUrl) updateData.background_image_url = data.backgroundImageUrl;
       if (data.categories) updateData.categories = data.categories;
       if (data.vibeRating !== undefined) updateData.vibe_rating = data.vibeRating;
-      if (data.latitude) updateData.latitude = data.latitude;
-      if (data.longitude) updateData.longitude = data.longitude;
+      if (data.latitude !== undefined) updateData.latitude = data.latitude;
+      if (data.longitude !== undefined) updateData.longitude = data.longitude;
       if (data.weeklyPrograms) updateData.weekly_programs = data.weeklyPrograms;
       if (data.venueType) updateData.venue_type = data.venueType;
 
@@ -1249,6 +1249,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data.ticketContacts) updateData.ticket_contacts = data.ticketContacts;
       if (data.paymentMethods) updateData.payment_methods = data.paymentMethods;
       if (data.attendees) updateData.attendees = data.attendees;
+      if (data.location !== undefined) updateData.location = data.location;
       if (data.eventStatus) updateData.event_status = data.eventStatus;
       if (data.postponedTo) updateData.postponed_to = data.postponedTo.toISOString();
       if (data.lateFeePercent !== undefined) updateData.late_fee_percent = data.lateFeePercent;

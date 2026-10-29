@@ -48,12 +48,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   link: {
-    fontSize: 13,
+    fontSize: 10,
     fontWeight: "600",
     textDecorationLine: "underline",
   },
   separator: {
-    fontSize: 12,
+    fontSize: 9,
   },
   lightText: {
     color: "#C7CBD4",

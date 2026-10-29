@@ -81,6 +81,39 @@ class LocationService {
   }
 
   /**
+   * Get an actual browser position without substituting a fallback location.
+   * Use this for edits where silently changing a saved address would be unsafe.
+   */
+  async getCurrentPositionStrict() {
+    return new Promise<{
+      latitude: number
+      longitude: number
+      accuracy: number | null
+      timestamp: number
+    }>((resolve, reject) => {
+      if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
+        reject(new Error("Location is not available in this browser."))
+        return
+      }
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: typeof position.coords.accuracy === "number" ? position.coords.accuracy : null,
+            timestamp: position.timestamp ?? Date.now(),
+          })
+        },
+        (error) => {
+          reject(new Error(error.message || "Unable to get your current location."))
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 },
+      )
+    })
+  }
+
+  /**
    * Watch for location changes
    *
    * The callback receives numeric latitude and longitude values (no rounding).
