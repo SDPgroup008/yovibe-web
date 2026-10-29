@@ -1061,7 +1061,7 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             (a) If you believe that content on the Platform infringes your copyright or other intellectual
-            property rights, you may submit a takedown notice to support@yovibe.net identifying the
+            property rights, you may submit a takedown notice to reinolmartin001@gmail.com identifying the
             allegedly infringing content and your rights in respect of it.
           </Text>
           <Text style={styles.paragraph}>
@@ -1416,7 +1416,7 @@ const TermsAndConditionsScreen: React.FC = () => {
             23.2 Our Privacy Policy (summarized in Section 12), together with our Cookie Policy and any
             Organizer or promotional terms applicable to a specific Event, are incorporated into these
             Terms by reference. Copies of the Privacy Policy and Cookie Policy are available on our website
-            and may be requested from support at support@yovibe.net.
+            and may be requested from support at reinolmartin001@gmail.com.
           </Text>
 
           <Text style={styles.sectionTitle}>24. ASSIGNMENT</Text>
@@ -1432,7 +1432,7 @@ const TermsAndConditionsScreen: React.FC = () => {
           </Text>
           <Text style={styles.paragraph}>
             YoVibe Support{'\n'}
-            Email: support@yovibe.net{'\n'}
+            Email: reinolmartin001@gmail.com{'\n'}
             Website: {publicSiteUrl()}{'\n'}
             Jurisdiction: Republic of Uganda
           </Text>
