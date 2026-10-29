@@ -753,12 +753,17 @@ class SupabaseService {
       if (data.weeklyPrograms) updateData.weekly_programs = data.weeklyPrograms;
       if (data.venueType) updateData.venue_type = data.venueType;
 
-      const { error } = await supabase
+      const { data: updatedVenue, error } = await supabase
         .from("venues")
         .update(updateData)
-        .eq("slug", venueSlug);
+        .eq("slug", venueSlug)
+        .select("slug")
+        .maybeSingle();
 
       if (error) throw error;
+      if (!updatedVenue) {
+        throw new Error("No venue was updated. Check the venue slug and authenticated owner permissions.");
+      }
       dataCache.invalidateVenue(venueSlug)
     } catch (error) {
       console.error("SupabaseService: Error updating venue:", error);

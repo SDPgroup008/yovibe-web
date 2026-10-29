@@ -36,7 +36,7 @@ const VenueDetailScreen: React.FC = () => {
 
   // Validate venueId
   const isValidVenueId = venueId && venueId.length > 0 && venueId !== 'add-event' && venueId !== 'programs' && venueId !== 'vibe' && venueId !== 'ticket-contacts' && venueId !== 'my-tickets'
-  const { data: venuePage, loading, refetch: refetchVenuePage } = useCachedVenuePage(isValidVenueId ? venueId : "")
+  const { data: venuePage, loading, refetch: refetchVenuePage, updateCachedData } = useCachedVenuePage(isValidVenueId ? venueId : "")
 
   const venue = venuePage?.venue ?? null
   const events = venuePage?.events ?? []
@@ -325,7 +325,7 @@ const VenueDetailScreen: React.FC = () => {
       let backgroundImageUrl = venue.backgroundImageUrl
       if (editVenueImageUri) backgroundImageUrl = await SupabaseService.uploadVenueImage(editVenueImageUri)
 
-      await SupabaseService.updateVenue(venue.slug || venueId, {
+      const updatedDetails = {
         name: editVenueName.trim(),
         location: editVenueLocation.trim(),
         description: editVenueDescription.trim(),
@@ -333,10 +333,17 @@ const VenueDetailScreen: React.FC = () => {
         backgroundImageUrl,
         latitude,
         longitude,
-      })
-      await refetchVenuePage()
+      }
+      await SupabaseService.updateVenue(venue.slug || venueId, updatedDetails)
+      updateCachedData((previous) => previous?.venue ? {
+        ...previous,
+        venue: { ...previous.venue, ...updatedDetails },
+      } : previous)
       setShowEditVenue(false)
       Alert.alert("Saved", "Venue details updated successfully.")
+      void refetchVenuePage().catch((refreshError) => {
+        console.error("[VenueDetailScreen] Venue saved but background refresh failed:", refreshError)
+      })
     } catch (error) {
       console.error("[VenueDetailScreen] Unable to update venue:", error)
       Alert.alert("Error", "Unable to update venue details. Please try again.")

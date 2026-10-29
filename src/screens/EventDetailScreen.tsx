@@ -134,7 +134,6 @@ const EventDetailScreen: React.FC = () => {
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [editName, setEditName] = useState("")
   const [editDescription, setEditDescription] = useState("")
-  const [editDate, setEditDate] = useState("")
   const [editTime, setEditTime] = useState("")
   const [editArtists, setEditArtists] = useState("")
   const [editLocation, setEditLocation] = useState("")
@@ -235,7 +234,6 @@ const EventDetailScreen: React.FC = () => {
     if (!event) return
     setEditName(event.name || "")
     setEditDescription(event.description || "")
-    setEditDate(new Date(event.date).toISOString().slice(0, 10))
     setEditTime(event.time || "")
     setEditArtists((event.artists || []).join(", "))
     setEditLocation(event.location || "")
@@ -256,9 +254,8 @@ const EventDetailScreen: React.FC = () => {
 
   const saveEventDetails = async () => {
     if (!event || !user || !(event.createdBy === user.id || event.createdByAuth === user.id || user.userType === "admin")) return
-    const parsedDate = new Date(`${editDate}T12:00:00`)
-    if (!editName.trim() || !editDescription.trim() || Number.isNaN(parsedDate.getTime())) {
-      Alert.alert("Missing information", "Enter an event name, description, and valid date (YYYY-MM-DD).")
+    if (!editName.trim() || !editDescription.trim()) {
+      Alert.alert("Missing information", "Enter an event name and description.")
       return
     }
 
@@ -270,7 +267,6 @@ const EventDetailScreen: React.FC = () => {
       const updatedDetails: Partial<Event> = {
         name: editName.trim(),
         description: editDescription.trim(),
-        date: parsedDate,
         time: editTime.trim(),
         artists: editArtists.split(",").map((artist) => artist.trim()).filter(Boolean),
         location: editLocation.trim(),
@@ -655,9 +651,6 @@ const EventDetailScreen: React.FC = () => {
 
             <Text style={styles.editLabel}>Description *</Text>
             <TextInput style={[styles.editInput, styles.editTextArea]} value={editDescription} onChangeText={setEditDescription} placeholder="Describe your event" placeholderTextColor="#777777" multiline textAlignVertical="top" />
-
-            <Text style={styles.editLabel}>Date * (YYYY-MM-DD)</Text>
-            <TextInput style={styles.editInput} value={editDate} onChangeText={setEditDate} placeholder="2026-12-31" placeholderTextColor="#777777" autoCapitalize="none" />
 
             <Text style={styles.editLabel}>Time</Text>
             <TextInput style={styles.editInput} value={editTime} onChangeText={setEditTime} placeholder="7:00 PM" placeholderTextColor="#777777" />
