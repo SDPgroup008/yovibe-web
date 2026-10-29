@@ -5,6 +5,7 @@ const path = require("path");
 
 const projectRoot = path.join(__dirname, "..");
 const patchScript = path.join(__dirname, "patch-web-shell-seo.js");
+const termsPageScript = path.join(__dirname, "generate-terms-page.js");
 require("./prepare-ffmpeg-web-assets")();
 
 // Local staging builds intentionally load the ignored dotenv files here because
@@ -196,5 +197,6 @@ const run = (command) => {
 const extraArgs = process.argv.slice(2);
 const escapedArgs = extraArgs.join(" ");
 
+run(`node "${termsPageScript}"`);
 run(`npx expo export --platform web${escapedArgs ? ` ${escapedArgs}` : ""}`);
 run(`node "${patchScript}"`);

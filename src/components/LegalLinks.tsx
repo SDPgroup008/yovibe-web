@@ -31,7 +31,6 @@ const LegalLinks: React.FC<LegalLinksProps> = ({ tone = "light" }) => {
           <Text style={[styles.link, textStyle]}>Terms of Service</Text>
         </TouchableOpacity>
       </View>
-      <Text style={[styles.contact, textStyle]}>Contact: reinolmartin0001@gmail.com</Text>
     </View>
   );
 };
@@ -39,9 +38,8 @@ const LegalLinks: React.FC<LegalLinksProps> = ({ tone = "light" }) => {
 const styles = StyleSheet.create({
   container: {
     alignItems: "center",
-    gap: 8,
     paddingTop: 28,
-    paddingBottom: 18,
+    paddingBottom: 0,
   },
   links: {
     alignItems: "center",
@@ -55,9 +53,6 @@ const styles = StyleSheet.create({
     textDecorationLine: "underline",
   },
   separator: {
-    fontSize: 12,
-  },
-  contact: {
     fontSize: 12,
   },
   lightText: {

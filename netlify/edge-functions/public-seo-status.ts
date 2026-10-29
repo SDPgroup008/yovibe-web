@@ -506,6 +506,10 @@ export function injectFeaturedEventsHtml(html: string, markup: string): string {
   return html.replace(/<body[^>]*>/i, `$&${markup}`);
 }
 
+function removeHomepageLegalFooter(html: string): string {
+  return html.replace(/\s*<footer id=["']yovibe-home-legal-footer["'][\s\S]*?<\/footer>/i, '');
+}
+
 function brandedErrorPage(status: 404 | 410, pathname: string): Response {
   const title = status === 410 ? 'Event retired' : 'Page not found';
   const message = status === 410 ? 'This event has ended and is no longer available on YoVibe.' : 'The YoVibe page you requested could not be found.';
@@ -595,6 +599,8 @@ export default async (request: Request, context: any) => {
       if (request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
       const canonicalPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
       let html = injectEventDocumentHtml(await upstream.text(), buildPageDocument(shareRoute.page, `${url.origin}${canonicalPath}`));
+
+      if (shareRoute.page !== 'home') html = removeHomepageLegalFooter(html);
 
       if (landingPage) {
         const featured = await fetchFeaturedEvents();

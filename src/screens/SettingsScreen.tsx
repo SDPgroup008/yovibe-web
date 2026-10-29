@@ -5,7 +5,6 @@ import { Ionicons } from "@expo/vector-icons"
 import { supabase } from "../config/supabase"
 import SupabaseService from "../services/SupabaseService"
 import { useAuth } from "../contexts/AuthContext"
-import LegalLinks from "../components/LegalLinks"
 
 export default function SettingsScreen() {
   const { user, signOut } = useAuth()
@@ -90,7 +89,6 @@ export default function SettingsScreen() {
           <Text style={[styles.menuText, { color: "#FF3B30" }]}>Delete Account</Text>
           <Ionicons name="chevron-forward" size={22} color="#666666" />
         </TouchableOpacity>
-        <LegalLinks />
       </ScrollView>
 
       {/* Change Password Modal */}

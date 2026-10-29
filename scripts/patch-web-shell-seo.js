@@ -81,7 +81,7 @@ const headInjection = `
 
 const noScriptReplacement = `
     <noscript>
-      <div style="padding:24px;font-family:Arial,sans-serif;line-height:1.5;color:#111;background:#fff;max-width:720px;margin:0 auto;">
+      <div style="padding:24px 24px 2px;font-family:Arial,sans-serif;line-height:1.5;color:#111;background:#fff;max-width:720px;margin:0 auto;">
         <h1 style="font-size:28px;margin-bottom:12px;">YoVibe</h1>
         <p style="margin:0 0 12px;">Discover nightlife events, concerts, parties, artists, and venues across Uganda.</p>
         <p style="margin:0 0 12px;">Browse upcoming events in Kampala, Entebbe, Mukono, and Jinja, or explore popular venues and live entertainment.</p>
@@ -92,12 +92,11 @@ const noScriptReplacement = `
           <a href="${siteUrl}/map">Map</a>
           <a href="${siteUrl}/about">About</a>
         </nav>
-        <footer aria-label="YoVibe legal information" style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0 0;font-size:14px;">
+        <p style="margin:0;">YoVibe helps people discover and buy tickets for events, concerts, parties, and nightlife across Uganda.</p>
+        <footer id="yovibe-home-legal-footer" aria-label="YoVibe legal information" style="display:flex;gap:12px;flex-wrap:wrap;margin:20px 0 0;font-size:14px;">
           <a href="${siteUrl}/privacy">Privacy Policy</a>
           <a href="${siteUrl}/terms">Terms of Service</a>
-          <a href="mailto:reinolmartin0001@gmail.com">Contact</a>
         </footer>
-        <p style="margin:0;">YoVibe helps people discover and buy tickets for events, concerts, parties, and nightlife across Uganda.</p>
       </div>
     </noscript>`;
 

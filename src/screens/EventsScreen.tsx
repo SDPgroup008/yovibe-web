@@ -114,6 +114,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
 
   const { user, setRedirectIntent } = useAuth();
   const isFocused = useIsFocused();
+  const isPublicHomepage = Platform.OS === "web"
+    && typeof window !== "undefined"
+    && window.location.pathname === "/";
 
 
   const events = useMemo<Event[]>(() => {
@@ -520,13 +523,14 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
             index,
           })}
           ListEmptyComponent={<Text style={styles.emptyText}>No upcoming events found</Text>}
-          ListFooterComponent={<LegalLinks />}
+          ListFooterComponent={isPublicHomepage ? <LegalLinks /> : null}
           contentContainerStyle={[
             styles.eventsList,
             deviceType.isLargeScreen && styles.desktopEventsList,
             { 
               paddingLeft: gridHorizontalPadding,
               paddingRight: gridHorizontalPadding,
+              paddingBottom: isPublicHomepage ? 2 : undefined,
               columnGap: gridColumns > 1 ? spacing.md : 0
             }
           ]}
