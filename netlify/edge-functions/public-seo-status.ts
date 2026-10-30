@@ -593,17 +593,33 @@ export default async (request: Request, context: any) => {
   const landingPage = isPublicEventsLanding(url.pathname);
   if (!shareRoute) return context.next();
 
+  // context.next() advances the Netlify Edge request pipeline and must only be
+  // invoked once per request. Keep a pristine clone so a later optional SEO
+  // lookup failure can return the app response without re-entering that pipeline.
+  let fallbackUpstream: Response | null = null;
+  let downstreamStarted = false;
+
   try {
     if (shareRoute.kind === 'page') {
+      downstreamStarted = true;
       const upstream = await context.next();
       if (request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+      fallbackUpstream = upstream.clone();
       const canonicalPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
       let html = injectEventDocumentHtml(await upstream.text(), buildPageDocument(shareRoute.page, `${url.origin}${canonicalPath}`));
 
       if (shareRoute.page !== 'home') html = removeHomepageLegalFooter(html);
 
       if (landingPage) {
-        const featured = await fetchFeaturedEvents();
+        let featured: PublicEvent[] | undefined;
+        try {
+          featured = await fetchFeaturedEvents();
+        } catch (error) {
+          // Featured-event markup is supplementary. A transient Supabase
+          // failure must not take the homepage, its canonical tags, or its
+          // primary structured metadata offline.
+          console.error('[public-seo-status] Featured-event lookup failed; serving homepage without featured markup', error);
+        }
         const markup = featured ? buildFeaturedEventsMarkup(featured, url.origin) : '';
         if (markup) html = injectFeaturedEventsHtml(html, markup);
       }
@@ -619,8 +635,10 @@ export default async (request: Request, context: any) => {
     const status = publicEntityStatus(shareRoute.entity, row);
     if (status !== 200) return brandedErrorPage(status, url.pathname);
 
+    downstreamStarted = true;
     const upstream = await context.next();
     if (request.method === 'HEAD' || String(getEdgeEnv('APP_ENV')).toLowerCase() === 'staging' || !String(upstream.headers.get('content-type') || '').includes('text/html')) return upstream;
+    fallbackUpstream = upstream.clone();
 
     const canonicalPath = shareRoute.entity === 'events'
       ? (shareRoute.purchase ? `/events/tickets/${encodeURIComponent(shareRoute.slug)}` : `/events/${encodeURIComponent(shareRoute.slug)}`)
@@ -644,7 +662,9 @@ export default async (request: Request, context: any) => {
     if (shareRoute.purchase) headers.set('X-Robots-Tag', 'noindex, nofollow');
     return new Response(injectEventDocumentHtml(await upstream.text(), document), { status: upstream.status, statusText: upstream.statusText, headers });
   } catch (error) {
-    console.error('[public-seo-status] Public entity lookup failed; passing through to avoid false errors', error);
-    return context.next();
+    console.error('[public-seo-status] SEO enhancement failed; serving the original app response when available', error);
+    if (fallbackUpstream) return fallbackUpstream;
+    if (!downstreamStarted) return context.next();
+    throw error;
   }
 };

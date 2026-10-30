@@ -1,10 +1,46 @@
 import { canonicalHostRedirect } from '../netlify/edge-functions/canonical-host';
-import { buildEventDocument, buildFeaturedEventsMarkup, buildPageDocument, buildTicketPurchaseDocument, buildVenueDocument, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, parsePublicShareRoute, publicEntityStatus, structuredEventTimes } from '../netlify/edge-functions/public-seo-status';
+import publicSeoStatus, { buildEventDocument, buildFeaturedEventsMarkup, buildPageDocument, buildTicketPurchaseDocument, buildVenueDocument, eventIsGone, featuredEvents, injectEventDocumentHtml, injectFeaturedEventsHtml, parsePublicEntityPath, parsePublicShareRoute, publicEntityStatus, structuredEventTimes } from '../netlify/edge-functions/public-seo-status';
 import { robotsBody } from '../netlify/edge-functions/robots';
 import fs from 'fs';
 import path from 'path';
 
 describe('public SEO route handling', () => {
+  test('serves the SEO homepage without replaying the Edge pipeline when featured-event lookup fails', async () => {
+    const previousNetlify = (globalThis as any).Netlify;
+    const hadNetlify = Object.prototype.hasOwnProperty.call(globalThis, 'Netlify');
+    const previousFetch = globalThis.fetch;
+    const context = {
+      next: jest.fn().mockResolvedValue(new Response('<html><head></head><body><div id="root"></div></body></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      })),
+    };
+
+    (globalThis as any).Netlify = {
+      env: {
+        get: (name: string) => ({
+          APP_ENV: 'production',
+          SUPABASE_URL: 'https://example.supabase.co',
+          SUPABASE_PUBLISHABLE_KEY: 'public-test-key',
+        } as Record<string, string>)[name],
+      },
+    };
+    globalThis.fetch = jest.fn().mockRejectedValue(new Error('Supabase timeout')) as typeof fetch;
+
+    try {
+      const response = await publicSeoStatus(new Request('https://yovibe.net/'), context);
+      const html = await response.text();
+
+      expect(response.status).toBe(200);
+      expect(context.next).toHaveBeenCalledTimes(1);
+      expect(html).toContain('<link rel="canonical" href="https://yovibe.net/">');
+    } finally {
+      globalThis.fetch = previousFetch;
+      if (hadNetlify) (globalThis as any).Netlify = previousNetlify;
+      else delete (globalThis as any).Netlify;
+    }
+  });
+
   test('recognises public detail routes but leaves app routes alone', () => {
     expect(parsePublicEntityPath('/events/future-concert')).toEqual({ entity: 'events', slug: 'future-concert' });
     expect(parsePublicEntityPath('/venues/torino-bar-restaurant/')).toEqual({ entity: 'venues', slug: 'torino-bar-restaurant' });
