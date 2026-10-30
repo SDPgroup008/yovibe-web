@@ -2,7 +2,7 @@
 
 import type React from "react"
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput, ActivityIndicator } from "react-native"
+import { Alert, View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking, RefreshControl, TextInput, ActivityIndicator } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
@@ -16,6 +16,7 @@ import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { useMapScroll } from "../hooks/useScrollPersistence";
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
+import LocationService from "../services/LocationService"
 
 // ─── Module-level cache: survives component remounts ─────────────
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
@@ -84,6 +85,7 @@ const COUNTRY_BOUNDS: Array<{ code: string; name: string; bounds: [number, numbe
 
 // Cities per country (capital first). Used to populate the city dropdown.
 type MapCity = { name: string; lat: number; lng: number; capital?: boolean }
+type UserMapLocation = { latitude: number; longitude: number; accuracy: number | null }
 const CITY_LOOKUP: Record<string, MapCity[]> = {
   UG: [
     { name: "Kampala", lat: 0.3476, lng: 32.5825, capital: true },
@@ -315,6 +317,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [selectedCountry, setSelectedCountry] = useState("UG")
   const [selectedCity, setSelectedCity] = useState<string>("Kampala")
   const [openDropdown, setOpenDropdown] = useState<"city" | "country" | null>(null)
+  const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null)
+  const [locatingUser, setLocatingUser] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const [lastCreatedAt, setLastCreatedAt] = useState<string | undefined>(undefined)
   const [hasMore, setHasMore] = useState(true)
@@ -632,6 +636,39 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     if (win) win.postMessage(msg, "*")
   }
 
+  const postUserLocation = (location: UserMapLocation, focus = false) => {
+    postToMap({
+      type: "user-location",
+      lat: location.latitude,
+      lng: location.longitude,
+      accuracy: location.accuracy,
+      focus,
+    })
+  }
+
+  const locateUser = async () => {
+    if (locatingUser) return
+    setLocatingUser(true)
+    setOpenDropdown(null)
+    try {
+      const position = await LocationService.getCurrentPositionStrict()
+      const location = {
+        latitude: position.latitude,
+        longitude: position.longitude,
+        accuracy: position.accuracy,
+      }
+      setUserLocation(location)
+      postUserLocation(location, true)
+    } catch (error: any) {
+      Alert.alert(
+        "Location unavailable",
+        error?.message || "We could not find your current location. Check your browser permission and try again.",
+      )
+    } finally {
+      setLocatingUser(false)
+    }
+  }
+
   const mapVenuesPayload = () => ({
     type: "venues",
     venues: venues.map((v) => ({
@@ -708,17 +745,19 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
         // so markers render even if earlier posts were dropped by the iframe.
         postToMap(mapVenuesPayload())
         postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
-        focusCapital()
+        if (userLocation) postUserLocation(userLocation, true)
+        else focusCapital()
       }
     }
     window.addEventListener("message", handler)
     return () => window.removeEventListener("message", handler)
-  }, [venues, selectedVenue, selectedCountry])
+  }, [venues, selectedVenue, selectedCountry, userLocation])
 
   const handleMapLoad = () => {
     postToMap(mapVenuesPayload())
     postToMap({ type: "select", id: selectedVenue ? venueKey(selectedVenue) : null })
-    focusCapital()
+    if (userLocation) postUserLocation(userLocation, true)
+    else focusCapital()
   }
 
   // ─── Scroll → load more ────────────────────────────────────────
@@ -908,6 +947,15 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 onLoad={handleMapLoad}
               />
               <View style={styles.mapTopRightControls}>
+                <TouchableOpacity
+                  style={[styles.mapLocationButton, locatingUser && styles.mapLocationButtonLoading]}
+                  onPress={() => { void locateUser() }}
+                  disabled={locatingUser}
+                  accessibilityRole="button"
+                  accessibilityLabel={locatingUser ? "Finding your location" : "Show my location"}
+                >
+                  {locatingUser ? <ActivityIndicator size="small" color="#06131C" /> : <Ionicons name="locate" size={19} color="#06131C" />}
+                </TouchableOpacity>
                 <CityDropdown
                   cities={currentCities}
                   selected={selectedCity}
@@ -1038,6 +1086,16 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
               accessibilityLabel={showList ? "Close venue list" : "Show venue list"}
             >
               <Ionicons name={showList ? "close" : "list"} size={20} color="#FFFFFF" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.mobileLocationBtn, locatingUser && styles.mapLocationButtonLoading]}
+              onPress={() => { void locateUser() }}
+              disabled={locatingUser}
+              accessibilityRole="button"
+              accessibilityLabel={locatingUser ? "Finding your location" : "Show my location"}
+            >
+              {locatingUser ? <ActivityIndicator size="small" color="#06131C" /> : <Ionicons name="locate" size={20} color="#06131C" />}
             </TouchableOpacity>
 
             {/* Overlay list on top of the map */}
@@ -1416,6 +1474,43 @@ const styles = StyleSheet.create({
   mobileToggleBtnActive: {
     backgroundColor: "rgba(34, 211, 238, 0.25)",
     borderColor: "#22d3ee",
+  },
+  mobileLocationBtn: {
+    position: "absolute",
+    top: 60,
+    right: 12,
+    zIndex: 45,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#22d3ee",
+    borderWidth: 1,
+    borderColor: "#8AF1FF",
+    shadowColor: "#22d3ee",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.42,
+    shadowRadius: 7,
+    elevation: 6,
+  },
+  mapLocationButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#22d3ee",
+    borderWidth: 1,
+    borderColor: "#8AF1FF",
+    shadowColor: "#22d3ee",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.42,
+    shadowRadius: 7,
+    elevation: 6,
+  },
+  mapLocationButtonLoading: {
+    opacity: 0.68,
   },
   mapTopRightControls: {
     position: "absolute",

@@ -34,6 +34,29 @@
     box-shadow: 0 0 16px rgba(244, 114, 182, 1);
   }
 
+  /* A separate marker for the visitor's one-time browser location. */
+  .yovibe-me-pin {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #2de8ff;
+    border: 3px solid #ffffff;
+    box-shadow: 0 0 0 5px rgba(45, 232, 255, 0.25), 0 0 18px rgba(45, 232, 255, 0.9);
+    position: relative;
+  }
+  .yovibe-me-pin::after {
+    content: "";
+    position: absolute;
+    inset: -10px;
+    border: 1px solid rgba(45, 232, 255, 0.9);
+    border-radius: 50%;
+    animation: yovibe-me-pulse 1.8s ease-out infinite;
+  }
+  @keyframes yovibe-me-pulse {
+    0% { transform: scale(0.45); opacity: 0.9; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+
   /* Marker popup styling to match the dark theme */
   .leaflet-popup-content-wrapper, .leaflet-popup-tip {
     background: #10121c;
@@ -67,6 +90,8 @@
   var map = null;
   var markers = {};   // id -> Leaflet marker
   var markerLayer = null;
+  var userLocationMarker = null;
+  var userAccuracyCircle = null;
   var manualFit = false; // true once the user interacts or picks a country
 
   // Fallback centre: Kampala, Uganda (most venues are here).
@@ -117,6 +142,60 @@
       iconAnchor: [15, 15],
       popupAnchor: [0, -16],
     });
+  }
+
+  function userLocationIcon() {
+    return L.divIcon({
+      className: "",
+      html: '<div class="yovibe-me-pin" aria-label="Your location"></div>',
+      iconSize: [22, 22],
+      iconAnchor: [11, 11],
+      popupAnchor: [0, -14],
+    });
+  }
+
+  function setUserLocation(lat, lng, accuracy, focus) {
+    if (!map) boot();
+    if (!map || !isFinite(Number(lat)) || !isFinite(Number(lng))) return;
+
+    var position = L.latLng(Number(lat), Number(lng));
+    if (userLocationMarker) {
+      userLocationMarker.setLatLng(position);
+    } else {
+      userLocationMarker = L.marker(position, {
+        icon: userLocationIcon(),
+        title: "Your location",
+        zIndexOffset: 1000,
+        interactive: false,
+      }).addTo(map);
+      userLocationMarker.bindTooltip("You are here", { direction: "top", offset: [0, -12], opacity: 0.9 });
+    }
+
+    var accuracyMeters = Number(accuracy);
+    if (isFinite(accuracyMeters) && accuracyMeters > 0) {
+      if (userAccuracyCircle) {
+        userAccuracyCircle.setLatLng(position);
+        userAccuracyCircle.setRadius(accuracyMeters);
+      } else {
+        userAccuracyCircle = L.circle(position, {
+          radius: accuracyMeters,
+          color: "#2de8ff",
+          weight: 1,
+          opacity: 0.58,
+          fillColor: "#2de8ff",
+          fillOpacity: 0.1,
+          interactive: false,
+        }).addTo(map);
+      }
+    } else if (userAccuracyCircle) {
+      map.removeLayer(userAccuracyCircle);
+      userAccuracyCircle = null;
+    }
+
+    if (focus) {
+      manualFit = true;
+      map.flyTo(position, Math.max(map.getZoom(), 15), { duration: 0.8 });
+    }
   }
 
   function setVenues(venues) {
@@ -186,6 +265,7 @@
     else if (d.type === "select") selectVenue(d.id);
     else if (d.type === "fit-bounds") fitToBounds(d.bounds);
     else if (d.type === "focus-location") focusLocation(d.lat, d.lng, d.zoom);
+    else if (d.type === "user-location") setUserLocation(d.lat, d.lng, d.accuracy, d.focus === true);
   });
 
   boot();
