@@ -48,7 +48,7 @@ const VenueDetailScreen: React.FC = () => {
   const [isCustomVenue, setIsCustomVenue] = useState(false)
   const [vibeRating, setVibeRating] = useState<number>(0.0)
   const [currentVibeImage, setCurrentVibeImage] = useState<string | null>(null)
-  const [showVibeImageFull, setShowVibeImageFull] = useState(false)
+  const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null)
   const [showOwnershipModal, setShowOwnershipModal] = useState(false)
   const [showEditVenue, setShowEditVenue] = useState(false)
   const [editVenueName, setEditVenueName] = useState("")
@@ -126,6 +126,10 @@ const VenueDetailScreen: React.FC = () => {
         [{ text: "OK" }]
       )
     }
+  }
+
+  const openFullScreenImage = (imageUri: string) => {
+    if (imageUri) setFullScreenImageUri(imageUri)
   }
 
   useEffect(() => {
@@ -596,7 +600,7 @@ const VenueDetailScreen: React.FC = () => {
                 <View style={styles.vibeImageContainer}>
                   <TouchableOpacity
                     activeOpacity={0.9}
-                    onPress={() => setShowVibeImageFull(true)}
+                    onPress={() => openFullScreenImage(currentVibeImage)}
                     accessibilityRole="button"
                     accessibilityLabel="View vibe image full screen"
                   >
@@ -630,7 +634,7 @@ const VenueDetailScreen: React.FC = () => {
                 <View style={styles.programContainer}>
                   {visiblePrograms.map((program) => (
                     <View key={program.day} style={styles.programItem}>
-                      {program.posterUrl ? <Image source={{ uri: program.posterUrl }} style={styles.programPoster} /> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                      {program.posterUrl ? <TouchableOpacity onPress={() => openFullScreenImage(program.posterUrl)} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
                       <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                     </View>
                   ))}
@@ -642,7 +646,7 @@ const VenueDetailScreen: React.FC = () => {
               <>
                 <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Venue Gallery</Text><Text style={styles.sectionEyebrow}>{venueGallery.length} {venueGallery.length === 1 ? "moment" : "moments"}</Text></View>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryScroller}>
-                  {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
+                  {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><TouchableOpacity style={styles.galleryImageButton} onPress={() => openFullScreenImage(item.imageUrl)} accessibilityLabel={`View ${item.title || "venue gallery"} image full screen`}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /></TouchableOpacity><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
                 </ScrollView>
               </>
             )}
@@ -726,7 +730,7 @@ const VenueDetailScreen: React.FC = () => {
                       navigation.navigate("EventDetail", { eventId: event.slug || event.id })
                     }}
                   >
-                    <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+                    <TouchableOpacity onPress={(pressEvent) => { pressEvent.stopPropagation?.(); openFullScreenImage(event.posterImageUrl) }} accessibilityLabel={`View ${event.name} poster full screen`}><Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} /></TouchableOpacity>
                     <View style={styles.eventInfo}>
                       <Text style={styles.eventName}>{event.name}</Text>
                       <Text style={styles.eventDate}>
@@ -920,7 +924,7 @@ const VenueDetailScreen: React.FC = () => {
               <View style={styles.vibeImageContainer}>
                 <TouchableOpacity
                   activeOpacity={0.9}
-                  onPress={() => setShowVibeImageFull(true)}
+                    onPress={() => openFullScreenImage(currentVibeImage)}
                   accessibilityRole="button"
                   accessibilityLabel="View vibe image full screen"
                 >
@@ -955,7 +959,7 @@ const VenueDetailScreen: React.FC = () => {
                 <View style={styles.programContainer}>
                   {visiblePrograms.map((program) => (
                   <View key={program.day} style={styles.programItem}>
-                    {program.posterUrl ? <Image source={{ uri: program.posterUrl }} style={styles.programPoster} /> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                    {program.posterUrl ? <TouchableOpacity onPress={() => openFullScreenImage(program.posterUrl)} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
                     <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                   </View>
                 ))}
@@ -967,7 +971,7 @@ const VenueDetailScreen: React.FC = () => {
             <>
               <View style={styles.sectionHeadingRow}><Text style={styles.sectionTitle}>Venue Gallery</Text><Text style={styles.sectionEyebrow}>{venueGallery.length} {venueGallery.length === 1 ? "moment" : "moments"}</Text></View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.galleryScroller}>
-                {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
+              {venueGallery.map((item) => <View key={item.id} style={styles.galleryCard}><TouchableOpacity style={styles.galleryImageButton} onPress={() => openFullScreenImage(item.imageUrl)} accessibilityLabel={`View ${item.title || "venue gallery"} image full screen`}><Image source={{ uri: item.imageUrl }} style={styles.galleryImage} /></TouchableOpacity><View style={styles.galleryCardCopy}><Text style={styles.galleryTitle}>{item.title}</Text>{item.description ? <Text style={styles.galleryDescription}>{item.description}</Text> : null}</View></View>)}
               </ScrollView>
             </>
           )}
@@ -987,7 +991,7 @@ const VenueDetailScreen: React.FC = () => {
                     navigation.navigate("EventDetail", { eventId: event.slug || event.id })
                   }}
                 >
-                  <Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} />
+                  <TouchableOpacity onPress={(pressEvent) => { pressEvent.stopPropagation?.(); openFullScreenImage(event.posterImageUrl) }} accessibilityLabel={`View ${event.name} poster full screen`}><Image source={{ uri: event.posterImageUrl }} style={styles.eventImage} /></TouchableOpacity>
                   <View style={styles.eventInfo}>
                     <Text style={styles.eventName}>{event.name}</Text>
                     <Text style={styles.eventDate}>
@@ -1145,25 +1149,25 @@ const VenueDetailScreen: React.FC = () => {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Full-screen vibe image viewer */}
+      {/* Full-screen venue image viewer */}
       <Modal
-        visible={showVibeImageFull}
+        visible={Boolean(fullScreenImageUri)}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShowVibeImageFull(false)}
+        onRequestClose={() => setFullScreenImageUri(null)}
       >
         <View style={styles.fullImageModal}>
           <TouchableOpacity
             style={styles.fullImageCloseButton}
-            onPress={() => setShowVibeImageFull(false)}
+            onPress={() => setFullScreenImageUri(null)}
             accessibilityRole="button"
             accessibilityLabel="Close full screen image"
           >
             <Ionicons name="close" size={28} color="#FFFFFF" />
           </TouchableOpacity>
-          {currentVibeImage && (
+          {fullScreenImageUri && (
             <Image
-              source={{ uri: currentVibeImage }}
+              source={{ uri: fullScreenImageUri }}
               style={styles.fullVibeImage}
               resizeMode="contain"
             />
@@ -1381,6 +1385,9 @@ const styles = StyleSheet.create({
     width: "100%",
     height: responsiveSize(120, 145, 175),
     backgroundColor: "#0A1626",
+  },
+  galleryImageButton: {
+    width: "100%",
   },
   galleryCardCopy: {
     padding: responsiveSize(9, 11, 13),
