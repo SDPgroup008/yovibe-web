@@ -46,6 +46,18 @@ function error(statusCode, body) {
   return { statusCode, headers, body: JSON.stringify(body) };
 }
 
+function deriveUnitPriceFromPaidTotal(total, billableUnits, lateFeePercent) {
+  if (!Number.isFinite(total) || !Number.isFinite(billableUnits) || billableUnits <= 0) return null;
+  const pct = Number(lateFeePercent) || 0;
+  const guess = Math.max(1, Math.round(total / (billableUnits * (1 + pct / 100))));
+  for (let candidate = Math.max(1, guess - 1000); candidate <= guess + 1000; candidate += 1) {
+    const subtotal = candidate * billableUnits;
+    const lateFee = Math.round(subtotal * pct / 100);
+    if (subtotal + lateFee === total) return candidate;
+  }
+  return null;
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
   if (event.httpMethod !== 'POST') return error(405, { success: false, error: 'Method Not Allowed' });
@@ -63,6 +75,8 @@ exports.handler = async (event) => {
     ticketType,
     quantity,
     totalAmount,
+    unitPriceAtCheckout,
+    lateFeePercentAtCheckout,
     isTableEntry,
     tableSize,
     buyerNames,
@@ -180,8 +194,8 @@ exports.handler = async (event) => {
         error: `Ticket category "${ticketType || 'Standard'}" is no longer available. Please refresh and try again.`,
       });
     }
-    const unitPrice = Number.parseInt(String(feeForPurchase.amount || '0').replace(/[^0-9]/g, ''), 10) || 0;
-    const lateFeePercent = Number(event.late_fee_percent ?? 0) || 0;
+    let unitPrice = Number.parseInt(String(feeForPurchase.amount || '0').replace(/[^0-9]/g, ''), 10) || 0;
+    let lateFeePercent = Number(event.late_fee_percent ?? 0) || 0;
     const startTime = resolveEventStartTime(event);
     const sevenAm = new Date(startTime);
     sevenAm.setHours(7, 0, 0, 0);
@@ -193,7 +207,39 @@ exports.handler = async (event) => {
     const billableUnits = isTableEntry ? Math.ceil(qty / normalizedTableSize) : qty;
     const expectedSubtotal = unitPrice * billableUnits;
     const expectedLateFee = isLatePurchase ? Math.round(expectedSubtotal * lateFeePercent / 100) : 0;
-    const expectedTotal = expectedSubtotal + expectedLateFee;
+    let expectedTotal = expectedSubtotal + expectedLateFee;
+    if (Math.abs(expectedTotal - total) > 1) {
+      // A buyer may have completed payment using the old fee while the event
+      // price changed before the fulfillment callback. Accept the original
+      // amount only when the payment provider independently confirms that exact
+      // amount; never trust a client-only price override.
+      const providerAmount = Math.round(Number(
+        verificationResult?.amount
+          ?? verificationResult?.data?.amount
+          ?? 0,
+      ));
+      const snapshotLateFeePercent = Number.isFinite(Number(lateFeePercentAtCheckout))
+        ? Number(lateFeePercentAtCheckout)
+        : lateFeePercent;
+      const snapshotUnitPrice = Number(unitPriceAtCheckout) > 0
+        ? Number(unitPriceAtCheckout)
+        : deriveUnitPriceFromPaidTotal(total, billableUnits, snapshotLateFeePercent);
+      const snapshotSubtotal = snapshotUnitPrice ? snapshotUnitPrice * billableUnits : 0;
+      const snapshotLateFee = snapshotSubtotal > 0
+        ? Math.round(snapshotSubtotal * snapshotLateFeePercent / 100)
+        : 0;
+      const snapshotTotal = snapshotSubtotal + snapshotLateFee;
+      const paidAmountMatches = providerAmount > 0 && Math.abs(providerAmount - total) <= 1;
+      if (paidAmountMatches && snapshotUnitPrice && Math.abs(snapshotTotal - total) <= 1) {
+        unitPrice = snapshotUnitPrice;
+        lateFeePercent = snapshotLateFeePercent;
+        expectedTotal = snapshotTotal;
+        console.warn(
+          `[FulfillPurchase] Current fee changed after payment; using verified checkout price ` +
+          `(paid=${total}, current=${expectedTotal}, fee="${ticketType}")`,
+        );
+      }
+    }
     if (Math.abs(expectedTotal - total) > 1) {
       console.warn(
         `[FulfillPurchase] Price mismatch — client=${total}, expected=${expectedTotal} ` +
@@ -256,6 +302,10 @@ exports.handler = async (event) => {
       totalAmount: total,
       unitPrice,
       lateFeePercent,
+      unitPriceAtCheckout: Number(unitPriceAtCheckout) > 0 ? Number(unitPriceAtCheckout) : unitPrice,
+      lateFeePercentAtCheckout: Number.isFinite(Number(lateFeePercentAtCheckout))
+        ? Number(lateFeePercentAtCheckout)
+        : lateFeePercent,
       isTableEntry: !!isTableEntry,
       tableSize: isTableEntry ? normalizedTableSize : null,
       tableGroupId: tableGroupId || null,
