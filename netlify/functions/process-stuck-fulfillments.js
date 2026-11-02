@@ -32,8 +32,26 @@ const {
 } = require('../shared/ticketFulfillment');
 
 const MAX_ATTEMPTS = 5;
+const RECOVERY_ATTEMPT_CAP = 10;
 const MAX_AGE_MINUTES = 5;
 const BATCH_SIZE = 25;
+
+// fulfill-purchase creates this row only after the payment has already been
+// confirmed by the server. Re-verifying the provider here can exceed Netlify's
+// execution window (especially for PawaPay), leaving the row in `fulfilling`
+// with no ticket IDs. Keep the persisted payment ID as the idempotent proof
+// for the normal fulfillment path; the scheduled worker remains the recovery
+// path for legacy rows that do not contain this proof.
+function hasServerFulfillmentProof(fulfillment) {
+  const payload = fulfillment?.payload && typeof fulfillment.payload === 'object'
+    ? fulfillment.payload
+    : null;
+  return Boolean(
+    payload?.paymentId
+      && fulfillment?.payment_id
+      && String(payload.paymentId) === String(fulfillment.payment_id),
+  );
+}
 
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
@@ -63,7 +81,9 @@ exports.handler = async (event, context) => {
       .neq('status', 'fulfilled')
       .or(`next_retry_at.is.null,next_retry_at.lte.${new Date().toISOString()}`)
       .lt('created_at', cutoff)
-      .lte('attempt_count', MAX_ATTEMPTS - 1)
+      // Permit a bounded recovery pass for rows that were left fulfilling
+      // without ticket IDs before the persisted-proof fix was deployed.
+      .or(`attempt_count.lte.${MAX_ATTEMPTS - 1},and(status.eq.fulfilling,attempt_count.lte.${RECOVERY_ATTEMPT_CAP})`)
       .order('created_at', { ascending: true })
       .limit(BATCH_SIZE);
 
@@ -105,13 +125,30 @@ async function processOne(admin, f) {
   if (!claimed || claimed.length === 0) return 'locked';
   f = claimed[0];
 
-  // 1. Confirm the payment (deployed verify functions + direct API tiebreaker).
-  const verifyMethod = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
-  const confirmation = await confirmPaymentVerified(verifyMethod, {
-    depositId: f.pawapay_deposit_id,
-    orderId: f.payment_id,
-    trackingId: undefined,
-  });
+  // 1. Confirm the payment. The normal fulfill-purchase path persists the
+  // provider payment ID only after server-side verification succeeds. Avoid a
+  // second unbounded provider round-trip for that path; it is what previously
+  // left paid fulfillments stuck in `fulfilling` before ticket creation.
+  let confirmation;
+  if (hasServerFulfillmentProof(f)) {
+    confirmation = {
+      confirmed: true,
+      verificationResult: {
+        status: 'completed',
+        transactionId: f.payload?.pesapalTransactionId || f.payment_id,
+        confirmationCode: f.payload?.pesapalConfirmationCode || undefined,
+      },
+      source: 'persisted-server-proof',
+    };
+    console.info(`[StuckFulfillments] ${f.id}: using persisted server payment proof`);
+  } else {
+    const verifyMethod = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
+    confirmation = await confirmPaymentVerified(verifyMethod, {
+      depositId: f.pawapay_deposit_id,
+      orderId: f.payment_id,
+      trackingId: undefined,
+    });
+  }
   if (confirmation.failed) {
     await bump(admin, f, 'failed', 'Payment not completed');
     return 'failed';
