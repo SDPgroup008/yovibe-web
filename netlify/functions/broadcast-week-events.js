@@ -8,7 +8,7 @@ exports.handler = async () => {
   }
 
   const appEnv = String(process.env.APP_ENV || '').toLowerCase();
-  if (!['production', 'staging'].includes(appEnv) || process.env.NOTIFICATION_DISPATCH_ENABLED !== 'true') {
+  if (!['production', 'staging', 'stagging'].includes(appEnv) || process.env.NOTIFICATION_DISPATCH_ENABLED !== 'true') {
     return { statusCode: 204, body: '' };
   }
 

@@ -18,7 +18,7 @@ function isScheduledWorkerEnabled() {
 
   // Netlify branch deploys can inherit production-looking variables. Treat the
   // staging branch/site as staging even when APP_ENV was configured incorrectly.
-  const isStaging = appEnv === 'staging'
+  const isStaging = ['staging', 'stagging'].includes(appEnv)
     || branch === 'stagging'
     || siteHost.includes('yovibe-stagging')
     || (deployContext === 'branch-deploy' && branch !== 'main');
