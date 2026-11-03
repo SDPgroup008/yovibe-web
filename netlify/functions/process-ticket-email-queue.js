@@ -2,6 +2,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { sendTicketEmail } = require('../shared/ticketFulfillment');
+const { isScheduledWorkerEnabled, disabledResponse } = require('../shared/stagingScheduledWorkerGate');
 
 const BATCH_SIZE = 10;
 const LEASE_SECONDS = 300;
@@ -16,6 +17,10 @@ exports.handler = async (event) => {
   if (event?.httpMethod && !['GET', 'POST'].includes(event.httpMethod)) {
     console.warn('[EmailQueue] Rejected invocation method:', event.httpMethod);
     return json(405, { error: 'Method Not Allowed' });
+  }
+
+  if (!isScheduledWorkerEnabled()) {
+    return disabledResponse('process-ticket-email-queue');
   }
 
   const now = new Date().toISOString();

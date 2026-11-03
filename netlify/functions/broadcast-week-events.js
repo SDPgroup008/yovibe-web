@@ -1,8 +1,14 @@
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { sendEventSummaryBroadcast } = require('../shared/eventSummaryBroadcast');
+const { isScheduledWorkerEnabled, disabledResponse } = require('../shared/stagingScheduledWorkerGate');
 
 exports.handler = async () => {
-  if (process.env.APP_ENV !== 'production' || process.env.NOTIFICATION_DISPATCH_ENABLED !== 'true') {
+  if (!isScheduledWorkerEnabled()) {
+    return disabledResponse('broadcast-week-events');
+  }
+
+  const appEnv = String(process.env.APP_ENV || '').toLowerCase();
+  if (!['production', 'staging'].includes(appEnv) || process.env.NOTIFICATION_DISPATCH_ENABLED !== 'true') {
     return { statusCode: 204, body: '' };
   }
 

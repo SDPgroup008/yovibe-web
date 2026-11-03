@@ -1,9 +1,14 @@
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { deleteObject } = require('../shared/r2');
+const { isScheduledWorkerEnabled, disabledResponse } = require('../shared/stagingScheduledWorkerGate');
 
 // The scheduler calls this daily. Media remains recoverable for 24 hours after
 // expiry/soft deletion, then both the public object and database row are purged.
 exports.handler = async () => {
+  if (!isScheduledWorkerEnabled()) {
+    return disabledResponse('purge-expired-vibe-updates');
+  }
+
   try {
     const admin = getAdminClient();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();

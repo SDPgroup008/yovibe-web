@@ -10,6 +10,7 @@
 
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { deleteObject, listObjects, privateKeyFromReference } = require('../shared/r2');
+const { isScheduledWorkerEnabled, disabledResponse } = require('../shared/stagingScheduledWorkerGate');
 
 const RETENTION_DAYS = Number(process.env.PURGE_RETENTION_DAYS || 30);
 
@@ -20,6 +21,10 @@ async function deleteKeys(keys) {
 }
 
 exports.handler = async (event) => {
+  if (!isScheduledWorkerEnabled()) {
+    return disabledResponse('purge-expired-photos');
+  }
+
   const admin = getAdminClient();
   const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const keysToDelete = new Set();

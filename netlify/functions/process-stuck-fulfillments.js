@@ -30,6 +30,7 @@ const {
   uploadImageDataUrl,
   cleanupTicketAssets,
 } = require('../shared/ticketFulfillment');
+const { isScheduledWorkerEnabled, disabledResponse } = require('../shared/stagingScheduledWorkerGate');
 
 const MAX_ATTEMPTS = 5;
 const RECOVERY_ATTEMPT_CAP = 10;
@@ -62,6 +63,10 @@ exports.handler = async (event, context) => {
   const isScheduled = event?.headers?.['x-netlify-scheduled'] === 'true' || (event?.path || '').includes('/schedule');
   if (event && event.httpMethod && event.httpMethod !== 'GET') {
     return json(405, { error: 'Method Not Allowed' });
+  }
+
+  if (!isScheduledWorkerEnabled()) {
+    return disabledResponse('process-stuck-fulfillments');
   }
 
   const admin = getAdminClient();
