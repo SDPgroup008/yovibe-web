@@ -30,6 +30,14 @@ function isScheduledWorkerEnabled() {
 }
 
 function disabledResponse(workerName) {
+  console.info('[ScheduledWorkerGate] skipped', {
+    worker: workerName,
+    appEnv: String(process.env.APP_ENV || '').trim().toLowerCase() || 'unset',
+    context: String(process.env.CONTEXT || '').trim().toLowerCase() || 'unset',
+    branch: String(process.env.BRANCH || '').trim() || 'unset',
+    stagingWorkersEnabled: String(process.env.STAGING_SCHEDULED_WORKERS_ENABLED || '').trim().toLowerCase() === 'true',
+  });
+
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },
