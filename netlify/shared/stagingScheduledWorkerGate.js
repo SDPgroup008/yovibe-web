@@ -6,8 +6,27 @@
  * their existing behaviour as well.
  */
 function isScheduledWorkerEnabled() {
-  if (String(process.env.APP_ENV || '').toLowerCase() !== 'staging') return true;
-  return String(process.env.STAGING_SCHEDULED_WORKERS_ENABLED || '').toLowerCase() === 'true';
+  const appEnv = String(process.env.APP_ENV || '').trim().toLowerCase();
+  const deployContext = String(process.env.CONTEXT || '').trim().toLowerCase();
+  const branch = String(process.env.BRANCH || '').trim().toLowerCase();
+  let siteHost = '';
+  try {
+    siteHost = new URL(String(process.env.SITE_URL || '')).hostname.toLowerCase();
+  } catch {
+    // An absent or malformed SITE_URL must not make a non-production worker run.
+  }
+
+  // Netlify branch deploys can inherit production-looking variables. Treat the
+  // staging branch/site as staging even when APP_ENV was configured incorrectly.
+  const isStaging = appEnv === 'staging'
+    || branch === 'stagging'
+    || siteHost.includes('yovibe-stagging')
+    || (deployContext === 'branch-deploy' && branch !== 'main');
+
+  // Production retains the original always-on behavior. Every other
+  // environment is opt-in, which also fails closed for local/preview runs.
+  if (appEnv === 'production' && !isStaging) return true;
+  return String(process.env.STAGING_SCHEDULED_WORKERS_ENABLED || '').trim().toLowerCase() === 'true';
 }
 
 function disabledResponse(workerName) {
