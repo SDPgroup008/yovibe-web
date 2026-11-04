@@ -344,6 +344,7 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
   const origin = new URL(canonicalUrl).origin;
   const description = textValue(event.description, 1000) || `Discover ${name} on YoVibe.`;
   const image = publicImage(event.poster_image_url);
+  const socialPreview = eventShareImage(event, origin, 'events');
   const venueName = textValue(event.venue_name, 180);
   const venueSlug = textValue(event.venue_slug, 240);
   const locality = textValue(event.location, 180);
@@ -380,7 +381,9 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
       address: { '@type': 'PostalAddress', addressLocality: locality || 'Kampala', addressCountry: 'UG' },
     };
   }
-  if (image) eventSchema.image = [image];
+  // Google requires Event.image. Use the approved poster when present and a
+  // branded, absolute YoVibe card for sparse events without poster artwork.
+  eventSchema.image = [socialPreview.image];
   if (eventPerformers.length) eventSchema.performer = eventPerformers.map((artist) => ({ '@type': 'PerformingGroup', name: artist }));
   const organizer = organizerSchema(event);
   if (organizer) eventSchema.organizer = organizer;
@@ -413,7 +416,6 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
   // React replaces this server fallback with the full Event Detail screen after
   // startup. Keep it out of sight until then so visitors never see unstyled HTML.
   const summary = `<main id="yovibe-event-summary" data-yovibe-seo-fallback="true" hidden aria-hidden="true"><article>${image ? `<img src="${htmlEscape(image)}" alt="${htmlEscape(`Poster for ${name}`)}">` : ''}<h1>${htmlEscape(name)}</h1><p>${htmlEscape(description)}</p><p><strong>Date and time:</strong> <time datetime="${htmlEscape(start.toISOString())}">${htmlEscape(formatEventDate(start, event.time))}</time></p>${venueMarkup}${artistMarkup}${ticketMarkup}<p><a href="${htmlEscape(purchaseUrl)}">Buy tickets for ${htmlEscape(name)}</a></p></article></main>`;
-  const socialPreview = eventShareImage(event, origin, 'events');
   const socialImage = socialPreview.image;
   const socialTitle = `${name} | YoVibe`;
   const socialText = socialDescription(description, `Discover ${name} on YoVibe.`);

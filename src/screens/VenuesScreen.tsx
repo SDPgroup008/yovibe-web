@@ -16,6 +16,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { publicSiteUrl } from "../config/runtime";
 import { ResponsiveSkeleton } from "../components/SkeletonLoader";
+import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -81,10 +82,17 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   const [refreshing, setRefreshing] = useState(false);
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
+  const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey());
   const [activeTab, setActiveTab] = useState<"all" | "nightlife" | "recreation">("all");
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [showSearch, setShowSearch] = useState(false);
+
+  // Re-query after local midnight so an open screen cannot keep yesterday's rating.
+  useEffect(() => {
+    const timer = setTimeout(() => setVibeDayKey(getLocalVibeDayKey()), getMillisecondsUntilNextLocalDay());
+    return () => clearTimeout(timer);
+  }, [vibeDayKey]);
   useEffect(() => {
     const normalized = initialSearchQuery.trim();
     if (!normalized) return;
@@ -150,9 +158,9 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
             (latest, image) => !latest || image.uploadedAt > latest.uploadedAt ? image : latest,
             null,
           )
-          ratings[key] = latestVibe?.vibeRating ?? venue.vibeRating ?? 0
+          ratings[key] = latestVibe?.vibeRating ?? 0
         } catch {
-          ratings[key] = venue.vibeRating ?? 0
+          ratings[key] = 0
         }
       }))
 
@@ -161,7 +169,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
     loadCurrentVibes()
     return () => { cancelled = true }
-  }, [venues])
+  }, [venues, vibeDayKey])
 
 
 
@@ -172,7 +180,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   };
 
   const getCurrentVibe = (venue: Venue) =>
-    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
+    venueVibeRatings[venue.slug || venue.id] ?? 0
 
   const getFilteredVenues = () => {
     // Handle search query filtering

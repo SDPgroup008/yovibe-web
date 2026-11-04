@@ -17,6 +17,7 @@ import { useMapScroll } from "../hooks/useScrollPersistence";
 import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import LocationService from "../services/LocationService"
+import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
 
 // ─── Module-level cache: survives component remounts ─────────────
 const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
@@ -311,6 +312,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>(() => isCacheValid() ? mapCache!.vibeRatings : {})
+  const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey())
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
   const [showList, setShowList] = useState(false)
@@ -327,6 +329,14 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const hasMoreRef = useRef(true)
   const lastCreatedAtRef = useRef<string | undefined>(undefined)
   const autoLoadAllRef = useRef(false)
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setVibeDayKey(getLocalVibeDayKey())
+      setVenueVibeRatings((previous) => Object.fromEntries(Object.keys(previous).map((key) => [key, 0])))
+    }, getMillisecondsUntilNextLocalDay())
+    return () => clearTimeout(timer)
+  }, [vibeDayKey])
 
   // Keep refs in sync so the auto-load loop always reads fresh state.
   useEffect(() => {
@@ -521,12 +531,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             });
             setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: latestVibe.vibeRating || 0.0 }));
           } else {
-            // Keep the denormalized venue rating when there is no image for today.
-            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: venue.vibeRating || 0.0 }));
+            // No upload today means the live vibe is reset for the new day.
+            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: 0.0 }));
           }
         } catch {
-          // A transient daily-vibe read failure must not erase a valid venue rating.
-          setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: venue.vibeRating || 0.0 }));
+          // Do not resurrect a stale denormalized rating after a daily read.
+          setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: 0.0 }));
         }
       }
       return true
@@ -538,7 +548,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       setLoadingMore(false);
       loadingMoreRef.current = false;
     }
-  }, []);
+  }, [vibeDayKey]);
 
   // Load the next page (resolves true when a batch was fetched).
   const loadMore = useCallback(() => {
@@ -598,7 +608,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   }
 
   const getCurrentVibe = (venue: Venue) =>
-    venueVibeRatings[venueKey(venue)] ?? venue.vibeRating ?? 0
+    venueVibeRatings[venueKey(venue)] ?? 0
 
   // Memoized sorted and filtered venues
   const filteredAndSortedVenues = useMemo(() => {

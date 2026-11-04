@@ -10,6 +10,7 @@ import type { MapScreenProps } from "../navigation/types"
 import { useMapScroll } from "../hooks/useScrollPersistence"
 import { useIsFocused } from "../utils/compatNavigation"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
+import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
 
 // This is a web-only implementation of the MapScreen
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
@@ -23,6 +24,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([])
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
+  const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey())
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVibeDayKey(getLocalVibeDayKey()), getMillisecondsUntilNextLocalDay())
+    return () => clearTimeout(timer)
+  }, [vibeDayKey])
   const [currentPage, setCurrentPage] = useState(1)
   const [lastCreatedAt, setLastCreatedAt] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
@@ -66,9 +73,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
           const latestVibe = vibeImages.reduce((latest, image) => (
             !latest || image.uploadedAt > latest.uploadedAt ? image : latest
           ), null as (typeof vibeImages[number] | null))
-          ratings[key] = latestVibe?.vibeRating ?? venue.vibeRating ?? 0
+          ratings[key] = latestVibe?.vibeRating ?? 0
         } catch {
-          ratings[key] = venue.vibeRating ?? 0
+          ratings[key] = 0
         }
       }))
 
@@ -77,7 +84,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
     loadCurrentVibes()
     return () => { cancelled = true }
-  }, [venues])
+  }, [venues, vibeDayKey])
 
   // Pull-to-refresh handler
   const onRefresh = useCallback(async () => {
@@ -97,7 +104,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   }, [destinationVenueId, venues])
 
   const getCurrentVibe = (venue: Venue) =>
-    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
+    venueVibeRatings[venue.slug || venue.id] ?? 0
 
   const sortedVenues = useMemo(() => [...venues].sort((a, b) => {
     return getCurrentVibe(b) - getCurrentVibe(a)

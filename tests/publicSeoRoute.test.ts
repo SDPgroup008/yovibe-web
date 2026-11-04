@@ -202,6 +202,7 @@ describe('public SEO route handling', () => {
     const event = graph['@graph'].find((item: { '@type': string }) => item['@type'] === 'Event');
     expect(event.performer).toBeUndefined();
     expect(event.organizer).toBeUndefined();
+    expect(event.image).toEqual(['https://yovibe.net/.netlify/functions/social-card?kind=events']);
     expect(event.offers[0]).toEqual(expect.objectContaining({ validFrom: '2030-01-02T09:00:00.000Z' }));
     expect(event.offers[0].availability).toBeUndefined();
   });

@@ -21,6 +21,7 @@ import { useCompatNavigation } from "../utils/compatNavigation"
 import { useAuth } from "../contexts/AuthContext"
 import type { Venue } from "../models/Venue"
 import type { VibeImage } from "../models/VibeImage"
+import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
 
 const MyVenuesScreen: React.FC = () => {
   const navigation = useCompatNavigation()
@@ -28,10 +29,16 @@ const MyVenuesScreen: React.FC = () => {
   const [venues, setVenues] = useState<Venue[]>([])
   const [loading, setLoading] = useState(true)
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
+  const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey())
+
+  useEffect(() => {
+    const timer = setTimeout(() => setVibeDayKey(getLocalVibeDayKey()), getMillisecondsUntilNextLocalDay())
+    return () => clearTimeout(timer)
+  }, [vibeDayKey])
 
   useEffect(() => {
     loadVenues()
-  }, [])
+  }, [vibeDayKey])
 
   const loadVenues = async () => {
     if (!user) return
@@ -52,9 +59,9 @@ const MyVenuesScreen: React.FC = () => {
             (current, image) => !current || image.uploadedAt > current.uploadedAt ? image : current,
             null,
           )
-          vibeRatings[key] = latest?.vibeRating ?? venue.vibeRating ?? 0
+          vibeRatings[key] = latest?.vibeRating ?? 0
         } catch {
-          vibeRatings[key] = venue.vibeRating ?? 0
+          vibeRatings[key] = 0
         }
       }))
       setVenueVibeRatings(vibeRatings)
@@ -75,7 +82,7 @@ const MyVenuesScreen: React.FC = () => {
   }
 
   const getCurrentVibe = (venue: Venue) =>
-    venueVibeRatings[venue.slug || venue.id] ?? venue.vibeRating ?? 0
+    venueVibeRatings[venue.slug || venue.id] ?? 0
 
   const sortedVenues = useMemo(
     () => [...venues].sort((a, b) => getCurrentVibe(b) - getCurrentVibe(a)),
