@@ -11,7 +11,7 @@ describe('web shell SEO source', () => {
     expect(patcher).toContain('Remove a previous site graph');
     expect(patcher).toContain("'@type': 'Organization'");
     expect(patcher).toContain("'@type': 'WebSite'");
-    expect(patcher).toContain('reinolmartin0001@gmail.com');
+    expect(patcher).toContain('info@yovibe.net');
     expect(patcher).toContain('+256764336256');
     expect(patcher).toContain('/assets/icon.png');
     expect(patcher).toContain('/assets/og-image.png');

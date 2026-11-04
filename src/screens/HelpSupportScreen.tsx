@@ -6,7 +6,7 @@ import { useAuth } from "../contexts/AuthContext"
 import { useRouter } from "../utils/URLRouter"
 import { publicSiteUrl } from "../config/runtime"
 
-const SUPPORT_EMAIL = "reinolmartin0001@gmail.com"
+const SUPPORT_EMAIL = "support@yovibe.net"
 const PHONE_NUMBER = "+256764336256"
 const WHATSAPP_NUMBER = "+256764336256"
 

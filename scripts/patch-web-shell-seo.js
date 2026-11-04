@@ -33,7 +33,7 @@ const structuredData = isStaging ? '' : `
           name: 'YoVibe',
           url: canonicalUrl,
           logo: `${siteUrl}/assets/icon.png`,
-          email: 'reinolmartin0001@gmail.com',
+          email: 'info@yovibe.net',
           telephone: '+256764336256',
         },
         {
