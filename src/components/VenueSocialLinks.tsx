@@ -2,9 +2,11 @@ import React from "react"
 import { Alert, Linking, StyleSheet, TouchableOpacity, View } from "react-native"
 import { FontAwesome6 } from "@expo/vector-icons"
 import type { Venue } from "../models/Venue"
-import { normalizeVenueSocialUrl } from "../utils/venueSocialLinks"
+import { isValidVenueSocialUrl } from "../utils/venueSocialLinks"
+import { responsiveSize } from "../utils/ResponsiveDesign"
 
 type SocialItem = { key: keyof Pick<Venue, "tiktokUrl" | "facebookUrl" | "instagramUrl" | "xUrl" | "youtubeUrl">; icon: string; label: string }
+type VenueSocialLinksPlacement = "mobile" | "desktop"
 
 const SOCIAL_ITEMS: SocialItem[] = [
   { key: "tiktokUrl", icon: "tiktok", label: "TikTok" },
@@ -14,17 +16,8 @@ const SOCIAL_ITEMS: SocialItem[] = [
   { key: "youtubeUrl", icon: "youtube", label: "YouTube" },
 ]
 
-export default function VenueSocialLinks({ venue }: { venue: Venue }) {
-  const available = SOCIAL_ITEMS.filter((item) => {
-    const value = venue[item.key]
-    if (!value?.trim()) return false
-    try {
-      normalizeVenueSocialUrl(value, item.key)
-      return true
-    } catch {
-      return false
-    }
-  })
+export default function VenueSocialLinks({ venue, placement = "desktop" }: { venue: Venue; placement?: VenueSocialLinksPlacement }) {
+  const available = SOCIAL_ITEMS.filter((item) => isValidVenueSocialUrl(venue[item.key], item.key))
   if (!available.length) return null
 
   const openLink = async (url: string, label: string) => {
@@ -37,7 +30,7 @@ export default function VenueSocialLinks({ venue }: { venue: Venue }) {
   }
 
   return (
-    <View style={styles.container} accessibilityLabel="Venue social links">
+    <View style={[styles.container, placement === "mobile" ? styles.mobileContainer : styles.desktopContainer]} accessibilityLabel="Venue social links">
       {available.map((item) => (
         <TouchableOpacity
           key={item.key}
@@ -54,6 +47,8 @@ export default function VenueSocialLinks({ venue }: { venue: Venue }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: "row", alignItems: "center", gap: 12, marginTop: 10, marginBottom: 12 },
+  container: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 12 },
+  mobileContainer: { marginTop: 0, marginBottom: 0 },
+  desktopContainer: { marginTop: 10, marginBottom: responsiveSize(16, 18, 22) },
   button: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", backgroundColor: "rgba(34, 211, 238, 0.2)", borderWidth: 1, borderColor: "rgba(116, 247, 255, 0.55)" },
 })

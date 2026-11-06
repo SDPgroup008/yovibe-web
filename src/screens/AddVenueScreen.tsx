@@ -316,9 +316,9 @@ const AddVenueScreen: React.FC<any> = (props) => {
           ["X", xUrl, setXUrl, "xUrl", "https://x.com/yourvenue"],
           ["YouTube", youtubeUrl, setYoutubeUrl, "youtubeUrl", "https://www.youtube.com/@yourvenue"],
         ] as const).map(([label, value, setter, key, placeholder]) => (
-          <View key={key}>
+          <View key={key} style={styles.socialField}>
             <TextInput
-              style={[styles.input, errors[key] && styles.errorInput]}
+              style={[styles.input, styles.socialInput, errors[key] && styles.errorInput]}
               value={value}
               onChangeText={(text) => { setter(text); setErrors((previous) => { const next = { ...previous }; delete next[key]; return next }) }}
               placeholder={`${label} URL (optional)`}
@@ -456,8 +456,14 @@ const styles = StyleSheet.create({
   socialHint: {
     color: "#777777",
     fontSize: responsiveSize(10, 11, 12),
-    marginTop: -10,
+    marginTop: 4,
+    marginBottom: 0,
+  },
+  socialField: {
     marginBottom: responsiveSize(10, 12, 14),
+  },
+  socialInput: {
+    marginBottom: 0,
   },
   input: {
     backgroundColor: "#1E1E1E",

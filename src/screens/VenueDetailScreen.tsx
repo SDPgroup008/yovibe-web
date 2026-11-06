@@ -22,7 +22,7 @@ import { useCachedVenuePage } from "../hooks/useDataCache"
 import ImagePickerService from "../services/ImagePickerService"
 import LocationService from "../services/LocationService"
 import VenueSocialLinks from "../components/VenueSocialLinks"
-import { normalizeVenueSocialUrl, validateVenueSocialLinks, type VenueSocialErrors } from "../utils/venueSocialLinks"
+import { isValidVenueSocialUrl, normalizeVenueSocialUrl, validateVenueSocialLinks, venueSocialKeys, type VenueSocialErrors } from "../utils/venueSocialLinks"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -41,6 +41,7 @@ const VenueDetailScreen: React.FC = () => {
   const { data: venuePage, loading, refetch: refetchVenuePage, updateCachedData } = useCachedVenuePage(isValidVenueId ? venueId : "")
 
   const venue = venuePage?.venue ?? null
+  const hasVisibleSocialLinks = venue ? venueSocialKeys.some((key) => isValidVenueSocialUrl(venue[key], key)) : false
   const events = venuePage?.events ?? []
   const venueGallery = venuePage?.gallery ?? []
   const [refreshing, setRefreshing] = useState(false)
@@ -677,7 +678,7 @@ const VenueDetailScreen: React.FC = () => {
                 </ScrollView>
               </>
             )}
-            <VenueSocialLinks venue={venue} />
+            <VenueSocialLinks venue={venue} placement="desktop" />
           </View>
         </ScrollView>
 
@@ -801,7 +802,7 @@ const VenueDetailScreen: React.FC = () => {
           alt={`Venue image for ${venue.name}`}
         />
 
-        <View style={styles.contentContainer}>
+        <View style={[styles.contentContainer, hasVisibleSocialLinks && styles.contentContainerWithSocialLinks]}>
           <View style={styles.headerRow}>
             <View style={styles.titleContainer}>
               <Text style={styles.venueName} accessibilityRole="header">{venue.name}</Text>
@@ -1040,13 +1041,13 @@ const VenueDetailScreen: React.FC = () => {
           )}
 
           <TouchableOpacity
-            style={[styles.directionsButton, { backgroundColor: COLORS.primary }]}
+            style={[styles.directionsButton, { backgroundColor: COLORS.primary, marginBottom: responsiveSize(8, 10, 14) }]}
             onPress={openInGoogleMaps}
           >
             <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
             <Text style={styles.directionsButtonText}>Get Directions</Text>
           </TouchableOpacity>
-          <VenueSocialLinks venue={venue} />
+          <VenueSocialLinks venue={venue} placement="mobile" />
         </View>
       </ScrollView>
     )}
@@ -1155,15 +1156,15 @@ const VenueDetailScreen: React.FC = () => {
               <TextInput style={styles.input} value={editVenueCategories} onChangeText={setEditVenueCategories} placeholder="Nightlife, Bar, Restaurant" placeholderTextColor="#666666" />
 
               <Text style={styles.inputLabel}>Social links (optional)</Text>
-              <TextInput style={[styles.input, editSocialErrors.tiktokUrl && styles.inputError]} value={editTiktokUrl} onChangeText={(value) => { setEditTiktokUrl(value); setEditSocialErrors((previous) => ({ ...previous, tiktokUrl: undefined })) }} placeholder="TikTok URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              <TextInput style={[styles.input, styles.socialInput, editSocialErrors.tiktokUrl && styles.inputError]} value={editTiktokUrl} onChangeText={(value) => { setEditTiktokUrl(value); setEditSocialErrors((previous) => ({ ...previous, tiktokUrl: undefined })) }} placeholder="TikTok URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
               {editSocialErrors.tiktokUrl && <Text style={styles.socialError}>{editSocialErrors.tiktokUrl}</Text>}
-              <TextInput style={[styles.input, editSocialErrors.facebookUrl && styles.inputError]} value={editFacebookUrl} onChangeText={(value) => { setEditFacebookUrl(value); setEditSocialErrors((previous) => ({ ...previous, facebookUrl: undefined })) }} placeholder="Facebook URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              <TextInput style={[styles.input, styles.socialInput, editSocialErrors.facebookUrl && styles.inputError]} value={editFacebookUrl} onChangeText={(value) => { setEditFacebookUrl(value); setEditSocialErrors((previous) => ({ ...previous, facebookUrl: undefined })) }} placeholder="Facebook URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
               {editSocialErrors.facebookUrl && <Text style={styles.socialError}>{editSocialErrors.facebookUrl}</Text>}
-              <TextInput style={[styles.input, editSocialErrors.instagramUrl && styles.inputError]} value={editInstagramUrl} onChangeText={(value) => { setEditInstagramUrl(value); setEditSocialErrors((previous) => ({ ...previous, instagramUrl: undefined })) }} placeholder="Instagram URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              <TextInput style={[styles.input, styles.socialInput, editSocialErrors.instagramUrl && styles.inputError]} value={editInstagramUrl} onChangeText={(value) => { setEditInstagramUrl(value); setEditSocialErrors((previous) => ({ ...previous, instagramUrl: undefined })) }} placeholder="Instagram URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
               {editSocialErrors.instagramUrl && <Text style={styles.socialError}>{editSocialErrors.instagramUrl}</Text>}
-              <TextInput style={[styles.input, editSocialErrors.xUrl && styles.inputError]} value={editXUrl} onChangeText={(value) => { setEditXUrl(value); setEditSocialErrors((previous) => ({ ...previous, xUrl: undefined })) }} placeholder="X URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              <TextInput style={[styles.input, styles.socialInput, editSocialErrors.xUrl && styles.inputError]} value={editXUrl} onChangeText={(value) => { setEditXUrl(value); setEditSocialErrors((previous) => ({ ...previous, xUrl: undefined })) }} placeholder="X URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
               {editSocialErrors.xUrl && <Text style={styles.socialError}>{editSocialErrors.xUrl}</Text>}
-              <TextInput style={[styles.input, editSocialErrors.youtubeUrl && styles.inputError]} value={editYoutubeUrl} onChangeText={(value) => { setEditYoutubeUrl(value); setEditSocialErrors((previous) => ({ ...previous, youtubeUrl: undefined })) }} placeholder="YouTube URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              <TextInput style={[styles.input, styles.socialInput, editSocialErrors.youtubeUrl && styles.inputError]} value={editYoutubeUrl} onChangeText={(value) => { setEditYoutubeUrl(value); setEditSocialErrors((previous) => ({ ...previous, youtubeUrl: undefined })) }} placeholder="YouTube URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
               {editSocialErrors.youtubeUrl && <Text style={styles.socialError}>{editSocialErrors.youtubeUrl}</Text>}
 
               <Text style={styles.inputLabel}>Venue coordinates *</Text>
@@ -1260,6 +1261,9 @@ const styles = StyleSheet.create({
     maxWidth: isLargeScreen ? 900 : "100%",
     alignSelf: "center",
     width: "100%",
+  },
+  contentContainerWithSocialLinks: {
+    paddingBottom: responsiveSize(8, 10, 14),
   },
   venueName: {
     fontSize: responsiveSize(22, 26, 32),
@@ -1736,10 +1740,14 @@ const styles = StyleSheet.create({
   inputError: {
     borderColor: "#FF6B6B",
   },
+  socialInput: {
+    marginBottom: responsiveSize(10, 12, 14),
+  },
   socialError: {
     color: "#FF8A8A",
     fontSize: responsiveSize(12, 13, 14),
     marginTop: responsiveSize(4, 5, 6),
+    marginBottom: responsiveSize(10, 12, 14),
   },
   textArea: {
     minHeight: responsiveSize(80, 90, 100),

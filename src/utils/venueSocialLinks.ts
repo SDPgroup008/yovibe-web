@@ -52,4 +52,14 @@ export function validateVenueSocialLinks(values: VenueSocialLinks): VenueSocialE
   return errors
 }
 
+export function isValidVenueSocialUrl(value: string | null | undefined, key: VenueSocialKey): boolean {
+  if (!value?.trim()) return false
+  try {
+    normalizeVenueSocialUrl(value, key)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export const venueSocialKeys: VenueSocialKey[] = ["tiktokUrl", "facebookUrl", "instagramUrl", "xUrl", "youtubeUrl"]
