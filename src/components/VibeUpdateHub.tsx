@@ -196,6 +196,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const { user } = useAuth()
   const navigation = useUrlNavigation()
   const { width, height } = useWindowDimensions()
+  const [visualViewportHeight, setVisualViewportHeight] = useState(() => typeof window !== "undefined" ? window.visualViewport?.height || window.innerHeight : height)
   const [panelMounted, setPanelMounted] = useState(false)
   const panelMotion = useRef(new Animated.Value(0)).current
   const [loading, setLoading] = useState(true)
@@ -227,6 +228,21 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const [trimEndSeconds, setTrimEndSeconds] = useState(0)
   const [pendingPublish, setPendingPublish] = useState<PendingVibePublish | null>(null)
   const composerScrollRef = useRef<ScrollView | null>(null)
+  const captionInputRef = useRef<TextInput | null>(null)
+  const composerScrollOffset = useRef(0)
+
+  useEffect(() => {
+    if (Platform.OS !== "web" || placement === "desktop" || typeof window === "undefined") return
+    const viewport = window.visualViewport
+    const updateHeight = () => setVisualViewportHeight(viewport?.height || window.innerHeight)
+    updateHeight()
+    viewport?.addEventListener("resize", updateHeight)
+    window.addEventListener("resize", updateHeight)
+    return () => {
+      viewport?.removeEventListener("resize", updateHeight)
+      window.removeEventListener("resize", updateHeight)
+    }
+  }, [placement])
 
   const isAdmin = user?.userType === "admin"
   const ownVenue = useCallback((venue: VibeUpdateVenue) => Boolean(user && venue.ownerId === user.id), [user])
@@ -239,7 +255,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
   const desktopPanelWidth = 213
   const desktopComposerWidth = Math.min(width - 64, 620)
   const desktopSourcePickerWidth = Math.min(width - 64, 460)
-  const composerHeight = placement === "desktop" ? Math.min(height * 0.82, 760) : Math.max(height * 0.9, 480)
+  const composerHeight = placement === "desktop" ? Math.min(height * 0.82, 760) : Math.max(320, Math.min(height * 0.9, visualViewportHeight - 16))
   // Reserve the header, venue label, caption, counter, button, and the 20px
   // bottom breathing room. This makes the selected-media area use all of the
   // remaining safe space without letting Publish Pulse fall below the sheet.
@@ -430,6 +446,31 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
     setTimeout(() => { plusPressVenueRef.current = null }, 0)
   }
   const closeSourcePicker = () => { setSourcePickerOpen(false); setSourceVenue(null); setComposerMediaState(file ? "ready" : "idle") }
+  const revealCaptionInput = () => {
+    if (placement === "desktop") return
+    const scrollView = composerScrollRef.current
+    const input = captionInputRef.current
+    if (!scrollView || !input) return
+    requestAnimationFrame(() => {
+      const scrollViewport = (scrollView as any).getNativeScrollRef?.() || scrollView
+      scrollViewport.measureInWindow((_scrollX: number, scrollY: number, _scrollWidth: number, scrollHeight: number) => {
+        input.measureInWindow((_inputX, inputY, _inputWidth, inputHeight) => {
+          const viewportBottom = Platform.OS === "web" && typeof window !== "undefined"
+            ? (window.visualViewport?.offsetTop || 0) + (window.visualViewport?.height || window.innerHeight)
+            : scrollY + scrollHeight
+          const visibleBottom = Math.min(scrollY + scrollHeight, viewportBottom) - 16
+          const inputBottom = inputY + inputHeight
+          if (inputBottom > visibleBottom) {
+            const currentOffset = composerScrollOffset.current
+            scrollView.scrollTo({ y: currentOffset + inputBottom - visibleBottom, animated: true })
+          } else if (inputY < scrollY + 8) {
+            const currentOffset = composerScrollOffset.current
+            scrollView.scrollTo({ y: Math.max(0, currentOffset - (scrollY + 8 - inputY)), animated: true })
+          }
+        })
+      })
+    })
+  }
   const handleVenuePress = (card: VibeUpdateVenue) => {
     if (plusPressVenueRef.current === card.venueSlug) return
     if (card.updates.length) openVenue(card)
@@ -492,12 +533,12 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
     <Modal visible={Boolean(composerVenue) && !sourcePickerOpen} animationType="slide" transparent onRequestClose={closeComposer}>
       <View style={[styles.composerOverlay, placement === "desktop" && styles.desktopModalOverlay]}>
         <KeyboardAvoidingView enabled={placement !== "desktop"} behavior={Platform.OS === "ios" ? "padding" : Platform.OS === "android" ? "height" : undefined} style={[styles.keyboardComposer, placement === "desktop" ? styles.desktopKeyboardComposer : styles.mobileKeyboardComposer]}>
-        <View style={[styles.composer, placement === "desktop" && { width: desktopComposerWidth }, placement === "desktop" && styles.desktopComposer]}>
+        <View style={[styles.composer, placement !== "desktop" && { height: composerHeight, maxHeight: composerHeight }, placement === "desktop" && { width: desktopComposerWidth }, placement === "desktop" && styles.desktopComposer]}>
           <View style={styles.composerHeader}>
             <Text style={styles.composerTitle}>CREATE VIBE UPDATE</Text>
             <TouchableOpacity onPress={closeComposer}><Ionicons name="close" color="#E7EEFF" size={24} /></TouchableOpacity>
           </View>
-          <ScrollView ref={composerScrollRef} style={styles.composerScroll} contentContainerStyle={styles.composerBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView ref={composerScrollRef} style={styles.composerScroll} contentContainerStyle={styles.composerBody} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" onScroll={(event) => { composerScrollOffset.current = event.nativeEvent.contentOffset.y }} scrollEventThrottle={16}>
             {composerVenue?.venueSlug ? <Text style={styles.composerVenue}>{composerVenue.venueName}</Text> : <View style={styles.venueSelectSection}>
               {venues.map((venue) => <TouchableOpacity key={venue.slug || venue.id} style={styles.pickerItem} onPress={() => setComposerVenue({ venueSlug: venue.slug || venue.id, venueName: venue.name, posterUrl: venue.backgroundImageUrl, ownerId: venue.ownerId, updates: cards.find((card) => card.venueSlug === (venue.slug || venue.id))?.updates || [] })}><Text style={styles.pickerText}>{venue.name}</Text><Ionicons name="chevron-forward" color="#75E9FF" size={18} /></TouchableOpacity>)}
             </View>}
@@ -509,7 +550,7 @@ export default function VibeUpdateHub({ placement, iconSize, barHeight }: { plac
               {composerMediaState === "preparing" && <View style={styles.preparingOverlay}><ActivityIndicator color="#63E9FF" /><Text style={styles.preparingText}>{trimProgress === null ? "Preparing media…" : `Trimming video ${Math.round(trimProgress * 100)}%`}</Text></View>}
             </TouchableOpacity>}
             {mediaError && !trimCandidate && <View style={styles.mediaError}><Ionicons name="alert-circle-outline" color="#FFB4C3" size={18} /><View style={styles.mediaErrorCopy}><Text style={styles.mediaErrorText}>{mediaError}</Text><TouchableOpacity onPress={() => { setSourceVenue(composerVenue); setMediaError(null); setComposerMediaState("picking"); setSourcePickerOpen(true) }}><Text style={styles.mediaRetry}>TRY ANOTHER FILE</Text></TouchableOpacity></View></View>}
-            <TextInput value={caption} onChangeText={setCaption} onFocus={() => { if (placement !== "desktop") requestAnimationFrame(() => composerScrollRef.current?.scrollToEnd({ animated: true })) }} maxLength={220} multiline placeholder="Add Caption..." placeholderTextColor="#7B859B" style={styles.captionInput} />
+            <TextInput ref={captionInputRef} value={caption} onChangeText={setCaption} onFocus={() => { if (placement !== "desktop") setTimeout(revealCaptionInput, Platform.OS === "web" ? 180 : 320) }} maxLength={220} multiline placeholder="Add Caption..." placeholderTextColor="#7B859B" style={styles.captionInput} />
             <Text style={styles.characterCount}>{caption.length}/220</Text>
             <TouchableOpacity disabled={(!file && !trimCandidate) || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7} style={[styles.publishButton, ((!file && !trimCandidate) || !composerVenue?.venueSlug || publishing || preparingMedia || composerVenue.updates.length >= 7) && styles.publishDisabled]} onPress={publish}>{publishing ? <ActivityIndicator color="#06101B" /> : <><Ionicons name="flash" size={18} color="#06101B" /><Text style={styles.publishText}>PUBLISH PULSE</Text></>}</TouchableOpacity>
           </ScrollView>
