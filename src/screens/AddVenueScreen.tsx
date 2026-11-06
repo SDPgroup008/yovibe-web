@@ -17,6 +17,7 @@ import {
 import { useCompatNavigation } from "../utils/compatNavigation"
 import SupabaseService from "../services/SupabaseService"
 import LocationService from "../services/LocationService"
+import { normalizeVenueSocialUrl, validateVenueSocialLinks, type VenueSocialErrors } from "../utils/venueSocialLinks"
 import { useAuth } from "../contexts/AuthContext"
 import { ValidationDialog } from "../components/ValidationDialog"
 import ImagePickerService from "../services/ImagePickerService"
@@ -45,6 +46,11 @@ const AddVenueScreen: React.FC<any> = (props) => {
   const [location, setLocation] = useState("")
   const [description, setDescription] = useState("")
   const [categories, setCategories] = useState("")
+  const [tiktokUrl, setTiktokUrl] = useState("")
+  const [facebookUrl, setFacebookUrl] = useState("")
+  const [instagramUrl, setInstagramUrl] = useState("")
+  const [xUrl, setXUrl] = useState("")
+  const [youtubeUrl, setYoutubeUrl] = useState("")
   const [venueType, setVenueType] = useState<"nightlife" | "recreation">("nightlife")
 
   // Store latitude and longitude as numbers to preserve full precision
@@ -61,7 +67,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
     description?: string
     categories?: string
     image?: string
-  }>({})
+  } & VenueSocialErrors>({})
   const [validationVisible, setValidationVisible] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
 
@@ -132,6 +138,8 @@ const AddVenueScreen: React.FC<any> = (props) => {
     if (!image) {
       newErrors.image = "Please select an image for the venue"
     }
+    const socialErrors = validateVenueSocialLinks({ tiktokUrl, facebookUrl, instagramUrl, xUrl, youtubeUrl })
+    Object.assign(newErrors, socialErrors)
     if (!user) {
       Alert.alert("Error", "You must be logged in to add a venue")
       return
@@ -190,6 +198,11 @@ const AddVenueScreen: React.FC<any> = (props) => {
         categories: venueCategories,
         vibeRating: 4.0, // Default vibe rating
         backgroundImageUrl: imageUrl,
+        tiktokUrl: normalizeVenueSocialUrl(tiktokUrl, "tiktokUrl"),
+        facebookUrl: normalizeVenueSocialUrl(facebookUrl, "facebookUrl"),
+        instagramUrl: normalizeVenueSocialUrl(instagramUrl, "instagramUrl"),
+        xUrl: normalizeVenueSocialUrl(xUrl, "xUrl"),
+        youtubeUrl: normalizeVenueSocialUrl(youtubeUrl, "youtubeUrl"),
         latitude: latitude, // number with full precision
         longitude: longitude, // number with full precision
         ownerId: user.id,
@@ -294,6 +307,30 @@ const AddVenueScreen: React.FC<any> = (props) => {
           placeholderTextColor="#999"
         />
         {errors.categories && <Text style={styles.errorText}>Please enter at least one category</Text>}
+
+        <Text style={styles.label}>Social Links (optional)</Text>
+        {([
+          ["TikTok", tiktokUrl, setTiktokUrl, "tiktokUrl", "https://www.tiktok.com/@yourvenue"],
+          ["Facebook", facebookUrl, setFacebookUrl, "facebookUrl", "https://www.facebook.com/yourvenue"],
+          ["Instagram", instagramUrl, setInstagramUrl, "instagramUrl", "https://www.instagram.com/yourvenue"],
+          ["X", xUrl, setXUrl, "xUrl", "https://x.com/yourvenue"],
+          ["YouTube", youtubeUrl, setYoutubeUrl, "youtubeUrl", "https://www.youtube.com/@yourvenue"],
+        ] as const).map(([label, value, setter, key, placeholder]) => (
+          <View key={key}>
+            <TextInput
+              style={[styles.input, errors[key] && styles.errorInput]}
+              value={value}
+              onChangeText={(text) => { setter(text); setErrors((previous) => { const next = { ...previous }; delete next[key]; return next }) }}
+              placeholder={`${label} URL (optional)`}
+              placeholderTextColor="#999"
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+            {!errors[key] && <Text style={styles.socialHint}>{placeholder}</Text>}
+            {errors[key] && <Text style={styles.errorText}>{errors[key]}</Text>}
+          </View>
+        ))}
 
         <View style={styles.locationContainer}>
           <View style={styles.locationField}>
@@ -415,6 +452,12 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(11, 12, 13),
     color: "#FF3B30",
     marginBottom: responsiveSize(12, 14, 16),
+  },
+  socialHint: {
+    color: "#777777",
+    fontSize: responsiveSize(10, 11, 12),
+    marginTop: -10,
+    marginBottom: responsiveSize(10, 12, 14),
   },
   input: {
     backgroundColor: "#1E1E1E",

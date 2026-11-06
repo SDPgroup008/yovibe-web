@@ -18,6 +18,11 @@ export interface Venue {
   latitude: number
   longitude: number
   phoneNumber?: string
+  tiktokUrl?: string | null
+  facebookUrl?: string | null
+  instagramUrl?: string | null
+  xUrl?: string | null
+  youtubeUrl?: string | null
   coordinates?: { latitude: number; longitude: number }
   weeklyPrograms?: Record<string, WeeklyProgramValue>
   ownerId: string

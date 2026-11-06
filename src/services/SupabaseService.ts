@@ -509,6 +509,11 @@ class SupabaseService {
             location: doc.location,
             description: doc.description,
             backgroundImageUrl: doc.background_image_url,
+            tiktokUrl: doc.tiktok_url,
+            facebookUrl: doc.facebook_url,
+            instagramUrl: doc.instagram_url,
+            xUrl: doc.x_url,
+            youtubeUrl: doc.youtube_url,
             categories: doc.categories || [],
             vibeRating: doc.vibe_rating || 0,
             todayImages: doc.today_images || [],
@@ -555,6 +560,11 @@ class SupabaseService {
         location: doc.location,
         description: doc.description,
         backgroundImageUrl: doc.background_image_url,
+        tiktokUrl: doc.tiktok_url,
+        facebookUrl: doc.facebook_url,
+        instagramUrl: doc.instagram_url,
+        xUrl: doc.x_url,
+        youtubeUrl: doc.youtube_url,
         categories: doc.categories || [],
         vibeRating: doc.vibe_rating || 0,
         todayImages: doc.today_images || [],
@@ -600,6 +610,11 @@ class SupabaseService {
         location: data.location,
         description: data.description,
         backgroundImageUrl: data.background_image_url,
+        tiktokUrl: data.tiktok_url,
+        facebookUrl: data.facebook_url,
+        instagramUrl: data.instagram_url,
+        xUrl: data.x_url,
+        youtubeUrl: data.youtube_url,
         categories: data.categories || [],
         vibeRating: data.vibe_rating || 0,
         todayImages: data.today_images || [],
@@ -646,6 +661,11 @@ class SupabaseService {
         location: data.location,
         description: data.description,
         backgroundImageUrl: data.background_image_url,
+        tiktokUrl: data.tiktok_url,
+        facebookUrl: data.facebook_url,
+        instagramUrl: data.instagram_url,
+        xUrl: data.x_url,
+        youtubeUrl: data.youtube_url,
         categories: data.categories || [],
         vibeRating: data.vibe_rating || 0,
         todayImages: data.today_images || [],
@@ -683,6 +703,11 @@ class SupabaseService {
             location: doc.location,
             description: doc.description,
             backgroundImageUrl: doc.background_image_url,
+            tiktokUrl: doc.tiktok_url,
+            facebookUrl: doc.facebook_url,
+            instagramUrl: doc.instagram_url,
+            xUrl: doc.x_url,
+            youtubeUrl: doc.youtube_url,
             categories: doc.categories || [],
             vibeRating: doc.vibe_rating || 0,
             todayImages: doc.today_images || [],
@@ -715,6 +740,11 @@ class SupabaseService {
           location: venueData.location,
           description: venueData.description,
           background_image_url: venueData.backgroundImageUrl,
+          tiktok_url: venueData.tiktokUrl || null,
+          facebook_url: venueData.facebookUrl || null,
+          instagram_url: venueData.instagramUrl || null,
+          x_url: venueData.xUrl || null,
+          youtube_url: venueData.youtubeUrl || null,
           categories: venueData.categories,
           vibe_rating: venueData.vibeRating,
           latitude: venueData.latitude,
@@ -746,6 +776,11 @@ class SupabaseService {
       if (data.location) updateData.location = data.location;
       if (data.description) updateData.description = data.description;
       if (data.backgroundImageUrl) updateData.background_image_url = data.backgroundImageUrl;
+      if (data.tiktokUrl !== undefined) updateData.tiktok_url = data.tiktokUrl || null;
+      if (data.facebookUrl !== undefined) updateData.facebook_url = data.facebookUrl || null;
+      if (data.instagramUrl !== undefined) updateData.instagram_url = data.instagramUrl || null;
+      if (data.xUrl !== undefined) updateData.x_url = data.xUrl || null;
+      if (data.youtubeUrl !== undefined) updateData.youtube_url = data.youtubeUrl || null;
       if (data.categories) updateData.categories = data.categories;
       if (data.vibeRating !== undefined) updateData.vibe_rating = data.vibeRating;
       if (data.latitude !== undefined) updateData.latitude = data.latitude;
@@ -911,6 +946,11 @@ class SupabaseService {
         location: doc.location,
         description: doc.description,
         backgroundImageUrl: doc.background_image_url,
+        tiktokUrl: doc.tiktok_url,
+        facebookUrl: doc.facebook_url,
+        instagramUrl: doc.instagram_url,
+        xUrl: doc.x_url,
+        youtubeUrl: doc.youtube_url,
         categories: doc.categories || [],
         vibeRating: doc.vibe_rating || 0,
         todayImages: doc.today_images || [],

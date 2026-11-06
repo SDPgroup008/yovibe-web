@@ -21,6 +21,8 @@ import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { useCachedVenuePage } from "../hooks/useDataCache"
 import ImagePickerService from "../services/ImagePickerService"
 import LocationService from "../services/LocationService"
+import VenueSocialLinks from "../components/VenueSocialLinks"
+import { normalizeVenueSocialUrl, validateVenueSocialLinks, type VenueSocialErrors } from "../utils/venueSocialLinks"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -57,6 +59,12 @@ const VenueDetailScreen: React.FC = () => {
   const [editVenueCategories, setEditVenueCategories] = useState("")
   const [editVenueLatitude, setEditVenueLatitude] = useState("")
   const [editVenueLongitude, setEditVenueLongitude] = useState("")
+  const [editTiktokUrl, setEditTiktokUrl] = useState("")
+  const [editFacebookUrl, setEditFacebookUrl] = useState("")
+  const [editInstagramUrl, setEditInstagramUrl] = useState("")
+  const [editXUrl, setEditXUrl] = useState("")
+  const [editYoutubeUrl, setEditYoutubeUrl] = useState("")
+  const [editSocialErrors, setEditSocialErrors] = useState<VenueSocialErrors>({})
   const [editVenueImageUri, setEditVenueImageUri] = useState<string | null>(null)
   const [locatingVenue, setLocatingVenue] = useState(false)
   const [savingVenue, setSavingVenue] = useState(false)
@@ -276,6 +284,12 @@ const VenueDetailScreen: React.FC = () => {
     setEditVenueCategories((venue.categories || []).join(", "))
     setEditVenueLatitude(String(venue.latitude ?? ""))
     setEditVenueLongitude(String(venue.longitude ?? ""))
+    setEditTiktokUrl(venue.tiktokUrl || "")
+    setEditFacebookUrl(venue.facebookUrl || "")
+    setEditInstagramUrl(venue.instagramUrl || "")
+    setEditXUrl(venue.xUrl || "")
+    setEditYoutubeUrl(venue.youtubeUrl || "")
+    setEditSocialErrors({})
     setEditVenueImageUri(null)
     setShowEditVenue(true)
   }
@@ -319,6 +333,14 @@ const VenueDetailScreen: React.FC = () => {
 
     const latitude = Number(editVenueLatitude.trim())
     const longitude = Number(editVenueLongitude.trim())
+    const socialValues = { tiktokUrl: editTiktokUrl, facebookUrl: editFacebookUrl, instagramUrl: editInstagramUrl, xUrl: editXUrl, youtubeUrl: editYoutubeUrl }
+    const socialErrors = validateVenueSocialLinks(socialValues)
+    if (Object.keys(socialErrors).length > 0) {
+      setEditSocialErrors(socialErrors)
+      Alert.alert("Invalid social links", "Please correct the highlighted social links.")
+      return
+    }
+    setEditSocialErrors({})
     if (!editVenueLatitude.trim() || !editVenueLongitude.trim() || !Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
       Alert.alert("Invalid coordinates", "Enter a latitude from -90 to 90 and a longitude from -180 to 180.")
       return
@@ -337,6 +359,11 @@ const VenueDetailScreen: React.FC = () => {
         backgroundImageUrl,
         latitude,
         longitude,
+        tiktokUrl: normalizeVenueSocialUrl(editTiktokUrl, "tiktokUrl"),
+        facebookUrl: normalizeVenueSocialUrl(editFacebookUrl, "facebookUrl"),
+        instagramUrl: normalizeVenueSocialUrl(editInstagramUrl, "instagramUrl"),
+        xUrl: normalizeVenueSocialUrl(editXUrl, "xUrl"),
+        youtubeUrl: normalizeVenueSocialUrl(editYoutubeUrl, "youtubeUrl"),
       }
       await SupabaseService.updateVenue(venue.slug || venueId, updatedDetails)
       updateCachedData((previous) => previous?.venue ? {
@@ -634,7 +661,7 @@ const VenueDetailScreen: React.FC = () => {
                 <View style={styles.programContainer}>
                   {visiblePrograms.map((program) => (
                     <View key={program.day} style={styles.programItem}>
-                      {program.posterUrl ? <TouchableOpacity onPress={() => openFullScreenImage(program.posterUrl)} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                      {program.posterUrl ? <TouchableOpacity onPress={() => { if (program.posterUrl) openFullScreenImage(program.posterUrl) }} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
                       <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                     </View>
                   ))}
@@ -650,6 +677,7 @@ const VenueDetailScreen: React.FC = () => {
                 </ScrollView>
               </>
             )}
+            <VenueSocialLinks venue={venue} />
           </View>
         </ScrollView>
 
@@ -959,7 +987,7 @@ const VenueDetailScreen: React.FC = () => {
                 <View style={styles.programContainer}>
                   {visiblePrograms.map((program) => (
                   <View key={program.day} style={styles.programItem}>
-                    {program.posterUrl ? <TouchableOpacity onPress={() => openFullScreenImage(program.posterUrl)} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
+                    {program.posterUrl ? <TouchableOpacity onPress={() => { if (program.posterUrl) openFullScreenImage(program.posterUrl) }} accessibilityLabel={`View ${program.day} program poster full screen`}><Image source={{ uri: program.posterUrl }} style={styles.programPoster} /></TouchableOpacity> : <View style={styles.programDayRail}><Ionicons name="calendar-outline" size={18} color="#74F7FF" /></View>}
                     <View style={styles.programCopy}><Text style={styles.programDay}>{program.day}</Text><Text style={styles.programDescription}>{program.description || "Featured program"}</Text></View>
                   </View>
                 ))}
@@ -1018,6 +1046,7 @@ const VenueDetailScreen: React.FC = () => {
             <Ionicons name="navigate-outline" size={20} color="#FFFFFF" />
             <Text style={styles.directionsButtonText}>Get Directions</Text>
           </TouchableOpacity>
+          <VenueSocialLinks venue={venue} />
         </View>
       </ScrollView>
     )}
@@ -1124,6 +1153,18 @@ const VenueDetailScreen: React.FC = () => {
 
               <Text style={styles.inputLabel}>Categories (comma-separated)</Text>
               <TextInput style={styles.input} value={editVenueCategories} onChangeText={setEditVenueCategories} placeholder="Nightlife, Bar, Restaurant" placeholderTextColor="#666666" />
+
+              <Text style={styles.inputLabel}>Social links (optional)</Text>
+              <TextInput style={[styles.input, editSocialErrors.tiktokUrl && styles.inputError]} value={editTiktokUrl} onChangeText={(value) => { setEditTiktokUrl(value); setEditSocialErrors((previous) => ({ ...previous, tiktokUrl: undefined })) }} placeholder="TikTok URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              {editSocialErrors.tiktokUrl && <Text style={styles.socialError}>{editSocialErrors.tiktokUrl}</Text>}
+              <TextInput style={[styles.input, editSocialErrors.facebookUrl && styles.inputError]} value={editFacebookUrl} onChangeText={(value) => { setEditFacebookUrl(value); setEditSocialErrors((previous) => ({ ...previous, facebookUrl: undefined })) }} placeholder="Facebook URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              {editSocialErrors.facebookUrl && <Text style={styles.socialError}>{editSocialErrors.facebookUrl}</Text>}
+              <TextInput style={[styles.input, editSocialErrors.instagramUrl && styles.inputError]} value={editInstagramUrl} onChangeText={(value) => { setEditInstagramUrl(value); setEditSocialErrors((previous) => ({ ...previous, instagramUrl: undefined })) }} placeholder="Instagram URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              {editSocialErrors.instagramUrl && <Text style={styles.socialError}>{editSocialErrors.instagramUrl}</Text>}
+              <TextInput style={[styles.input, editSocialErrors.xUrl && styles.inputError]} value={editXUrl} onChangeText={(value) => { setEditXUrl(value); setEditSocialErrors((previous) => ({ ...previous, xUrl: undefined })) }} placeholder="X URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              {editSocialErrors.xUrl && <Text style={styles.socialError}>{editSocialErrors.xUrl}</Text>}
+              <TextInput style={[styles.input, editSocialErrors.youtubeUrl && styles.inputError]} value={editYoutubeUrl} onChangeText={(value) => { setEditYoutubeUrl(value); setEditSocialErrors((previous) => ({ ...previous, youtubeUrl: undefined })) }} placeholder="YouTube URL (optional)" placeholderTextColor="#666666" autoCapitalize="none" autoCorrect={false} keyboardType="url" />
+              {editSocialErrors.youtubeUrl && <Text style={styles.socialError}>{editSocialErrors.youtubeUrl}</Text>}
 
               <Text style={styles.inputLabel}>Venue coordinates *</Text>
               <View style={styles.coordinateRow}>
@@ -1691,6 +1732,14 @@ const styles = StyleSheet.create({
     fontSize: responsiveSize(14, 15, 16),
     borderWidth: 1,
     borderColor: "#444444",
+  },
+  inputError: {
+    borderColor: "#FF6B6B",
+  },
+  socialError: {
+    color: "#FF8A8A",
+    fontSize: responsiveSize(12, 13, 14),
+    marginTop: responsiveSize(4, 5, 6),
   },
   textArea: {
     minHeight: responsiveSize(80, 90, 100),
