@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 
 const indexPath = path.join(__dirname, "..", "dist", "index.html");
@@ -54,6 +54,16 @@ if (!fs.existsSync(sourceOgImagePath)) {
 }
 fs.mkdirSync(path.dirname(publishedOgImagePath), { recursive: true });
 fs.copyFileSync(sourceOgImagePath, publishedOgImagePath);
+// Copy apple-touch-icon PNGs to dist/assets so the HTML tags resolve at runtime.
+const appleIconSizes = [120, 152, 167, 180];
+for (const size of appleIconSizes) {
+  const srcApple  = path.join(__dirname, '..', 'public', 'assets', 'apple-touch-icon-' + size + '.png');
+  const destApple = path.join(__dirname, '..', 'dist',   'assets', 'apple-touch-icon-' + size + '.png');
+  if (fs.existsSync(srcApple)) {
+    fs.copyFileSync(srcApple, destApple);
+  }
+}
+
 
 const headInjection = `
     <title>${title}</title>
@@ -77,7 +87,14 @@ const headInjection = `
     <meta name="twitter:description" content="${description}" />
     <meta name="twitter:image" content="${ogImage}" />
     <meta name="twitter:image:alt" content="YoVibe — Discover events and tickets in Uganda" />
-    <link rel="canonical" href="${canonicalUrl}" />${structuredData}`;
+    <link rel="canonical" href="${canonicalUrl}" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/assets/apple-touch-icon-167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/assets/apple-touch-icon-152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/assets/apple-touch-icon-120.png" />
+    ${structuredData}`;
 
 const noScriptReplacement = `
     <noscript>
