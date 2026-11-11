@@ -125,39 +125,38 @@ html = html.replace(/\s*<script id="yovibe-site-jsonld" type="application\/ld\+j
 html = html.replace(/<title>[\s\S]*?<\/title>/i, headInjection.trim());
 html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, noScriptReplacement.trim());
 
-// ── iOS Safari full-screen fix ───────────────────────────────────────────────
-// 1. Add viewport-fit=cover so the viewport extends edge-to-edge under the
+// -- iOS Safari full-screen fix --
+// 1. Replace the viewport meta with one that includes viewport-fit=cover.
+//    This tells iOS to extend the layout viewport edge-to-edge under the
 //    browser chrome (address bar + home indicator).
 html = html.replace(
-  /(<meta\s[^>]*name="viewport"[^>]*content=")([^"]*?)(")/i,
-  (_, pre, content, post) => {
-    if (content.includes('viewport-fit')) return pre + content + post;
-    return pre + content.trimEnd().replace(/,?\s*$/, '') + ', viewport-fit=cover' + post;
-  }
+  /<meta[^>]*name="viewport"[^>]*>/i,
+  '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />'
 );
 
-// 2. Patch the expo-reset <style> block to:
-//    - use -webkit-fill-available so 100vh behaves correctly on iOS Safari
-//    - add env(safe-area-inset-*) padding to #root so content clears
-//      the notch / home indicator while still painting under them.
-html = html.replace(
-  /(<style\s[^>]*id="expo-reset"[^>]*>)([\s\S]*?)(<\/style>)/i,
-  (_, open, body, close) => {
-    if (body.includes('safe-area-inset')) return open + body + close;
-    const patched = body
-      // Replace height:100% on html,body with the iOS-safe equivalent
-      .replace(
-        /(html,\s*\n?\s*body\s*\{[^}]*?)height:\s*100%;/,
-        '$1height: 100%; min-height: -webkit-fill-available;'
-      )
-      // Replace height:100% on #root with 100dvh + safe-area padding
-      .replace(
-        /(#root\s*\{[^}]*?)height:\s*100%;/,
-        '$1height: 100dvh;\n        padding-top: env(safe-area-inset-top);\n        padding-bottom: env(safe-area-inset-bottom);\n        padding-left: env(safe-area-inset-left);\n        padding-right: env(safe-area-inset-right);\n        box-sizing: border-box;'
-      );
-    return open + patched + close;
-  }
-);
+// 2. Inject a small CSS override block just before </head>.
+//    - 100dvh : correct height that shrinks when the address bar collapses
+//    - -webkit-fill-available : fallback for older iOS Safari (pre-15)
+//    - env(safe-area-inset-*): paints under the notch / home indicator
+//    We append a NEW block (not patching Expo's expo-reset) so this is
+//    resilient to any whitespace changes in the Expo-generated HTML.
+if (!html.includes('yovibe-ios-fix')) {
+  const iosFix = [
+    '  <style id="yovibe-ios-fix">',
+    '    html { height: -webkit-fill-available; }',
+    '    body { min-height: -webkit-fill-available; }',
+    '    #root {',
+    '      height: 100dvh;',
+    '      padding-top: env(safe-area-inset-top);',
+    '      padding-bottom: env(safe-area-inset-bottom);',
+    '      padding-left: env(safe-area-inset-left);',
+    '      padding-right: env(safe-area-inset-right);',
+    '      box-sizing: border-box;',
+    '    }',
+    '  </style>',
+  ].join('\n');
+  html = html.replace('</head>', iosFix + '\n</head>');
+}
 
 fs.writeFileSync(indexPath, html, "utf8");
 
