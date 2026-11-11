@@ -125,6 +125,40 @@ html = html.replace(/\s*<script id="yovibe-site-jsonld" type="application\/ld\+j
 html = html.replace(/<title>[\s\S]*?<\/title>/i, headInjection.trim());
 html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, noScriptReplacement.trim());
 
+// ── iOS Safari full-screen fix ───────────────────────────────────────────────
+// 1. Add viewport-fit=cover so the viewport extends edge-to-edge under the
+//    browser chrome (address bar + home indicator).
+html = html.replace(
+  /(<meta\s[^>]*name="viewport"[^>]*content=")([^"]*?)(")/i,
+  (_, pre, content, post) => {
+    if (content.includes('viewport-fit')) return pre + content + post;
+    return pre + content.trimEnd().replace(/,?\s*$/, '') + ', viewport-fit=cover' + post;
+  }
+);
+
+// 2. Patch the expo-reset <style> block to:
+//    - use -webkit-fill-available so 100vh behaves correctly on iOS Safari
+//    - add env(safe-area-inset-*) padding to #root so content clears
+//      the notch / home indicator while still painting under them.
+html = html.replace(
+  /(<style\s[^>]*id="expo-reset"[^>]*>)([\s\S]*?)(<\/style>)/i,
+  (_, open, body, close) => {
+    if (body.includes('safe-area-inset')) return open + body + close;
+    const patched = body
+      // Replace height:100% on html,body with the iOS-safe equivalent
+      .replace(
+        /(html,\s*\n?\s*body\s*\{[^}]*?)height:\s*100%;/,
+        '$1height: 100%; min-height: -webkit-fill-available;'
+      )
+      // Replace height:100% on #root with 100dvh + safe-area padding
+      .replace(
+        /(#root\s*\{[^}]*?)height:\s*100%;/,
+        '$1height: 100dvh;\n        padding-top: env(safe-area-inset-top);\n        padding-bottom: env(safe-area-inset-bottom);\n        padding-left: env(safe-area-inset-left);\n        padding-right: env(safe-area-inset-right);\n        box-sizing: border-box;'
+      );
+    return open + patched + close;
+  }
+);
+
 fs.writeFileSync(indexPath, html, "utf8");
 
 if (fs.existsSync(messagingWorkerPath)) {
