@@ -1,4 +1,4 @@
-﻿const fs = require("fs");
+const fs = require("fs");
 const path = require("path");
 
 const indexPath = path.join(__dirname, "..", "dist", "index.html");
@@ -88,8 +88,12 @@ const headInjection = `
     <meta name="twitter:image" content="${ogImage}" />
     <meta name="twitter:image:alt" content="YoVibe — Discover events and tickets in Uganda" />
     <link rel="canonical" href="${canonicalUrl}" />
+    <meta name="theme-color" content="#121212" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="YoVibe" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/assets/apple-touch-icon-180.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/assets/apple-touch-icon-180.png" />
     <link rel="apple-touch-icon" sizes="167x167" href="/assets/apple-touch-icon-167.png" />
     <link rel="apple-touch-icon" sizes="152x152" href="/assets/apple-touch-icon-152.png" />
@@ -143,15 +147,31 @@ html = html.replace(
 if (!html.includes('yovibe-ios-fix')) {
   const iosFix = [
     '  <style id="yovibe-ios-fix">',
-    '    html { height: -webkit-fill-available; }',
-    '    body { min-height: -webkit-fill-available; }',
+    '    :root {',
+    '      --sat: env(safe-area-inset-top, 0px);',
+    '      --sab: env(safe-area-inset-bottom, 0px);',
+    '    }',
+    '    html, body {',
+    '      height: 100%;',
+    '      min-height: 100dvh;',
+    '      min-height: -webkit-fill-available;',
+    '      background-color: #121212 !important;',
+    '      margin: 0;',
+    '      padding: 0;',
+    '    }',
     '    #root {',
-    '      height: 100dvh;',
-    '      padding-top: env(safe-area-inset-top);',
-    '      padding-bottom: env(safe-area-inset-bottom);',
-    '      padding-left: env(safe-area-inset-left);',
-    '      padding-right: env(safe-area-inset-right);',
-    '      box-sizing: border-box;',
+    '      height: 100%;',
+    '      min-height: 100dvh;',
+    '      min-height: -webkit-fill-available;',
+    '      background-color: #121212 !important;',
+    '    }',
+    '    .yovibe-mobile-header {',
+    '      padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;',
+    '      min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;',
+    '    }',
+    '    .yovibe-bottom-tab-bar {',
+    '      padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)) !important;',
+    '      min-height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;',
     '    }',
     '  </style>',
   ].join('\n');

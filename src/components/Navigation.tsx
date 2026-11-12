@@ -63,14 +63,22 @@ export const TabBar: React.FC = () => {
   };
 
   return (
-    <View style={[
-      styles.bottomTabBar,
-      {
-        height: componentSizes.tabBarHeight,
-        paddingBottom: Platform.OS === 'ios' ? spacing.xs : 0,
-        paddingTop: spacing.xs,
-      }
-    ]}>
+    <View
+      style={[
+        styles.bottomTabBar,
+        {
+          height: componentSizes.tabBarHeight,
+          paddingBottom: Platform.OS === 'ios' ? spacing.xs : 0,
+          paddingTop: spacing.xs,
+        },
+        Platform.OS === 'web' && ({
+          paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
+          minHeight: 'calc(56px + env(safe-area-inset-bottom, 0px))',
+          boxSizing: 'border-box',
+        } as any),
+      ]}
+      {...({ className: 'yovibe-bottom-tab-bar' } as any)}
+    >
       {tabs.map((tab) => {
         const isActive = currentTab === tab.key;
         const iconName = isActive
@@ -226,9 +234,19 @@ export const AppHeader: React.FC = () => {
     );
   }
 
-  // On mobile/tablet, header contains back button and title
+  // Mobile/Tablet: Header contains back button, logo and actions
   return (
-    <View style={styles.mobileHeader}>
+    <View
+      style={[
+        styles.mobileHeader,
+        Platform.OS === 'web' && ({
+          paddingTop: 'max(12px, env(safe-area-inset-top, 0px))',
+          minHeight: 'calc(56px + env(safe-area-inset-top, 0px))',
+          boxSizing: 'border-box',
+        } as any),
+      ]}
+      {...({ className: 'yovibe-mobile-header' } as any)}
+    >
       <BackButton />
       <View style={styles.headerBrand}>
         <View style={styles.headerIconWrap}>
