@@ -186,9 +186,6 @@ if (!html.includes('yovibe-ios-fix')) {
     '      padding-bottom: 2px !important;',
     '      box-sizing: border-box !important;',
     '    }',
-    '    .yovibe-standalone .yovibe-back-button {',
-    '      top: env(safe-area-inset-top, 0px) !important;',
-    '    }',
     '  </style>',
   ].join('\n');
   const standaloneMode = [

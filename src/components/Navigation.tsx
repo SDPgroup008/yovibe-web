@@ -29,6 +29,9 @@ const tabs: TabConfig[] = [
   { key: 'profile', label: 'Profile', icon: 'person-outline', route: '/profile' }
 ];
 
+// Preserve the tab group's current top spacing while adding 2px below it.
+const STANDALONE_TAB_BAR_HEIGHT = 46;
+
 // Custom tab bar component
 export const TabBar: React.FC = () => {
   const { currentPath, navigateToEvents, navigateToVenues, navigateToMap, navigateToCalendar, navigateToProfile } = useNavigation();
@@ -78,7 +81,7 @@ export const TabBar: React.FC = () => {
           minHeight: 'calc(56px + env(safe-area-inset-bottom, 0px))',
           boxSizing: 'border-box',
         } as any),
-        compactStandalone && { height: 44, minHeight: 44, paddingTop: 0, paddingBottom: 0, boxSizing: 'border-box' } as any,
+        compactStandalone && { height: STANDALONE_TAB_BAR_HEIGHT, minHeight: STANDALONE_TAB_BAR_HEIGHT, paddingTop: 0, paddingBottom: 0, boxSizing: 'border-box' } as any,
       ]}
       {...({ className: 'yovibe-bottom-tab-bar' } as any)}
     >
@@ -91,7 +94,7 @@ export const TabBar: React.FC = () => {
         return (
           <TouchableOpacity
             key={tab.key}
-            style={[styles.bottomTabItem, compactStandalone && { height: 44, paddingTop: 2, paddingBottom: 2, justifyContent: 'center', boxSizing: 'border-box' } as any]}
+            style={[styles.bottomTabItem, compactStandalone && { height: STANDALONE_TAB_BAR_HEIGHT, paddingTop: 2, paddingBottom: 4, justifyContent: 'center', boxSizing: 'border-box' } as any]}
             {...({ className: 'yovibe-bottom-tab-item' } as any)}
             onPress={() => navigateToTab(tab.key)}
             activeOpacity={0.7}
@@ -110,7 +113,7 @@ export const TabBar: React.FC = () => {
           </TouchableOpacity>
         );
       })}
-      <VibeUpdateHub placement="mobile" iconSize={componentSizes.iconSize} barHeight={compactStandalone ? 44 : componentSizes.tabBarHeight} />
+      <VibeUpdateHub placement="mobile" iconSize={componentSizes.iconSize} barHeight={compactStandalone ? STANDALONE_TAB_BAR_HEIGHT : componentSizes.tabBarHeight} />
     </View>
   );
 };
@@ -227,7 +230,8 @@ const HeaderAction: React.FC = () => {
 
 // Header component for consistency
 export const AppHeader: React.FC = () => {
-  const { isLargeScreen } = useDeviceType();
+  const { isLargeScreen, isTablet } = useDeviceType();
+  const compactStandalone = useIphoneStandalone() && !isTablet && !isLargeScreen;
 
   // On desktop, header is minimal since we have the sidebar
   if (isLargeScreen) {
@@ -252,15 +256,31 @@ export const AppHeader: React.FC = () => {
       ]}
       {...({ className: 'yovibe-mobile-header' } as any)}
     >
-      <BackButton />
-      <View style={styles.headerBrand} {...({ className: 'yovibe-header-brand' } as any)}>
-        <View style={styles.headerIconWrap}>
-          <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
+      {compactStandalone ? (
+        <View style={styles.standaloneHeaderRow}>
+          <BackButton style={styles.standaloneBackButton} />
+          <View style={styles.headerBrand} {...({ className: 'yovibe-header-brand' } as any)}>
+            <View style={styles.headerIconWrap}>
+              <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
+            </View>
+            <Text style={styles.headerTitle}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
+          </View>
+          <View style={styles.mobileHeaderSpacer} />
+          <HeaderAction />
         </View>
-        <Text style={styles.headerTitle}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
-      </View>
-      <View style={styles.mobileHeaderSpacer} />
-      <HeaderAction />
+      ) : (
+        <>
+          <BackButton />
+          <View style={styles.headerBrand} {...({ className: 'yovibe-header-brand' } as any)}>
+            <View style={styles.headerIconWrap}>
+              <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
+            </View>
+            <Text style={styles.headerTitle}><Text style={{color: 'red'}}>Yo</Text>Vibe</Text>
+          </View>
+          <View style={styles.mobileHeaderSpacer} />
+          <HeaderAction />
+        </>
+      )}
     </View>
   );
 };
@@ -301,7 +321,7 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
     <View style={styles.mobileLayout}>
       <AppHeader />
       <View
-        style={[styles.mobileContent, { paddingBottom: compactStandalone ? 44 : componentSizes.tabBarHeight }]}
+        style={[styles.mobileContent, { paddingBottom: compactStandalone ? STANDALONE_TAB_BAR_HEIGHT : componentSizes.tabBarHeight }]}
         {...({ className: 'yovibe-mobile-content' } as any)}
       >
         {children}
@@ -426,6 +446,18 @@ const styles = StyleSheet.create({
   },
   mobileHeaderSpacer: {
      flex: 1,
+  },
+  standaloneHeaderRow: {
+    flex: 1,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  standaloneBackButton: {
+    left: 0,
+    top: '50%',
+    transform: [{ translateY: -22 }],
   },
   headerActionSlot: {
     flex: 1,
