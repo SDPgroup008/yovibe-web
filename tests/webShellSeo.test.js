@@ -33,9 +33,13 @@ describe('web shell SEO source', () => {
     expect(patcher).toContain('display-mode: standalone');
     expect(patcher).toContain('window.navigator.standalone === true');
     expect(patcher).toContain('yovibe-standalone .yovibe-mobile-header');
-    expect(patcher).toContain('padding-top: env(safe-area-inset-top, 0px) !important');
-    expect(patcher).toContain('padding-bottom: env(safe-area-inset-bottom, 0px) !important');
+    expect(patcher).toContain('padding-top: 2px !important');
+    expect(patcher).toContain('padding-bottom: 2px !important');
+    expect(patcher).toContain('align-self: flex-start !important');
+    expect(patcher).toContain('justify-content: flex-end !important');
     expect(patcher).toContain('yovibe-standalone .yovibe-mobile-content');
     expect(navigation).toContain('yovibe-mobile-content');
+    expect(navigation).toContain('yovibe-header-brand');
+    expect(navigation).toContain('yovibe-bottom-tab-item');
   });
 });

@@ -89,6 +89,7 @@ export const TabBar: React.FC = () => {
           <TouchableOpacity
             key={tab.key}
             style={styles.bottomTabItem}
+            {...({ className: 'yovibe-bottom-tab-item' } as any)}
             onPress={() => navigateToTab(tab.key)}
             activeOpacity={0.7}
           >
@@ -248,7 +249,7 @@ export const AppHeader: React.FC = () => {
       {...({ className: 'yovibe-mobile-header' } as any)}
     >
       <BackButton />
-      <View style={styles.headerBrand}>
+      <View style={styles.headerBrand} {...({ className: 'yovibe-header-brand' } as any)}>
         <View style={styles.headerIconWrap}>
           <Image source={require('../../assets/icon.png')} style={styles.headerIcon} resizeMode="cover" />
         </View>
