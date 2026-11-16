@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import VibeUpdateHub from './VibeUpdateHub';
+import { useIphoneStandalone } from '../utils/useIphoneStandalone';
 
 // Import responsive utilities
 import { useDeviceType, useComponentSizes, useSpacing, BREAKPOINTS } from '../utils/ResponsiveDesign';
@@ -34,6 +35,7 @@ export const TabBar: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType();
   const componentSizes = useComponentSizes();
   const spacing = useSpacing();
+  const compactStandalone = useIphoneStandalone() && !isTablet && !isLargeScreen;
 
   // For desktop, use left sidebar instead of bottom tabs
   if (isLargeScreen) {
@@ -71,11 +73,12 @@ export const TabBar: React.FC = () => {
           paddingBottom: Platform.OS === 'ios' ? spacing.xs : 0,
           paddingTop: spacing.xs,
         },
-        Platform.OS === 'web' && ({
+        Platform.OS === 'web' && !compactStandalone && ({
           paddingBottom: 'max(8px, env(safe-area-inset-bottom, 0px))',
           minHeight: 'calc(56px + env(safe-area-inset-bottom, 0px))',
           boxSizing: 'border-box',
         } as any),
+        compactStandalone && { height: 44, minHeight: 44, paddingTop: 0, paddingBottom: 0, boxSizing: 'border-box' } as any,
       ]}
       {...({ className: 'yovibe-bottom-tab-bar' } as any)}
     >
@@ -88,7 +91,7 @@ export const TabBar: React.FC = () => {
         return (
           <TouchableOpacity
             key={tab.key}
-            style={styles.bottomTabItem}
+            style={[styles.bottomTabItem, compactStandalone && { height: 44, paddingTop: 2, paddingBottom: 2, justifyContent: 'center', boxSizing: 'border-box' } as any]}
             {...({ className: 'yovibe-bottom-tab-item' } as any)}
             onPress={() => navigateToTab(tab.key)}
             activeOpacity={0.7}
@@ -107,7 +110,7 @@ export const TabBar: React.FC = () => {
           </TouchableOpacity>
         );
       })}
-      <VibeUpdateHub placement="mobile" iconSize={componentSizes.iconSize} barHeight={componentSizes.tabBarHeight} />
+      <VibeUpdateHub placement="mobile" iconSize={componentSizes.iconSize} barHeight={compactStandalone ? 44 : componentSizes.tabBarHeight} />
     </View>
   );
 };
@@ -285,8 +288,9 @@ export const DesktopLayout: React.FC<{ children: React.ReactNode }> = ({ childre
 
 // Layout wrapper for mobile/tablet
 export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { isLargeScreen } = useDeviceType();
+  const { isLargeScreen, isTablet } = useDeviceType();
   const componentSizes = useComponentSizes();
+  const compactStandalone = useIphoneStandalone() && !isTablet && !isLargeScreen;
 
   if (isLargeScreen) {
     return <>{children}</>;
@@ -296,7 +300,7 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
     <View style={styles.mobileLayout}>
       <AppHeader />
       <View
-        style={[styles.mobileContent, { paddingBottom: componentSizes.tabBarHeight }]}
+        style={[styles.mobileContent, { paddingBottom: compactStandalone ? 44 : componentSizes.tabBarHeight }]}
         {...({ className: 'yovibe-mobile-content' } as any)}
       >
         {children}

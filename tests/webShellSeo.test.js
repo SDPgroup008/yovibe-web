@@ -31,15 +31,14 @@ describe('web shell SEO source', () => {
   test('balances standalone Home Screen header and tab content around the real safe area', () => {
     const navigation = fs.readFileSync(path.join(root, 'src/components/Navigation.tsx'), 'utf8');
     expect(patcher).toContain('display-mode: standalone');
-    expect(patcher).toContain('window.navigator.standalone === true');
+    expect(patcher).toContain('navigator.standalone === true');
     expect(patcher).toContain('yovibe-standalone .yovibe-mobile-header');
     expect(patcher).toContain('height: calc(44px + env(safe-area-inset-top, 0px)) !important');
     expect(patcher).toContain('padding-top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
     expect(patcher).toContain('padding-bottom: 2px !important');
     expect(patcher).toContain('top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
-    expect(patcher).toContain('height: 44px !important');
-    expect(patcher).toContain('justify-content: center !important');
-    expect(patcher).toContain('yovibe-standalone .yovibe-mobile-content');
+    expect(patcher).toContain('html:not(.yovibe-standalone) .yovibe-bottom-tab-bar');
+    expect(navigation).toContain('compactStandalone ? 44 : componentSizes.tabBarHeight');
     expect(navigation).toContain('yovibe-mobile-content');
     expect(navigation).toContain('yovibe-header-brand');
     expect(navigation).toContain('yovibe-bottom-tab-item');
