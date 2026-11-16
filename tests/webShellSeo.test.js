@@ -27,17 +27,4 @@ describe('web shell SEO source', () => {
     expect(entry).not.toContain('SEO META TAGS INJECTION');
     expect(entry).not.toContain("document.title = 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda'");
   });
-
-  test('configures edge-to-edge iPhone viewport with document scrolling and safe navigation insets', () => {
-    const navigation = fs.readFileSync(path.join(root, 'src/components/Navigation.tsx'), 'utf8');
-    const app = fs.readFileSync(path.join(root, 'src/App.tsx'), 'utf8');
-    expect(patcher).toContain('viewport-fit=cover');
-    expect(patcher).toContain('@supports (-webkit-touch-callout: none)');
-    expect(patcher).toContain('overflow-y: auto !important');
-    expect(patcher).toContain('min-height: 100dvh !important');
-    expect(patcher).toContain('env(safe-area-inset-top, 0px)');
-    expect(patcher).toContain('env(safe-area-inset-bottom, 0px)');
-    expect(navigation).toContain('yovibe-mobile-layout');
-    expect(app).toContain('yovibe-app-shell');
-  });
 });

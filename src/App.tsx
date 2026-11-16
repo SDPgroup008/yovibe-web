@@ -542,7 +542,7 @@ function AppContent() {
 
   // Always render the main router - screens handle their own authentication
   return (
-    <View style={{ flex: 1 }} {...(Platform.OS === "web" ? { className: "yovibe-app-shell" } as any : {})}>
+    <View style={{ flex: 1 }}>
       {/* Permission banner at the very top */}
       {permissionBannerMode && (
         <PermissionBanner
