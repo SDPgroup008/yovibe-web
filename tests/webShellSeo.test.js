@@ -36,11 +36,13 @@ describe('web shell SEO source', () => {
     expect(patcher).toContain('height: calc(44px + env(safe-area-inset-top, 0px)) !important');
     expect(patcher).toContain('padding-top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
     expect(patcher).toContain('padding-bottom: 2px !important');
-    expect(patcher).toContain('top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
+    expect(patcher).toContain('yovibe-standalone .yovibe-back-button');
+    expect(patcher).toContain('top: env(safe-area-inset-top, 0px) !important');
     expect(patcher).toContain('html:not(.yovibe-standalone) .yovibe-bottom-tab-bar');
     expect(navigation).toContain('compactStandalone ? 44 : componentSizes.tabBarHeight');
     expect(navigation).toContain('yovibe-mobile-content');
     expect(navigation).toContain('yovibe-header-brand');
+    expect(navigation).toContain('yovibe-back-button');
     expect(navigation).toContain('yovibe-bottom-tab-item');
   });
 });

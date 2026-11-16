@@ -589,7 +589,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     padding: responsiveSize(14, 18, 12),
-    paddingTop: Platform.OS === "ios" ? responsiveSize(40, 50, 30) : responsiveSize(20, 30, 20),
+    paddingTop: Platform.OS === "ios" ? responsiveSize(20, 25, 15) : responsiveSize(10, 15, 10),
+    paddingBottom: responsiveSize(7, 9, 6),
     backgroundColor: "#1A1A2E",
   },
   headerTitle: {

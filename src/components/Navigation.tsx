@@ -206,6 +206,7 @@ export const BackButton: React.FC<{ style?: any }> = ({ style }) => {
   return (
     <TouchableOpacity
       style={[styles.standardBackButton, style]}
+      {...(Platform.OS === 'web' ? { className: 'yovibe-back-button' } as any : {})}
       onPress={goBack}
       activeOpacity={0.7}
     >

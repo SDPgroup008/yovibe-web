@@ -186,8 +186,8 @@ if (!html.includes('yovibe-ios-fix')) {
     '      padding-bottom: 2px !important;',
     '      box-sizing: border-box !important;',
     '    }',
-    '    .yovibe-standalone .standardBackButton {',
-    '      top: calc(env(safe-area-inset-top, 0px) + 2px) !important;',
+    '    .yovibe-standalone .yovibe-back-button {',
+    '      top: env(safe-area-inset-top, 0px) !important;',
     '    }',
     '  </style>',
   ].join('\n');
