@@ -848,28 +848,6 @@ const updateBuyerName = (index: number, name: string) => {
     }
   }
 
-  const handleChoosePhoto = async () => {
-    try {
-      setLoading(true)
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      })
-
-      if (!result.canceled && result.assets[0]) {
-        setBuyerPhotoUrl(result.assets[0].uri)
-        setPhotoCaptured(true)
-        Alert.alert("Success", "Photo selected successfully!")
-      }
-    } catch (error) {
-      Alert.alert("Error", "Failed to select photo")
-    } finally {
-      setLoading(false)
-    }
-  }
-
 const handleInstallmentPurchase = async () => {
     if (authoritativeConfigLoading) {
       Alert.alert("Checking event", "Event details are still being verified. Please wait a moment and try again.")
@@ -1675,18 +1653,6 @@ const handleInstallmentPurchase = async () => {
                     {photoCaptured ? "Photo Captured" : "Capture Photo"}
                   </Text>
                 </TouchableOpacity>
-                {Platform.OS === "web" && (
-                  <TouchableOpacity
-                    style={[styles.photoButton, photoCaptured && styles.photoButtonCaptured, { marginTop: 10 }]}
-                    onPress={handleChoosePhoto}
-                    disabled={loading}
-                  >
-                    <Ionicons name={photoCaptured ? "checkmark-circle" : "image-outline"} size={24} color="#FFFFFF" />
-                    <Text style={styles.photoButtonText}>
-                      {photoCaptured ? "Choose a Different Photo" : "Choose Photo"}
-                    </Text>
-                  </TouchableOpacity>
-                )}
               </View>
             )}
           </>
@@ -1994,7 +1960,7 @@ const handleInstallmentPurchase = async () => {
       <View style={[styles.trustCluster, isLargeScreen && styles.desktopTrustCluster]}>
         <View style={styles.trustRow}>
           <Ionicons name="lock-closed" size={13} color="#00D4FF" />
-          <Text style={styles.trustText}>Secured by PesaPal &amp; PawaPay</Text>
+          <Text style={styles.trustText}>Secured by YoVibe</Text>
         </View>
       </View>
       </View>{/* desktopTicketRight */}
@@ -3441,6 +3407,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 4,
     gap: 8,
+    alignItems: "center",
   },
   trustRow: {
     flexDirection: "row",
