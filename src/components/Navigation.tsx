@@ -292,7 +292,7 @@ export const MobileLayout: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   return (
-    <View style={styles.mobileLayout}>
+    <View style={styles.mobileLayout} {...(Platform.OS === 'web' ? { className: 'yovibe-mobile-layout' } as any : {})}>
       <AppHeader />
       <View style={[styles.mobileContent, { paddingBottom: componentSizes.tabBarHeight }]}>
         {children}

@@ -131,39 +131,49 @@ html = html.replace(/<noscript>[\s\S]*?<\/noscript>/i, noScriptReplacement.trim(
 
 // -- iOS Safari full-screen fix --
 // 1. Replace the viewport meta with one that includes viewport-fit=cover.
-//    This tells iOS to extend the layout viewport edge-to-edge under the
-//    browser chrome (address bar + home indicator).
+//    This lets the page background extend behind the iPhone safe areas.
 html = html.replace(
   /<meta[^>]*name="viewport"[^>]*>/i,
   '<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover" />'
 );
 
-// 2. Inject a small CSS override block just before </head>.
-//    - 100dvh : correct height that shrinks when the address bar collapses
-//    - -webkit-fill-available : fallback for older iOS Safari (pre-15)
-//    - env(safe-area-inset-*): paints under the notch / home indicator
+// 2. Inject CSS that lets Safari own document scrolling and resize the app as
+//    its browser controls expand/collapse. App controls keep their safe insets.
 //    We append a NEW block (not patching Expo's expo-reset) so this is
 //    resilient to any whitespace changes in the Expo-generated HTML.
 if (!html.includes('yovibe-ios-fix')) {
   const iosFix = [
     '  <style id="yovibe-ios-fix">',
+    '    @supports (-webkit-touch-callout: none) {',
     '    :root {',
     '      --sat: env(safe-area-inset-top, 0px);',
     '      --sab: env(safe-area-inset-bottom, 0px);',
     '    }',
     '    html, body {',
-    '      height: 100%;',
-    '      min-height: 100dvh;',
-    '      min-height: -webkit-fill-available;',
+    '      height: auto !important;',
+    '      min-height: 100%;',
     '      background-color: #121212 !important;',
     '      margin: 0;',
     '      padding: 0;',
+    '      overscroll-behavior-y: auto;',
+    '    }',
+    '    body {',
+    '      min-height: 100vh;',
+    '      min-height: 100dvh;',
+    '      overflow-x: hidden !important;',
+    '      overflow-y: auto !important;',
+    '      -webkit-overflow-scrolling: touch;',
     '    }',
     '    #root {',
-    '      height: 100%;',
+    '      height: auto !important;',
+    '      min-height: 100vh;',
     '      min-height: 100dvh;',
-    '      min-height: -webkit-fill-available;',
     '      background-color: #121212 !important;',
+    '    }',
+    '    .yovibe-app-shell, .yovibe-mobile-layout {',
+    '      min-height: 100vh !important;',
+    '      min-height: 100dvh !important;',
+    '      height: auto !important;',
     '    }',
     '    .yovibe-mobile-header {',
     '      padding-top: max(12px, env(safe-area-inset-top, 0px)) !important;',
@@ -172,6 +182,8 @@ if (!html.includes('yovibe-ios-fix')) {
     '    .yovibe-bottom-tab-bar {',
     '      padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)) !important;',
     '      min-height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;',
+    '      height: auto !important;',
+    '    }',
     '    }',
     '  </style>',
   ].join('\n');
