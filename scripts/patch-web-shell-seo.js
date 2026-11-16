@@ -173,9 +173,34 @@ if (!html.includes('yovibe-ios-fix')) {
     '      padding-bottom: max(6px, env(safe-area-inset-bottom, 0px)) !important;',
     '      min-height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;',
     '    }',
+    '    .yovibe-standalone,',
+    '    .yovibe-standalone body,',
+    '    .yovibe-standalone #root {',
+    '      height: 100dvh !important;',
+    '      min-height: 100dvh !important;',
+    '    }',
+    '    .yovibe-standalone .yovibe-mobile-header {',
+    '      padding-top: env(safe-area-inset-top, 0px) !important;',
+    '      min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;',
+    '    }',
+    '    .yovibe-standalone .yovibe-bottom-tab-bar {',
+    '      padding-bottom: env(safe-area-inset-bottom, 0px) !important;',
+    '      min-height: calc(56px + env(safe-area-inset-bottom, 0px)) !important;',
+    '      height: auto !important;',
+    '    }',
+    '    .yovibe-standalone .yovibe-mobile-content {',
+    '      padding-bottom: 0 !important;',
+    '    }',
     '  </style>',
   ].join('\n');
-  html = html.replace('</head>', iosFix + '\n</head>');
+  const standaloneMode = [
+    '  <script id="yovibe-standalone-mode">',
+    '    if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true) {',
+    '      document.documentElement.classList.add("yovibe-standalone");',
+    '    }',
+    '  </script>',
+  ].join('\n');
+  html = html.replace('</head>', iosFix + '\n' + standaloneMode + '\n</head>');
 }
 
 fs.writeFileSync(indexPath, html, "utf8");
