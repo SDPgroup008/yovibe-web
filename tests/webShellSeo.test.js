@@ -28,15 +28,17 @@ describe('web shell SEO source', () => {
     expect(entry).not.toContain("document.title = 'YoVibe | Buy Tickets, Discover Events & Venues in Uganda'");
   });
 
-  test('detects iOS Home Screen mode and uses only the device safe insets there', () => {
+  test('balances standalone Home Screen header and tab content around the real safe area', () => {
     const navigation = fs.readFileSync(path.join(root, 'src/components/Navigation.tsx'), 'utf8');
     expect(patcher).toContain('display-mode: standalone');
     expect(patcher).toContain('window.navigator.standalone === true');
     expect(patcher).toContain('yovibe-standalone .yovibe-mobile-header');
-    expect(patcher).toContain('padding-top: 2px !important');
+    expect(patcher).toContain('height: calc(44px + env(safe-area-inset-top, 0px)) !important');
+    expect(patcher).toContain('padding-top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
     expect(patcher).toContain('padding-bottom: 2px !important');
-    expect(patcher).toContain('align-self: flex-start !important');
-    expect(patcher).toContain('justify-content: flex-end !important');
+    expect(patcher).toContain('top: calc(env(safe-area-inset-top, 0px) + 2px) !important');
+    expect(patcher).toContain('height: 44px !important');
+    expect(patcher).toContain('justify-content: center !important');
     expect(patcher).toContain('yovibe-standalone .yovibe-mobile-content');
     expect(navigation).toContain('yovibe-mobile-content');
     expect(navigation).toContain('yovibe-header-brand');
