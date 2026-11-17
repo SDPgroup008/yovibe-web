@@ -60,7 +60,7 @@ async function request<T>(body: Record<string, unknown>): Promise<T> {
 const GuestTicketService = {
   overview(eventSlug: string) { return request<GuestTicketOverview>({ action: "overview", eventSlug }); },
   issueDirect(input: Record<string, unknown>) { return request<{ ids: string[] }>({ action: "issue_direct", ...input }); },
-  bulkGenerate(input: Record<string, unknown>) { return request<{ allocationId: string; issued: number; unassigned: number }>({ action: "bulk_generate", ...input }); },
+  bulkGenerate(input: Record<string, unknown>) { return request<{ allocationId: string; issued: number }>({ action: "bulk_generate", ...input }); },
   createClaimLink(input: Record<string, unknown>) { return request<{ allocationId: string; claimUrl: string }>({ action: "create_claim_link", ...input }); },
   generateCodes(input: Record<string, unknown>) { return request<{ allocationId: string; codes: string[]; redeemUrl: string }>({ action: "generate_codes", ...input }); },
   createSponsorship(input: Record<string, unknown>) { return request<{ allocationId: string; paymentUrl: string; order: Record<string, any> }>({ action: "create_sponsorship", ...input }); },

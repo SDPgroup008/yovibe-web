@@ -38,6 +38,7 @@
     "@ffmpeg/ffmpeg": "0.12.15",
     "@netlify/aws-lambda-compat": "^2.0.0",
     "@react-native-async-storage/async-storage": "2.2.0",
+    "@react-native-community/datetimepicker": "9.1.0",
     "@react-navigation/bottom-tabs": "^6.5.16",
     "@react-navigation/native": "^6.1.14",
     "@react-navigation/native-stack": "^6.9.22",

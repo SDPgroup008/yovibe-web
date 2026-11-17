@@ -2,7 +2,7 @@ const { getAdminClient, requireUser, json } = require('../shared/supabaseAdmin')
 const { sendTransactionalEmail } = require('../shared/transactionalEmail');
 const {
   assertEventOwner, entryFee, cleanRecipient, createAllocation, issueRecipients,
-  randomToken, randomCode, maskCode, hashSecret, calculateGatewayFee,
+  randomToken, randomCode, maskCode, hashSecret,
   calculateRevenueSplit, siteBaseUrl,
 } = require('../shared/guestTicketAllocations');
 
@@ -37,6 +37,7 @@ async function listOverview(admin, eventSlug) {
 async function createDirect(admin, actorId, input, event) {
   const recipients = (input.recipients || []).map(cleanRecipient);
   if (!recipients.length) throw Object.assign(new Error('Add at least one recipient'), { statusCode: 422 });
+  if (recipients.some((recipient) => !recipient.email)) throw Object.assign(new Error('Every recipient needs a valid email address for ticket delivery'), { statusCode: 422 });
   entryFee(event, input.entryFeeType);
   const allocationId = await createAllocation(admin, actorId, {
     ...input, eventSlug: event.slug, quantity: recipients.length, reserveQuantity: 0,
@@ -47,19 +48,16 @@ async function createDirect(admin, actorId, input, event) {
 
 async function createBulk(admin, actorId, input, event) {
   const recipients = (input.recipients || []).map(cleanRecipient);
-  const unassigned = Math.max(0, Math.floor(Number(input.unassignedQuantity || 0)));
-  if (!recipients.length && !unassigned) throw Object.assign(new Error('Add valid recipients or unassigned tickets'), { statusCode: 422 });
+  if (!recipients.length) throw Object.assign(new Error('Add at least one recipient'), { statusCode: 422 });
+  if (recipients.some((recipient) => !recipient.email)) throw Object.assign(new Error('Every bulk recipient needs a valid email address for ticket delivery'), { statusCode: 422 });
+  if (Math.max(0, Math.floor(Number(input.unassignedQuantity || 0))) > 0) throw Object.assign(new Error('Unassigned tickets are unavailable because every guest ticket must be delivered by email'), { statusCode: 422 });
   entryFee(event, input.entryFeeType);
   const allocationId = await createAllocation(admin, actorId, {
-    ...input, eventSlug: event.slug, quantity: recipients.length + unassigned, reserveQuantity: recipients.length + unassigned,
+    ...input, eventSlug: event.slug, quantity: recipients.length, reserveQuantity: recipients.length,
     fundingType: 'complimentary', distributionMethod: 'bulk', name: input.name || `Bulk guest list — ${input.entryFeeType}`,
   });
-  // Unassigned bulk tickets are intentionally minted now, with their own QR
-  // and reference, so a batch always creates the exact promised allocation.
-  // They can be named later without changing the credential or capacity.
-  const allRecipients = [...recipients, ...Array.from({ length: unassigned }, () => ({ name: 'Unassigned guest', email: null, phone: null, organisation: null, notes: null }))];
-  const issued = await issueRecipients(admin, { allocationId, recipients: allRecipients, actorId });
-  return { allocationId, issued: issued.ids.length, unassigned };
+  const issued = await issueRecipients(admin, { allocationId, recipients, actorId });
+  return { allocationId, issued: issued.ids.length };
 }
 
 async function createClaimLink(admin, actorId, input, event) {
@@ -76,7 +74,7 @@ async function createClaimLink(admin, actorId, input, event) {
   const { error } = await admin.from('ticket_allocation_claim_tokens').insert({
     allocation_id: allocationId, token_hash: hashSecret(`claim:${token}`), password_hash: password ? hashSecret(`password:${password}`) : null,
     max_per_claim: Math.max(1, Math.floor(Number(input.maxPerClaim || 1))), max_per_email: input.maxPerEmail ? Math.max(1, Math.floor(Number(input.maxPerEmail))) : null,
-    allowed_email_domains: domains, approved_email_hashes: approvedEmails, recipient_requirements: input.recipientRequirements || { name: true, email: true, phone: false },
+    allowed_email_domains: domains, approved_email_hashes: approvedEmails, recipient_requirements: { ...(input.recipientRequirements || {}), name: true, email: true },
     show_remaining: input.showRemaining !== false, custom_message: String(input.customMessage || '').trim() || null,
   });
   if (error) throw error;
@@ -121,11 +119,9 @@ async function createSponsorship(admin, actorId, input, event) {
   const fee = entryFee(event, input.entryFeeType);
   const discount = Math.max(0, Math.min(fee.amount * quantity, Number(input.discountAmount || 0)));
   const subtotal = fee.amount * quantity - discount;
-  const method = input.paymentMethod === 'mobile_money' ? 'mobile_money' : 'credit_card';
-  const gatewayFee = calculateGatewayFee(method, subtotal);
   const split = calculateRevenueSplit(subtotal);
   const allocationId = await createAllocation(admin, actorId, {
-    ...input, eventSlug: event.slug, quantity, reserveQuantity: quantity, fundingType: 'sponsored', distributionMethod: input.distributionMethod || 'claim_link',
+    ...input, eventSlug: event.slug, expiresAt: input.paymentDeadline || input.expiresAt || null, quantity, reserveQuantity: quantity, fundingType: 'sponsored', distributionMethod: input.distributionMethod || 'claim_link',
     name: input.name || `Sponsored allocation — ${input.entryFeeType}`, initialStatus: 'awaiting_funding',
   });
   const paymentToken = randomToken();
@@ -133,8 +129,8 @@ async function createSponsorship(admin, actorId, input, event) {
     allocation_id: allocationId, sponsor_name: sponsorName, sponsor_organisation: String(input.sponsorOrganisation || '').trim() || null,
     sponsor_email: sponsorEmail, sponsor_phone: String(input.sponsorPhone || '').trim() || null,
     sponsor_message: String(input.sponsorMessage || '').trim() || null, payment_token_hash: hashSecret(`sponsor:${paymentToken}`), payment_token_expires_at: input.paymentDeadline || null,
-    payment_method: method, face_value: fee.amount * quantity, discount_amount: discount, platform_fee: split.appCommission, gateway_fee: gatewayFee,
-    amount_paid: subtotal + gatewayFee, organiser_net: split.venueRevenue, payment_deadline: input.paymentDeadline || null,
+    payment_method: null, face_value: fee.amount * quantity, discount_amount: discount, platform_fee: split.appCommission, gateway_fee: 0,
+    amount_paid: subtotal, organiser_net: split.venueRevenue, payment_deadline: input.paymentDeadline || null,
   }).select('*').single();
   if (error) throw error;
   return { allocationId, order, paymentUrl: publicUrl(`/sponsor/pay/${paymentToken}`) };
@@ -164,7 +160,7 @@ exports.handler = async (event) => {
       if (allocation.status !== 'ready_for_distribution') throw Object.assign(new Error('This allocation becomes distributable only after sponsor payment is verified'), { statusCode: 409 });
       if (allocation.distribution_method !== 'claim_link') throw Object.assign(new Error('This sponsored allocation was configured for a different distribution method'), { statusCode: 422 });
       const token = randomToken();
-      const { error: tokenError } = await admin.from('ticket_allocation_claim_tokens').insert({ allocation_id: allocation.id, token_hash: hashSecret(`claim:${token}`), max_per_claim: Math.max(1, Math.min(allocation.reserved_quantity, Number(body.maxPerClaim || 1))), recipient_requirements: body.recipientRequirements || { name: true, email: true, phone: false }, custom_message: body.customMessage || null });
+      const { error: tokenError } = await admin.from('ticket_allocation_claim_tokens').insert({ allocation_id: allocation.id, token_hash: hashSecret(`claim:${token}`), max_per_claim: Math.max(1, Math.min(allocation.reserved_quantity, Number(body.maxPerClaim || 1))), recipient_requirements: { ...(body.recipientRequirements || {}), name: true, email: true }, custom_message: body.customMessage || null });
       if (tokenError) {
         if (tokenError.code === '23505') throw Object.assign(new Error('A claim link has already been created for this sponsored allocation'), { statusCode: 409 });
         throw tokenError;

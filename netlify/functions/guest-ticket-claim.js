@@ -53,7 +53,7 @@ function publicClaimDetails({ tokenRow, allocation, event }) {
 async function validateClaimRecipient(admin, tokenRow, allocation, body) {
   const recipient = cleanRecipient(body.recipient || body);
   const requirements = tokenRow.recipient_requirements || {};
-  if (requirements.email && !recipient.email) throw Object.assign(new Error('Email is required for this allocation'), { statusCode: 422 });
+  if (!recipient.email) throw Object.assign(new Error('A valid email address is required so your QR ticket and PDF can be delivered'), { statusCode: 422 });
   if (requirements.phone && !recipient.phone) throw Object.assign(new Error('Phone is required for this allocation'), { statusCode: 422 });
   const quantity = Math.max(1, Math.floor(Number(body.quantity || 1)));
   if (quantity > Number(tokenRow.max_per_claim || 1)) throw Object.assign(new Error(`You can claim up to ${tokenRow.max_per_claim} tickets at once`), { statusCode: 422 });
@@ -110,6 +110,7 @@ async function redeem(admin, body) {
   const rawCode = String(body.code || '').trim().toUpperCase();
   const recipient = cleanRecipient(body.recipient || body);
   if (!eventSlug || !rawCode) throw Object.assign(new Error('Event and redemption code are required'), { statusCode: 422 });
+  if (!recipient.email) throw Object.assign(new Error('A valid email address is required so your QR ticket and PDF can be delivered'), { statusCode: 422 });
   const { data, error } = await admin.rpc('consume_ticket_redemption_code', { p_code_hash: hashSecret(`code:${rawCode}`), p_event_slug: eventSlug, p_email_hash: recipient.email ? hashSecret(`email:${recipient.email}`) : null });
   if (error) throw Object.assign(new Error(error.message.includes('CODE') ? 'This redemption code is invalid, expired, or already used.' : error.message), { statusCode: 422 });
   const quantity = Number(data.ticketsPerRedemption || 1);
