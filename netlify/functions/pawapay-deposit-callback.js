@@ -15,6 +15,7 @@
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { verifyPawaPayDeposit, markTicketsByPayment, triggerFulfillmentWorker } = require('../shared/ticketFulfillment');
 const { verifyCallbackSignature } = require('../shared/pawapaySignatures');
+const { activateSponsorPayment, failSponsorPayment } = require('../shared/sponsorPayments');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -78,6 +79,13 @@ exports.handler = async (event) => {
         .eq('pawapay_deposit_id', depositId)
         .maybeSingle();
       if (fulfillment) await triggerFulfillmentWorker(fulfillment.id);
+
+      const { data: sponsorOrder } = await admin.from('ticket_sponsorship_orders').select('*').eq('provider_deposit_id', depositId).maybeSingle();
+      if (sponsorOrder) await activateSponsorPayment(admin, sponsorOrder, verification);
+    } else if (verification.status === 'failed') {
+      const admin = getAdminClient();
+      const { data: sponsorOrder } = await admin.from('ticket_sponsorship_orders').select('*').eq('provider_deposit_id', depositId).maybeSingle();
+      if (sponsorOrder) await failSponsorPayment(admin, sponsorOrder, 'PawaPay payment failed');
     }
 
     return ack({ depositId, status: verification.status });

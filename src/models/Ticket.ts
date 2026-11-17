@@ -32,7 +32,7 @@ export interface Ticket {
   entryFeeType?: string
   reentryPass?: { grantedAt: string; grantedBy: string; grantedByName: string; used: boolean }
   paymentId?: string
-  paymentStatus?: "pending" | "completed" | "failed"
+  paymentStatus?: "pending" | "completed" | "failed" | "not_required"
   paymentReference?: string
   pesapalTransactionId?: string
   pesapalConfirmationCode?: string
@@ -46,7 +46,7 @@ export interface Ticket {
   purchaseDeadline: Date
   expiresAt: Date
   payoutEligible: boolean
-  payoutStatus: "pending" | "processing" | "paid" | "failed"
+  payoutStatus: "pending" | "processing" | "paid" | "failed" | "not_eligible"
   payoutDate?: Date
   scannedAt?: Date
   paymentMethod?: "mobile_money" | "credit_card" | "bank_transfer"
@@ -54,6 +54,15 @@ export interface Ticket {
   paymentNumber?: string
   paymentName?: string
   qrSignature?: string
+  allocationId?: string
+  sponsorshipOrderId?: string
+  fundingType?: "paid" | "complimentary" | "sponsored"
+  distributionMethod?: "direct" | "bulk" | "claim_link" | "redemption_code"
+  originalFaceValue?: number
+  beneficiaryAmountPaid?: number
+  issuanceReason?: string
+  issuedBy?: string
+  issuedAt?: Date
 }
 
 export interface TicketValidation {

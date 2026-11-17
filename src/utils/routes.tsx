@@ -46,6 +46,9 @@ import HelpSupportScreen from '../screens/HelpSupportScreen';
 import OrganiserDashboardScreen from '../screens/OrganiserDashboardScreen';
 import TokenScannerScreen from '../screens/auth/TokenScannerScreen';
 import GuestRefundScreen from '../screens/GuestRefundScreen';
+import GuestTicketsScreen from '../screens/GuestTicketsScreen';
+import GuestTicketClaimScreen from '../screens/GuestTicketClaimScreen';
+import SponsorTicketPaymentScreen from '../screens/SponsorTicketPaymentScreen';
 
 // Import compatibility wrapper
 import { withCompatNavigation } from './compatNavigation';
@@ -97,6 +100,21 @@ export const routes: RouteDefinition[] = [
     component: GuestRefundScreen,
     exact: true
   },
+  {
+    path: '/claim/:token',
+    component: GuestTicketClaimScreen,
+    exact: true
+  },
+  {
+    path: '/redeem/:eventSlug',
+    component: GuestTicketClaimScreen,
+    exact: true
+  },
+  {
+    path: '/sponsor/pay/:token',
+    component: SponsorTicketPaymentScreen,
+    exact: true
+  },
 
   // Main navigation routes
   {
@@ -136,6 +154,11 @@ export const routes: RouteDefinition[] = [
   {
     path: '/events/organiser/:eventId',
     component: withCompatNavigation(OrganiserDashboardScreen)
+  },
+  {
+    path: '/events/organiser/:eventId/guest-tickets',
+    component: withCompatNavigation(GuestTicketsScreen),
+    exact: true
   },
 
 

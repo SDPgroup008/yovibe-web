@@ -17,6 +17,7 @@
 const { getPesapalToken } = require('../shared/pesapalAuth');
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const { verifyPesapalPayment, markTicketsByPayment, triggerFulfillmentWorker } = require('../shared/ticketFulfillment');
+const { activateSponsorPayment, failSponsorPayment } = require('../shared/sponsorPayments');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -92,6 +93,19 @@ exports.handler = async (event) => {
         .eq('payment_id', orderMerchantReference)
         .maybeSingle();
       if (fulfillment) await triggerFulfillmentWorker(fulfillment.id);
+    }
+
+    // Sponsor allocations use the same verified IPN, but no beneficiary ticket
+    // is created here. Funding only unlocks the allocation for distribution.
+    if (orderMerchantReference) {
+      let sponsorQuery = admin.from('ticket_sponsorship_orders').select('*').eq('payment_reference', orderMerchantReference);
+      if (orderTrackingId) sponsorQuery = admin.from('ticket_sponsorship_orders').select('*')
+        .or(`payment_reference.eq.${orderMerchantReference},provider_tracking_id.eq.${orderTrackingId}`);
+      const { data: sponsorOrder } = await sponsorQuery.maybeSingle();
+      if (sponsorOrder) {
+        if (verification.status === 'completed') await activateSponsorPayment(admin, sponsorOrder, verification);
+        else if (verification.status === 'failed') await failSponsorPayment(admin, sponsorOrder, verification.rawStatus || 'PesaPal payment failed');
+      }
     }
 
     return ack({ orderTrackingId, verifiedStatus: verification.status });

@@ -1948,11 +1948,19 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
         })
       }
 
-      const { data, error } = await supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      const recipientEmail = String(session?.user?.email || "").trim().toLowerCase()
+      let ticketQuery = supabase
         .from("tickets")
         .select("*")
-        .eq("buyer_id", userId)
-        .limit(10000);
+        .limit(10000)
+      // Guest recipients can claim without creating an account. If they later
+      // sign in with the delivery email, their already-issued guest ticket is
+      // visible in My Tickets alongside ordinary buyer-id tickets.
+      ticketQuery = recipientEmail
+        ? ticketQuery.or(`buyer_id.eq.${userId},buyer_email.eq.${recipientEmail},delivery_email.eq.${recipientEmail}`)
+        : ticketQuery.eq("buyer_id", userId)
+      const { data, error } = await ticketQuery;
 
       if (error) throw error;
 
@@ -2010,11 +2018,19 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           tableTotalAmount: row.table_total_amount ?? row.tableTotalAmount ?? 0,
           purchase_date: row.purchase_date,
           created_at: row.created_at,
+          allocationId: row.allocation_id || row.allocationId,
+          sponsorshipOrderId: row.sponsorship_order_id || row.sponsorshipOrderId,
+          fundingType: row.funding_type || row.fundingType || "paid",
+          distributionMethod: row.distribution_method || row.distributionMethod,
+          originalFaceValue: row.original_face_value ?? row.originalFaceValue,
+          beneficiaryAmountPaid: row.beneficiary_amount_paid ?? row.beneficiaryAmountPaid,
+          issuanceReason: row.issuance_reason || row.issuanceReason,
+          issuedBy: row.issued_by || row.issuedBy,
+          issuedAt: row.issued_at ? new Date(row.issued_at) : undefined,
         };
       };
 
       const tickets = (data || []).map(mapRow);
-      const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {
         await Promise.all(tickets.map(async (ticket: any) => {
           if (typeof ticket.qrCodeDataUrl !== 'string' || !ticket.qrCodeDataUrl.startsWith('r2-private://')) return;

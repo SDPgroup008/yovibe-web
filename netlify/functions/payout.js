@@ -91,6 +91,72 @@ async function releaseTickets(admin, ticketIds, currentStatus) {
     .in('status', PAYABLE_TICKET_STATUSES).eq('refund_status', 'none');
 }
 
+async function loadSponsorOrders(admin, orderIds) {
+  const uniqueIds = Array.isArray(orderIds) ? [...new Set(orderIds.filter(Boolean).map(String))] : [];
+  if (!uniqueIds.length) throw Object.assign(new Error('No sponsorship orders provided'), { statusCode: 400 });
+  const { data, error } = await admin.from('ticket_sponsorship_orders')
+    .select('*, ticket_allocations!inner(event_slug)')
+    .in('id', uniqueIds);
+  if (error) throw error;
+  if (!data || data.length !== uniqueIds.length) throw Object.assign(new Error('One or more sponsorship orders do not exist'), { statusCode: 404 });
+  return data;
+}
+
+async function executeSponsorPayout({ admin, authUser, profile, body, action }) {
+  const orders = await loadSponsorOrders(admin, body.sponsorshipOrderIds);
+  const eventIds = [...new Set(orders.map((order) => order.ticket_allocations?.event_slug).filter(Boolean))];
+  if (eventIds.length !== 1) throw Object.assign(new Error('All sponsorship orders must belong to one event'), { statusCode: 422 });
+  const { data: payoutEvent, error: eventError } = await admin.from('events').select('*').eq('slug', eventIds[0]).maybeSingle();
+  if (eventError) throw eventError;
+  if (!payoutEvent) throw Object.assign(new Error('Event not found'), { statusCode: 404 });
+  const isAdmin = profile?.user_type === 'admin';
+  if (!isAdmin && !ownerIds(authUser, profile).includes(String(payoutEvent.created_by || '')) && !ownerIds(authUser, profile).includes(String(payoutEvent.created_by_auth || ''))) {
+    throw Object.assign(new Error('You do not own this event'), { statusCode: 403 });
+  }
+  const payable = orders.filter((order) => order.payment_status === 'paid' && order.payout_eligible === true && order.payout_status === 'pending');
+  const total = amountNumber(payable.reduce((sum, order) => sum + Number(order.organiser_net || 0), 0));
+  if (action === 'sponsorship_eligibility') {
+    return { success: true, eligibleCount: payable.length, total: orders.length, amount: total, eligibleSponsorshipOrderIds: payable.map((order) => order.id) };
+  }
+  if (payable.length !== orders.length || total <= 0) throw Object.assign(new Error('One or more sponsorship orders are no longer payout eligible'), { statusCode: 409 });
+  const payoutMethod = body.payoutMethod || 'mobile_money';
+  const expectedPaymentMethod = payoutMethod === 'mobile_money' ? 'mobile_money' : 'credit_card';
+  if (orders.some((order) => order.payment_method !== expectedPaymentMethod)) throw Object.assign(new Error(`Every selected sponsorship must have been paid by ${expectedPaymentMethod}`), { statusCode: 422 });
+  const verifiedOtp = await verifyOtp(admin, authUser.id, body.otpCode);
+  const requested = body.recipientDetails || {};
+  const recipient = buildRecipient(payoutEvent, { method: payoutMethod, name: requested.name, phoneNumber: requested.phoneNumber, provider: requested.provider, bankName: requested.bankName, accountNumber: requested.accountNumber });
+  if (!recipient.name || (payoutMethod === 'mobile_money' && (!recipient.phoneNumber || !recipient.provider)) || (payoutMethod === 'bank_transfer' && (!recipient.bankName || !recipient.accountNumber))) throw Object.assign(new Error('Complete the recipient payment details'), { statusCode: 422 });
+  await consumeOtp(admin, verifiedOtp.id);
+  const claimedStatus = payoutMethod === 'mobile_money' ? 'processing' : 'pending_review';
+  const ids = orders.map((order) => order.id);
+  const { data: claimed, error: claimError } = await admin.from('ticket_sponsorship_orders').update({ payout_eligible: false, payout_status: claimedStatus, updated_at: new Date().toISOString() })
+    .in('id', ids).eq('payment_status', 'paid').eq('payout_status', 'pending').eq('payout_eligible', true).select('id');
+  if (claimError) throw claimError;
+  if (!claimed || claimed.length !== ids.length) throw Object.assign(new Error('Sponsorship eligibility changed. Refresh and try again.'), { statusCode: 409 });
+  const providerRequestId = payoutMethod === 'mobile_money' ? crypto.randomUUID() : null;
+  const { data: payout, error: payoutError } = await admin.from('payouts').insert({
+    organizer_id: payoutEvent.created_by ? String(payoutEvent.created_by) : (profile?.uid || authUser.id), ticket_ids: [], sponsorship_order_ids: ids, amount: total,
+    status: payoutMethod === 'mobile_money' ? 'processing' : 'pending_admin_review', payout_method: payoutMethod, recipient_name: recipient.name,
+    recipient_phone_number: payoutMethod === 'mobile_money' ? recipient.phoneNumber : null, metadata: payoutMethod === 'bank_transfer' ? { bank_name: recipient.bankName, account_number: recipient.accountNumber, source: 'sponsorship' } : { provider: recipient.provider, pawapay_payout_id: providerRequestId, source: 'sponsorship' }, transaction_reference: providerRequestId, event_id: payoutEvent.slug,
+  }).select('*').single();
+  if (payoutError) throw payoutError;
+  if (payoutMethod === 'mobile_money') {
+    try {
+      const provider = await submitPawaPayPayout({ payoutId: providerRequestId, amount: total, currency: 'UGX', phoneNumber: recipient.phoneNumber, provider: recipient.provider });
+      await admin.from('payouts').update({ transaction_reference: provider.payoutId, updated_at: new Date().toISOString() }).eq('id', payout.id);
+    } catch (error) {
+      await admin.from('ticket_sponsorship_orders').update({ payout_eligible: true, payout_status: 'pending', updated_at: new Date().toISOString() }).in('id', ids).eq('payout_status', claimedStatus);
+      await admin.from('payouts').update({ status: 'failed', admin_note: error.message, updated_at: new Date().toISOString() }).eq('id', payout.id);
+      throw Object.assign(new Error(error.message || 'Unable to initiate sponsor payout'), { statusCode: 502 });
+    }
+  }
+  return { success: true, payoutId: payout.id, amount: total, sponsorshipOrderIds: ids };
+}
+
+function ownerIds(authUser, profile) {
+  return [authUser?.id, profile?.uid, profile?.id].filter(Boolean).map(String);
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
@@ -101,10 +167,13 @@ exports.handler = async (event) => {
   try { body = JSON.parse(event.body || '{}'); }
   catch { return json(400, { error: 'Invalid JSON body' }); }
   const action = body.action || 'execute';
-  if (!['execute', 'eligibility'].includes(action)) return json(400, { error: `Unknown action: ${action}` });
+  if (!['execute', 'eligibility', 'execute_sponsorship', 'sponsorship_eligibility'].includes(action)) return json(400, { error: `Unknown action: ${action}` });
 
   try {
     const { admin, authUser, profile } = await requireUser(event);
+    if (action === 'execute_sponsorship' || action === 'sponsorship_eligibility') {
+      return json(200, await executeSponsorPayout({ admin, authUser, profile, body, action }));
+    }
     const isAdmin = profile?.user_type === 'admin';
     const tickets = await loadTickets(admin, body.ticketIds);
     const payoutEvent = await loadAuthorizedEvent(admin, tickets, authUser, profile, isAdmin);
