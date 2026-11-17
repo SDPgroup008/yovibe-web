@@ -1458,21 +1458,6 @@ const OrganiserDashboardScreen: React.FC = () => {
   const renderOrganizerLeftColumn = () => (
     <>
       <View style={styles.dashboardSection}>
-        <Text style={styles.dashboardSectionTitle}>🎟️ Guest Tickets</Text>
-        <View style={styles.dashboardCard}>
-          <Text style={{ color: "#A8B3C7", fontSize: 13, lineHeight: 19, marginBottom: 13 }}>
-            Issue complimentary tickets, create secure claim links and redemption codes, manage guest lists, and collect sponsor-funded allocations.
-          </Text>
-          <TouchableOpacity
-            style={[styles.withdrawBtn, { backgroundColor: "#0E7490" }]}
-            onPress={() => navigatePath(`/events/organiser/${eventId}/guest-tickets`)}
-          >
-            <Ionicons name="ticket-outline" size={20} color="#FFF" />
-            <Text style={styles.withdrawBtnText}>Open Guest Tickets</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-      <View style={styles.dashboardSection}>
         <Text style={styles.dashboardSectionTitle}>🎫 Ticket Sales</Text>
         <View style={styles.statsRow}>
           <View style={styles.statCard}><Ionicons name="time" size={24} color={COLORS.primary} /><Text style={styles.statValue}>{ticketSalesEarly}</Text><Text style={styles.statLabel}>Early</Text></View>
@@ -1759,6 +1744,22 @@ const OrganiserDashboardScreen: React.FC = () => {
           <TouchableOpacity style={[styles.withdrawBtn, eligiblePayoutTotal === 0 && { opacity: 0.4 }]} onPress={() => setShowWithdrawModal(true)} disabled={eligiblePayoutTotal === 0}>
             <Ionicons name="cash-outline" size={20} color="#FFF" />
             <Text style={styles.withdrawBtnText}>Withdraw Earnings</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.dashboardSection}>
+        <Text style={styles.dashboardSectionTitle}>🎟️ Guest Tickets</Text>
+        <View style={styles.dashboardCard}>
+          <Text style={{ color: "#A8B3C7", fontSize: 13, lineHeight: 19, marginBottom: 13 }}>
+            Issue complimentary tickets, create secure claim links and redemption codes, manage guest lists, and collect sponsor-funded allocations.
+          </Text>
+          <TouchableOpacity
+            style={[styles.withdrawBtn, { backgroundColor: "#0E7490" }]}
+            onPress={() => navigatePath(`/events/organiser/${eventId}/guest-tickets`)}
+          >
+            <Ionicons name="ticket-outline" size={20} color="#FFF" />
+            <Text style={styles.withdrawBtnText}>Open Guest Tickets</Text>
           </TouchableOpacity>
         </View>
       </View>
