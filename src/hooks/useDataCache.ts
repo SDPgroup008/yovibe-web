@@ -127,6 +127,17 @@ export function useCachedEvents() {
   });
 }
 
+export function useCachedVenueEventSlugs() {
+  return useDataCache({
+    cacheKey: CACHE_KEYS.VENUE_EVENT_SLUGS,
+    fetchFunction: async () => {
+      const { default: SupabaseService } = await import('../services/SupabaseService');
+      return SupabaseService.getUpcomingEventVenueSlugs();
+    },
+    ttl: 10 * 60 * 1000,
+  });
+}
+
 export function useCachedVenues() {
   return useDataCache({
     cacheKey: CACHE_KEYS.VENUES,

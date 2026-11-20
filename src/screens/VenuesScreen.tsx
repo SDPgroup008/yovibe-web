@@ -5,7 +5,7 @@ import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, ImageBackground, ActivityIndicator, RefreshControl, Dimensions, TextInput } from "react-native";
 import { useIsFocused } from "../utils/compatNavigation";
 import { useCompatNavigation } from "../utils/compatNavigation";
-import { useCachedVenues } from "../hooks/useDataCache";
+import { useCachedVenues, useCachedVenueEventSlugs } from "../hooks/useDataCache";
 import { useVenuesScroll } from "../hooks/useScrollPersistence";
 import type { Venue } from "../models/Venue";
 import type { VibeImage } from "../models/VibeImage";
@@ -40,6 +40,7 @@ type VenuesScreenPropsInternal = {
 const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
   const { data: venues = [], loading, refetch } = useCachedVenues()
+  const { data: venueEventSlugs = [] } = useCachedVenueEventSlugs()
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useVenuesScroll()
   /* console.log('[VenuesScreen] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Venues page
@@ -81,7 +82,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
   }, [isFocused]);
 
   const [refreshing, setRefreshing] = useState(false);
-  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({});
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number | null>>({});
   const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey());
   const [activeTab, setActiveTab] = useState<"all" | "nightlife" | "recreation">("all");
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([]);
@@ -147,7 +148,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       }
 
       const today = new Date()
-      const ratings: Record<string, number> = {}
+      const ratings: Record<string, number | null> = {}
       await Promise.all(venueList.map(async (venue) => {
         const key = venue.slug || venue.id
         if (!key) return
@@ -158,9 +159,9 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
             (latest, image) => !latest || image.uploadedAt > latest.uploadedAt ? image : latest,
             null,
           )
-          ratings[key] = latestVibe?.vibeRating ?? 0
+          ratings[key] = latestVibe?.vibeRating ?? null
         } catch {
-          ratings[key] = 0
+          ratings[key] = null
         }
       }))
 
@@ -181,6 +182,29 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
 
   const getCurrentVibe = (venue: Venue) =>
     venueVibeRatings[venue.slug || venue.id] ?? 0
+
+  const venueEventSlugSet = useMemo(() => new Set(venueEventSlugs), [venueEventSlugs])
+
+  const compareVenues = useCallback((a: Venue, b: Venue) => {
+    const aKey = a.slug || a.id
+    const bKey = b.slug || b.id
+    const aVibe = venueVibeRatings[aKey]
+    const bVibe = venueVibeRatings[bKey]
+    const aHasVibe = typeof aVibe === "number"
+    const bHasVibe = typeof bVibe === "number"
+
+    if (aHasVibe && bHasVibe && aVibe !== bVibe) return bVibe - aVibe
+    if (aHasVibe !== bHasVibe) return aHasVibe ? -1 : 1
+
+    if (!aHasVibe && !bHasVibe) {
+      const aHasEvents = venueEventSlugSet.has(aKey)
+      const bHasEvents = venueEventSlugSet.has(bKey)
+      if (aHasEvents !== bHasEvents) return aHasEvents ? -1 : 1
+    }
+
+    const nameOrder = (a.name || "").localeCompare(b.name || "", undefined, { sensitivity: "base" })
+    return nameOrder || aKey.localeCompare(bKey, undefined, { sensitivity: "base" })
+  }, [venueEventSlugSet, venueVibeRatings])
 
   const getFilteredVenues = () => {
     // Handle search query filtering
@@ -205,11 +229,7 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
         });
       }
       
-      const sorted = [...filtered].sort((a, b) => {
-        const aVibe = getCurrentVibe(a);
-        const bVibe = getCurrentVibe(b);
-        return bVibe - aVibe;
-      });
+      const sorted = [...filtered].sort(compareVenues);
       return sorted;
     }
     
@@ -254,19 +274,14 @@ const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery 
       });
     }
     
-    // Sort by current vibe rating (highest first)
-    const sorted = searchFiltered.sort((a, b) => {
-      const aVibe = getCurrentVibe(a);
-      const bVibe = getCurrentVibe(b);
-      return bVibe - aVibe;
-    });
+    const sorted = searchFiltered.sort(compareVenues);
     
     return sorted;
   };
 
   // Memoize filtered and sorted venues to prevent recalculation on every render
   // Only recalculate when venues, activeTab, or searchQuery changes
-  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery, venueVibeRatings]);
+  const filteredVenues = useMemo(() => getFilteredVenues(), [venues, activeTab, searchQuery, compareVenues]);
 
   useEffect(() => {
     const venuesToDisplay = Array.isArray(filteredVenues) ? filteredVenues : [];

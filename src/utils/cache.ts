@@ -69,6 +69,7 @@ class Cache {
     // details are small, so clear the detail group rather than risk stale data.
     this.deleteMatching("event_");
     this.delete(CACHE_KEYS.EVENTS);
+    this.delete(CACHE_KEYS.VENUE_EVENT_SLUGS);
   }
 
   invalidateVenue(venueId: string): void {
@@ -111,6 +112,7 @@ export const dataCache = new Cache();
 // Cache keys for different data types
 export const CACHE_KEYS = {
   EVENTS: 'events',
+  VENUE_EVENT_SLUGS: 'venue_event_slugs',
   VENUES: 'venues',
   EVENT_DETAILS: (id: string) => `event_${id}`,
   VENUE_DETAILS: (id: string) => `venue_${id}`,

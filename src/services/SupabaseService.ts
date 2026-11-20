@@ -1021,6 +1021,29 @@ class SupabaseService {
     }
   }
 
+  async getUpcomingEventVenueSlugs(): Promise<string[]> {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from("events")
+        .select("venue_slug, event_status")
+        .eq("is_deleted", false)
+        .gte("date", today.toISOString())
+        .limit(10000);
+
+      if (error) throw error;
+
+      return [...new Set((data || [])
+        .filter((event) => event.venue_slug && event.event_status !== "cancelled")
+        .map((event) => String(event.venue_slug)))];
+    } catch (error) {
+      console.error("SupabaseService: Error getting event venue index:", error);
+      return [];
+    }
+  }
+
   async getEventById(eventSlug: string): Promise<Event | null> {
     try {
       if (!eventSlug || eventSlug === 'undefined' || eventSlug === 'null') {
