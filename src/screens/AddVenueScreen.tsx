@@ -75,6 +75,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
   } & VenueSocialErrors>({})
   const [validationVisible, setValidationVisible] = useState(false)
   const [validationErrors, setValidationErrors] = useState<string[]>([])
+  const [validationTitle, setValidationTitle] = useState("Missing Information")
 
   useEffect(() => {
     ;(async () => {
@@ -159,6 +160,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       setValidationErrors(Object.values(newErrors))
+      setValidationTitle("Missing Information")
       setValidationVisible(true)
       return
     }
@@ -228,9 +230,12 @@ const AddVenueScreen: React.FC<any> = (props) => {
 
       Alert.alert("Success", "Venue created successfully")
       navigation.goBack()
-    } catch (error) {
-      Alert.alert("Error", "Failed to create venue")
-      console.error(error)
+    } catch (error: any) {
+      const message = typeof error?.message === "string" ? error.message : "Please try again."
+      setValidationTitle("Unable to create venue")
+      setValidationErrors([message])
+      setValidationVisible(true)
+      console.error("[AddVenue] Save failed", { code: error?.code, message })
     } finally {
       setLoading(false)
     }
@@ -415,7 +420,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
 
       <ValidationDialog
         visible={validationVisible}
-        title="Missing Information"
+        title={validationTitle}
         missingFields={validationErrors}
         onDismiss={() => setValidationVisible(false)}
       />
