@@ -1153,7 +1153,13 @@ const VenueDetailScreen: React.FC = () => {
               <TextInput style={styles.input} value={editVenueName} onChangeText={setEditVenueName} placeholder="Venue name" placeholderTextColor="#666666" />
 
               <Text style={styles.inputLabel}>Location *</Text>
-              <CountrySelector value={editCountry} onSelect={setEditCountry} />
+              <CountrySelector value={editCountry} onSelect={(country) => {
+                if (country !== editCountry) {
+                  setEditVenueLatitude("")
+                  setEditVenueLongitude("")
+                }
+                setEditCountry(country)
+              }} />
               <TextInput style={styles.input} value={editVenueLocation} onChangeText={setEditVenueLocation} placeholder="Venue location" placeholderTextColor="#666666" />
 
               <Text style={styles.inputLabel}>Description *</Text>

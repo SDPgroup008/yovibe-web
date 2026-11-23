@@ -4,7 +4,7 @@ import CountrySelector from "../components/CountrySelector"
 import { type CountryCode } from "../config/countries"
 
 import type React from "react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   View,
   Text,
@@ -55,6 +55,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
   const [xUrl, setXUrl] = useState("")
   const [youtubeUrl, setYoutubeUrl] = useState("")
   const [countryCode, setCountryCode] = useState<CountryCode>('UG')
+  const countryChanged = useRef(false)
   const [venueType, setVenueType] = useState<"nightlife" | "recreation">("nightlife")
 
   // Store latitude and longitude as numbers to preserve full precision
@@ -87,8 +88,10 @@ const AddVenueScreen: React.FC<any> = (props) => {
 
         // Save as numbers (no rounding) to preserve full precision
         setUserLocation({ latitude: lat, longitude: lon })
-        setLatitude(lat)
-        setLongitude(lon)
+        if (!countryChanged.current) {
+          setLatitude(lat)
+          setLongitude(lon)
+        }
       }
     })()
   }, [])
@@ -132,6 +135,9 @@ const AddVenueScreen: React.FC<any> = (props) => {
     }
     if (!location.trim()) {
       newErrors.location = "Please enter the venue address"
+    }
+    if (countryChanged.current && latitude === 0 && longitude === 0) {
+      newErrors.location = "Enter the venue coordinates for the selected country"
     }
     if (!description.trim()) {
       newErrors.description = "Please enter a venue description"
@@ -276,7 +282,14 @@ const AddVenueScreen: React.FC<any> = (props) => {
         {errors.description && <Text style={styles.errorText}>Please enter a venue description</Text>}
 
         <Text style={styles.label}>Country *</Text>
-        <CountrySelector value={countryCode} onSelect={setCountryCode} />
+        <CountrySelector value={countryCode} onSelect={(country) => {
+          if (country !== countryCode) {
+            countryChanged.current = true
+            setLatitude(0)
+            setLongitude(0)
+          }
+          setCountryCode(country)
+        }} />
         <Text style={styles.label}>Venue Type *</Text>
         <View style={styles.venueTypeContainer}>
           <TouchableOpacity

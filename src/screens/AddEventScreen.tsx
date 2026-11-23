@@ -235,6 +235,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeAmount, setNewFeeAmount] = useState("")
   const [newFeeIsTable, setNewFeeIsTable] = useState(false)
   const [customCountry, setCustomCountry] = useState<CountryCode>('UG')
+  const customCountryChanged = React.useRef(false)
   const [congoCurrency, setCongoCurrency] = useState('CDF')
   const eventCountry = useCustomVenue ? customCountry : venues.find(v => v.id === selectedVenueId || v.slug === selectedVenueId)?.countryCode
   const eventCurrency = eventCountry === 'CD' ? congoCurrency : DISCOVERY_COUNTRIES.find(c => c.code === eventCountry)?.currencies[0]
@@ -322,8 +323,10 @@ const AddEventScreen: React.FC<any> = (props) => {
         if (hasPermission) {
           const location = await LocationService.getCurrentPosition()
           // Preserve full precision (no rounding)
-          setLatitude(location.latitude.toString())
-          setLongitude(location.longitude.toString())
+          if (!customCountryChanged.current) {
+            setLatitude(location.latitude.toString())
+            setLongitude(location.longitude.toString())
+          }
         }
       })()
     }
@@ -856,6 +859,9 @@ const AddEventScreen: React.FC<any> = (props) => {
     if (useCustomVenue && !customVenueAddress.trim()) {
       newErrors.customVenueAddress = "Custom Venue Address is required"
     }
+    if (useCustomVenue && customCountryChanged.current && (!latitude.trim() || !longitude.trim() || !Number.isFinite(Number(latitude)) || !Number.isFinite(Number(longitude)))) {
+      newErrors.customVenueAddress = "Enter the venue coordinates for the selected country"
+    }
     if (!location.trim()) {
       newErrors.location = "Location (City) is required"
     }
@@ -1175,7 +1181,14 @@ const AddEventScreen: React.FC<any> = (props) => {
               <>
                 <View style={styles.labelContainer}>
                   <Text style={styles.label}>Country *</Text>
-                  <CountrySelector value={customCountry} onSelect={setCustomCountry} />
+                  <CountrySelector value={customCountry} onSelect={(country) => {
+                    if (country !== customCountry) {
+                      customCountryChanged.current = true
+                      setLatitude("")
+                      setLongitude("")
+                    }
+                    setCustomCountry(country)
+                  }} />
                   <Text style={styles.label}>Custom Venue Name *</Text>
                   {errors.customVenueName && <Text style={styles.errorStar}>*</Text>}
                 </View>
@@ -1199,7 +1212,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                   placeholder="Enter venue address"
                   placeholderTextColor="#999"
                 />
-                {errors.customVenueAddress && <Text style={styles.errorText}>Please enter a custom venue address</Text>}
+                {errors.customVenueAddress && <Text style={styles.errorText}>{errors.customVenueAddress}</Text>}
 
                 <View style={styles.locationContainer}>
                   <View style={styles.locationField}>
