@@ -21,7 +21,7 @@ async function paymentRoute({ country, currency, provider, amount, operation, ph
   const options = await fetchConfiguredOperations(country, currency, operation);
   const route = options.find(row => row.provider === provider && row.available);
   if (!route) throw invalid('This provider is unavailable for the selected currency and operation');
-  const precision = { NONE: 0, TWO: 2 }[route.decimalsInAmount];
+  const precision = { NONE: 0, TWO: 2, TWO_PLACES: 2 }[route.decimalsInAmount];
   if (precision === undefined) throw invalid('Provider amount precision is unavailable');
   let units;
   try { units = toMinorUnits(decimal(amount), precision); }
