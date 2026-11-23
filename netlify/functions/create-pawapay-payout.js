@@ -15,7 +15,7 @@ const generateUUID = () => {
   })
 }
 
-async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, payoutId: requestedPayoutId }) {
+async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, route, payoutId: requestedPayoutId }) {
   if (!amount || !phoneNumber || !provider) {
     const error = new Error("Missing required fields: amount, phoneNumber, provider")
     error.statusCode = 400
@@ -24,7 +24,8 @@ async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, pa
 
   const payoutId = requestedPayoutId || generateUUID()
   const apiKey = getApiKey()
-  let formattedPhone = phoneNumber
+  if (!route && (currency || 'UGX') !== 'UGX') throw Object.assign(new Error('An event-linked payout is required for this currency'), { statusCode: 422 });
+  let formattedPhone = route?.phoneNumber || phoneNumber
   if (formattedPhone.startsWith("0")) formattedPhone = "256" + formattedPhone.substring(1)
   else if (formattedPhone.startsWith("+")) formattedPhone = formattedPhone.substring(1)
 
@@ -33,7 +34,7 @@ async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, pa
     headers: { "Content-Type": "application/json", "Authorization": "Bearer " + apiKey },
     body: JSON.stringify({
       payoutId,
-      amount: amount.toString(),
+      amount: route?.amount || amount.toString(),
       currency: currency || "UGX",
       recipient: { type: "MMO", accountDetails: { phoneNumber: formattedPhone, provider } },
     }),
@@ -41,7 +42,8 @@ async function submitPawaPayPayout({ amount, currency, phoneNumber, provider, pa
   const data = await response.json()
   if (!response.ok || data.status === "REJECTED") {
     const error = new Error(data.failureReason?.failureMessage || data.message || "Failed to initiate payout")
-    error.statusCode = response.status || 502
+    error.definitive = data.status === 'REJECTED';
+    error.statusCode = response.ok ? 422 : response.status
     throw error
   }
   return { payoutId: data.payoutId || payoutId, status: data.status || "ENQUEUED" }

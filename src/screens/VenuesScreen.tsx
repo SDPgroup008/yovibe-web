@@ -17,6 +17,7 @@ import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata";
 import { publicSiteUrl } from "../config/runtime";
 import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe";
+import { useCountry } from "../contexts/CountryContext";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -39,8 +40,10 @@ type VenuesScreenPropsInternal = {
 
 const VenuesScreen: React.FC<VenuesScreenPropsInternal> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
-  const { data: venues = [], loading, refetch } = useCachedVenues()
-  const { data: venueEventSlugs = [] } = useCachedVenueEventSlugs()
+  const { country, ready } = useCountry()
+  const { data: allVenues = [], loading, refetch } = useCachedVenues(country, ready)
+  const venues = useMemo(() => (allVenues || []).filter((venue) => country === 'ALL' || (venue.countryCode || 'UG') === country), [allVenues, country])
+  const { data: venueEventSlugs = [] } = useCachedVenueEventSlugs(country, ready)
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useVenuesScroll()
   /* console.log('[VenuesScreen] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Venues page

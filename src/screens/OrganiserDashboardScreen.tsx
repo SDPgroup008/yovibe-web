@@ -1,3 +1,6 @@
+import { walletPhone } from "../../shared/eventMoney"
+import { estimateFee } from "../../netlify/shared/mobileMoneyFees"
+import { useMobileMoneyOptions } from "../hooks/useMobileMoneyOptions"
 "use client"
 
 import type React from "react"
@@ -65,7 +68,7 @@ const toInternationalPhone = (localNumber: string): string => {
 // Test cases:
 // MTN_MOMO_UGA: 499->fee=5, 500->fee=305, 60000->fee=3300, 60001->fee=3600, 500000->fee=5600, 500001->fee=6000, 1000000->fee=11200
 // AIRTEL_OAPI_UGA: 499->fee=5, 500->fee=305, 60000->fee=3300, 500000->fee=5600, 500001->fee=6000
-const calculatePayoutFee = (amount: number, provider: "MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA"): number => {
+const calculatePayoutFee = (amount: number, provider: string): number => {
   const percentFee = Math.round(amount * 0.01)
   
   if (amount < 500) {
@@ -90,8 +93,9 @@ const PayoutSlider: React.FC<{
   price: number
   value: number
   onChange: (v: number) => void
+  currency: string
   unitLabel?: string
-}> = ({ label, max, price, value, onChange, unitLabel = "ticket" }) => {
+}> = ({ label, max, price, value, onChange, currency, unitLabel = "ticket" }) => {
   const [trackWidth, setTrackWidth] = useState(SLIDER_WIDTH)
   const total = value * price
 
@@ -144,7 +148,7 @@ const PayoutSlider: React.FC<{
       </View>
       <View style={payoutSliderStyles.footer}>
         <Text style={payoutSliderStyles.countText}>{value} {unitLabel}{value !== 1 ? "s" : ""}</Text>
-        <Text style={payoutSliderStyles.amountText}>UGX {total.toLocaleString()}</Text>
+        <Text style={payoutSliderStyles.amountText}>{currency} {total.toLocaleString()}</Text>
       </View>
     </View>
   )
@@ -236,6 +240,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [ticketSalesLate, setTicketSalesLate] = useState(0)
   const [scanLogs, setScanLogs] = useState<Array<{ time: string; name: string; ticketRef: string; feeType: string; seatNumber: string; tableNumber: string; status: string; reason: string }>>([])
   const [payoutHistory, setPayoutHistory] = useState<Array<{ date: string; amount: string; status: string }>>([])
+  const currency = event?.currency || "UGX"
+  const payoutRoutes = useMobileMoneyOptions(event?.countryCode, currency, "PAYOUT")
   const [walletBalance, setWalletBalance] = useState("UGX 0")
   const [eligiblePayoutTotal, setEligiblePayoutTotal] = useState(0)
   const [showWithdrawModal, setShowWithdrawModal] = useState(false)
@@ -251,7 +257,10 @@ const OrganiserDashboardScreen: React.FC = () => {
   const [otpLoading, setOtpLoading] = useState(false)
   const [otpError, setOtpError] = useState("")
   const [resendCooldown, setResendCooldown] = useState(0)
-  const [payoutProvider, setPayoutProvider] = useState<"MTN_MOMO_UGA" | "AIRTEL_OAPI_UGA">("MTN_MOMO_UGA")
+  const [preferredProvider, setPayoutProvider] = useState("MTN_MOMO_UGA")
+  const payoutRoute = payoutRoutes.options.find(option => option.provider === preferredProvider) || payoutRoutes.options[0]
+  const payoutProvider = payoutRoute?.provider || ""
+  const recipientPhone = (value: string) => walletPhone(value, payoutRoute?.prefix) || ""
   const [payoutTab, setPayoutTab] = useState<"mobile_money" | "card">("mobile_money")
   const [bankName, setBankName] = useState("")
   const [bankAccountNumber, setBankAccountNumber] = useState("")
@@ -578,7 +587,7 @@ const OrganiserDashboardScreen: React.FC = () => {
 
     setTicketSalesEarly(earlyCount)
     setTicketSalesLate(lateCount)
-    setWalletBalance(`UGX ${totalRevenue.toLocaleString()}`)
+    setWalletBalance(`${currency} ${totalRevenue.toLocaleString()}`)
     setEligiblePayoutTotal(eligibleTotal)
     setTicketSalesByType(salesByType)
     setPayoutTicketTypes(payoutTypes)
@@ -734,7 +743,7 @@ const OrganiserDashboardScreen: React.FC = () => {
           const filtered = payouts.filter((p: any) => (p.ticket_ids || []).some((id: string) => eventTicketIds.has(id)))
           setPayoutHistory(filtered.map((p: any) => ({
             date: new Date(p.request_date || p.processed_date).toLocaleDateString(),
-            amount: `UGX ${(p.amount || 0).toLocaleString()}`,
+            amount: `${currency} ${(p.amount || 0).toLocaleString()}`,
             status: p.status === "Completed" ? "Completed" : "Pending",
           })))
         }
@@ -812,7 +821,7 @@ const OrganiserDashboardScreen: React.FC = () => {
         URL.revokeObjectURL(url)
       }
       const s = data.summary
-      Alert.alert("Report Downloaded", `PDF report exported for ${s.eventName}.\n\nTickets: ${s.soldCount}\nGross: UGX ${s.gross.toLocaleString()}\nCommission (15%): UGX ${s.commission.toLocaleString()}\nNet to venue: UGX ${s.venueRevenue.toLocaleString()}\nRefunds: ${s.completedRefunds} (UGX ${s.refundAmount.toLocaleString()})\nPayouts: UGX ${s.payoutsTotal.toLocaleString()}\nClawbacks: UGX ${s.clawbacks.toLocaleString()}`)
+      Alert.alert("Report Downloaded", `PDF report exported for ${s.eventName}.\n\nTickets: ${s.soldCount}\nGross: ${currency} ${s.gross.toLocaleString()}\nCommission (15%): ${currency} ${s.commission.toLocaleString()}\nNet to venue: ${currency} ${s.venueRevenue.toLocaleString()}\nRefunds: ${s.completedRefunds} (${currency} ${s.refundAmount.toLocaleString()})\nPayouts: ${currency} ${s.payoutsTotal.toLocaleString()}\nClawbacks: ${currency} ${s.clawbacks.toLocaleString()}`)
     } catch (error) {
       console.error("Report error:", error)
       Alert.alert("Error", "Failed to download report")
@@ -850,7 +859,7 @@ const OrganiserDashboardScreen: React.FC = () => {
         const intPhone = toInternationalPhone(adminPhone)
         const payoutResult = await PawaPayService.initiatePayout(Math.round(adminNetAfterFee * 100) / 100, "UGX", intPhone, payoutProvider, adminOTPCode.trim())
         if (!payoutResult.success) { Alert.alert("Payout Failed", payoutResult.error || "Unknown"); return }
-        Alert.alert("✅ Payout Submitted!", `UGX ${adminNetAfterFee.toLocaleString()} sent to ${intPhone}\nPayout ID: ${payoutResult.payoutId}`)
+        Alert.alert("✅ Payout Submitted!", `${currency} ${adminNetAfterFee.toLocaleString()} sent to ${intPhone}\nPayout ID: ${payoutResult.payoutId}`)
         setShowAdminWithdrawModal(false)
         setAdminOTPSent(false)
         setAdminOTPCode("")
@@ -994,7 +1003,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   const handleSendOtp = async () => {
     if (!user?.email) return;
 
-    if (payoutTab === "mobile_money" && toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm)) {
+    if (payoutTab === "mobile_money" && (!recipientPhone(payoutPhone) || recipientPhone(payoutPhone) !== recipientPhone(payoutPhoneConfirm))) {
       setOtpError("Numbers don't match");
       return;
     }
@@ -1063,7 +1072,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     // Validate based on tab
     if (payoutTab === "mobile_money") {
       /* console.log("[PayoutSubmit] 📱 Mobile money validation — phone:", payoutPhone) */
-      if (!payoutPhone || payoutPhone.length < 10) { setPayoutFieldErrors({payoutPhone:"Enter a valid mobile money number"}); Alert.alert("Error", "Enter a valid mobile money number"); return }
+      if (!recipientPhone(payoutPhone)) { setPayoutFieldErrors({payoutPhone:"Enter a valid mobile money number"}); Alert.alert("Error", "Enter a valid mobile money number"); return }
     } else {
       /* console.log("[PayoutSubmit] 💳 Card validation — bankName:", bankName.trim(), "acct:", bankAccountNumber.trim(), "holder:", bankAccountName.trim()) */
       if (!bankName.trim()) { setPayoutFieldErrors({bankName:"Enter bank name"}); /* console.log("[PayoutSubmit] ❌ Missing bank name"); */ Alert.alert("Error", "Enter bank name"); return }
@@ -1102,7 +1111,7 @@ const OrganiserDashboardScreen: React.FC = () => {
         selectedTicketIds.push(...selectedIdsForType)
         const addedAmount = Math.round(count * (isTableType ? (data.price * tableSize) : (data.price || 0)) * 100) / 100
         totalAmount += addedAmount
-        /* console.log(`[PayoutSubmit]    → Added ${selectedIdsForType.length} ticket(s), amount: UGX ${addedAmount.toLocaleString()}`) */
+        /* console.log(`[PayoutSubmit]    → Added ${selectedIdsForType.length} ticket(s), amount: ${currency} ${addedAmount.toLocaleString()}`) */
       } else {
         /* console.log(`[PayoutSubmit]    → Skipping type ${type} (count=${count}, exists=${!!payoutTicketTypes[type]})`) */
       }
@@ -1126,7 +1135,7 @@ const OrganiserDashboardScreen: React.FC = () => {
       if (!token) { Alert.alert("Session expired", "Please sign in again."); return }
 
       const isMobile = payoutTab === "mobile_money"
-      const intPhone = toInternationalPhone(payoutPhone)
+      const intPhone = recipientPhone(payoutPhone)
       const response = await fetch("/.netlify/functions/payout", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -1145,15 +1154,15 @@ const OrganiserDashboardScreen: React.FC = () => {
       const paidAmount = data.amount || totalAmount
       setPayoutHistory(prev => [{
         date: new Date().toLocaleDateString(),
-        amount: `UGX ${paidAmount.toLocaleString()}`,
+        amount: `${currency} ${paidAmount.toLocaleString()}`,
         status: isMobile ? "Processing" : "Pending Review",
       }, ...prev])
       setEligiblePayoutTotal(prev => Math.max(0, prev - paidAmount))
       Alert.alert(
         isMobile ? "✅ Payout Submitted" : "✅ Payout Request Submitted",
         isMobile
-          ? `UGX ${paidAmount.toLocaleString()} is processing through PawaPay.\nRequest ID: ${data.payoutId || ""}`
-          : `UGX ${paidAmount.toLocaleString()} is pending admin review and PesaPal submission.`,
+          ? `${currency} ${paidAmount.toLocaleString()} is processing through PawaPay.\nRequest ID: ${data.payoutId || ""}`
+          : `${currency} ${paidAmount.toLocaleString()} is pending admin review and PesaPal submission.`,
       )
 
       setShowWithdrawModal(false)
@@ -1215,6 +1224,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   if (!event) return <View style={styles.loadingContainer}><Text style={styles.loadingText}>Event not found</Text></View>
 
   // ===========================================================================
+  const estimatedFee = estimateFee(payoutProvider, "PAYOUT", totalPayoutAmount)
   // Payout Slider Modal
   // ===========================================================================
   const renderWithdrawModal = () => (
@@ -1266,6 +1276,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                 return (
                 <View key={typeName} style={styles.sliderSection}>
                   <PayoutSlider
+                    currency={currency}
                     label={typeName}
                     max={sliderMax}
                     price={sliderPrice}
@@ -1284,18 +1295,13 @@ const OrganiserDashboardScreen: React.FC = () => {
               <View style={[styles.phoneSection, isLargeScreen && styles.phoneSectionDesktop]}>
                 <Text style={styles.phoneLabel}>📱 Provider</Text>
                 <View style={styles.providerRow}>
-                  <TouchableOpacity
-                    style={[styles.providerChip, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipActive]}
-                    onPress={() => setPayoutProvider("MTN_MOMO_UGA")}
-                  >
-                    <Text style={[styles.providerChipText, payoutProvider === "MTN_MOMO_UGA" && styles.providerChipTextActive]}>MTN</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.providerChip, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipActive]}
-                    onPress={() => setPayoutProvider("AIRTEL_OAPI_UGA")}
-                  >
-                    <Text style={[styles.providerChipText, payoutProvider === "AIRTEL_OAPI_UGA" && styles.providerChipTextActive]}>Airtel</Text>
-                  </TouchableOpacity>
+                  {payoutRoutes.options.map(option => (
+                    <TouchableOpacity key={option.provider} style={[styles.providerChip, payoutProvider === option.provider && styles.providerChipActive]}
+                      onPress={() => setPayoutProvider(option.provider)}>
+                      <Text style={[styles.providerChipText, payoutProvider === option.provider && styles.providerChipTextActive]}>{option.displayName}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {!payoutRoutes.options.length && <Text style={styles.phoneLabel}>{payoutRoutes.loading ? "Checking providers..." : payoutRoutes.error || "No payout provider is available."}</Text>}
                 </View>
               </View>
 
@@ -1305,7 +1311,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                 <View style={styles.phoneRow}>
                   <TextInput
                     style={styles.phoneInput}
-                    placeholder="07XXXXXXXX"
+                    placeholder={payoutRoute ? "+" + payoutRoute.prefix + "..." : "Mobile money number"}
                     placeholderTextColor="#555"
                     value={payoutPhone}
                     onChangeText={(t) => {
@@ -1320,7 +1326,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                 <View style={styles.phoneRow}>
                   <TextInput
                     style={styles.phoneInput}
-                    placeholder="07XXXXXXXX"
+                    placeholder={payoutRoute ? "+" + payoutRoute.prefix + "..." : "Mobile money number"}
                     placeholderTextColor="#555"
                     value={payoutPhoneConfirm}
                     onChangeText={(t) => {
@@ -1332,9 +1338,9 @@ const OrganiserDashboardScreen: React.FC = () => {
                 </View>
                 <View style={{ height: 12 }} />
                 <TouchableOpacity
-                  style={[styles.sendOtpBtn, (toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading || resendCooldown > 0) && styles.sendOtpBtnDisabled]}
+                  style={[styles.sendOtpBtn, ((!recipientPhone(payoutPhone) || recipientPhone(payoutPhone) !== recipientPhone(payoutPhoneConfirm)) || otpLoading || resendCooldown > 0) && styles.sendOtpBtnDisabled]}
                   onPress={handleSendOtp}
-                  disabled={toInternationalPhone(payoutPhone) !== toInternationalPhone(payoutPhoneConfirm) || otpLoading || resendCooldown > 0}
+                  disabled={(!recipientPhone(payoutPhone) || recipientPhone(payoutPhone) !== recipientPhone(payoutPhoneConfirm)) || otpLoading || resendCooldown > 0}
                 >
                   {otpLoading ? <ActivityIndicator color="#FFF" size="small" /> : <Text style={styles.sendOtpBtnText}>Send OTP</Text>}
                 </TouchableOpacity>
@@ -1427,13 +1433,13 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
             <View style={styles.summaryCenter}>
               <Text style={styles.summaryLabel}>Total</Text>
-              <Text style={[styles.summaryAmount, totalPayoutAmount > eligiblePayoutTotal && { color: "#FF6B6B" }]}>UGX {cappedPayoutAmount.toLocaleString()}</Text>
+              <Text style={[styles.summaryAmount, totalPayoutAmount > eligiblePayoutTotal && { color: "#FF6B6B" }]}>{currency} {cappedPayoutAmount.toLocaleString()}</Text>
             </View>
             <View style={styles.feeRight}>
-              <Text style={styles.feeLabel}>Fee</Text>
-              <Text style={styles.feeAmount}>- UGX {calculatePayoutFee(totalPayoutAmount, payoutProvider).toLocaleString()}</Text>
-              <Text style={styles.netLabel}>You'll receive</Text>
-              <Text style={styles.netAmount}>UGX {Math.max(0, totalPayoutAmount - calculatePayoutFee(totalPayoutAmount, payoutProvider)).toLocaleString()}</Text>
+              <Text style={styles.feeLabel}>Estimated provider fee</Text>
+              <Text style={styles.feeAmount}>{currency} {estimatedFee?.toLocaleString() ?? "unavailable"}</Text>
+              <Text style={styles.netLabel}>Payout amount</Text>
+              <Text style={styles.netAmount}>{currency} {cappedPayoutAmount.toLocaleString()}</Text>
             </View>
             <TouchableOpacity
               style={[styles.payoutActionBtn, (totalSelected === 0 || withdrawLoading || totalPayoutAmount > eligiblePayoutTotal || !otpSent) && styles.payoutActionBtnDisabled]}
@@ -1577,9 +1583,9 @@ const OrganiserDashboardScreen: React.FC = () => {
             return (
             <View key={typeName} style={styles.salesTableRow}>
               <Text style={[styles.salesTableCellText, { width: 90 }]} numberOfLines={1}>{typeName}</Text>
-              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.early.revenue.toLocaleString()}</Text></View>
-              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>UGX {s.late.revenue.toLocaleString()}</Text></View>
-              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>UGX {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.early.count)}</Text><Text style={styles.salesTableRevenueText}>{currency} {s.early.revenue.toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.late.count)}</Text><Text style={styles.salesTableRevenueText}>{currency} {s.late.revenue.toLocaleString()}</Text></View>
+              <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{formatCount(s.scanned?.count || 0)}</Text><Text style={styles.salesTableRevenueText}>{currency} {(s.scanned?.revenue || 0).toLocaleString()}</Text></View>
               <View style={{ width: 70, alignItems: "center" }}><Text style={styles.salesTableCountText}>{maxTickets ?? '--'}</Text></View>
               <View style={{ width: 70, alignItems: "center" }}>
                 <Text style={[styles.salesTableCountText, { color: remainColor }]}>
@@ -1731,7 +1737,7 @@ const OrganiserDashboardScreen: React.FC = () => {
             <Ionicons name="wallet-outline" size={24} color="#4CAF50" />
             <View>
               <Text style={styles.eligibleLabel}>Eligible for Payout</Text>
-              <Text style={styles.eligibleAmount}>UGX {eligiblePayoutTotal.toLocaleString()}</Text>
+              <Text style={styles.eligibleAmount}>{currency} {eligiblePayoutTotal.toLocaleString()}</Text>
             </View>
           </View>
           <Text style={styles.eligibleDesc}>
@@ -2017,20 +2023,20 @@ const OrganiserDashboardScreen: React.FC = () => {
               <View style={styles.dashboardCard}>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
                   <Text style={{ color: "#888", fontSize: 13 }}>App Commission Collected</Text>
-                  <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "700" }}>UGX {adminTotalAppCommission.toLocaleString()}</Text>
+                  <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "700" }}>{currency} {adminTotalAppCommission.toLocaleString()}</Text>
                 </View>
                 <View style={{ flexDirection: "row", justifyContent: "space-between", marginBottom: 8 }}>
                   <Text style={{ color: "#888", fontSize: 13 }}>Gateway Fees</Text>
-                  <Text style={{ color: "#FF6B6B", fontSize: 14, fontWeight: "700" }}>- UGX {adminTotalGatewayFees.toLocaleString()}</Text>
+                  <Text style={{ color: "#FF6B6B", fontSize: 14, fontWeight: "700" }}>- {currency} {adminTotalGatewayFees.toLocaleString()}</Text>
                 </View>
                 <View style={{ borderTopWidth: 1, borderTopColor: "#2a2a2a", paddingTop: 8, marginTop: 4 }}>
                   <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
                     <Text style={{ color: "#00D4FF", fontSize: 15, fontWeight: "700" }}>Net Revenue</Text>
-                    <Text style={{ color: "#00D4FF", fontSize: 18, fontWeight: "800" }}>UGX {adminNetRevenue.toLocaleString()}</Text>
+                    <Text style={{ color: "#00D4FF", fontSize: 18, fontWeight: "800" }}>{currency} {adminNetRevenue.toLocaleString()}</Text>
                   </View>
                 </View>
                 {adminNetRevenue > 0 && (
-                  <TouchableOpacity style={styles.withdrawBtn} onPress={() => { setAdminPhone(""); setAdminPhoneConfirm(""); setAdminOTPSent(false); setAdminOTPCode(""); setAdminOTPError(""); setShowAdminWithdrawModal(true) }}>
+                  <TouchableOpacity style={styles.withdrawBtn} disabled={currency !== "UGX"} onPress={() => { setAdminPhone(""); setAdminPhoneConfirm(""); setAdminOTPSent(false); setAdminOTPCode(""); setAdminOTPError(""); setShowAdminWithdrawModal(true) }}>
                     <Ionicons name="cash-outline" size={20} color="#FFF" />
                     <Text style={styles.withdrawBtnText}>Withdraw Net Revenue</Text>
                   </TouchableOpacity>
@@ -2067,7 +2073,7 @@ const OrganiserDashboardScreen: React.FC = () => {
                           <Text style={{ color: "#FFF", fontSize: 12, fontFamily: "monospace" }}>{ref.request_reference}</Text>
                           <Text style={{ color: statusColors[ref.status] || "#888", fontSize: 11, fontWeight: "700" }}>{ref.status?.replace(/_/g, " ")}</Text>
                         </View>
-                        <Text style={{ color: "#888", fontSize: 11 }}>{ref.reason_code?.replace(/_/g, " ")} · UGX {Number(ref.requested_amount).toLocaleString()} · {ref.buyer_email}</Text>
+                        <Text style={{ color: "#888", fontSize: 11 }}>{ref.reason_code?.replace(/_/g, " ")} · {currency} {Number(ref.requested_amount).toLocaleString()} · {ref.buyer_email}</Text>
                       </View>
                     )
                   })
@@ -2212,8 +2218,8 @@ const OrganiserDashboardScreen: React.FC = () => {
             </View>
             <ScrollView style={{ padding: 20 }}>
               <Text style={{ color: "#888", fontSize: 13, marginBottom: 4 }}>Net Revenue</Text>
-              <Text style={{ color: "#00D4FF", fontSize: 28, fontWeight: "800", marginBottom: 4 }}>UGX {adminNetRevenue.toLocaleString()}</Text>
-              <Text style={{ color: "#666", fontSize: 12, marginBottom: 20 }}>Withdraw fee: UGX {adminWithdrawFee.toLocaleString()} · You receive: UGX {adminNetAfterFee.toLocaleString()}</Text>
+              <Text style={{ color: "#00D4FF", fontSize: 28, fontWeight: "800", marginBottom: 4 }}>{currency} {adminNetRevenue.toLocaleString()}</Text>
+              <Text style={{ color: "#666", fontSize: 12, marginBottom: 20 }}>Withdraw fee: {currency} {adminWithdrawFee.toLocaleString()} · You receive: {currency} {adminNetAfterFee.toLocaleString()}</Text>
 
               <Text style={{ color: "#FFF", fontSize: 14, fontWeight: "600", marginBottom: 8 }}>Mobile Money Number</Text>
               <TextInput style={styles.staffInput} value={adminPhone} onChangeText={setAdminPhone} placeholder="e.g. 0772123456" placeholderTextColor="#555" keyboardType="phone-pad" />

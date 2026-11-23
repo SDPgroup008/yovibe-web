@@ -1,5 +1,7 @@
 "use client"
 
+import { parseEntryFee } from '../config/countries'
+
 import type React from "react"
 import { useState, useEffect, useMemo, useCallback } from "react"
 import {
@@ -49,23 +51,23 @@ const socialShareDescription = (description: string | undefined, eventName: stri
 
 type EventEntryFee = Event["entryFees"][number]
 
-const formatTicketAmount = (amount: unknown): string => {
+const formatTicketAmount = (amount: unknown, currency: string): string => {
   const rawAmount = String(amount ?? "").trim()
-  const numericAmount = Number.parseInt(rawAmount.replace(/[^0-9]/g, ""), 10)
-  return Number.isFinite(numericAmount) ? `UGX ${numericAmount.toLocaleString()}` : rawAmount || "Price on request"
+  const numericAmount = parseEntryFee(rawAmount)
+  return Number.isFinite(numericAmount) ? `${currency} ${numericAmount.toLocaleString()}` : rawAmount || "Price on request"
 }
 
 const getTicketPriceLabel = (event: Event): string => {
   if (event.isFreeEntry) return "Free entry"
   const amounts = (event.entryFees || [])
-    .map((fee) => Number.parseInt(String(fee.amount || "").replace(/[^0-9]/g, ""), 10))
+    .map((fee) => parseEntryFee(fee.amount))
     .filter(Number.isFinite)
 
   if (!amounts.length) return "Tickets available"
   const lowestAmount = Math.min(...amounts)
   return event.entryFees.length > 1
-    ? `From UGX ${lowestAmount.toLocaleString()}`
-    : `UGX ${lowestAmount.toLocaleString()}`
+    ? `From ${event.currency || 'UGX'} ${lowestAmount.toLocaleString()}`
+    : `${event.currency || 'UGX'} ${lowestAmount.toLocaleString()}`
 }
 
 const TicketOptions: React.FC<{ event: Event; desktop?: boolean }> = ({ event, desktop = false }) => {
@@ -101,7 +103,7 @@ const TicketOptions: React.FC<{ event: Event; desktop?: boolean }> = ({ event, d
                   Table{fee.tableSize ? ` · up to ${fee.tableSize}` : ""}
                 </Text>
               )}
-              <Text style={styles.ticketTierAmount}>{formatTicketAmount(fee.amount)}</Text>
+              <Text style={styles.ticketTierAmount}>{formatTicketAmount(fee.amount, event.currency || 'UGX')}</Text>
             </View>
           ))}
         </View>

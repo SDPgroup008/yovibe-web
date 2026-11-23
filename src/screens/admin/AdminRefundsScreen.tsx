@@ -107,7 +107,7 @@ export default function AdminRefundsScreen() {
           </View>
           <View style={styles.cardDetail}>
             <Text style={styles.cardLabel}>Amount</Text>
-            <Text style={styles.cardValue}>UGX {Number(item.requested_amount).toLocaleString()}</Text>
+            <Text style={styles.cardValue}>{item.currency || "UGX"} {Number(item.requested_amount).toLocaleString()}</Text>
           </View>
           <View style={styles.cardDetail}>
             <Text style={styles.cardLabel}>Buyer</Text>
@@ -201,9 +201,9 @@ export default function AdminRefundsScreen() {
                 <View style={styles.modalBody}>
                   <Row label="Buyer" value={detailModal.buyer_email} />
                   <Row label="Reason" value={detailModal.reason_code?.replace(/_/g, " ")} />
-                  <Row label="Requested" value={`UGX ${Number(detailModal.requested_amount).toLocaleString()}`} />
-                  <Row label="Approved" value={detailModal.approved_amount ? `UGX ${Number(detailModal.approved_amount).toLocaleString()}` : "—"} />
-                  <Row label="Refunded" value={detailModal.refunded_amount ? `UGX ${Number(detailModal.refunded_amount).toLocaleString()}` : "—"} />
+                  <Row label="Requested" value={`${detailModal.currency || "UGX"} ${Number(detailModal.requested_amount).toLocaleString()}`} />
+                  <Row label="Approved" value={detailModal.approved_amount ? `${detailModal.currency || "UGX"} ${Number(detailModal.approved_amount).toLocaleString()}` : "—"} />
+                  <Row label="Refunded" value={detailModal.refunded_amount ? `${detailModal.currency || "UGX"} ${Number(detailModal.refunded_amount).toLocaleString()}` : "—"} />
                   <Row label="Provider" value={detailModal.payment_provider} />
                   <Row label="Payment Ref" value={detailModal.payment_reference || "—"} />
                   <Row label="Event ID" value={detailModal.event_id} />

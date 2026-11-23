@@ -1,13 +1,10 @@
 import type { PaymentIntent } from "../models/Ticket"
 import supabase from "../config/supabase"
 
-const PAWAPAY_PROVIDERS: Record<string, string[]> = {
-  UG: ["MTN_MOMO_UGA", "AIRTEL_OAPI_UGA"],
-  RW: ["MTN_MOMO_RWA", "AIRTEL_RWA"],
-  KE: ["MPESA_KE"],
-  GH: ["MTN_MOMO_GH", "AIRTEL_GH"],
-  TZ: ["MTN_MOMO_TZ", "AIRTEL_TZ"],
-}
+import { COUNTRY_CURRENCIES } from "../../shared/paymentMarkets"
+const PAWAPAY_PROVIDERS: Record<string, string[]> = Object.fromEntries(
+  Object.entries(COUNTRY_CURRENCIES).map(([country, market]) => [country, market.providers])
+)
 
 // Safely parse a fetch response. Netlify functions often serve JSON with a
 // `text/plain` content-type, so try JSON first and only fall back to an error
@@ -52,7 +49,8 @@ export class PawaPayService {
     amount: number,
     currency: string,
     phoneNumber: string,
-    provider: string
+    provider: string,
+    checkout?: Record<string, unknown>
   ): Promise<{
     success: boolean
     depositId?: string
@@ -70,6 +68,7 @@ export class PawaPayService {
           amount,
           currency,
           phoneNumber,
+          checkout,
           provider,
         }),
       })

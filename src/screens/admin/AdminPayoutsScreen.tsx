@@ -104,7 +104,7 @@ export default function AdminPayoutsScreen() {
         <View style={styles.cardBody}>
           <View style={styles.cardRow}>
             <Text style={styles.cardLabel}>Amount</Text>
-            <Text style={styles.cardValue}>UGX {Number(item.amount).toLocaleString()}</Text>
+            <Text style={styles.cardValue}>{item.currency || "UGX"} {Number(item.amount).toLocaleString()}</Text>
           </View>
           <View style={styles.cardRow}>
             <Text style={styles.cardLabel}>Method</Text>
@@ -195,7 +195,7 @@ export default function AdminPayoutsScreen() {
                 </View>
                 <View style={styles.modalBody}>
                   <Row label="ID" value={detailModal.id} />
-                  <Row label="Amount" value={`UGX ${Number(detailModal.amount).toLocaleString()}`} />
+                  <Row label="Amount" value={`${detailModal.currency || "UGX"} ${Number(detailModal.amount).toLocaleString()}`} />
                   <Row label="Method" value={detailModal.payout_method === "bank_transfer" ? "Card / Bank Transfer" : "Mobile Money"} />
                   <Row label="Status" value={detailModal.status} />
                   <Row label="Recipient" value={detailModal.recipient_name || "—"} />

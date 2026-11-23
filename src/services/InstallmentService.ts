@@ -1,3 +1,4 @@
+import { installmentAmounts } from '../../shared/eventMoney'
 import supabase from "../config/supabase"
 import { v4 as uuidv4 } from "uuid"
 import TicketService from "./TicketService"
@@ -11,7 +12,6 @@ import {
   type InstallmentPlanType,
   INSTALLMENT_SERVICE_FEE_RATE,
   YOVIBE_COMMISSION_RATE,
-  splitIntoInstallments,
   buildDueDates,
 } from "../models/InstallmentPlan"
 
@@ -37,18 +37,15 @@ export class InstallmentService {
   static previewPlan(
     totalAmount: number,
     planType: InstallmentPlanType,
-    eventDate: Date
+    eventDate: Date, country = "UG", currency = "UGX"
   ): Installment[] {
-    const baseAmounts = splitIntoInstallments(totalAmount, planType)
+    const baseAmounts = installmentAmounts(totalAmount, Number(planType), country, currency)
     const dueDates = buildDueDates(planType, eventDate)
 
-    return baseAmounts.map((amount, i) => {
-      const serviceFee = Math.round(amount * INSTALLMENT_SERVICE_FEE_RATE)
+    return baseAmounts.map((part, i) => {
       return {
         index: i,
-        amount,
-        serviceFee,
-        totalDue: amount + serviceFee,
+        ...part,
         dueDate: dueDates[i],
         status: "pending",
       }
@@ -87,7 +84,7 @@ export class InstallmentService {
       name?: string
     }
   ): Promise<{ planId: string; depositId?: string; paymentUrl?: string; orderId?: string; trackingId?: string }> {
-    const installments = this.previewPlan(totalAmount, planType, event.date)
+    const installments = this.previewPlan(totalAmount, planType, event.date, event.countryCode, event.currency)
 
     const plan: Omit<InstallmentPlan, "id"> = {
       buyerId: buyerInfo.buyerId,
@@ -168,7 +165,7 @@ export class InstallmentService {
       throw new Error("The event has already passed. This plan has been cancelled.")
     }
 
-    const event = { id: plan.eventId, name: plan.eventName || "" } as Event
+    const event = { id: plan.eventId, name: plan.eventName || "", currency: plan.currency, countryCode: plan.countryCode }
     return this.chargeInstallment(planId, installmentIndex, installment.totalDue, paymentDetails, event)
   }
 
@@ -368,21 +365,23 @@ export class InstallmentService {
       number?: string
       name?: string
     },
-    event: Pick<Event, "id" | "name">
+    event: Pick<Event, "id" | "name" | "currency" | "countryCode">
   ): Promise<{ depositId?: string; paymentUrl?: string; orderId?: string; trackingId?: string }> {
     if (paymentDetails.method === "mobile_money") {
       const provider =
-        paymentDetails.provider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
+        paymentDetails.provider === "mtn" ? "MTN_MOMO_UGA" : paymentDetails.provider === "airtel" ? "AIRTEL_OAPI_UGA" : paymentDetails.provider || ""
       const result = await PawaPayService.initiateDeposit(
         amount,
-        "UGX",
+        event.currency || "UGX",
         paymentDetails.number!,
-        provider
+        provider,
+        { purpose: 'installment', eventSlug: event.id, subjectId: planId, installmentIndex }
       )
       if (!result.success) throw new Error(result.error || "Mobile money payment failed")
       return { depositId: result.depositId }
     }
 
+    if ((event.currency || 'UGX') !== 'UGX') throw new Error('Card payments unavailable for this currency')
     // PesaPal (card / bank)
     const result = await PesaPalService.submitOrder(
       amount,
@@ -474,6 +473,8 @@ export class InstallmentService {
       reservationId: row.reservation_id,
       reservationStatus: row.reservation_status || "none",
       reservationExpiresAt: row.reservation_expires_at ? new Date(row.reservation_expires_at) : undefined,
+      currency: row.currency || 'UGX',
+      countryCode: row.country_code || 'UG',
       paymentProvider: row.payment_provider,
       paymentNumber: row.payment_number,
       baseTotal: row.base_total,

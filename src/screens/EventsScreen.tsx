@@ -29,6 +29,8 @@ import { useEventsScroll } from "../hooks/useScrollPersistence";
 import { publicSiteUrl } from "../config/runtime";
 import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 import LegalLinks from "../components/LegalLinks";
+import CountrySelector from "../components/CountrySelector";
+import { useCountry } from "../contexts/CountryContext";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -61,7 +63,8 @@ type EventsScreenProps = {
 
 const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) => {
   const navigation = useCompatNavigation()
-  const { data: cachedEvents, loading, refetch } = useCachedEvents()
+  const { country, ready } = useCountry()
+  const { data: cachedEvents, loading, refetch } = useCachedEvents(country, ready)
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useEventsScroll()
   /* console.log('[EventsScreen] 🏗️ RENDER/MOUNT'); */
   // SEO Metadata for Events page
@@ -120,8 +123,9 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
 
 
   const events = useMemo<Event[]>(() => {
-    return Array.isArray(cachedEvents) ? cachedEvents : [];
-  }, [cachedEvents]);
+    const allEvents = Array.isArray(cachedEvents) ? cachedEvents : [];
+    return country === 'ALL' ? allEvents : allEvents.filter((event) => (event.countryCode || 'UG') === country);
+  }, [cachedEvents, country]);
 
   // The useScrollPersistence hook automatically restores on mount.
   // We keep this effect for potential future use when useIsFocused
@@ -420,7 +424,7 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         url={seoUrl}
       />
       <View style={styles.header}>
-        <Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text>
+        <View style={styles.headerHeading}><CountrySelector /><Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text></View>
         <View style={styles.headerActions}>
           {deviceType.isLargeScreen && (!user || user.userType === "regular_user" || user.userType === "admin") && (
             <TouchableOpacity
@@ -601,6 +605,7 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 2 },
     textShadowRadius: 4,
   },
+  headerHeading: { flexDirection: 'row', alignItems: 'center', flexShrink: 1 },
   searchButton: {
     padding: responsiveSize(8, 12, 7),
     backgroundColor: "rgba(0, 212, 255, 0.2)",

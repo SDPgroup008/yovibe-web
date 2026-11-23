@@ -69,7 +69,9 @@ class Cache {
     // details are small, so clear the detail group rather than risk stale data.
     this.deleteMatching("event_");
     this.delete(CACHE_KEYS.EVENTS);
+    this.deleteMatching(`${CACHE_KEYS.EVENTS}:`);
     this.delete(CACHE_KEYS.VENUE_EVENT_SLUGS);
+    this.deleteMatching(`${CACHE_KEYS.VENUE_EVENT_SLUGS}:`);
   }
 
   invalidateVenue(venueId: string): void {
@@ -77,6 +79,7 @@ class Cache {
     this.delete(CACHE_KEYS.VENUE_PAGE(venueId));
     this.deleteMatching("venue_");
     this.delete(CACHE_KEYS.VENUES);
+    this.deleteMatching(`${CACHE_KEYS.VENUES}:`);
   }
 
   /**

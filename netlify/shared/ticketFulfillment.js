@@ -1,3 +1,4 @@
+const { priceScale } = require('../../shared/eventMoney');
 // netlify/shared/ticketFulfillment.js
 //
 // Shared server-side helpers for the payment trust boundary (Phase 1):
@@ -12,7 +13,7 @@
 
 const crypto = require('crypto');
 const QRCode = require('qrcode');
-const { v4: uuidv4 } = require('uuid');
+const uuidv4 = crypto.randomUUID;
 const { getAdminClient } = require('./supabaseAdmin');
 const { requiredEnv, assertPesapalUrl, assertPawaPayUrl, getSiteUrl } = require('./runtimeConfig');
 const { uploadObject, deleteObject, privateKeyFromReference } = require('./r2');
@@ -95,9 +96,9 @@ async function loadEvent(admin, eventId) {
 
 // ─── Revenue / fees ─────────────────────────────────────────────────────────
 
-function calculateRevenueSplit(total) {
-  const appCommission = Math.round(total * APP_COMMISSION_RATE);
-  return { appCommission, venueRevenue: total - appCommission };
+function calculateRevenueSplit(total, scale = 1) {
+  const appCommission = Math.round(total * scale * APP_COMMISSION_RATE) / scale;
+  return { appCommission, venueRevenue: Math.round((total - appCommission) * scale) / scale };
 }
 
 function calculateGatewayFee(method, total) {
@@ -140,7 +141,9 @@ async function verifyPesapalPayment({ trackingId, orderId }) {
     rawStatus,
     transactionId: data.confirmation_code || data.merchant_reference || id,
     confirmationCode: data.confirmation_code || undefined,
-    amount: parseFloat(data.amount) || 0,
+    amount: data.amount,
+    currency: data.currency,
+    merchantReference: data.merchant_reference,
   };
 }
 
@@ -169,7 +172,9 @@ async function verifyPawaPayDeposit(depositId) {
   return {
     status,
     rawStatus,
-    amount: parseFloat(deposit.amount) || 0,
+    amount: deposit.amount,
+    depositId: deposit.depositId,
+    currency: deposit.currency,
     provider: deposit.payer?.accountDetails?.provider,
     providerTransactionId: deposit.providerTransactionId,
   };
@@ -226,8 +231,7 @@ async function verifyPesapalPaymentViaFunction({ trackingId, orderId }) {
  * path fails fast; otherwise it retries a few times and reports pending.
  * Logs every attempt so a stuck integration is diagnosable from function logs.
  */
-async function confirmPaymentVerified(method, verification) {
-  const attempts = 6;
+async function confirmPaymentVerified(method, verification, attempts = 2) {
   const outcomes = [];
   for (let i = 0; i < attempts; i++) {
     let via = null;
@@ -480,22 +484,13 @@ async function createTicketServerSide(admin, {
   // tickets store the slug in BOTH event_id and event_slug.
   const eventIdForTicket = eventSlug;
   const startTime = resolveEventStartTime(event);
-  const lateFeePct = unitPrice != null
-    ? (Number(lateFeePercent ?? 0) || 0)
-    : (Number(event.late_fee_percent ?? 0) || 0);
-  const sevenAm = new Date(startTime);
-  sevenAm.setHours(7, 0, 0, 0);
-  const isLatePurchase = new Date() >= sevenAm;
-  const baseAmount = unitPrice != null ? unitPrice : totalAmount;
-  const lateFee = isLatePurchase ? Math.round(baseAmount * lateFeePct / 100) : 0;
-
-  // With a verified unitPrice, the snapshot is authoritative: subtotal = price
-  // per ticket, total = price + late fee. Without it (stranded-retry path) the
-  // legacy behaviour is preserved (totalAmount is the per-ticket total).
-  const subtotal = baseAmount;
-  const total = unitPrice != null ? baseAmount + lateFee : totalAmount;
-  const { appCommission, venueRevenue } = calculateRevenueSplit(total);
-  const gatewayFee = calculateGatewayFee(payment.method, total);
+  const scale = priceScale(event.country_code || 'UG', event.currency || 'UGX');
+  const total = Number(totalAmount);
+  const subtotal = unitPrice == null ? total : Number(unitPrice);
+  const lateFee = Math.max(0, Math.round((total - subtotal) * scale) / scale);
+  const isLatePurchase = lateFee > 0;
+  const { appCommission, venueRevenue } = calculateRevenueSplit(total, scale);
+  const gatewayFee = payment.gatewayFeeShare ?? calculateGatewayFee(payment.method, total);
   const purchaseDeadline = new Date(startTime.getTime() - 24 * 60 * 60 * 1000);
 
   const id = uuidv4();

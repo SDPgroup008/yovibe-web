@@ -81,6 +81,17 @@ const getOptimalImageSize = (): { width: number; quality: number } => {
   return { width: 1200, quality: 90 };
 };
 
+async function loadPublicPages<T>(page: (start: number, end: number) => PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> {
+  const rows: T[] = [];
+  const size = 500;
+  for (let start = 0; ; start += size) {
+    const { data, error } = await page(start, start + size - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < size) return rows;
+  }
+}
+
 class SupabaseService {
   private static instance: SupabaseService;
 
@@ -488,16 +499,15 @@ class SupabaseService {
 
   // ============ Venue Methods ============
 
-  async getVenues(): Promise<Venue[]> {
+  async getVenues(country = 'ALL'): Promise<Venue[]> {
     try {
-      const { data, error } = await supabase
-        .from("venues")
-        .select("*")
-        .eq("is_deleted", false)
-        .order("name", { ascending: true })
-        .limit(10000);
+      const query = () => {
+        let request = supabase.from("venues").select("*").eq("is_deleted", false);
+        if (country !== 'ALL') request = request.eq('country_code', country);
+        return request.order('name', { ascending: true }).order('slug');
+      };
+      const data = await loadPublicPages((start, end) => query().range(start, end));
 
-      if (error) throw error;
 
       const venues: Venue[] = [];
       if (data) {
@@ -505,6 +515,7 @@ class SupabaseService {
           venues.push({
             id: doc.slug,
             slug: doc.slug,
+            countryCode: doc.country_code || 'UG',
             name: doc.name,
             location: doc.location,
             description: doc.description,
@@ -556,6 +567,7 @@ class SupabaseService {
         // Keep id aligned with slug so vibe lookups/ranking use the same key.
         id: doc.slug || doc.id,
         slug: doc.slug,
+        countryCode: doc.country_code || 'UG',
         name: doc.name,
         location: doc.location,
         description: doc.description,
@@ -606,6 +618,7 @@ class SupabaseService {
       return {
         id: data.id,
         slug: data.slug,
+        countryCode: data.country_code || "UG",
         name: data.name,
         location: data.location,
         description: data.description,
@@ -657,6 +670,7 @@ class SupabaseService {
       return {
         id: data.id,
         slug: data.slug,
+        countryCode: data.country_code || "UG",
         name: data.name,
         location: data.location,
         description: data.description,
@@ -699,6 +713,7 @@ class SupabaseService {
           venues.push({
             id: doc.slug,
             slug: doc.slug,
+            countryCode: doc.country_code || "UG",
             name: doc.name,
             location: doc.location,
             description: doc.description,
@@ -737,6 +752,7 @@ class SupabaseService {
         .insert({
           slug,
           name: venueData.name,
+          country_code: venueData.countryCode || "UG",
           location: venueData.location,
           description: venueData.description,
           background_image_url: venueData.backgroundImageUrl,
@@ -773,6 +789,7 @@ class SupabaseService {
       const updateData: any = {};
 
       if (data.name) updateData.name = data.name;
+      if (data.countryCode) updateData.country_code = data.countryCode;
       if (data.location) updateData.location = data.location;
       if (data.description) updateData.description = data.description;
       if (data.backgroundImageUrl) updateData.background_image_url = data.backgroundImageUrl;
@@ -967,21 +984,19 @@ class SupabaseService {
     }
   }
 
-  async getEvents(): Promise<Event[]> {
+  async getEvents(country = 'ALL'): Promise<Event[]> {
     try {
       // Get today's date at midnight to compare with event dates
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
-        .from("events")
-        .select("*")
-        .eq("is_deleted", false)
-        .gte("date", today.toISOString())
-        .order("date", { ascending: true })
-        .limit(10000);
+      const query = () => {
+        let request = supabase.from("events").select("*").eq("is_deleted", false).gte("date", today.toISOString());
+        if (country !== 'ALL') request = request.eq('country_code', country);
+        return request.order('date', { ascending: true }).order('slug');
+      };
+      const data = await loadPublicPages((start, end) => query().range(start, end));
 
-      if (error) throw error;
 
       const events: Event[] = [];
       if (data) {
@@ -989,6 +1004,8 @@ class SupabaseService {
           events.push({
             id: doc.slug,
             slug: doc.slug,
+            countryCode: doc.country_code || 'UG',
+            currency: doc.currency || 'UGX',
             name: doc.name,
             description: doc.description,
             date: new Date(doc.date),
@@ -1021,19 +1038,18 @@ class SupabaseService {
     }
   }
 
-  async getUpcomingEventVenueSlugs(): Promise<string[]> {
+  async getUpcomingEventVenueSlugs(country = 'ALL'): Promise<string[]> {
     try {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const { data, error } = await supabase
-        .from("events")
-        .select("venue_slug, event_status")
-        .eq("is_deleted", false)
-        .gte("date", today.toISOString())
-        .limit(10000);
+      const query = () => {
+        let request = supabase.from("events").select("venue_slug, event_status").eq("is_deleted", false).gte("date", today.toISOString());
+        if (country !== 'ALL') request = request.eq('country_code', country);
+        return request.order('slug');
+      };
+      const data = await loadPublicPages((start, end) => query().range(start, end));
 
-      if (error) throw error;
 
       return [...new Set((data || [])
         .filter((event) => event.venue_slug && event.event_status !== "cancelled")
@@ -1078,6 +1094,8 @@ class SupabaseService {
       return {
         id: data.slug,
         slug: data.slug,
+        currency: data.currency || "UGX",
+        countryCode: data.country_code || "UG",
         name: data.name,
         description: data.description,
         date: new Date(data.date),
@@ -1130,6 +1148,8 @@ class SupabaseService {
           events.push({
             id: doc.slug,
             slug: doc.slug,
+            countryCode: doc.country_code || "UG",
+            currency: doc.currency || "UGX",
             name: doc.name,
             description: doc.description,
             date: new Date(doc.date),
@@ -1193,6 +1213,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           .insert({
             slug,
             name: eventData.name,
+            country_code: eventData.countryCode || "UG",
+            currency: eventData.currency || "UGX",
             venue_slug: eventData.venueSlug,
             venue_name: eventData.venueName,
             description: eventData.description,
@@ -2002,6 +2024,8 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
           buyerEmail: row.buyer_email || row.buyerEmail,
           buyerPhone: row.buyer_phone || row.buyerPhone,
           quantity: row.quantity,
+          currency: row.currency || 'UGX',
+          countryCode: row.country_code || 'UG',
           totalAmount: row.total_amount ?? row.totalAmount ?? 0,
           basePrice: row.base_price ?? row.basePrice ?? 0,
           lateFee: row.late_fee ?? row.lateFee ?? 0,

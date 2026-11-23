@@ -5,6 +5,8 @@ import type { Timestamp } from "firebase/firestore"
 export type EventCreatorType = "user" | "regular_user" | "club_owner" | "admin"
 
 export interface Event {
+  countryCode?: string
+  currency?: string
   id: string
   slug: string
   name: string

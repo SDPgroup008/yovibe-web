@@ -11,10 +11,10 @@ const escapeHtml = (value) =>
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 
-const fmtMoney = (n) => "UGX " + Math.round(Number(n) || 0).toLocaleString("en-US");
+const fmtMoney = (n, currency = "UGX") => currency + " " + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 function renderReceiptHtml(payout) {
-  const amount = fmtMoney(payout.amount);
+  const amount = fmtMoney(payout.amount, payout.currency);
   const payoutId = escapeHtml(payout.id || payout.payoutId || "—");
   const txRef = escapeHtml(payout.transaction_reference || payout.payoutId || "—");
   const date = payout.processed_date
@@ -80,7 +80,7 @@ function renderReceiptHtml(payout) {
 }
 
 function renderReceiptText(payout) {
-  const amount = fmtMoney(payout.amount);
+  const amount = fmtMoney(payout.amount, payout.currency);
   const line = "------------------------------------------------";
   return [
     "YOVIBE — PAYOUT RECEIPT",

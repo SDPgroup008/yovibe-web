@@ -38,6 +38,7 @@ export function useDataCache<T>({
   const fetchData = useCallback(async (forceRefresh = false) => {
     if (!enabled) return;
 
+    const requestKey = cacheKey;
     const cachedSnapshot = dataCache.peek<T>(cacheKey);
     if (!forceRefresh && cachedSnapshot?.isFresh) {
       setData(cachedSnapshot.data);
@@ -53,16 +54,20 @@ export function useDataCache<T>({
 
     try {
       const freshData = await fetchFunction();
+      if (currentCacheKeyRef.current !== requestKey) return;
       dataCache.set(cacheKey, freshData, ttl);
       setData(freshData);
       onSuccess?.(freshData);
     } catch (err) {
+      if (currentCacheKeyRef.current !== requestKey) return;
       const error = err instanceof Error ? err : new Error('Unknown error');
       setError(error);
       onError?.(error);
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (currentCacheKeyRef.current === requestKey) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, [cacheKey, fetchFunction, ttl, enabled, onSuccess, onError]);
 
@@ -116,34 +121,37 @@ export function useDataCache<T>({
 }
 
 // Pre-configured hooks for common data fetching
-export function useCachedEvents() {
+export function useCachedEvents(country = 'ALL', ready = true) {
   return useDataCache({
-    cacheKey: CACHE_KEYS.EVENTS,
+    cacheKey: country === 'ALL' ? CACHE_KEYS.EVENTS : `${CACHE_KEYS.EVENTS}:${country}`,
+    enabled: ready,
     fetchFunction: async () => {
       const { default: SupabaseService } = await import('../services/SupabaseService');
-      return SupabaseService.getEvents();
+      return SupabaseService.getEvents(country);
     },
     ttl: 10 * 60 * 1000 // 10 minutes for events
   });
 }
 
-export function useCachedVenueEventSlugs() {
+export function useCachedVenueEventSlugs(country = 'ALL', ready = true) {
   return useDataCache({
-    cacheKey: CACHE_KEYS.VENUE_EVENT_SLUGS,
+    cacheKey: country === 'ALL' ? CACHE_KEYS.VENUE_EVENT_SLUGS : `${CACHE_KEYS.VENUE_EVENT_SLUGS}:${country}`,
+    enabled: ready,
     fetchFunction: async () => {
       const { default: SupabaseService } = await import('../services/SupabaseService');
-      return SupabaseService.getUpcomingEventVenueSlugs();
+      return SupabaseService.getUpcomingEventVenueSlugs(country);
     },
     ttl: 10 * 60 * 1000,
   });
 }
 
-export function useCachedVenues() {
+export function useCachedVenues(country = 'ALL', ready = true) {
   return useDataCache({
-    cacheKey: CACHE_KEYS.VENUES,
+    cacheKey: country === 'ALL' ? CACHE_KEYS.VENUES : `${CACHE_KEYS.VENUES}:${country}`,
+    enabled: ready,
     fetchFunction: async () => {
       const { default: SupabaseService } = await import('../services/SupabaseService');
-      return SupabaseService.getVenues();
+      return SupabaseService.getVenues(country);
     },
     ttl: 10 * 60 * 1000 // 10 minutes for venues
   });

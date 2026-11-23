@@ -1,5 +1,8 @@
 "use client"
 
+import CountrySelector from "../components/CountrySelector"
+import { isDiscoveryCountry, type CountryCode } from "../config/countries"
+
 import { publicSiteUrl } from "../config/runtime"
 
 import type React from "react"
@@ -54,6 +57,7 @@ const VenueDetailScreen: React.FC = () => {
   const [fullScreenImageUri, setFullScreenImageUri] = useState<string | null>(null)
   const [showOwnershipModal, setShowOwnershipModal] = useState(false)
   const [showEditVenue, setShowEditVenue] = useState(false)
+  const [editCountry, setEditCountry] = useState<CountryCode>('UG')
   const [editVenueName, setEditVenueName] = useState("")
   const [editVenueLocation, setEditVenueLocation] = useState("")
   const [editVenueDescription, setEditVenueDescription] = useState("")
@@ -279,6 +283,7 @@ const VenueDetailScreen: React.FC = () => {
 
   const openEditVenue = () => {
     if (!venue) return
+    setEditCountry(venue.countryCode && isDiscoveryCountry(venue.countryCode) ? venue.countryCode : 'UG')
     setEditVenueName(venue.name || "")
     setEditVenueLocation(venue.location || "")
     setEditVenueDescription(venue.description || "")
@@ -353,6 +358,7 @@ const VenueDetailScreen: React.FC = () => {
       if (editVenueImageUri) backgroundImageUrl = await SupabaseService.uploadVenueImage(editVenueImageUri)
 
       const updatedDetails = {
+        countryCode: editCountry,
         name: editVenueName.trim(),
         location: editVenueLocation.trim(),
         description: editVenueDescription.trim(),
@@ -1147,6 +1153,7 @@ const VenueDetailScreen: React.FC = () => {
               <TextInput style={styles.input} value={editVenueName} onChangeText={setEditVenueName} placeholder="Venue name" placeholderTextColor="#666666" />
 
               <Text style={styles.inputLabel}>Location *</Text>
+              <CountrySelector value={editCountry} onSelect={setEditCountry} />
               <TextInput style={styles.input} value={editVenueLocation} onChangeText={setEditVenueLocation} placeholder="Venue location" placeholderTextColor="#666666" />
 
               <Text style={styles.inputLabel}>Description *</Text>

@@ -1,3 +1,4 @@
+import { lateFeeStartsAt, priceScale } from '../../shared/eventMoney'
 import type { PaymentIntent } from "../models/Ticket"
 import supabase from "../config/supabase"
 
@@ -20,6 +21,7 @@ export class PesaPalService {
     quantity: number,
     eventStartTime: Date,
     lateFeePercent?: number,
+    currency = "UGX", country = "UG",
   ): {
     subtotal: number
     lateFee: number
@@ -27,21 +29,21 @@ export class PesaPalService {
     isLatePurchase: boolean
   } {
     const now = new Date()
-    const sevenAm = new Date(eventStartTime)
-    sevenAm.setHours(7, 0, 0, 0)
+    const sevenAm = lateFeeStartsAt(eventStartTime, country)
 
-    const subtotal = basePrice * quantity
+    const scale = priceScale(country, currency)
+    const subtotal = Math.round(basePrice * quantity * scale) / scale
     let lateFee = 0
 
     if (now >= sevenAm) {
       const pct = lateFeePercent ?? this.LATE_FEE_PERCENTAGE
-      lateFee = Math.round(subtotal * pct / 100)
+      lateFee = Math.round(subtotal * scale * pct / 100) / scale
     }
 
     return {
       subtotal,
       lateFee,
-      total: subtotal + lateFee,
+      total: Math.round((subtotal + lateFee) * scale) / scale,
       isLatePurchase: lateFee > 0,
     }
   }

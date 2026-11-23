@@ -65,6 +65,11 @@ exports.handler = async (event) => {
     const verification = await verifyPawaPayDeposit(depositId);
     /* console.log('[PawaPayCallback] Verified status:', verification.status); */
 
+    const adminForAttempt = getAdminClient();
+    const { data: attempt, error: attemptError } = await adminForAttempt.from('country_payment_attempts').select('*').eq('id', depositId).maybeSingle();
+    if (attemptError) throw attemptError;
+    if (attempt?.status === 'pending') await require('../shared/reconcileCountryPayment').reconcileCountryPayment(adminForAttempt, attempt, verification);
+
     // 3. A deposit that never completed must not leave live tickets behind.
     if (verification.status === 'failed') {
       const result = await markTicketsByPayment(getAdminClient(), { depositId, status: 'cancelled', refundStatus: null });

@@ -26,7 +26,7 @@ function failureDetails(data) {
   }
 }
 
-async function predictProvider(baseUrl, apiKey, phoneNumber) {
+async function predictProvider(baseUrl, apiKey, phoneNumber, market) {
   const response = await fetch(`${baseUrl}/predict-provider`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -40,8 +40,9 @@ async function predictProvider(baseUrl, apiKey, phoneNumber) {
     error.failureCode = failure.code
     throw error
   }
-  if (!['UG', 'UGA'].includes(String(data.country || '').toUpperCase()) || !UGANDA_PROVIDERS.has(data.provider)) {
-    const error = new Error('The mobile-money number is not supported for Uganda')
+  const allowedCountries = market ? [market.country, market.countryCode] : ['UG', 'UGA'];
+  if (!allowedCountries.includes(String(data.country || '').toUpperCase()) || (market ? data.provider !== market.provider : !UGANDA_PROVIDERS.has(data.provider))) {
+    const error = new Error('The mobile-money number does not match the selected country and provider')
     error.statusCode = 422
     throw error
   }
@@ -74,31 +75,42 @@ exports.handler = async (event, context) => {
 
     const numericAmount = Number(amount)
     const normalizedCurrency = String(currency || 'UGX').toUpperCase()
-    const formattedPhone = normalizeUgandanPhone(phoneNumber)
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || !Number.isInteger(numericAmount)) {
+    let attempt, route, admin;
+    if (body.checkout) {
+      admin = require('../shared/supabaseAdmin').getAdminClient();
+      attempt = await require('../shared/checkoutAttempt').prepareAttempt(body, admin);
+      route = await require('../shared/marketPayments').paymentRoute({ country: attempt.country_code, currency: attempt.currency,
+        operation: 'DEPOSIT', provider, amount: attempt.amount, phoneNumber });
+    }
+    const formattedPhone = route?.phoneNumber || normalizeUgandanPhone(phoneNumber)
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0 || (!route && !Number.isInteger(numericAmount))) {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Amount must be a positive whole number for UGX' }) }
     }
-    if (numericAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX) {
+    if (normalizedCurrency === 'UGX' && numericAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX) {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE }) }
     }
-    if (normalizedCurrency !== 'UGX') {
+    if (!route && normalizedCurrency !== 'UGX') {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Only UGX mobile-money deposits are supported' }) }
     }
     if (!formattedPhone) {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Enter a valid Ugandan mobile-money number' }) }
     }
-    if (!UGANDA_PROVIDERS.has(provider)) {
+    if (!route && !UGANDA_PROVIDERS.has(provider)) {
       return { statusCode: 400, body: JSON.stringify({ success: false, error: 'Unsupported Ugandan mobile-money provider' }) }
     }
 
-    const depositId = crypto.randomUUID()
     const apiKey = getApiKey()
     const baseUrl = getPawaPayBaseUrl()
-    const prediction = await predictProvider(baseUrl, apiKey, formattedPhone)
+    const prediction = await predictProvider(baseUrl, apiKey, formattedPhone, route)
+    const persisted = attempt ? await require('../shared/checkoutAttempt').saveAttempt(admin, attempt, formattedPhone) : null
+    const depositId = persisted?.id || crypto.randomUUID()
+    if (persisted?.status === 'completed') {
+      return { statusCode: 200, body: JSON.stringify({ success: true, depositId, status: 'COMPLETED' }) }
+    }
 
     const payload = {
       depositId,
-      amount: String(numericAmount),
+      amount: route?.amount || String(numericAmount),
       currency: normalizedCurrency,
       payer: {
         type: "MMO",
@@ -125,6 +137,7 @@ exports.handler = async (event, context) => {
     /* console.log("📥 PawaPay response:", JSON.stringify(data, null, 2)) */
 
     if (data.status === "REJECTED" || !response.ok) {
+      if (attempt && data.status === "REJECTED") await admin.from("country_payment_attempts").update({ status: "failed" }).eq("id", depositId).eq("status", "pending")
       const failure = failureDetails(data)
       return {
         statusCode: response.ok ? 422 : response.status,

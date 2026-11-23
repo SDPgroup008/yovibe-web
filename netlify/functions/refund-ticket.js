@@ -43,7 +43,7 @@ async function sendRefundNotification(admin, type, refund) {
       approved: `Your refund ${refund.request_reference} has been approved`,
       rejected: `Your refund ${refund.request_reference} has been rejected`,
       executed: `Refund ${refund.request_reference} submitted to payment provider`,
-      completed: `Refund ${refund.request_reference} completed — UGX ${Number(refund.refunded_amount || refund.approved_amount).toLocaleString()}`,
+      completed: `Refund ${refund.request_reference} completed — ${refund.currency || 'UGX'} ${Number(refund.refunded_amount || refund.approved_amount).toLocaleString()}`,
       chargeback: `Chargeback filed for refund ${refund.request_reference}`,
     };
     if (refund.buyer_id) {
@@ -143,13 +143,22 @@ async function submitPesaPal(refund) {
 async function submitPawaPay(refund) {
   const token = requiredEnv('PAWAPAY_API_KEY');
   const baseUrl = assertPawaPayUrl(requiredEnv('PAWAPAY_API_URL'));
-  const externalRefundId = refund.external_refund_id || uuid();
+  const externalRefundId = refund.external_refund_id || refund.id;
+  const deposit = await require('../shared/ticketFulfillment').verifyPawaPayDeposit(refund.processor_reference);
+  if (deposit.status !== 'completed' || deposit.depositId !== refund.processor_reference ||
+      deposit.currency !== refund.currency || Number(refund.approved_amount) > Number(deposit.amount)) {
+    throw new Error('Refund requires reconciliation with the original completed deposit');
+  }
+  const route = await require('../shared/marketPayments').paymentRoute({
+    country: refund.country_code || 'UG', currency: refund.currency, amount: refund.approved_amount,
+    operation: 'REFUND', provider: deposit.provider,
+  });
   const response = await fetch(`${baseUrl}/refunds`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       refundId: externalRefundId, depositId: refund.processor_reference,
-      amount: String(refund.approved_amount), currency: refund.currency || 'UGX',
+      amount: route.amount, currency: refund.currency,
       clientReferenceId: refund.request_reference,
       metadata: [{ orderId: refund.payment_reference || refund.request_reference }],
     }),

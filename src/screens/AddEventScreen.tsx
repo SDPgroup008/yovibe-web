@@ -1,5 +1,8 @@
 ﻿"use client"
 
+import CountrySelector from "../components/CountrySelector"
+import { DISCOVERY_COUNTRIES, type CountryCode } from "../config/countries"
+
 import React, { useState, useEffect } from "react"
 import {
   View,
@@ -202,7 +205,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [imageFile, setImageFile] = useState<any>(null)
   const [isFeatured, setIsFeatured] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [venues, setVenues] = useState<Array<{ id: string; slug?: string; name: string }>>([])
+  const [venues, setVenues] = useState<Array<{ id: string; slug?: string; name: string; countryCode?: string }>>([])
   const [selectedVenueId, setSelectedVenueId] = useState(route.params?.venueId ?? "")
   const [selectedVenueName, setSelectedVenueName] = useState(route.params?.venueName ?? "")
   const [showVenueSelector, setShowVenueSelector] = useState(false)
@@ -231,6 +234,10 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [newFeeName, setNewFeeName] = useState("")
   const [newFeeAmount, setNewFeeAmount] = useState("")
   const [newFeeIsTable, setNewFeeIsTable] = useState(false)
+  const [customCountry, setCustomCountry] = useState<CountryCode>('UG')
+  const [congoCurrency, setCongoCurrency] = useState('CDF')
+  const eventCountry = useCustomVenue ? customCountry : venues.find(v => v.id === selectedVenueId || v.slug === selectedVenueId)?.countryCode
+  const eventCurrency = eventCountry === 'CD' ? congoCurrency : DISCOVERY_COUNTRIES.find(c => c.code === eventCountry)?.currencies[0]
   const [newTableSize, setNewTableSize] = useState("")
   const [showContactForm, setShowContactForm] = useState(false)
   const [ticketContacts, setTicketContacts] = useState<Array<{ number: string; type: "call" | "whatsapp" }>>([])
@@ -325,7 +332,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const loadVenues = async () => {
     try {
       const venuesList = await SupabaseService.getVenues()
-      setVenues(venuesList.map((venue) => ({ id: venue.id, slug: venue.slug, name: venue.name })))
+      setVenues(venuesList.map((venue) => ({ id: venue.id, slug: venue.slug, name: venue.name, countryCode: venue.countryCode })))
       // Set default venue if provided in route params
       if (route.params?.venueId) {
         const selectedVenue = venuesList.find((venue) => venue.id === route.params?.venueId)
@@ -893,6 +900,7 @@ const AddEventScreen: React.FC<any> = (props) => {
           ownerId: user.id,
           createdAt: new Date(),
           // Narrow the literal so it matches the Venue type ("nightlife" | "recreation")
+          countryCode: customCountry,
           venueType: "nightlife" as "nightlife",
           todayImages: [] as any[],
           weeklyPrograms: {} as Record<string, any>,
@@ -938,6 +946,8 @@ const AddEventScreen: React.FC<any> = (props) => {
         date,
         time: `${new Date(`2000-01-01T${startTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${new Date(`2000-01-01T${endTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
         artists: artists.split(",").map((artist) => artist.trim()),
+        countryCode: eventCountry,
+        currency: eventCurrency,
         venueSlug: venueId,
         venueName,
         posterImageUrl: imageUrl || "",
@@ -1164,6 +1174,8 @@ const AddEventScreen: React.FC<any> = (props) => {
             ) : (
               <>
                 <View style={styles.labelContainer}>
+                  <Text style={styles.label}>Country *</Text>
+                  <CountrySelector value={customCountry} onSelect={setCustomCountry} />
                   <Text style={styles.label}>Custom Venue Name *</Text>
                   {errors.customVenueName && <Text style={styles.errorStar}>*</Text>}
                 </View>
@@ -1254,7 +1266,13 @@ const AddEventScreen: React.FC<any> = (props) => {
         {errors.location && <Text style={styles.errorText}>Please enter the city location</Text>}
 
         <View style={styles.labelContainer}>
-          <Text style={styles.label}>Entry Fees *</Text>
+          {eventCountry === 'CD' && <View style={styles.providerButtons}>{['CDF', 'USD'].map(code => (
+            <TouchableOpacity key={code} accessibilityRole="radio" accessibilityState={{ checked: eventCurrency === code }}
+              style={[styles.providerButton, eventCurrency === code && styles.providerButtonActive]} onPress={() => setCongoCurrency(code)}>
+              <Text style={styles.providerButtonText}>{code}</Text>
+            </TouchableOpacity>
+          ))}</View>}
+          <Text style={styles.label}>Entry Fees ({eventCurrency || 'select venue'}) *</Text>
           {errors.entryFees && <Text style={styles.errorStar}>*</Text>}
         </View>
         <View style={styles.checkboxContainer}>
@@ -1481,7 +1499,7 @@ const AddEventScreen: React.FC<any> = (props) => {
                   <Text style={styles.feeText}>
                     {fee.name}{fee.isTable ? ` (Table: ${fee.tableSize} pax)` : ""}
                   </Text>
-                  <Text style={styles.feeAmountText}>UGX {fee.amount}</Text>
+                  <Text style={styles.feeAmountText}>{eventCurrency} {fee.amount}</Text>
                 </View>
                 <TouchableOpacity onPress={() => removeFee(index)}>
                   <Ionicons name="trash-outline" size={20} color="#FF3B30" />

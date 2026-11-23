@@ -15,7 +15,7 @@ const sections: Array<{ key: Section; label: string; icon: keyof typeof Ionicons
   { key: "guests", label: "Guest list", icon: "list-outline" }, { key: "reports", label: "Reports", icon: "bar-chart-outline" },
 ];
 
-const amount = (value: number) => `UGX ${Number(value || 0).toLocaleString()}`;
+
 const emptyOverview: GuestTicketOverview = { allocations: [], guests: [], sponsorships: [], summary: { complimentaryIssued: 0, sponsoredDistributed: 0, reserved: 0, cancelled: 0, checkedIn: 0, faceValue: 0, sponsorshipRevenue: 0 } };
 
 function parseRecipients(csv: string): { valid: GuestRecipient[]; invalid: number[] } {
@@ -43,6 +43,7 @@ const GuestTicketsScreen: React.FC = () => {
   const { currentPath, navigate, goBack } = useRouter();
   const eventSlug = currentPath.split("/").filter(Boolean)[2] || "";
   const [event, setEvent] = useState<Event | null>(null);
+  const amount = (value: number) => `${event?.currency || "UGX"} ${Number(value || 0).toLocaleString()}`;
   const [overview, setOverview] = useState<GuestTicketOverview>(emptyOverview);
   const [section, setSection] = useState<Section>("overview");
   const [loading, setLoading] = useState(true);

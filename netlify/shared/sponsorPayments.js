@@ -2,6 +2,9 @@ async function activateSponsorPayment(admin, order, verification) {
   if (!order) return null;
   if (order.payment_status === 'paid') return order;
   if (!verification || verification.status !== 'completed') return null;
+  if (verification.currency !== order.currency || !require('./marketPayments').amountMatches(verification.amount, order.amount_paid)) {
+    throw new Error('Verified sponsorship amount or currency does not match');
+  }
   const { data: updated, error } = await admin.from('ticket_sponsorship_orders').update({
     payment_status: 'paid', amount_paid: Number(order.amount_paid || 0), paid_at: new Date().toISOString(),
     payout_eligible: true, payout_status: 'pending', updated_at: new Date().toISOString(),

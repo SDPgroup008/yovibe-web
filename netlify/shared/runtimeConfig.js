@@ -74,6 +74,12 @@ function assertPawaPayUrl(value) {
   return url.toString().replace(/\/$/, '');
 }
 
+function assertPublicMediaUrl(value) {
+  if (isStaging() && parseUrl('R2_PUBLIC_URL', value).hostname === PRODUCTION_R2_PUBLIC_HOST) {
+    throw new Error('Staging R2 configuration points to the production public bucket URL');
+  }
+}
+
 function assertR2Config(config) {
   parseUrl('R2_ENDPOINT', config.endpoint);
   if (isStaging()) {
@@ -86,9 +92,7 @@ function assertR2Config(config) {
     if (config.kind === 'private' && config.publicUrl) {
       throw new Error('Private R2 configuration must not expose a public URL');
     }
-    if (config.publicUrl && parseUrl('R2_PUBLIC_URL', config.publicUrl).hostname === PRODUCTION_R2_PUBLIC_HOST) {
-      throw new Error('Staging R2 configuration points to the production public bucket URL');
-    }
+    if (config.publicUrl) assertPublicMediaUrl(config.publicUrl);
   }
   return config;
 }
@@ -106,5 +110,6 @@ module.exports = {
   assertPesapalUrl,
   assertPawaPayUrl,
   assertR2Config,
+  assertPublicMediaUrl,
   getSiteUrl,
 };

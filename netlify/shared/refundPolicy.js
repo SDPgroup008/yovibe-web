@@ -218,7 +218,7 @@ function buildRefundRow({ eligibility, buyerId, buyerEmail, idempotencyKey, note
     processor_confirmation_code: ticket.pesapal_confirmation_code || null,
     reason_code: eligibility.reasonCode || reasonForEventStatus(eligibility.eventStatus),
     requested_amount: amount,
-    currency: 'UGX',
+    currency: ticket.currency || event.currency || 'UGX',
     idempotency_key: idempotencyKey,
     buyer_note: sanitizeBuyerNote(note),
   };

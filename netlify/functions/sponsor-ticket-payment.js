@@ -8,8 +8,9 @@ const reply = (statusCode, body) => ({ statusCode, headers, body: JSON.stringify
 
 function quoteForPaymentMethod(order, method) {
   const subtotal = Math.max(0, Number(order.face_value || 0) - Number(order.discount_amount || 0));
-  const gatewayFee = calculateGatewayFee(method, subtotal);
-  return { subtotal, gatewayFee, total: subtotal + gatewayFee };
+  const scale = require("../../shared/eventMoney").priceScale(order.country_code || "UG", order.currency || "UGX");
+  const gatewayFee = Math.round(calculateGatewayFee(method, subtotal) * scale) / scale;
+  return { subtotal, gatewayFee, total: Math.round((subtotal + gatewayFee) * scale) / scale };
 }
 
 async function resetPendingPayment(admin, orderId, subtotal) {
@@ -23,7 +24,7 @@ async function resetPendingPayment(admin, orderId, subtotal) {
 }
 
 async function orderForToken(admin, token) {
-  const { data: order, error } = await admin.from('ticket_sponsorship_orders').select('*, ticket_allocations(*, events(name,date,time,venue_name,poster_image_url))').eq('payment_token_hash', hashSecret(`sponsor:${token}`)).maybeSingle();
+  const { data: order, error } = await admin.from('ticket_sponsorship_orders').select('*, ticket_allocations(*, events(name,date,time,venue_name,poster_image_url,country_code,currency))').eq('payment_token_hash', hashSecret(`sponsor:${token}`)).maybeSingle();
   if (error) throw error;
   if (!order || (order.payment_token_expires_at && new Date(order.payment_token_expires_at) <= new Date())) throw Object.assign(new Error('This sponsor payment link is invalid or expired'), { statusCode: 404 });
   return order;
@@ -70,6 +71,7 @@ exports.handler = async (event) => {
     if (order.payment_status === 'processing') throw Object.assign(new Error('A payment attempt is already in progress. Complete it or wait for verification before trying again.'), { statusCode: 409 });
     const paymentMethod = String(body.paymentMethod || '').trim();
     if (!['credit_card', 'mobile_money'].includes(paymentMethod)) throw Object.assign(new Error('Choose card or mobile money before continuing'), { statusCode: 422 });
+    if (paymentMethod === 'credit_card' && order.currency !== 'UGX') throw Object.assign(new Error('Card payments unavailable for this currency'), { statusCode: 422 });
     const quote = quoteForPaymentMethod(order, paymentMethod);
     const { data: paymentOrder, error: paymentOrderError } = await admin.from('ticket_sponsorship_orders').update({
       payment_method: paymentMethod,
@@ -106,14 +108,18 @@ exports.handler = async (event) => {
     }
     let result;
     try {
-      result = await handler({ httpMethod: 'POST', body: JSON.stringify({ amount: Math.round(Number(paymentOrder.amount_paid)), currency: paymentOrder.currency, phoneNumber: sponsorPhone, provider: body.provider, buyerEmail: paymentOrder.sponsor_email, buyerName: paymentOrder.sponsor_name }) });
+      result = await handler({ httpMethod: 'POST', body: JSON.stringify({ checkout: { purpose: 'sponsorship', eventSlug: order.ticket_allocations.event_slug, subjectId: order.id }, amount: paymentOrder.amount_paid, currency: paymentOrder.currency, phoneNumber: sponsorPhone, provider: body.provider, buyerEmail: paymentOrder.sponsor_email, buyerName: paymentOrder.sponsor_name }) });
     } catch (error) {
       await resetPendingPayment(admin, paymentOrder.id, quote.subtotal);
       throw error;
     }
     const data = JSON.parse(result.body || '{}');
     if (result.statusCode >= 400 || !data.success) {
-      await resetPendingPayment(admin, paymentOrder.id, quote.subtotal);
+      const { data: pending, error: pendingError } = await admin.from('country_payment_attempts')
+        .select('id').eq('purpose', 'sponsorship').eq('subject_id', paymentOrder.id)
+        .eq('status', 'pending').maybeSingle();
+      if (pendingError) throw pendingError;
+      if (!pending) await resetPendingPayment(admin, paymentOrder.id, quote.subtotal);
       throw Object.assign(new Error(data.error || 'Unable to start mobile-money payment'), { statusCode: 502 });
     }
     await admin.from('ticket_sponsorship_orders').update({ sponsor_phone: sponsorPhone, provider_deposit_id: data.depositId, payment_reference: data.depositId, updated_at: new Date().toISOString() }).eq('id', paymentOrder.id);

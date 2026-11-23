@@ -41,6 +41,29 @@ exports.handler = async (event) => {
     if (!confirmation.confirmed) return response(200, { success: false, status: 'pending', message: 'Payment is still being verified' });
 
     const admin = getAdminClient();
+    const { data: plan, error: planError } = await admin.from('ticket_installment_plans').select('*').eq('id', planId).single();
+    if (planError) throw planError;
+    const part = plan.installments?.[installmentIndex];
+    if (!part) return response(422, { error: 'Unknown installment' });
+    const { installmentAmounts } = require('../../shared/eventMoney');
+    const { amountMatches } = require('../shared/marketPayments');
+    const expected = installmentAmounts(plan.total_amount, plan.installments.length, plan.country_code || 'UG', plan.currency || 'UGX')[installmentIndex];
+    if (!expected || !amountMatches(part.amount, expected.amount) || !amountMatches(part.totalDue, expected.totalDue)) {
+      return response(409, { error: 'Installment amount requires reconciliation' });
+    }
+    const id = method === 'mobile_money' ? body.depositId : body.orderId;
+    require('../shared/settlement').checkPayment(confirmation.verificationResult, { method, id, amount: part.totalDue, currency: plan.currency || 'UGX' });
+    if (method === 'mobile_money') {
+      const { data: attempt, error } = await admin.from('country_payment_attempts').select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (attempt ? attempt.purpose !== 'installment' || attempt.subject_id !== planId || attempt.installment_index !== installmentIndex : plan.currency !== 'UGX') {
+        return response(409, { error: 'Deposit does not belong to this installment' });
+      }
+    }
+    if (part.status === 'paid') {
+      if (id !== (method === 'mobile_money' ? part.depositId : part.orderId)) return response(409, { error: 'Already paid with another transaction' });
+      return response(200, { success: true, planComplete: plan.status === 'completed', installmentsPaid: plan.installments_paid });
+    }
     const payment = {
       depositId: body.depositId || null,
       orderId: body.orderId || null,

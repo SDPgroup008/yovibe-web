@@ -1,5 +1,9 @@
 "use client"
 
+import { parseEntryFee } from "../config/countries"
+import { useMobileMoneyOptions } from "../hooks/useMobileMoneyOptions"
+import { estimateFee } from "../../netlify/shared/mobileMoneyFees"
+
 import type React from "react"
 import { useState, useMemo, useEffect, useRef } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, ScrollView, TextInput, Image, Modal, FlatList, Platform, Linking } from "react-native"
@@ -338,7 +342,12 @@ const TicketPurchaseScreen: React.FC = () => {
   }, [eventId])
   // Payment method state
   const [paymentMethod, setPaymentMethod] = useState<"mobile_money" | "credit_card" | "bank_transfer" | null>(null)
-  const [mobileMoneyProvider, setMobileMoneyProvider] = useState<"mtn" | "airtel">("mtn")
+  const currency = event?.currency || "UGX"
+  const country = event?.countryCode || "UG"
+  const routes = useMobileMoneyOptions(event ? country : undefined, currency)
+  const [chosenProvider, setMobileMoneyProvider] = useState("")
+  const mobileMoneyProvider = routes.options.find(p => p.provider === chosenProvider)?.provider || routes.options[0]?.provider || ""
+  const activeProvider = routes.options.find(p => p.provider === mobileMoneyProvider)
   const [mobileMoneyNumber, setMobileMoneyNumber] = useState("")
   const [mobileMoneyName, setMobileMoneyName] = useState("")
   const [cardNumber, setCardNumber] = useState("")
@@ -426,7 +435,7 @@ const TicketPurchaseScreen: React.FC = () => {
     if (paymentMethod === "mobile_money") {
       if (mobileMoneyLimitExceeded) errs.paymentMethod = mobileMoneyLimitMessage
       if (!mobileMoneyNumber.trim()) errs.mobileMoneyNumber = "Please enter your mobile money number"
-      else if (!PHONE_REGEX.test(mobileMoneyNumber.trim())) errs.mobileMoneyNumber = "Enter a valid Ugandan phone (e.g. 0772123456)"
+      else if (!mobileMoneyProvider || !/^\+?[\d ()-]{7,20}$/.test(mobileMoneyNumber.trim())) errs.mobileMoneyNumber = "Select an available provider and enter its mobile-money number"
     }
     if (paymentMethod === "credit_card") {
       if (!cardFirstName.trim()) errs.cardFirstName = "Please enter your first name for billing"
@@ -559,12 +568,39 @@ const TicketPurchaseScreen: React.FC = () => {
     setStatusMessage("Payment is still being verified. You can retry verification or cancel. Do not pay again unless the payment is confirmed failed.")
   }
 
+  const paymentSubject = useRef<string | null>(null)
+  const readCheckoutPhoto = async (): Promise<{ buyerPhotoUrl?: string; buyerPhotoDataUrl?: string }> => {
+    if (!securityPhotoEnabled || !photoCaptured || !buyerPhotoUrl) return {}
+    if (buyerPhotoUrl.startsWith("r2-private://")) return { buyerPhotoUrl }
+    const response = await fetch(buyerPhotoUrl)
+    if (!response.ok) throw new Error("Unable to read the ticket photo")
+    const blob = await response.blob()
+    if (blob.size > 4 * 1024 * 1024 || !["image/jpeg", "image/png", "image/webp"].includes(blob.type)) {
+      throw new Error("Choose a JPEG, PNG, or WebP ticket photo of up to 4 MB")
+    }
+    return { buyerPhotoDataUrl: await blobToDataURL(blob) }
+  }
+  const prepareTicketAttempt = async () => {
+    paymentSubject.current ??= uuidv4()
+    const subjectId = paymentSubject.current
+    const buyerNames = getBuyerNames()
+    const emails = getBuyerEmails()
+    const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || emails[0] || ""
+    return { purpose: "ticket", subjectId, eventSlug: event!.slug || event!.id, quantity: actualTicketCount,
+      ticketType: selectedTicketTypeName, buyerNames, payerEmail, buyerId: user?.id || null,
+      deliveryEmails: emailDistribution === "single" ? Array(actualTicketCount).fill(visitorEmail.trim() || emails[0] || payerEmail) : emails,
+      ...(await readCheckoutPhoto()),
+      inventoryHoldIds, inventorySessionId: checkoutSessionIdRef.current,
+      seatNumbers: isTableEntry ? undefined : perPersonSeats,
+      tableNumbers: isTableEntry ? tableSeats.flatMap(t => Array(tableSize).fill(t)).slice(0, actualTicketCount) : undefined }
+  }
+
   const createTicketAndNavigate = async (isMobileMoney: boolean, verificationResult: any, pollDepositId?: string, pollOrderId?: string, pollTrackingId?: string) => {
     // Phase 1: ticket creation is server-side. We submit the full purchase
     // payload; the server re-verifies the payment with the provider and only
     // then creates the tickets, uploads the QR/photo, emails, and records the
     // fulfillment row. The client no longer writes ticket rows.
-    const fulfillmentId = activeFulfillmentId ?? uuidv4()
+    const fulfillmentId = paymentSubject.current ?? activeFulfillmentId ?? uuidv4()
     setActiveFulfillmentId(fulfillmentId)
 
     try {
@@ -584,33 +620,9 @@ const TicketPurchaseScreen: React.FC = () => {
       const payerEmail = user?.email || buyerContactEmail.trim() || visitorEmail.trim() || buyerEmails[0]?.trim() || ""
       setDeliveryEmail(deliveryEmails[0] || payerEmail)
 
-      const includePhoto = securityPhotoEnabled && photoCaptured
-
-      let hostedBuyerPhotoUrl: string | undefined
-      let buyerPhotoDataUrl: string | undefined
-      if (includePhoto && buyerPhotoUrl) {
-        if (/^r2-private:\/\//i.test(buyerPhotoUrl)) {
-          hostedBuyerPhotoUrl = buyerPhotoUrl
-        } else {
-          setStatusMessage("Uploading security photo...")
-          try {
-            const photoResponse = await fetch(buyerPhotoUrl)
-            if (!photoResponse.ok) throw new Error(`Could not read security photo (${photoResponse.status})`)
-            const photoBlob = await photoResponse.blob()
-            if (photoBlob.size > 4 * 1024 * 1024) {
-              throw new Error("Security photo exceeds the 4 MB checkout limit")
-            }
-            if (!["image/jpeg", "image/png", "image/webp"].includes(photoBlob.type)) {
-              throw new Error("Security photo must be JPEG, PNG, or WebP")
-            }
-            buyerPhotoDataUrl = await blobToDataURL(photoBlob)
-          } catch (photoError: any) {
-            // Preserve the previous behavior: ticket fulfillment may continue
-            // without an optional photo if storage is temporarily unavailable.
-            console.warn("[TicketPurchase] Security photo upload failed:", photoError?.message || photoError)
-          }
-        }
-      }
+      const photo = isMobileMoney && paymentSubject.current ? {} : await readCheckoutPhoto()
+      const hostedBuyerPhotoUrl = photo.buyerPhotoUrl
+      const buyerPhotoDataUrl = photo.buyerPhotoDataUrl
 
       setProgressStep(1) // Saving ticket
       const fulfillPayload = {
@@ -736,9 +748,9 @@ const TicketPurchaseScreen: React.FC = () => {
   // Get base price from selected ticket type or event entry fees
   // For table entries, calculate price per person from total table price
   const rawBasePrice = selectedTicketType
-    ? Number.parseInt(selectedTicketType.amount?.replace(/[^0-9]/g, "") || "0")
+    ? parseEntryFee(selectedTicketType.amount)
     : event && event.entryFees && event.entryFees.length > 0
-      ? Number.parseInt(event.entryFees[0].amount?.replace(/[^0-9]/g, "") || "0")
+      ? parseEntryFee(event.entryFees[0].amount)
       : 0
   
   // For table entries: divide total table price by number of people
@@ -749,15 +761,15 @@ const TicketPurchaseScreen: React.FC = () => {
     if (!event || !event.date) {
       return { subtotal: 0, lateFee: 0, total: 0, isLatePurchase: false }
     }
-    return PesaPalService.calculateTicketPrice(basePrice, actualTicketCount, event.date, event.lateFeePercent)
-  }, [basePrice, actualTicketCount, event?.date])
+    return PesaPalService.calculateTicketPrice(basePrice, actualTicketCount, event.date, event.lateFeePercent, currency, country)
+  }, [basePrice, actualTicketCount, event?.date, event?.lateFeePercent, currency, country])
 
   const { subtotal, lateFee, total, isLatePurchase } = pricing
 
   // Installment preview � recalculated whenever plan type or total changes
   const installmentPreview = useMemo(() => {
     if (!useInstallments || !event?.date) return []
-    return InstallmentService.previewPlan(total, installmentPlanType, event.date)
+    return InstallmentService.previewPlan(total, installmentPlanType, event.date, event.countryCode, event.currency)
   }, [useInstallments, installmentPlanType, total, event?.date])
 
   // pawaPay limits one deposit, not the value of a whole installment plan.
@@ -766,7 +778,8 @@ const TicketPurchaseScreen: React.FC = () => {
   const mobileMoneyChargeAmount = useInstallments
     ? (installmentPreview[0]?.totalDue ?? 0)
     : total
-  const mobileMoneyLimitExceeded = mobileMoneyChargeAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX
+  const customerFee = estimateFee(mobileMoneyProvider, "DEPOSIT", mobileMoneyChargeAmount, true)
+  const mobileMoneyLimitExceeded = country === "UG" && mobileMoneyChargeAmount > PAWAPAY_MOBILE_MONEY_MAX_UGX
   const mobileMoneyLimitMessage = useInstallments
     ? "The limit for mobile money is 5,000,000 for the amount due today. Use Credit card or reduce the total due today and continue with mobile money"
     : PAWAPAY_MOBILE_MONEY_LIMIT_MESSAGE
@@ -859,7 +872,7 @@ const handleInstallmentPurchase = async () => {
     }
     setFieldErrors({})
     const errs = validatePurchaseForm()
-    delete errs.paymentMethod; delete errs.mobileMoneyNumber; delete errs.cardFirstName; delete errs.cardLastName; delete errs.cardPhone
+    if (paymentMethod === "credit_card" && currency !== "UGX") errs.paymentMethod = "Card payment is unavailable for this currency"
     if (Object.keys(errs).length > 0) { handleFieldErrors(errs); return }
 
     const buyerNamesList = getBuyerNames()
@@ -1049,14 +1062,15 @@ const handleInstallmentPurchase = async () => {
       if (paymentMethod === "mobile_money") {
         /* console.log("[handlePurchase] Mobile Money flow - total:", total, "number:", mobileMoneyNumber) */
         // Handle mobile money payment via PawaPay
-        const provider = mobileMoneyProvider === "mtn" ? "MTN_MOMO_UGA" : "AIRTEL_OAPI_UGA"
+        const provider = mobileMoneyProvider
         
         /* console.log("?? Initiating mobile money payment via PawaPay...") */
         const depositResult = await PawaPayService.initiateDeposit(
           total,
-          "UGX",
+          currency,
           mobileMoneyNumber,
-          provider
+          provider,
+          await prepareTicketAttempt()
         )
 
         if (!depositResult.success) {
@@ -1370,7 +1384,7 @@ const handleInstallmentPurchase = async () => {
                       ) : null}
                     </View>
                     <Text style={[styles.tierCardPrice, soldOut && { color: "#555" }]}>
-                      UGX {Number.parseInt(String(fee.amount || "0").replace(/[^0-9]/g, "") || "0").toLocaleString()}
+                      {currency} {parseEntryFee(fee.amount).toLocaleString()}
                     </Text>
                     {remaining !== null && !soldOut && !availabilityPending && (
                       <Text style={styles.remainingText}>{remaining} left</Text>
@@ -1393,7 +1407,7 @@ const handleInstallmentPurchase = async () => {
                     </Text>
                     {selectedTicketType && (
                       <Text style={styles.ticketTypeSelectorPrice}>
-                        UGX {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
+                        {currency} {isTableEntry ? (basePrice * tableSize).toLocaleString() : basePrice.toLocaleString()}
                       </Text>
                     )}
                   </View>
@@ -1409,14 +1423,14 @@ const handleInstallmentPurchase = async () => {
         {!isTableEntry && (
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Price per {selectedTicketLabel.toLowerCase()}:</Text>
-            <Text style={styles.priceValue}>UGX {basePrice.toLocaleString()}</Text>
+            <Text style={styles.priceValue}>{currency} {basePrice.toLocaleString()}</Text>
           </View>
         )}
 
         {isTableEntry && (
           <View style={styles.priceRow}>
             <Text style={styles.priceLabel}>Table price:</Text>
-            <Text style={styles.priceValue}>UGX {(basePrice * tableSize).toLocaleString()}</Text>
+            <Text style={styles.priceValue}>{currency} {(basePrice * tableSize).toLocaleString()}</Text>
           </View>
         )}
 
@@ -1680,7 +1694,7 @@ const handleInstallmentPurchase = async () => {
               showMobileMoneyLimitMessage()
               return
             }
-            setPaymentMethod("mobile_money")
+            if (routes.options.length) setPaymentMethod("mobile_money")
           }}
           disabled={authoritativeConfigLoading}
         >
@@ -1695,7 +1709,7 @@ const handleInstallmentPurchase = async () => {
                   ? useInstallments
                     ? "Unavailable, Due today is above UGX 5,000,000"
                     : "Unavailable above UGX 5,000,000"
-                  : "MTN & Airtel — instant"}
+                  : (routes.error || (routes.loading ? "Checking providers…" : routes.options.map(p => p.displayName).join(" · ") || "No providers available"))}
               </Text>
             </View>
           </View>
@@ -1703,7 +1717,7 @@ const handleInstallmentPurchase = async () => {
         </TouchableOpacity>
 
         {/* Credit Card */}
-        <TouchableOpacity
+        {currency === "UGX" && <TouchableOpacity
           activeOpacity={0.8}
           style={[styles.paymentOption, paymentMethod === "credit_card" && styles.paymentOptionSelected]}
           onPress={() => {
@@ -1721,34 +1735,29 @@ const handleInstallmentPurchase = async () => {
             </View>
           </View>
           {paymentMethod === "credit_card" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         {/* Payment Details Form */}
         {paymentMethod === "mobile_money" && (
           <View style={styles.paymentForm}>
             <Text style={styles.paymentFormTitle}>Mobile Money Details</Text>
             <View style={styles.providerButtons}>
-              <TouchableOpacity
-                style={[styles.providerButton, mobileMoneyProvider === "mtn" && styles.providerButtonActive]}
-                onPress={() => setMobileMoneyProvider("mtn")}
-              >
-                <Text style={[styles.providerButtonText, mobileMoneyProvider === "mtn" && styles.providerButtonTextActive]}>MTN</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.providerButton, mobileMoneyProvider === "airtel" && styles.providerButtonActive]}
-                onPress={() => setMobileMoneyProvider("airtel")}
-              >
-                <Text style={[styles.providerButtonText, mobileMoneyProvider === "airtel" && styles.providerButtonTextActive]}>Airtel</Text>
-              </TouchableOpacity>
+              {routes.options.map(option => <TouchableOpacity key={option.provider}
+                style={[styles.providerButton, mobileMoneyProvider === option.provider && styles.providerButtonActive]}
+                onPress={() => setMobileMoneyProvider(option.provider)}>
+                <Text style={styles.providerButtonText}>{option.displayName}</Text>
+              </TouchableOpacity>)}
             </View>
             <TextInput
               style={[styles.input, fieldErrors.mobileMoneyNumber && styles.inputError]}
               value={mobileMoneyNumber}
               onChangeText={(t) => { setMobileMoneyNumber(t); setFieldErrors(prev => { const n = { ...prev }; delete n.mobileMoneyNumber; return n }) }}
-              placeholder="Mobile money number"
+              placeholder={activeProvider?.prefix ? "+" + activeProvider.prefix + "…" : "Mobile money number"}
               placeholderTextColor="#999"
               keyboardType="phone-pad"
             />
+            {(activeProvider?.instructions || []).map((line, index) => <Text key={index} style={styles.paymentOptionSub}>{line}</Text>)}
+            {customerFee != null && customerFee > 0 && <Text style={styles.paymentOptionSub}>Estimated operator fee charged to your wallet: {currency} {customerFee.toLocaleString()}</Text>}
             {fieldErrors.mobileMoneyNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.mobileMoneyNumber}</Text>}
             <TextInput
               style={styles.input}
@@ -1815,10 +1824,10 @@ const handleInstallmentPurchase = async () => {
                 <View key={i} style={styles.installmentRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.installmentLabel}>{label}</Text>
-                    <Text style={styles.installmentFeeNote}>Includes 8% service fee (UGX {inst.serviceFee.toLocaleString()})</Text>
+                    <Text style={styles.installmentFeeNote}>Includes 8% service fee ({currency} {inst.serviceFee.toLocaleString()})</Text>
                   </View>
                   <Text style={[styles.installmentAmount, i === 0 && styles.installmentAmountFirst]}>
-                    UGX {inst.totalDue.toLocaleString()}
+                    {currency} {inst.totalDue.toLocaleString()}
                   </Text>
                 </View>
               )
@@ -1857,7 +1866,7 @@ const handleInstallmentPurchase = async () => {
 
         <View style={styles.summaryRow}>
           <Text style={styles.summaryLabel}>{isTableEntry ? "Table price:" : `${selectedTicketLabel} price:`}</Text>
-          <Text style={styles.summaryValue}>UGX {(isTableEntry ? rawBasePrice : basePrice).toLocaleString()}</Text>
+          <Text style={styles.summaryValue}>{currency} {(isTableEntry ? rawBasePrice : basePrice).toLocaleString()}</Text>
         </View>
 
         <View style={styles.summaryRow}>
@@ -1866,13 +1875,13 @@ const handleInstallmentPurchase = async () => {
               ? `${quantity} table${quantity === 1 ? "" : "s"}:`
               : `${actualTicketCount} ${selectedTicketLabel}:`}
           </Text>
-          <Text style={styles.summaryValue}>UGX {subtotal.toLocaleString()}</Text>
+          <Text style={styles.summaryValue}>{currency} {subtotal.toLocaleString()}</Text>
         </View>
 
         {isLatePurchase && (
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Late Fee ({(event?.lateFeePercent ?? 0)}%):</Text>
-            <Text style={styles.summaryValue}>UGX {lateFee.toLocaleString()}</Text>
+            <Text style={styles.summaryValue}>{currency} {lateFee.toLocaleString()}</Text>
           </View>
         )}
 
@@ -1880,14 +1889,14 @@ const handleInstallmentPurchase = async () => {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryLabel}>Due today (incl. 8% fee):</Text>
             <Text style={[styles.summaryValue, { color: "#F59E0B" }]}>
-              UGX {installmentPreview[0].totalDue.toLocaleString()}
+              {currency} {installmentPreview[0].totalDue.toLocaleString()}
             </Text>
           </View>
         )}
 
         <View style={[styles.summaryRow, styles.totalRow]}>
           <Text style={styles.totalLabel}>{useInstallments ? "Ticket Total:" : "Total:"}</Text>
-          <Text style={styles.totalValue}>UGX {total.toLocaleString()}</Text>
+          <Text style={styles.totalValue}>{currency} {total.toLocaleString()}</Text>
         </View>
       </View>
 
@@ -2024,7 +2033,7 @@ const handleInstallmentPurchase = async () => {
                         )}
                       </View>
                       <Text style={[styles.ticketTypeItemPrice, soldOut && { color: "#555" }]}>
-                        UGX {Number.parseInt(item.amount?.replace(/[^0-9]/g, "") || "0").toLocaleString()}
+                        {currency} {parseEntryFee(item.amount).toLocaleString()}
                       </Text>
                       {remaining !== null && !soldOut && !availabilityPending && (
                         <Text style={styles.remainingText}>{remaining} left</Text>

@@ -119,7 +119,7 @@ async function createSponsorship(admin, actorId, input, event) {
   const fee = entryFee(event, input.entryFeeType);
   const discount = Math.max(0, Math.min(fee.amount * quantity, Number(input.discountAmount || 0)));
   const subtotal = fee.amount * quantity - discount;
-  const split = calculateRevenueSplit(subtotal);
+  const split = calculateRevenueSplit(subtotal, require("../../shared/eventMoney").priceScale(event.country_code, event.currency));
   const allocationId = await createAllocation(admin, actorId, {
     ...input, eventSlug: event.slug, expiresAt: input.paymentDeadline || input.expiresAt || null, quantity, reserveQuantity: quantity, fundingType: 'sponsored', distributionMethod: input.distributionMethod || 'claim_link',
     name: input.name || `Sponsored allocation — ${input.entryFeeType}`, initialStatus: 'awaiting_funding',

@@ -1,3 +1,4 @@
+import { useMobileMoneyOptions } from "../hooks/useMobileMoneyOptions";
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
@@ -46,6 +47,7 @@ const SponsorTicketPaymentScreen: React.FC = () => {
     } catch (error: any) { setMessage(error?.message || "Unable to initiate payment."); }
     finally { setPaying(false); }
   };
+  const routes = useMobileMoneyOptions(details?.allocation?.event?.country_code, details?.order?.currency);
   if (loading) return <View style={styles.center}><ActivityIndicator color="#67E8F9" /></View>;
   const order = details?.order;
   const allocation = details?.allocation;
@@ -57,7 +59,7 @@ const SponsorTicketPaymentScreen: React.FC = () => {
     if (processing) return <View style={styles.processing}><ActivityIndicator color="#67E8F9" /><Text style={styles.processingText}>Your payment is being verified. This page updates automatically.</Text></View>;
     if (!selectedPaymentMethod) return <View style={styles.paymentOptions}>
       <Text style={styles.prompt}>Choose how you would like to pay.</Text>
-      <TouchableOpacity style={styles.primary} onPress={() => setSelectedPaymentMethod("credit_card")}><Ionicons name="card-outline" size={20} color="#08111F" /><Text style={styles.primaryText}>Pay by card</Text></TouchableOpacity>
+      {order?.currency === "UGX" && <TouchableOpacity style={styles.primary} onPress={() => setSelectedPaymentMethod("credit_card")}><Ionicons name="card-outline" size={20} color="#08111F" /><Text style={styles.primaryText}>Pay by card</Text></TouchableOpacity>}
       <TouchableOpacity style={styles.secondary} onPress={() => setSelectedPaymentMethod("mobile_money")}><Ionicons name="phone-portrait-outline" size={20} color="#67E8F9" /><Text style={styles.secondaryText}>Pay with mobile money</Text></TouchableOpacity>
     </View>;
     if (selectedPaymentMethod === "credit_card") return <View style={styles.paymentOptions}>
@@ -72,8 +74,11 @@ const SponsorTicketPaymentScreen: React.FC = () => {
       <Text style={styles.quote}>{order?.currency || "UGX"} {Number(paymentQuote?.total || 0).toLocaleString()}</Text>
       <Text style={styles.feeNote}>Includes gateway fee of {order?.currency || "UGX"} {Number(paymentQuote?.gatewayFee || 0).toLocaleString()}.</Text>
       <TextInput value={mobileNumber} onChangeText={setMobileNumber} placeholder="Mobile-money number" placeholderTextColor="#64748B" keyboardType="phone-pad" style={styles.phoneInput} />
-      <TouchableOpacity disabled={paying} style={styles.primary} onPress={() => pay("mobile_money", "MTN_MOMO_UGA")}>{paying ? <ActivityIndicator color="#08111F" /> : <Text style={styles.primaryText}>Pay with MTN MoMo</Text>}</TouchableOpacity>
-      <TouchableOpacity disabled={paying} style={styles.secondary} onPress={() => pay("mobile_money", "AIRTEL_OAPI_UGA")}><Text style={styles.secondaryText}>Pay with Airtel Money</Text></TouchableOpacity>
+      {routes.loading && <ActivityIndicator color="#67E8F9" />}
+      {!routes.loading && !routes.options.length && <Text style={styles.message}>{routes.error || "No mobile-money provider is available."}</Text>}
+      {routes.options.map(option => <TouchableOpacity key={option.provider} disabled={paying} style={styles.primary} onPress={() => pay("mobile_money", option.provider)}>
+        <Text style={styles.primaryText}>Pay with {option.displayName}</Text>
+      </TouchableOpacity>)}
       <TouchableOpacity disabled={paying} style={styles.changeMethod} onPress={() => setSelectedPaymentMethod(null)}><Text style={styles.changeMethodText}>Choose a different method</Text></TouchableOpacity>
     </View>;
   };

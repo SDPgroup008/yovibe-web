@@ -1,3 +1,5 @@
+const { priceScale, ticketShare } = require('../../shared/eventMoney');
+const { estimateFee } = require('../shared/mobileMoneyFees');
 // netlify/functions/process-stuck-fulfillments.js
 //
 // Phase 1 (P1.4): scheduled automatic retry for stranded purchases.
@@ -43,17 +45,6 @@ const BATCH_SIZE = 25;
 // with no ticket IDs. Keep the persisted payment ID as the idempotent proof
 // for the normal fulfillment path; the scheduled worker remains the recovery
 // path for legacy rows that do not contain this proof.
-function hasServerFulfillmentProof(fulfillment) {
-  const payload = fulfillment?.payload && typeof fulfillment.payload === 'object'
-    ? fulfillment.payload
-    : null;
-  return Boolean(
-    payload?.paymentId
-      && fulfillment?.payment_id
-      && String(payload.paymentId) === String(fulfillment.payment_id),
-  );
-}
-
 function json(statusCode, body) {
   return { statusCode, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
 }
@@ -73,6 +64,8 @@ exports.handler = async (event, context) => {
   const cutoff = new Date(Date.now() - MAX_AGE_MINUTES * 60 * 1000).toISOString();
 
   try {
+    try { await require('../shared/reconcileCountryPayment').recoverCountryPayments(admin); }
+    catch { console.warn('[CountryPayments] Deposit reconciliation temporarily unavailable'); }
     // Reclaim expired checkout holds and release installment inventory at the
     // three-hour cutoff. This runs on the existing every-minute scheduler.
     const { error: expiryError } = await admin.rpc('release_expired_inventory_reservations');
@@ -134,26 +127,14 @@ async function processOne(admin, f) {
   // provider payment ID only after server-side verification succeeds. Avoid a
   // second unbounded provider round-trip for that path; it is what previously
   // left paid fulfillments stuck in `fulfilling` before ticket creation.
-  let confirmation;
-  if (hasServerFulfillmentProof(f)) {
-    confirmation = {
-      confirmed: true,
-      verificationResult: {
-        status: 'completed',
-        transactionId: f.payload?.pesapalTransactionId || f.payment_id,
-        confirmationCode: f.payload?.pesapalConfirmationCode || undefined,
-      },
-      source: 'persisted-server-proof',
-    };
-    console.info(`[StuckFulfillments] ${f.id}: using persisted server payment proof`);
-  } else {
-    const verifyMethod = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
-    confirmation = await confirmPaymentVerified(verifyMethod, {
-      depositId: f.pawapay_deposit_id,
-      orderId: f.payment_id,
-      trackingId: undefined,
-    });
-  }
+  const saved = f.payload || {};
+  const eventRow = await loadEvent(admin, f.event_id);
+  if (!eventRow) throw new Error('Missing event for fulfillment');
+  const methodForVerification = f.pawapay_deposit_id ? 'mobile_money' : 'credit_card';
+  const confirmation = await require('../shared/settlement').verifyOrder(admin, eventRow, {
+    ...saved, fulfillmentId: f.id, eventId: f.event_id, ticketType: f.ticket_type || saved.ticketType,
+    quantity: f.quantity, totalAmount: f.amount, payment: { method: methodForVerification },
+  }, { depositId: f.pawapay_deposit_id, orderId: f.payment_id, trackingId: saved.verification?.trackingId });
   if (confirmation.failed) {
     await bump(admin, f, 'failed', 'Payment not completed');
     return 'failed';
@@ -183,7 +164,7 @@ async function processOne(admin, f) {
   // Full-fidelity rebuild when the claim stored the complete payload
   // (seats/tables/photo/payment — no degraded tickets).
   const payload = f.payload && typeof f.payload === 'object' ? f.payload : null;
-  const event = await loadEvent(admin, payload && payload.eventId ? payload.eventId : f.event_id);
+  const event = eventRow;
   if (!event) {
     await bump(admin, f, 'failed', `Event not found: ${f.event_id}`);
     return 'failed';
@@ -193,8 +174,7 @@ async function processOne(admin, f) {
     ? payload.buyerNames
     : (f.attendee_names && f.attendee_names.length ? f.attendee_names : [f.buyer_name || 'Attendee']);
   const qty = Math.max(1, Math.floor(Number((payload && payload.quantity) || f.quantity) || 1));
-  const total = Math.floor(Number((payload && payload.totalAmount) || f.amount) || 0);
-  const perTicketTotal = total > 0 ? total / qty : 0;
+  const total = Number(f.amount);
   const method = f.pawapay_deposit_id ? 'mobile_money' : ((payload && payload.payment && payload.payment.method) || 'credit_card');
   const sharedPaymentId = f.payment_id || (payload && payload.paymentId);
   const isTableEntry = !!(payload && payload.isTableEntry);
@@ -206,9 +186,10 @@ async function processOne(admin, f) {
   // The verified event fee is a table total for table tiers. Ticket rows still
   // store their per-attendee share, while table_total_amount stores the full
   // table amount.
-  const rowUnitPrice = verifiedFeePrice != null && isTableEntry
-    ? verifiedFeePrice / tableSize
-    : verifiedFeePrice;
+  const scale = priceScale(event.country_code || 'UG', event.currency || 'UGX');
+  const subtotal = verifiedFeePrice == null ? total : verifiedFeePrice * qty / (tableSize || 1);
+  const provider = confirmation.verificationResult?.provider || payload?.payment?.provider;
+  const feeEstimate = method === 'mobile_money' ? estimateFee(provider, 'DEPOSIT', total) : null;
 
   // Crash recovery for the narrow window after the ticket RPC commits but
   // before ticket_ids is written to the fulfillment row.
@@ -251,8 +232,8 @@ async function processOne(admin, f) {
       deliveryEmail: (payload && payload.deliveryEmails && payload.deliveryEmails[i])
         || (payload && payload.buyerEmails && payload.buyerEmails[i])
         || (payload && payload.payerEmail) || f.buyer_email,
-      totalAmount: perTicketTotal,
-      unitPrice: rowUnitPrice,
+      totalAmount: ticketShare(total, qty, i, scale),
+      unitPrice: ticketShare(subtotal, qty, i, scale),
       lateFeePercent: payload && payload.lateFeePercent,
       isTableEntry,
       tableSize: tableSize || undefined,
@@ -264,7 +245,7 @@ async function processOne(admin, f) {
       sharedPaymentId,
       cardPaymentName: payload && payload.payment && payload.payment.cardName,
       photoUrl,
-      payment: { ...((payload && payload.payment) || {}), ticketType: (payload && payload.ticketType) || f.ticket_type || undefined },
+      payment: { ...((payload && payload.payment) || {}), provider, gatewayFeeShare: feeEstimate == null ? undefined : ticketShare(feeEstimate, qty, i, 100), ticketType: (payload && payload.ticketType) || f.ticket_type || undefined },
       pesapalTransactionId: verification.transactionId || (payload && payload.pesapalTransactionId),
       pesapalConfirmationCode: verification.confirmationCode || (payload && payload.pesapalConfirmationCode),
       salePayoutEligible,

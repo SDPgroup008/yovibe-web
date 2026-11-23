@@ -337,7 +337,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
         visible={hardDeleteModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={closeHardDeleteModal}
+        onRequestClose={() => closeHardDeleteModal()}
       >
         <View style={styles.hardDeleteOverlay}>
           <View style={styles.hardDeleteModal}>
@@ -382,7 +382,7 @@ const AdminUsersScreen = ({ navigation }: AdminUsersScreenProps) => {
             <View style={styles.hardDeleteActions}>
               <TouchableOpacity
                 style={[styles.hardDeleteAction, styles.hardDeleteCancel]}
-                onPress={closeHardDeleteModal}
+                onPress={() => closeHardDeleteModal()}
                 disabled={hardDeleteSubmitting}
               >
                 <Text style={styles.hardDeleteCancelText}>Cancel</Text>

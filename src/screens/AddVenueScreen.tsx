@@ -1,5 +1,8 @@
 "use client"
 
+import CountrySelector from "../components/CountrySelector"
+import { type CountryCode } from "../config/countries"
+
 import type React from "react"
 import { useEffect, useState } from "react"
 import {
@@ -51,6 +54,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
   const [instagramUrl, setInstagramUrl] = useState("")
   const [xUrl, setXUrl] = useState("")
   const [youtubeUrl, setYoutubeUrl] = useState("")
+  const [countryCode, setCountryCode] = useState<CountryCode>('UG')
   const [venueType, setVenueType] = useState<"nightlife" | "recreation">("nightlife")
 
   // Store latitude and longitude as numbers to preserve full precision
@@ -192,6 +196,7 @@ const AddVenueScreen: React.FC<any> = (props) => {
 
       // Use numeric latitude/longitude directly (preserves full precision)
       const venueData = {
+        countryCode,
         name,
         location,
         description,
@@ -270,6 +275,8 @@ const AddVenueScreen: React.FC<any> = (props) => {
         />
         {errors.description && <Text style={styles.errorText}>Please enter a venue description</Text>}
 
+        <Text style={styles.label}>Country *</Text>
+        <CountrySelector value={countryCode} onSelect={setCountryCode} />
         <Text style={styles.label}>Venue Type *</Text>
         <View style={styles.venueTypeContainer}>
           <TouchableOpacity

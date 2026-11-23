@@ -1,3 +1,4 @@
+import { useMobileMoneyOptions } from "../hooks/useMobileMoneyOptions";
 "use client"
 
 import type React from "react"
@@ -54,7 +55,9 @@ const MyTicketsScreen: React.FC = () => {
   const [installmentPlans, setInstallmentPlans] = useState<InstallmentPlan[]>([])
   const [payingPlanId, setPayingPlanId] = useState<string | null>(null)
   const [payInstallmentMethod, setPayInstallmentMethod] = useState<"mobile_money" | "credit_card">("mobile_money")
-  const [payInstallmentProvider, setPayInstallmentProvider] = useState<"mtn" | "airtel">("mtn")
+  const [payInstallmentProvider, setPayInstallmentProvider] = useState("")
+  const payingPlan = installmentPlans.find(plan => plan.id === payingPlanId)
+  const routes = useMobileMoneyOptions(payingPlan ? payingPlan.countryCode || "UG" : undefined, payingPlan?.currency || "UGX")
   const [payInstallmentNumber, setPayInstallmentNumber] = useState("")
   const [payInstallmentLoading, setPayInstallmentLoading] = useState(false)
   const [payInstallmentStatus, setPayInstallmentStatus] = useState<"idle" | "polling" | "success" | "error">("idle")
@@ -350,7 +353,7 @@ const MyTicketsScreen: React.FC = () => {
                   <View style={[styles.progressBarFill, { width: `${progress * 100}%` as any }]} />
                 </View>
                 <Text style={styles.progressText}>
-                  UGX {plan.amountPaid.toLocaleString()} of UGX {plan.totalAmount.toLocaleString()} paid
+                  {plan.currency || "UGX"} {plan.amountPaid.toLocaleString()} of {plan.currency || "UGX"} {plan.totalAmount.toLocaleString()} paid
                 </Text>
 
                 {next && !paymentCutoffPassed && (
@@ -358,8 +361,8 @@ const MyTicketsScreen: React.FC = () => {
                     <View style={styles.nextInstallmentRow}>
                       <Text style={[styles.nextInstallmentLabel, isOverdue && styles.overdueText]}>
                         {isOverdue ? "⚠ Overdue — " : "Next: "}
-                        UGX {next.totalDue.toLocaleString()}
-                        <Text style={{ color: "#666", fontSize: 11 }}> (incl. UGX {next.serviceFee.toLocaleString()} fee)</Text>
+                        {plan.currency || "UGX"} {next.totalDue.toLocaleString()}
+                        <Text style={{ color: "#666", fontSize: 11 }}> (incl. {plan.currency || "UGX"} {next.serviceFee.toLocaleString()} fee)</Text>
                       </Text>
                     </View>
 
@@ -367,7 +370,7 @@ const MyTicketsScreen: React.FC = () => {
                       <View style={styles.payInstallmentForm}>
                         {/* Method toggle */}
                         <View style={styles.methodRow}>
-                          {(["mobile_money", "credit_card"] as const).map((m) => (
+                          {(["mobile_money", "credit_card"] as const).filter(method => method === "mobile_money" || (plan.currency || "UGX") === "UGX").map((m) => (
                             <TouchableOpacity
                               key={m}
                               style={[styles.methodBtn, payInstallmentMethod === m && styles.methodBtnActive]}
@@ -383,18 +386,19 @@ const MyTicketsScreen: React.FC = () => {
                         {payInstallmentMethod === "mobile_money" && (
                           <>
                             <View style={styles.methodRow}>
-                              {(["mtn", "airtel"] as const).map((p) => (
+                              {routes.options.map(({ provider: p, displayName }) => (
                                 <TouchableOpacity
                                   key={p}
                                   style={[styles.methodBtn, payInstallmentProvider === p && styles.methodBtnActive]}
                                   onPress={() => setPayInstallmentProvider(p)}
                                 >
                                   <Text style={[styles.methodBtnText, payInstallmentProvider === p && styles.methodBtnTextActive]}>
-                                    {p.toUpperCase()}
+                                    {displayName}
                                   </Text>
                                 </TouchableOpacity>
                               ))}
                             </View>
+                            {!routes.options.length && <Text style={styles.progressText}>{routes.loading ? "Checking providers..." : routes.error || "Mobile money is unavailable."}</Text>}
                             <TextInput
                               style={styles.payInput}
                               value={payInstallmentNumber}
@@ -423,11 +427,11 @@ const MyTicketsScreen: React.FC = () => {
                           <TouchableOpacity
                             style={[styles.payNowBtn, payInstallmentLoading && { opacity: 0.6 }]}
                             onPress={() => handlePayInstallment(plan)}
-                            disabled={payInstallmentLoading}
+                            disabled={payInstallmentLoading || (payInstallmentMethod === "mobile_money" && !routes.options.some(option => option.provider === payInstallmentProvider))}
                           >
                             {payInstallmentLoading
                               ? <ActivityIndicator size="small" color="#FFF" />
-                              : <Text style={styles.payNowBtnText}>Pay UGX {next.totalDue.toLocaleString()}</Text>
+                              : <Text style={styles.payNowBtnText}>Pay {plan.currency || "UGX"} {next.totalDue.toLocaleString()}</Text>
                             }
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -442,6 +446,8 @@ const MyTicketsScreen: React.FC = () => {
                       <TouchableOpacity
                         style={styles.payInstallmentBtn}
                         onPress={() => {
+                          setPayInstallmentProvider("")
+                          setPayInstallmentMethod("mobile_money")
                           setPayingPlanId(plan.id)
                           setPayInstallmentStatus("idle")
                           setPayInstallmentNumber(plan.paymentNumber || "")
@@ -554,7 +560,7 @@ const MyTicketsScreen: React.FC = () => {
                   <Ionicons name="calendar-outline" size={12} color="#666" />
                   <Text style={styles.cardMetaSmall}>{formatDate(ticket.eventStartTime)}</Text>
                 </View>
-                <Text style={styles.cardPrice}>UGX {(ticket.totalAmount || 0).toLocaleString()}</Text>
+                <Text style={styles.cardPrice}>{ticket.currency || "UGX"} {(ticket.totalAmount || 0).toLocaleString()}</Text>
               </View>
             </TouchableOpacity>
           ))

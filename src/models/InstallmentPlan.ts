@@ -13,6 +13,8 @@ export interface Installment {
 }
 
 export interface InstallmentPlan {
+  currency?: string
+  countryCode?: string
   id: string
   buyerId?: string
   buyerEmail: string

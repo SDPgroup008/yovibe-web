@@ -9,6 +9,16 @@ const { submitPawaPayPayout } = require('./create-pawapay-payout');
 const { otpMatches } = require('../shared/payoutOtp');
 const { notifyPayoutTerminal } = require('../shared/personalNotifications');
 
+const { paymentRoute, amountMatches, invalid } = require('../shared/marketPayments');
+function checkPayoutMarket(rows, event) {
+  if (rows.some(row => (row.currency || 'UGX') !== (event.currency || 'UGX') || (row.country_code || 'UG') !== (event.country_code || 'UG'))) {
+    throw invalid('Selected payments must share the event country and currency');
+  }
+}
+function validateRecipient(event, recipient, amount) {
+  return paymentRoute({ country: event.country_code || 'UG', currency: event.currency || 'UGX', provider: recipient.provider,
+    amount, operation: 'PAYOUT', phoneNumber: recipient.phoneNumber });
+}
 const ACTIVE_REFUND_STATES = ['pending_admin_review', 'approved', 'processing', 'submitted', 'completed', 'needs_attention'];
 const PAYABLE_TICKET_STATUSES = ['active', 'used'];
 
@@ -113,6 +123,7 @@ async function executeSponsorPayout({ admin, authUser, profile, body, action }) 
   if (!isAdmin && !ownerIds(authUser, profile).includes(String(payoutEvent.created_by || '')) && !ownerIds(authUser, profile).includes(String(payoutEvent.created_by_auth || ''))) {
     throw Object.assign(new Error('You do not own this event'), { statusCode: 403 });
   }
+  checkPayoutMarket(orders, payoutEvent);
   const payable = orders.filter((order) => order.payment_status === 'paid' && order.payout_eligible === true && order.payout_status === 'pending');
   const total = amountNumber(payable.reduce((sum, order) => sum + Number(order.organiser_net || 0), 0));
   if (action === 'sponsorship_eligibility') {
@@ -126,25 +137,40 @@ async function executeSponsorPayout({ admin, authUser, profile, body, action }) 
   const requested = body.recipientDetails || {};
   const recipient = buildRecipient(payoutEvent, { method: payoutMethod, name: requested.name, phoneNumber: requested.phoneNumber, provider: requested.provider, bankName: requested.bankName, accountNumber: requested.accountNumber });
   if (!recipient.name || (payoutMethod === 'mobile_money' && (!recipient.phoneNumber || !recipient.provider)) || (payoutMethod === 'bank_transfer' && (!recipient.bankName || !recipient.accountNumber))) throw Object.assign(new Error('Complete the recipient payment details'), { statusCode: 422 });
+  const route = payoutMethod === 'mobile_money' ? await validateRecipient(payoutEvent, recipient, total) : null;
   await consumeOtp(admin, verifiedOtp.id);
   const claimedStatus = payoutMethod === 'mobile_money' ? 'processing' : 'pending_review';
   const ids = orders.map((order) => order.id);
   const { data: claimed, error: claimError } = await admin.from('ticket_sponsorship_orders').update({ payout_eligible: false, payout_status: claimedStatus, updated_at: new Date().toISOString() })
     .in('id', ids).eq('payment_status', 'paid').eq('payout_status', 'pending').eq('payout_eligible', true).select('id');
   if (claimError) throw claimError;
-  if (!claimed || claimed.length !== ids.length) throw Object.assign(new Error('Sponsorship eligibility changed. Refresh and try again.'), { statusCode: 409 });
+  async function releaseSponsorClaims() {
+    const claimedIds = (claimed || []).map(row => row.id);
+    if (!claimedIds.length) return;
+    const { error } = await admin.from('ticket_sponsorship_orders').update({ payout_eligible: true, payout_status: 'pending' })
+      .in('id', claimedIds).eq('payout_status', claimedStatus);
+    if (error) throw error;
+  }
+  if (!claimed || claimed.length !== ids.length) {
+    await releaseSponsorClaims();
+    throw invalid('Sponsorship eligibility changed. Refresh and try again.', 409);
+  }
   const providerRequestId = payoutMethod === 'mobile_money' ? crypto.randomUUID() : null;
   const { data: payout, error: payoutError } = await admin.from('payouts').insert({
     organizer_id: payoutEvent.created_by ? String(payoutEvent.created_by) : (profile?.uid || authUser.id), ticket_ids: [], sponsorship_order_ids: ids, amount: total,
     status: payoutMethod === 'mobile_money' ? 'processing' : 'pending_admin_review', payout_method: payoutMethod, recipient_name: recipient.name,
     recipient_phone_number: payoutMethod === 'mobile_money' ? recipient.phoneNumber : null, metadata: payoutMethod === 'bank_transfer' ? { bank_name: recipient.bankName, account_number: recipient.accountNumber, source: 'sponsorship' } : { provider: recipient.provider, pawapay_payout_id: providerRequestId, source: 'sponsorship' }, transaction_reference: providerRequestId, event_id: payoutEvent.slug,
   }).select('*').single();
-  if (payoutError) throw payoutError;
+  if (payoutError) {
+    await releaseSponsorClaims();
+    throw payoutError;
+  }
   if (payoutMethod === 'mobile_money') {
     try {
-      const provider = await submitPawaPayPayout({ payoutId: providerRequestId, amount: total, currency: 'UGX', phoneNumber: recipient.phoneNumber, provider: recipient.provider });
+      const provider = await submitPawaPayPayout({ payoutId: providerRequestId, amount: total, currency: payoutEvent.currency || 'UGX', route, phoneNumber: recipient.phoneNumber, provider: recipient.provider });
       await admin.from('payouts').update({ transaction_reference: provider.payoutId, updated_at: new Date().toISOString() }).eq('id', payout.id);
     } catch (error) {
+      if (!error.definitive) throw invalid('Payout submission is being reconciled. Use its existing reference.', 503);
       await admin.from('ticket_sponsorship_orders').update({ payout_eligible: true, payout_status: 'pending', updated_at: new Date().toISOString() }).in('id', ids).eq('payout_status', claimedStatus);
       await admin.from('payouts').update({ status: 'failed', admin_note: error.message, updated_at: new Date().toISOString() }).eq('id', payout.id);
       throw Object.assign(new Error(error.message || 'Unable to initiate sponsor payout'), { statusCode: 502 });
@@ -177,6 +203,7 @@ exports.handler = async (event) => {
     const isAdmin = profile?.user_type === 'admin';
     const tickets = await loadTickets(admin, body.ticketIds);
     const payoutEvent = await loadAuthorizedEvent(admin, tickets, authUser, profile, isAdmin);
+    checkPayoutMarket(tickets, payoutEvent);
 
     if (action === 'eligibility') {
       const payable = tickets.filter(ticketIsPayable);
@@ -210,8 +237,8 @@ exports.handler = async (event) => {
     const serverAmount = amountNumber(tickets.reduce((sum, ticket) => sum + Number(ticket.venue_revenue || 0), 0));
     if (serverAmount <= 0) return json(409, { error: 'Payout amount is zero' });
     const clientAmount = amountNumber(body.amount);
-    if (clientAmount > 0 && Math.abs(clientAmount - serverAmount) > 1) {
-      return json(409, { error: `Payout amount mismatch (server: UGX ${serverAmount.toLocaleString()}). Refresh and retry.` });
+    if (clientAmount > 0 && !amountMatches(clientAmount, serverAmount)) {
+      return json(409, { error: `Payout amount mismatch (server: ${payoutEvent.currency || 'UGX'} ${serverAmount.toLocaleString()}). Refresh and retry.` });
     }
 
     const requested = body.recipientDetails || {};
@@ -227,6 +254,7 @@ exports.handler = async (event) => {
       return json(422, { error: 'Bank name and account number are required for card-funded payouts' });
     }
 
+    const route = payoutMethod === 'mobile_money' ? await validateRecipient(payoutEvent, recipient, serverAmount) : null;
     await consumeOtp(admin, verifiedOtp.id);
     const payoutStatus = payoutMethod === 'mobile_money' ? 'processing' : 'pending_admin_review';
     const claimedStatus = payoutMethod === 'mobile_money' ? 'processing' : 'pending_review';
@@ -269,7 +297,7 @@ exports.handler = async (event) => {
     if (payoutMethod === 'mobile_money') {
       try {
         const providerData = await submitPawaPayPayout({
-          payoutId: providerRequestId, amount: serverAmount, currency: 'UGX',
+          payoutId: providerRequestId, amount: serverAmount, currency: payoutEvent.currency || 'UGX', route,
           phoneNumber: recipient.phoneNumber, provider: recipient.provider,
         });
         providerPayoutId = providerData.payoutId;
@@ -279,6 +307,7 @@ exports.handler = async (event) => {
           updated_at: new Date().toISOString(),
         }).eq('id', payout.id).eq('status', 'processing');
       } catch (providerError) {
+        if (!providerError.definitive) throw invalid('Payout submission is being reconciled. Use its existing reference.', 503);
         await admin.from('payouts').update({ status: 'failed', admin_note: providerError.message, updated_at: new Date().toISOString() })
           .eq('id', payout.id).eq('status', 'processing');
         await notifyPayoutTerminal({

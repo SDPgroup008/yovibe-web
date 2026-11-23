@@ -15,11 +15,10 @@
 // If the row already exists and holds ticket_ids, this returns those tickets
 // instead of creating duplicates.
 
+const { verifyOrder } = require('../shared/settlement');
 const { getAdminClient } = require('../shared/supabaseAdmin');
 const {
-  confirmPaymentVerified,
   loadEvent,
-  resolveEventStartTime,
   uploadImageDataUrl,
 } = require('../shared/ticketFulfillment');
 const { requiredEnv, getSiteUrl } = require('../shared/runtimeConfig');
@@ -44,18 +43,6 @@ function ok(body) {
 
 function error(statusCode, body) {
   return { statusCode, headers, body: JSON.stringify(body) };
-}
-
-function deriveUnitPriceFromPaidTotal(total, billableUnits, lateFeePercent) {
-  if (!Number.isFinite(total) || !Number.isFinite(billableUnits) || billableUnits <= 0) return null;
-  const pct = Number(lateFeePercent) || 0;
-  const guess = Math.max(1, Math.round(total / (billableUnits * (1 + pct / 100))));
-  for (let candidate = Math.max(1, guess - 1000); candidate <= guess + 1000; candidate += 1) {
-    const subtotal = candidate * billableUnits;
-    const lateFee = Math.round(subtotal * pct / 100);
-    if (subtotal + lateFee === total) return candidate;
-  }
-  return null;
 }
 
 exports.handler = async (event) => {
@@ -107,9 +94,9 @@ exports.handler = async (event) => {
   }
 
   const qty = Math.floor(Number(quantity) || 0);
-  const total = Math.floor(Number(totalAmount) || 0);
+  const total = Number(totalAmount);
   const normalizedTableSize = Math.floor(Number(tableSize) || 0);
-  if (qty <= 0 || total <= 0) return error(400, { success: false, error: 'Invalid quantity or amount' });
+  if (!Number.isSafeInteger(Number(quantity)) || !Number.isFinite(total) || qty <= 0 || total <= 0) return error(400, { success: false, error: 'Invalid quantity or amount' });
   if (isTableEntry && normalizedTableSize <= 0) {
     return error(400, { success: false, error: 'A valid table size is required' });
   }
@@ -140,116 +127,14 @@ exports.handler = async (event) => {
       });
     }
 
-    // ── Step 2: Server-side payment confirmation ───────────────────────────
-    // The UI's poll verdict (verify-pawapay-payment / verify-pesapal-payment)
-    // IS server-backed — the client cannot forge it. Re-verification remains
-    // the primary gate, but a COMPLETED poll verdict is never allowed to strand
-    // a charged buyer:
-    //   • re-verification confirms   → proceed (normal).
-    //   • re-verification unresolved (both paths error/pending) + poll COMPLETED
-    //     → proceed on the poll verdict (infra/alias disagreement) + critical log.
-    //   • re-verification says FAILED → fail closed, regardless of the poll.
-    const confirmation = await confirmPaymentVerified(method, verification);
-    const pollSaysCompleted = String(verification.pollStatus || '').toLowerCase() === 'completed';
-
-    if (!confirmation.confirmed) {
-      if (confirmation.failed) {
-        // Both independent paths affirmatively report failed — never create
-        // tickets for a failed payment.
-        return error(402, { success: false, status: 'failed', message: 'Payment was not completed' });
-      }
-      if (!pollSaysCompleted) {
-        return ok({ success: false, status: 'pending', message: 'Payment is still being verified by the processor' });
-      }
-      // Poll confirmed COMPLETED but re-verification is unresolved — proceed on
-      // the poll verdict rather than strand a buyer whose money was taken.
-      console.error(
-        `[FulfillPurchase] ⚠️ Poll confirmed COMPLETED but re-verification unresolved — proceeding on poll verdict ` +
-        `(depositId=${verification.depositId || verification.orderId || '?'})`
-      );
-    }
-    const verificationResult = confirmation.confirmed
-      ? (confirmation.verificationResult || {})
-      : { status: 'completed', confirmedByPoll: true };
-
-    // ── Step 3: Load the event ─────────────────────────────────────────────
     const event = await loadEvent(admin, eventId);
-    if (!event) return error(404, { success: false, error: `Event not found: ${eventId}` });
-
-    // Snapshot the event's payout policy at the verified-sale boundary. The
-    // fulfillment worker may run later, after an admin changes the setting;
-    // that later change must not alter this already completed sale.
+    if (!event) return error(404, { success: false, error: 'Event not found' });
+    const confirmation = await verifyOrder(admin, event, payload, verification);
+    if (confirmation.failed) return error(402, { success: false, status: 'failed', message: 'Payment was not completed' });
+    if (!confirmation.confirmed) return ok({ success: false, status: 'pending', message: 'Payment is still being verified' });
+    const verificationResult = confirmation.verificationResult;
+    const { unitPrice, lateFeePercent } = confirmation.quote;
     const payoutEligibilityPolicy = await getEventPayoutEligibility(admin, event.slug || event.id);
-
-    // ── Step 3b: Server-side price verification (Phase 2.2) ─────────────────
-    // Recompute the expected total from the NOTIFIED price + late fee and
-    // reject any client-supplied amount that does not match — a tampered
-    // amount (devtools) can never be charged.
-    const feeForPurchase = Array.isArray(event.entry_fees)
-      ? event.entry_fees.find((f) => f && f.name === ticketType)
-      : null;
-    if (!feeForPurchase) {
-      return error(409, {
-        success: false,
-        error: `Ticket category "${ticketType || 'Standard'}" is no longer available. Please refresh and try again.`,
-      });
-    }
-    let unitPrice = Number.parseInt(String(feeForPurchase.amount || '0').replace(/[^0-9]/g, ''), 10) || 0;
-    let lateFeePercent = Number(event.late_fee_percent ?? 0) || 0;
-    const startTime = resolveEventStartTime(event);
-    const sevenAm = new Date(startTime);
-    sevenAm.setHours(7, 0, 0, 0);
-    const isLatePurchase = new Date() >= sevenAm;
-    // Entry-fee amounts for table tiers are table totals, while qty is the
-    // number of attendee ticket rows. Convert rows back to billable tables
-    // before validating the amount (for example: UGX 2,000 / 5-person table
-    // with five attendees is one table, not UGX 10,000).
-    const billableUnits = isTableEntry ? Math.ceil(qty / normalizedTableSize) : qty;
-    const expectedSubtotal = unitPrice * billableUnits;
-    const expectedLateFee = isLatePurchase ? Math.round(expectedSubtotal * lateFeePercent / 100) : 0;
-    let expectedTotal = expectedSubtotal + expectedLateFee;
-    if (Math.abs(expectedTotal - total) > 1) {
-      // A buyer may have completed payment using the old fee while the event
-      // price changed before the fulfillment callback. Accept the original
-      // amount only when the payment provider independently confirms that exact
-      // amount; never trust a client-only price override.
-      const providerAmount = Math.round(Number(
-        verificationResult?.amount
-          ?? verificationResult?.data?.amount
-          ?? 0,
-      ));
-      const snapshotLateFeePercent = Number.isFinite(Number(lateFeePercentAtCheckout))
-        ? Number(lateFeePercentAtCheckout)
-        : lateFeePercent;
-      const snapshotUnitPrice = Number(unitPriceAtCheckout) > 0
-        ? Number(unitPriceAtCheckout)
-        : deriveUnitPriceFromPaidTotal(total, billableUnits, snapshotLateFeePercent);
-      const snapshotSubtotal = snapshotUnitPrice ? snapshotUnitPrice * billableUnits : 0;
-      const snapshotLateFee = snapshotSubtotal > 0
-        ? Math.round(snapshotSubtotal * snapshotLateFeePercent / 100)
-        : 0;
-      const snapshotTotal = snapshotSubtotal + snapshotLateFee;
-      const paidAmountMatches = providerAmount > 0 && Math.abs(providerAmount - total) <= 1;
-      if (paidAmountMatches && snapshotUnitPrice && Math.abs(snapshotTotal - total) <= 1) {
-        unitPrice = snapshotUnitPrice;
-        lateFeePercent = snapshotLateFeePercent;
-        expectedTotal = snapshotTotal;
-        console.warn(
-          `[FulfillPurchase] Current fee changed after payment; using verified checkout price ` +
-          `(paid=${total}, current=${expectedTotal}, fee="${ticketType}")`,
-        );
-      }
-    }
-    if (Math.abs(expectedTotal - total) > 1) {
-      console.warn(
-        `[FulfillPurchase] Price mismatch — client=${total}, expected=${expectedTotal} ` +
-        `(fee="${ticketType}", unit=${unitPrice}, qty=${qty}, billableUnits=${billableUnits}, lateFee=${expectedLateFee})`
-      );
-      return error(409, {
-        success: false,
-        error: 'Ticket prices have changed. Please refresh the page and try again.',
-      });
-    }
 
     // ── Step 4: Claim the fulfillment row (concurrency lock via PK) ────────
     const paymentId = method === 'mobile_money' ? verification.depositId : (verification.orderId || paymentIdFallback(fulfillmentId));
@@ -283,12 +168,14 @@ exports.handler = async (event) => {
       });
     }
     const tableGroupId = isTableEntry ? `YVG-${String(event.slug || event.id).slice(-6)}-${Date.now().toString().slice(-6)}` : undefined;
-    let resolvedPhotoUrl = buyerPhotoUrl || null;
-    if (!resolvedPhotoUrl && buyerPhotoDataUrl) {
+    const recorded = confirmation.quote;
+    const checkout = recorded.buyerNames ? recorded : payload;
+    let resolvedPhotoUrl = checkout.buyerPhotoUrl || null;
+    if (!resolvedPhotoUrl && checkout.buyerPhotoDataUrl) {
       try {
         // Legacy clients may still send a data URL. Upload it before the queue
         // row is persisted so Base64 never gets stored in Supabase.
-        resolvedPhotoUrl = await uploadImageDataUrl(buyerPhotoDataUrl, 'buyer-photos', `purchase_${fulfillmentId}`);
+        resolvedPhotoUrl = await uploadImageDataUrl(checkout.buyerPhotoDataUrl, 'buyer-photos', `purchase_${fulfillmentId}`);
       } catch (e) {
         console.warn('[FulfillPurchase] Legacy photo upload failed; continuing without photo:', e.message);
       }
@@ -302,28 +189,27 @@ exports.handler = async (event) => {
       totalAmount: total,
       unitPrice,
       lateFeePercent,
-      unitPriceAtCheckout: Number(unitPriceAtCheckout) > 0 ? Number(unitPriceAtCheckout) : unitPrice,
-      lateFeePercentAtCheckout: Number.isFinite(Number(lateFeePercentAtCheckout))
-        ? Number(lateFeePercentAtCheckout)
-        : lateFeePercent,
+      unitPriceAtCheckout: Number(unitPrice),
+      lateFeePercentAtCheckout: lateFeePercent,
       isTableEntry: !!isTableEntry,
       tableSize: isTableEntry ? normalizedTableSize : null,
       tableGroupId: tableGroupId || null,
-      buyerNames,
-      buyerEmails,
-      deliveryEmails,
-      payerEmail,
-      buyerId: buyerId || null,
-      buyerPhone: buyerPhone || null,
+      buyerNames: checkout.buyerNames,
+      buyerEmails: checkout.buyerEmails,
+      deliveryEmails: checkout.deliveryEmails,
+      payerEmail: checkout.payerEmail,
+      buyerId: checkout.buyerId || null,
+      buyerPhone: checkout.buyerPhone || null,
       buyerPhotoDataUrl: null,
       buyerPhotoUrl: resolvedPhotoUrl,
-      seatNumbers: seatNumbers || null,
-      tableNumbers: tableNumbers || null,
-      inventoryHoldIds: Array.isArray(inventoryHoldIds) ? inventoryHoldIds : null,
-      inventorySessionId: inventorySessionId || null,
+      seatNumbers: checkout.seatNumbers || null,
+      tableNumbers: checkout.tableNumbers || null,
+      inventoryHoldIds: Array.isArray(checkout.inventoryHoldIds) ? checkout.inventoryHoldIds : null,
+      inventorySessionId: checkout.inventorySessionId || null,
       installmentPlanId: installmentPlanId || null,
       payment: { ...payment },
       paymentId,
+      verification: { depositId: verification.depositId, orderId: verification.orderId, trackingId: verification.trackingId },
       pesapalTransactionId: verificationResult.transactionId || null,
       pesapalConfirmationCode: verificationResult.confirmationCode || null,
       salePayoutEligible: payoutEligibilityPolicy.salePayoutEnabled === true,
@@ -332,9 +218,9 @@ exports.handler = async (event) => {
       id: fulfillmentId,
       payment_id: paymentId,
       pawapay_deposit_id: method === 'mobile_money' ? verification.depositId : null,
-      buyer_email: payerEmail || buyerEmails[0] || '',
-      buyer_name: buyerNames[0] || '',
-      buyer_id: buyerId || null,
+      buyer_email: checkout.payerEmail || checkout.buyerEmails?.[0] || '',
+      buyer_name: checkout.buyerNames[0] || '',
+      buyer_id: checkout.buyerId || null,
       event_id: eventId,
       event_name: event.name,
       ticket_type: claimPayload.ticketType,
@@ -363,18 +249,8 @@ exports.handler = async (event) => {
           tickets: (tickets || []).map((t) => ({ id: t.id, ticketRef: t.ticket_ref, qrCodeDataUrl: accessibleQr(t.qr_code_data_url) })),
         });
       }
-      const resume = await admin
-        .from('pending_ticket_fulfillments')
-        .update({
-          status: 'fulfilling',
-          payment_id: paymentId,
-          pawapay_deposit_id: method === 'mobile_money' ? verification.depositId : null,
-          attempt_count: ((existing.data && existing.data.attempt_count) || 0) + 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', fulfillmentId);
-      if (resume.error) throw resume.error;
-      /* console.log(`[FulfillPurchase] Resumed stranded claim ${fulfillmentId}`); */
+      const winner = await admin.from('pending_ticket_fulfillments').select('payment_id').eq('id', fulfillmentId).maybeSingle();
+      if (winner.error || winner.data?.payment_id !== paymentId) return error(409, { error: 'Checkout reference conflict' });
     } else if (claim.error) {
       throw claim.error;
     }
@@ -389,21 +265,7 @@ exports.handler = async (event) => {
     });
   } catch (err) {
     console.error('[FulfillPurchase] Error:', err.message);
-    // Try to surface the failure on the fulfillment row for admin visibility.
-    try {
-      await admin
-        .from('pending_ticket_fulfillments')
-        .update({
-          status: 'failed',
-          last_error: (err.message || 'Unknown error').substring(0, 500),
-          attempt_count: 1,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', fulfillmentId);
-    } catch (e) {
-      // ignore secondary failure
-    }
-    return error(500, { success: false, error: err.message || 'Unknown error', fulfillmentId });
+    return error(err.statusCode || 500, { success: false, error: err.message || 'Unknown error', fulfillmentId });
   }
 };
 

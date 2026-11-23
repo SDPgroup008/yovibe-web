@@ -43,6 +43,10 @@ path = "/robots.txt"
   path = "/*"
 
 [[edge_functions]]
+  function = "visitor-country"
+  path = "/api/visitor-country"
+
+[[edge_functions]]
 function = "public-seo-status"
 path = "/*"
 

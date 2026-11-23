@@ -86,7 +86,7 @@ exports.handler = async (event) => {
     const pdfBytes = await buildPayoutReceiptPdf(receipt);
     const pdfBase64 = Buffer.from(pdfBytes).toString("base64");
     const filename = `Payout_Receipt_${payoutId}.pdf`;
-    const subject = `Payout Receipt ${Math.round(Number(payout.amount) || 0).toLocaleString("en-US")} UGX — ${payoutId}`;
+    const subject = `Payout Receipt ${payout.currency || "UGX"} ${Number(payout.amount || 0).toLocaleString("en-US")} — ${payoutId}`;
     const html = renderReceiptHtml(receipt);
     const text = renderReceiptText(receipt);
 

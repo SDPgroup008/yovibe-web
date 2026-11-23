@@ -1,3 +1,4 @@
+import { useMapVenues } from "../hooks/useMapVenues"
 "use client"
 
 import type React from "react"
@@ -11,16 +12,17 @@ import { useMapScroll } from "../hooks/useScrollPersistence"
 import { useIsFocused } from "../utils/compatNavigation"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
+import { useCountry } from "../contexts/CountryContext"
 
 // This is a web-only implementation of the MapScreen
 const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   /* console.log('[MapScreen] 🏗️ RENDER/MOUNT'); */
   const { onScroll, onContentSizeChange, restorePosition, scrollRef } = useMapScroll()
   const isFocused = useIsFocused()
+  const { country } = useCountry()
 
-  const [venues, setVenues] = useState<Venue[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  const destinationVenueId = route.params?.destinationVenueId
+  const { venues, loading, refreshing, onRefresh } = useMapVenues(destinationVenueId)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
   const [displayedVenues, setDisplayedVenues] = useState<Venue[]>([])
   const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
@@ -31,25 +33,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     return () => clearTimeout(timer)
   }, [vibeDayKey])
   const [currentPage, setCurrentPage] = useState(1)
-  const [lastCreatedAt, setLastCreatedAt] = useState<string | null>(null)
-  const [hasMore, setHasMore] = useState(true)
-  const [dataCache, setDataCache] = useState<{data: Venue[], timestamp: number} | null>(null)
   const ITEMS_PER_PAGE = 5
-  const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-
-  // Check if we need to show directions to a specific venue
-  const destinationVenueId = route.params?.destinationVenueId
-
   // Restore scroll position when screen regains focus
   useEffect(() => {
     /* console.log('[MapScreen] 👁️ focus effect - isFocused=', isFocused); */
     if (isFocused) restorePosition()
   }, [isFocused])
-
-  // Initial load only
-  useEffect(() => {
-    loadVenues()
-  }, [])
 
   // Load today's canonical vibe image rating for every venue. This keeps the
   // list and its ordering in sync after a venue owner posts a new vibe.
@@ -87,12 +76,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   }, [venues, vibeDayKey])
 
   // Pull-to-refresh handler
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await loadVenues()
-    setRefreshing(false)
-  }, [])
-
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
     if (destinationVenueId && venues.length > 0) {
@@ -106,9 +89,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const getCurrentVibe = (venue: Venue) =>
     venueVibeRatings[venue.slug || venue.id] ?? 0
 
-  const sortedVenues = useMemo(() => [...venues].sort((a, b) => {
+  const sortedVenues = useMemo(() => venues.filter((venue) => country === 'ALL' || (venue.countryCode || 'UG') === country || venue.id === destinationVenueId || venue.slug === destinationVenueId).sort((a, b) => {
     return getCurrentVibe(b) - getCurrentVibe(a)
-  }), [venues, venueVibeRatings])
+  }), [venues, venueVibeRatings, country, destinationVenueId])
 
   useEffect(() => {
     // Reset pagination when venues or their live ratings change.
@@ -116,127 +99,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     setDisplayedVenues(sortedVenues.slice(0, ITEMS_PER_PAGE));
   }, [sortedVenues]);
 
-  const isCacheValid = () => {
-    if (!dataCache) return false;
-    return Date.now() - dataCache.timestamp < CACHE_DURATION;
-  };
-
-  const loadVenues = async () => {
-    try {
-      // Check cache first
-      if (isCacheValid()) {
-        // console.log("Using cached venues data for map");
-        setVenues(dataCache!.data);
-        setLoading(false);
-        return;
-      }
-      
-      setLoading(true);
-      
-      // AUTO-LOAD ALL VENUES: Fetch all data in batches with 7-second delays
-      // console.log("\n🚀 MAP AUTO-LOAD: Fetching ALL venues from Firebase in batches...\n");
-      
-      let allVenues: any[] = [];
-      let currentLastCreatedAt: string | undefined = undefined;
-      let fetchCount = 0;
-      const BATCH_SIZE = 5;
-      const DELAY_MS = 3000;
-      
-      while (true) {
-        fetchCount++;
-        // console.log(`\n${'='.repeat(60)}`);
-        // console.log(`🗺️  MAP BATCH #${fetchCount}: Requesting ${BATCH_SIZE} venues...`);
-        // console.log(`${'='.repeat(60)}`);
-        
-        const { venues: paginatedVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, currentLastCreatedAt);
-        
-        // console.log(`\n✅ BATCH #${fetchCount} RESULTS:`);
-        // console.log(`   • Received: ${paginatedVenues.length} venues`);
-        // console.log(`   • Has more data: ${newLastCreatedAt ? 'YES' : 'NO'}`);
-        
-        if (paginatedVenues.length === 0) {
-          // console.log(`\n⛔ BATCH #${fetchCount}: No venues returned - End of data`);
-          break;
-        }
-        
-        allVenues = [...allVenues, ...paginatedVenues];
-        currentLastCreatedAt = newLastCreatedAt ?? undefined;
-        
-        // 🚀 IMMEDIATELY DISPLAY the batch to users
-        setVenues(allVenues);
-        // console.log(`🎨 DISPLAYED: Batch #${fetchCount} now visible to users (${allVenues.length} venues)`);
-        
-        // Hide loading spinner after first batch is displayed
-        if (fetchCount === 1) {
-          // console.log("🎬 First batch complete - hiding loading spinner");
-          setLoading(false);
-        }
-        
-        // console.log(`\n📊 RUNNING TOTALS AFTER BATCH #${fetchCount}:`);
-        // console.log(`   • Total venues loaded: ${allVenues.length}`);
-        
-        if (!newLastCreatedAt) {
-          // console.log(`\n✅ BATCH #${fetchCount}: Last document is NULL - All venues loaded!`);
-          break;
-        }
-        
-        // console.log(`\n⏳ Waiting ${DELAY_MS / 1000} seconds before next batch...`);
-        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-      }
-      
-      // console.log(`\n${'='.repeat(60)}`);
-      // console.log(`🎉 MAP AUTO-LOAD COMPLETE!`);
-      // console.log(`${'='.repeat(60)}`);
-      // console.log(`   • Total batches: ${fetchCount}`);
-      // console.log(`   • Total venues: ${allVenues.length}`);
-      // console.log(`${'='.repeat(60)}\n`);
-      
-      setVenues(allVenues);
-      setLastCreatedAt(null);
-      setHasMore(false);
-      
-      // Cache the complete data
-      setDataCache({ data: allVenues, timestamp: Date.now() });
-      // console.log("💾 Complete venues dataset cached for map");
-    } catch (error) {
-      // console.error("Error loading venues for map:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadMoreVenues = async () => {
-    if (displayedVenues.length >= venues.length && hasMore) {
-      // Need to fetch more from Firebase
-      if (!lastCreatedAt || !hasMore) return;
-      
-      try {
-        const { venues: moreVenues, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(ITEMS_PER_PAGE, lastCreatedAt ?? undefined);
-        
-        if (moreVenues.length > 0) {
-          const updatedVenues = [...venues, ...moreVenues];
-          setVenues(updatedVenues);
-          setLastCreatedAt(newLastCreatedAt ?? null);
-          setHasMore(moreVenues.length === ITEMS_PER_PAGE);
-          
-          // Update cache
-          setDataCache({ data: updatedVenues, timestamp: Date.now() });
-        } else {
-          setHasMore(false);
-        }
-      } catch (error) {
-        console.error("Error loading more venues:", error);
-      }
-      return;
-    }
-    
-    if (displayedVenues.length >= venues.length) {
-      return; // No more items to load
-    }
+  const loadMoreVenues = () => {
+    if (currentPage * ITEMS_PER_PAGE >= sortedVenues.length) return
     const nextPage = currentPage + 1;
-    const startIndex = 0;
     const endIndex = nextPage * ITEMS_PER_PAGE;
-    setDisplayedVenues(sortedVenues.slice(startIndex, endIndex));
+    setDisplayedVenues(sortedVenues.slice(0, endIndex));
     setCurrentPage(nextPage);
   };
 

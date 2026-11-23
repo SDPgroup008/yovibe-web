@@ -1,4 +1,6 @@
 export interface Ticket {
+  currency?: string
+  countryCode?: string
   id: string
   eventId: string
   eventName: string

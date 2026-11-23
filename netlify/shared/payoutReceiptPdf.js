@@ -16,7 +16,7 @@ const WHITE = rgb(1, 1, 1);
 const LIGHT = rgb(0.94, 0.95, 0.97);
 const BORDER = rgb(0.85, 0.87, 0.9);
 
-const fmtMoney = (n) => "UGX " + Math.round(Number(n) || 0).toLocaleString("en-US");
+const fmtMoney = (n, currency = "UGX") => currency + " " + Number(n || 0).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 function drawRow(page, label, value, y, font, bold, mono, width, left, right) {
   page.drawText(String(label), { x: left, y, size: 11, font, color: MUTED });
@@ -56,7 +56,7 @@ async function buildPayoutReceiptPdf(payout) {
   // ── Amount card ────────────────────────────────────────────────────────
   page.drawRectangle({ x: L, y: 640, width: contentW, height: 104, color: LIGHT });
   page.drawText("AMOUNT PAID", { x: L + 20, y: 710, size: 11, font: helv, color: MUTED });
-  page.drawText(fmtMoney(amount), { x: L + 20, y: 668, size: 34, font: helvBold, color: DARK });
+  page.drawText(fmtMoney(amount, payout.currency), { x: L + 20, y: 668, size: 34, font: helvBold, color: DARK });
   page.drawText("Official transaction receipt", { x: L + 20, y: 654, size: 10, font: helv, color: MUTED });
 
   // ── Details table ──────────────────────────────────────────────────────

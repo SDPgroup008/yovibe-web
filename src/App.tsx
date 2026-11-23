@@ -8,6 +8,7 @@ import { RouterProvider, RouteRenderer } from "./utils/URLRouter";
 import { routes } from "./utils/routes";
 import { DesktopLayout, MobileLayout } from "./components/Navigation";
 import { LayoutProvider, useLayout } from "./contexts/LayoutContext";
+import { CountryProvider } from "./contexts/CountryContext";
 import { Ionicons } from "@expo/vector-icons";
 
 // 🔍 Error tracking (Phase 5) — init once at module scope, before React
@@ -585,11 +586,11 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AuthProvider>
+    <CountryProvider><AuthProvider>
       <LayoutProvider>
         <AppContent />
       </LayoutProvider>
-    </AuthProvider>
+    </AuthProvider></CountryProvider>
   );
 }
 

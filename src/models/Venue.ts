@@ -6,6 +6,7 @@ export interface WeeklyProgramDetails {
 export type WeeklyProgramValue = string | WeeklyProgramDetails
 
 export interface Venue {
+  countryCode?: string
   id: string
   slug?: string
   name: string

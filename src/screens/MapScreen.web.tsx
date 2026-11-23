@@ -1,3 +1,4 @@
+import { useMapVenues } from "../hooks/useMapVenues"
 "use client"
 
 import type React from "react"
@@ -18,33 +19,10 @@ import { useDeviceType, COLORS } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import LocationService from "../services/LocationService"
 import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
+import { useCountry } from "../contexts/CountryContext"
+import { isDiscoveryCountry } from "../config/countries"
 
 // ─── Module-level cache: survives component remounts ─────────────
-const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutes
-
-interface CacheEntry {
-  venues: Venue[];
-  vibeRatings: Record<string, number>;
-  timestamp: number;
-}
-
-let mapCache: CacheEntry | null = null;
-
-function isCacheValid(): boolean {
-  if (!mapCache) return false;
-  return Date.now() - mapCache.timestamp < CACHE_DURATION_MS;
-}
-
-function updateCache(venues: Venue[], vibeRatings: Record<string, number>) {
-  mapCache = { venues, vibeRatings, timestamp: Date.now() };
-}
-
-// ─── Module-level ref to track if we already set up listeners ────
-let listenersSetup = false;
-let vibeUnsubscribers: (() => void)[] = [];
-
-// ─────────────────────────────────────────────────────────────────
-
 // Traffic-light vibe colouring shared across the map and lists.
 function vibeColor(rating: number): string {
   return rating >= 4 ? "#4CAF50" : rating >= 3 ? "#FFC107" : "#F44336"
@@ -62,6 +40,15 @@ const sameVenue = (
 // ─── Country dropdown (map zoom-to-country) ──────────────────────
 // Bounding boxes are [south, west, north, east] in degrees.
 const COUNTRY_BOUNDS: Array<{ code: string; name: string; bounds: [number, number, number, number] }> = [
+  { code: "ALL", name: "All countries", bounds: [-35, -18, 15, 42] },
+  { code: "BJ", name: "Benin", bounds: [6.2, 0.7, 12.5, 3.9] },
+  { code: "CM", name: "Cameroon", bounds: [1.6, 8.4, 13.1, 16.2] },
+  { code: "CI", name: "Côte d’Ivoire", bounds: [4.3, -8.7, 10.8, -2.5] },
+  { code: "GA", name: "Gabon", bounds: [-4.0, 8.6, 2.4, 14.6] },
+  { code: "CG", name: "Republic of the Congo", bounds: [-5.1, 11.1, 3.8, 18.7] },
+  { code: "SN", name: "Senegal", bounds: [12.3, -17.6, 16.7, -11.3] },
+  { code: "SL", name: "Sierra Leone", bounds: [6.9, -13.3, 10.0, -10.2] },
+  { code: "ZM", name: "Zambia", bounds: [-18.1, 21.9, -8.2, 33.7] },
   { code: "UG", name: "Uganda", bounds: [-1.48, 29.57, 4.23, 35.03] },
   { code: "KE", name: "Kenya", bounds: [-4.68, 33.91, 5.51, 41.91] },
   { code: "TZ", name: "Tanzania", bounds: [-11.76, 29.34, -0.99, 40.44] },
@@ -224,7 +211,7 @@ const CountryDropdown: React.FC<{
       {open && (
         <DropdownPanel align="right" onClose={onToggle}>
           <ScrollView style={styles.countryList} showsVerticalScrollIndicator={false}>
-            {COUNTRY_BOUNDS.map((c) => (
+            {COUNTRY_BOUNDS.filter((c) => c.code === 'ALL' || isDiscoveryCountry(c.code)).map((c) => (
               <TouchableOpacity
                 key={c.code}
                 style={[styles.countryItem, c.code === selected && styles.countryItemSelected]}
@@ -307,29 +294,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const { isLargeScreen: isDesktop } = useDeviceType();
 
   // ─── Initialise state from cache if available ─────────────────
-  const [venues, setVenues] = useState<Venue[]>(() => isCacheValid() ? mapCache!.venues : []);
-  const [loading, setLoading] = useState(() => !isCacheValid());
-  const [refreshing, setRefreshing] = useState(false)
+  const destinationVenueId = route.params?.destinationVenueId
+  const { venues, loading, refreshing, onRefresh } = useMapVenues(destinationVenueId)
   const [selectedVenue, setSelectedVenue] = useState<Venue | null>(null)
-  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>(() => isCacheValid() ? mapCache!.vibeRatings : {})
+  const [venueVibeRatings, setVenueVibeRatings] = useState<Record<string, number>>({})
   const [vibeDayKey, setVibeDayKey] = useState(() => getLocalVibeDayKey())
   const [searchQuery, setSearchQuery] = useState("")
   const [showSearch, setShowSearch] = useState(false)
   const [showList, setShowList] = useState(false)
-  const [selectedCountry, setSelectedCountry] = useState("UG")
+  const { country: selectedCountry, selectCountry } = useCountry()
   const [selectedCity, setSelectedCity] = useState<string>("Kampala")
   const [openDropdown, setOpenDropdown] = useState<"city" | "country" | null>(null)
   const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null)
   const [locatingUser, setLocatingUser] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const [lastCreatedAt, setLastCreatedAt] = useState<string | undefined>(undefined)
-  const [hasMore, setHasMore] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const loadingMoreRef = useRef(false)
-  const hasMoreRef = useRef(true)
-  const lastCreatedAtRef = useRef<string | undefined>(undefined)
-  const autoLoadAllRef = useRef(false)
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setVibeDayKey(getLocalVibeDayKey())
@@ -337,28 +315,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }, getMillisecondsUntilNextLocalDay())
     return () => clearTimeout(timer)
   }, [vibeDayKey])
-
-  // Keep refs in sync so the auto-load loop always reads fresh state.
-  useEffect(() => {
-    hasMoreRef.current = hasMore
-  }, [hasMore])
-  useEffect(() => {
-    lastCreatedAtRef.current = lastCreatedAt
-  }, [lastCreatedAt])
-
-  // ─── Hydrate once from cache on first mount (if cached) ────────
-  const initialisedRef = useRef(false);
-  useEffect(() => {
-    if (!initialisedRef.current && isCacheValid() && mapCache) {
-      /* console.log('[MapScreen.web] 💾 Hydrating from module-level cache, venue count:', mapCache.venues.length); */
-      setVenues(mapCache.venues);
-      setVenueVibeRatings(mapCache.vibeRatings);
-      setHasMore(false);
-      setLoading(false);
-      initialisedRef.current = true;
-    }
-    initialisedRef.current = true;
-  }, []);
 
   // Restore scroll position when screen regains focus
   useEffect(() => {
@@ -387,55 +343,20 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     }
   }, [showSearch])
 
-  // Check if we need to show directions to a specific venue
-  const destinationVenueId = route.params?.destinationVenueId
-
-  // ─── Load data only once (module-level guard) ──────────────────
   useEffect(() => {
-    if (isCacheValid()) {
-      /* console.log('[MapScreen.web] ⏭️ Skipping initial load — cache is valid'); */
-      if (!listenersSetup) {
-        listenersSetup = true;
-        setupVibeListeners();
-      }
-      return;
+    let active = true
+    const unsubscribers: (() => void)[] = []
+    setSelectedVenue(null)
+    setVenueVibeRatings({})
+    for (const venue of venues) {
+      SupabaseService.getVibeImagesByVenueAndDate(venue.id, new Date()).then(images => {
+        if (!active || !images.length) return
+        const latest = images.reduce((a, b) => a.uploadedAt > b.uploadedAt ? a : b)
+        setVenueVibeRatings(previous => ({ ...previous, [venue.id]: latest.vibeRating || 0 }))
+      }).catch(() => {})
     }
-
-    // Cache invalid or empty — load fresh, then auto-load every remaining
-    // batch so the full venue list is available without scrolling.
-    loadVenues({ reset: true }).then(() => {
-      autoLoadAll()
-    });
-
-    if (!listenersSetup) {
-      listenersSetup = true;
-      setupVibeListeners();
-    }
-
-    return () => {
-      // NOTE: We do NOT tear down vibe listeners on unmount anymore —
-      // they stay alive & update the cache. The module-level
-      // `vibeUnsubscribers` array lets us clean up only on full page
-      // unload (handled below).
-    };
-  }, []);
-
-  // ─── Full-cleanup on page unload (not component unmount) ──────
-  useEffect(() => {
-    return () => {
-      // On component unmount update the cache so next mount has data
-      if (venues.length > 0) {
-        updateCache(venues, venueVibeRatings);
-      }
-    };
-  }, [venues, venueVibeRatings]);
-
-  // Set up real-time vibe listeners (called once)
-  const setupVibeListeners = async () => {
-    if (!db) return
-    try {
-      const venuesList = await SupabaseService.getVenues()
-      for (const venue of venuesList) {
+    if (db) {
+      for (const venue of venues) {
         // CRITICAL: skip venues without a valid id — Firebase will crash
         // with "Unsupported field value: undefined" on where("==", undefined)
         if (!venue?.id) {
@@ -477,12 +398,11 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
             console.error(`FirebaseService: Error listening to vibe ratings for venue ${venueId}:`, error)
           }
         )
-        vibeUnsubscribers.push(unsubscribe)
+        unsubscribers.push(unsubscribe)
       }
-    } catch (error) {
-      console.error("Error setting up vibe listeners:", error)
     }
-  }
+    return () => { active = false; unsubscribers.forEach(unsubscribe => unsubscribe()) }
+  }, [venues, vibeDayKey])
 
   useEffect(() => {
     // If a destination venue ID is provided, highlight it
@@ -493,91 +413,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       }
     }
   }, [destinationVenueId, venues])
-
-  const loadVenues = useCallback(async (opts?: { reset?: boolean }): Promise<boolean> => {
-    const reset = opts?.reset ?? false
-    const BATCH_SIZE = 25
-    if (reset) {
-      setLoading(true)
-    } else {
-      // Another load is already in flight (or nothing left) — signal "continue"
-      // so an auto-load loop doesn't stop because a scroll-triggered load won.
-      if (loadingMoreRef.current || !hasMoreRef.current) return true
-      loadingMoreRef.current = true
-      setLoadingMore(true)
-    }
-    try {
-      const cursor = reset ? undefined : lastCreatedAtRef.current
-      const { venues: batch, lastCreatedAt: newLastCreatedAt } = await SupabaseService.getVenuesPaginated(BATCH_SIZE, cursor);
-
-      setVenues((prev) => (reset ? batch : [...prev, ...batch]));
-      setLastCreatedAt(newLastCreatedAt ?? undefined);
-      lastCreatedAtRef.current = newLastCreatedAt ?? undefined;
-
-      // Stop if the cursor didn't advance (protects against infinite loops
-      // caused by duplicate created_at values).
-      const advanced = !!reset || (!!newLastCreatedAt && newLastCreatedAt !== cursor)
-      const more = advanced && !!newLastCreatedAt && batch.length > 0
-      setHasMore(more);
-      hasMoreRef.current = more;
-
-      const today = new Date();
-      for (const venue of batch) {
-        try {
-          const vibeImages = await SupabaseService.getVibeImagesByVenueAndDate(venue.id, today);
-          if (vibeImages.length > 0) {
-            const latestVibe = vibeImages.reduce((latest, image) => {
-              return image.uploadedAt > latest.uploadedAt ? image : latest;
-            });
-            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: latestVibe.vibeRating || 0.0 }));
-          } else {
-            // No upload today means the live vibe is reset for the new day.
-            setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: 0.0 }));
-          }
-        } catch {
-          // Do not resurrect a stale denormalized rating after a daily read.
-          setVenueVibeRatings(prev => ({ ...prev, [venueKey(venue)]: 0.0 }));
-        }
-      }
-      return true
-    } catch (error) {
-      console.error("[MapScreen.web] Error loading venues:", error);
-      return false
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      loadingMoreRef.current = false;
-    }
-  }, [vibeDayKey]);
-
-  // Load the next page (resolves true when a batch was fetched).
-  const loadMore = useCallback(() => {
-    return loadVenues({ reset: false })
-  }, [loadVenues])
-
-  // Load every remaining page back-to-back, without needing to scroll.
-  const autoLoadAll = useCallback(async () => {
-    if (autoLoadAllRef.current) return
-    autoLoadAllRef.current = true
-    try {
-      // Small pause between batches so we don't hammer the API.
-      while (hasMoreRef.current) {
-        const ok = await loadMore()
-        if (!ok) break
-        await new Promise((resolve) => setTimeout(resolve, 350))
-      }
-    } finally {
-      autoLoadAllRef.current = false
-    }
-  }, [loadMore])
-
-  // Pull-to-refresh handler — reloads everything, including all batches.
-  const onRefresh = useCallback(async () => {
-    setRefreshing(true)
-    await loadVenues({ reset: true })
-    await autoLoadAll()
-    setRefreshing(false)
-  }, [loadVenues, autoLoadAll])
 
   const handleVenueSelect = (venueId: string) => {
     navigation.navigate("VenueDetail", { venueId })
@@ -615,9 +450,9 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
     const searchTerm = searchQuery.toLowerCase().trim()
     
     // Filter venues based on search query
-    let filtered = venues
+    let filtered = venues.filter((venue) => selectedCountry === 'ALL' || (venue.countryCode || 'UG') === selectedCountry)
     if (searchTerm) {
-      filtered = venues.filter((venue) => {
+      filtered = filtered.filter((venue) => {
         const nameMatch = venue.name?.toLowerCase().includes(searchTerm)
         const locationMatch = venue.location?.toLowerCase().includes(searchTerm)
         const categoryMatch = venue.categories?.some((cat) => 
@@ -633,7 +468,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       const bVibe = getCurrentVibe(b)
       return bVibe - aVibe
     })
-  }, [venues, venueVibeRatings, searchQuery])
+  }, [venues, venueVibeRatings, searchQuery, selectedCountry])
 
   // Get venue count for display
   const venueCount = filteredAndSortedVenues.length
@@ -681,7 +516,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   const mapVenuesPayload = () => ({
     type: "venues",
-    venues: venues.map((v) => ({
+    venues: venues.filter((v) => selectedCountry === 'ALL' || (v.countryCode || 'UG') === selectedCountry || venueKey(v) === destinationVenueId).map((v) => ({
       id: venueKey(v),
       name: v.name,
       lat: v.latitude ?? v.coordinates?.latitude,
@@ -701,11 +536,12 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   }
 
   // Cities available for the selected country.
-  const currentCities = CITY_LOOKUP[selectedCountry] || CITY_LOOKUP.UG || []
+  const currentCities = CITY_LOOKUP[selectedCountry] || []
 
   // Selecting a country: populate cities, default to the capital, zoom to it.
   const handleCountrySelect = (code: string) => {
-    setSelectedCountry(code)
+    if (code !== 'ALL' && !isDiscoveryCountry(code)) return
+    selectCountry(code)
     const cities = CITY_LOOKUP[code] || []
     const capital = cities.find((c) => c.capital) || cities[0]
     setSelectedCity(capital ? capital.name : "")
@@ -725,10 +561,18 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
 
   // Initial load: zoom straight to the selected country's capital city.
   const focusCapital = () => {
-    const cities = CITY_LOOKUP[selectedCountry] || CITY_LOOKUP.UG || []
+    const cities = CITY_LOOKUP[selectedCountry] || []
     const capital = cities.find((c) => c.capital) || cities[0]
     if (capital) focusCity(capital)
+    else fitCountry(selectedCountry)
   }
+
+  useEffect(() => {
+    const cities = CITY_LOOKUP[selectedCountry] || []
+    const capital = cities.find((city) => city.capital) || cities[0]
+    setSelectedCity(capital?.name || '')
+    if (!destinationVenueId) fitCountry(selectedCountry)
+  }, [selectedCountry, destinationVenueId])
 
   // Push venue markers whenever the loaded list changes.
   useEffect(() => {
@@ -736,7 +580,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
       v.latitude != null || v.coordinates?.latitude != null).length
     /* console.log(`[MapScreen.web] posting ${venues.length} venues to map (${withCoords} with coords)`) */
     postToMap(mapVenuesPayload())
-  }, [venues])
+  }, [venues, selectedCountry, destinationVenueId])
 
   // Highlight the selected venue on the map (or clear it when null).
   useEffect(() => {
@@ -774,45 +618,6 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   // Resolve the underlying scrollable DOM element on web so we can read
   // scrollTop/scrollHeight reliably (RNW scroll events often omit
   // contentSize/layoutMeasurement, which breaks the usual threshold check).
-  const getScrollNode = () => {
-    const sc = scrollRef.current as any
-    if (!sc) return null
-    if (typeof sc.getScrollableNode === "function") return sc.getScrollableNode()
-    if (sc._listRef?._scrollRef && typeof sc._listRef._scrollRef.getScrollableNode === "function") {
-      return sc._listRef._scrollRef.getScrollableNode()
-    }
-    if (typeof sc.getScrollResponder === "function") {
-      const responder = sc.getScrollResponder()
-      if (responder && typeof responder.getScrollableNode === "function") return responder.getScrollableNode()
-    }
-    return sc._node || sc._scrollNodeRef || null
-  }
-
-  const maybeLoadMore = () => {
-    if (loadingMoreRef.current || !hasMore) return
-    const node = getScrollNode()
-    if (node && node.scrollHeight && node.clientHeight &&
-        node.scrollTop + node.clientHeight >= node.scrollHeight - 200) {
-      loadMore()
-    }
-  }
-
-  const handleListScroll = (event: any) => {
-    onScroll(event)
-    maybeLoadMore()
-  }
-
-  const handleListContentSize = (w?: number, h?: number) => {
-    onContentSizeChange(w, h)
-    // If the loaded items don't fill the viewport, keep fetching until they
-    // do (or until there are no more), so all venues load even without scrolling.
-    const node = getScrollNode()
-    if (node && node.scrollHeight && node.clientHeight &&
-        node.scrollHeight <= node.clientHeight + 5 && hasMore && !loadingMore) {
-      loadMore()
-    }
-  }
-
   return (
     <View style={[styles.container, { backgroundColor: COLORS.background }]}>
       {/* SEO Metadata for Map page */}
@@ -887,8 +692,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 ref={scrollRef}
                 style={styles.venueList}
                 showsVerticalScrollIndicator={false}
-                onContentSizeChange={handleListContentSize}
-                onScroll={handleListScroll}
+                onContentSizeChange={onContentSizeChange}
+                onScroll={onScroll}
                 scrollEventThrottle={16}
               >
                 {filteredAndSortedVenues.map((venue, index) => {
@@ -929,18 +734,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                     </TouchableOpacity>
                   );
                 })}
-                {loadingMore && (
-                  <View style={styles.listFooter}>
-                    <ActivityIndicator size="small" color="#22d3ee" />
-                    <Text style={styles.listFooterText}>Loading more venues…</Text>
-                  </View>
-                )}
-                {hasMore && !loadingMore && venues.length > 0 && (
-                  <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
-                    <Text style={styles.loadMoreButtonText}>Load more venues</Text>
-                  </TouchableOpacity>
-                )}
-                {!hasMore && venues.length > 0 && (
+                {venues.length > 0 && (
                   <View style={styles.listFooter}>
                     <Text style={styles.listFooterText}>All venues loaded</Text>
                   </View>
@@ -1167,8 +961,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                     ref={scrollRef}
                     style={styles.venueList}
                     showsVerticalScrollIndicator={false}
-                    onContentSizeChange={handleListContentSize}
-                    onScroll={handleListScroll}
+                    onContentSizeChange={onContentSizeChange}
+                    onScroll={onScroll}
                     scrollEventThrottle={16}
                     refreshControl={
                       <RefreshControl
@@ -1226,18 +1020,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                         </TouchableOpacity>
                       )
                     })}
-                    {loadingMore && (
-                      <View style={styles.listFooter}>
-                        <ActivityIndicator size="small" color="#22d3ee" />
-                        <Text style={styles.listFooterText}>Loading more venues…</Text>
-                      </View>
-                    )}
-                    {hasMore && !loadingMore && venues.length > 0 && (
-                      <TouchableOpacity style={styles.loadMoreButton} onPress={loadMore}>
-                        <Text style={styles.loadMoreButtonText}>Load more venues</Text>
-                      </TouchableOpacity>
-                    )}
-                    {!hasMore && venues.length > 0 && (
+                {venues.length > 0 && (
                       <View style={styles.listFooter}>
                         <Text style={styles.listFooterText}>All venues loaded</Text>
                       </View>

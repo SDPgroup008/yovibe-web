@@ -170,6 +170,11 @@ if (isStaging) {
     if (publicConfig.includes(identifier)) throw new Error(`Staging build rejected production identifier: ${identifier}`);
   }
 
+  const { assertPublicMediaUrl } = require('../netlify/shared/runtimeConfig');
+  for (const key of ['EXPO_PUBLIC_R2_PUBLIC_URL', 'NEXT_PUBLIC_R2_PUBLIC_URL']) {
+    if (process.env[key]) assertPublicMediaUrl(process.env[key]);
+  }
+
   const requiredPublicVariables = [
     'EXPO_PUBLIC_SITE_URL',
     'EXPO_PUBLIC_FUNCTIONS_BASE_URL',
