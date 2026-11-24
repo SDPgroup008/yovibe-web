@@ -1759,20 +1759,16 @@ const handleInstallmentPurchase = async () => {
           {paymentMethod === "mobile_money" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
         </TouchableOpacity>
 
-        {/* Credit Card is always discoverable. Settlement is only enabled for
-            currencies configured on the current PesaPal merchant account. */}
-        <TouchableOpacity
+        {/* Card checkout is shown only for merchant currencies confirmed in
+            YoVibe's PesaPal configuration. */}
+        {currency === "UGX" && <TouchableOpacity
           activeOpacity={0.8}
-          style={[
-            styles.paymentOption,
-            paymentMethod === "credit_card" && styles.paymentOptionSelected,
-            currency !== "UGX" && styles.paymentOptionUnavailable,
-          ]}
+          style={[styles.paymentOption, paymentMethod === "credit_card" && styles.paymentOptionSelected]}
           onPress={() => {
             if (!authoritativeConfigLoading) setPaymentMethod("credit_card")
           }}
-          disabled={authoritativeConfigLoading || currency !== "UGX"}
-          accessibilityState={{ disabled: authoritativeConfigLoading || currency !== "UGX" }}
+          disabled={authoritativeConfigLoading}
+          accessibilityState={{ disabled: authoritativeConfigLoading }}
         >
           <View style={styles.paymentOptionMain}>
             <View style={[styles.paymentOptionIcon, paymentMethod === "credit_card" && styles.paymentOptionIconActive]}>
@@ -1780,13 +1776,11 @@ const handleInstallmentPurchase = async () => {
             </View>
             <View>
               <Text style={[styles.paymentOptionText, paymentMethod === "credit_card" && styles.paymentOptionTextSelected]}>Credit Card</Text>
-              <Text style={styles.paymentOptionSub}>
-                {currency === "UGX" ? "Visa & Mastercard" : `Card checkout is not configured for ${currency} yet`}
-              </Text>
+              <Text style={styles.paymentOptionSub}>Visa & Mastercard</Text>
             </View>
           </View>
           {paymentMethod === "credit_card" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
-        </TouchableOpacity>
+        </TouchableOpacity>}
 
         {/* Payment Details Form */}
         {paymentMethod === "mobile_money" && (
@@ -1801,8 +1795,7 @@ const handleInstallmentPurchase = async () => {
                   onPress={() => setMobileMoneyProvider(option.provider)}
                   accessibilityRole="button"
                   accessibilityLabel={`Use ${option.displayName} mobile money`}>
-                  {logo ? <Image source={{ uri: logo }} style={styles.providerLogo} resizeMode="contain" /> : <Ionicons name="phone-portrait-outline" size={18} color={selected ? "#FFFFFF" : "#AAB4C0"} />}
-                  <Text style={[styles.providerButtonText, selected && styles.providerButtonTextActive]}>{option.displayName}</Text>
+                  {logo ? <Image source={{ uri: logo }} style={styles.providerLogo} resizeMode="contain" /> : <Ionicons name="phone-portrait-outline" size={34} color={selected ? "#FFFFFF" : "#AAB4C0"} />}
                 </TouchableOpacity>
               })}
             </View>
@@ -1814,7 +1807,6 @@ const handleInstallmentPurchase = async () => {
               placeholderTextColor="#999"
               keyboardType="phone-pad"
             />
-            {(activeProvider?.instructions || []).map((line, index) => <Text key={index} style={styles.paymentOptionSub}>{line}</Text>)}
             {customerFee != null && customerFee > 0 && <Text style={styles.paymentOptionSub}>Estimated operator fee charged to your wallet: {currency} {customerFee.toLocaleString()}</Text>}
             {fieldErrors.mobileMoneyNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{fieldErrors.mobileMoneyNumber}</Text>}
             <TextInput
@@ -2962,9 +2954,6 @@ const styles = StyleSheet.create({
       ? { boxShadow: "0 0 18px rgba(0,212,255,0.15)" }
       : {}),
   },
-  paymentOptionUnavailable: {
-    opacity: 0.58,
-  },
   paymentOptionMain: {
     flexDirection: "row",
     alignItems: "center",
@@ -3059,8 +3048,10 @@ const styles = StyleSheet.create({
   providerButton: {
     flex: 1,
     minWidth: 0,
-    padding: 12,
+    minHeight: 82,
+    padding: 14,
     alignItems: "center",
+    justifyContent: "center",
     backgroundColor: "#333333",
     borderRadius: 8,
     borderWidth: 1,
@@ -3070,17 +3061,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#2196F3",
     borderColor: "#2196F3",
   },
-  providerButtonText: {
-    color: "#888888",
-    fontWeight: "600",
-  },
-  providerButtonTextActive: {
-    color: "#FFFFFF",
-  },
   providerLogo: {
-    width: 30,
-    height: 22,
-    marginBottom: 5,
+    width: 92,
+    height: 52,
   },
   input: {
     backgroundColor: "#333333",
