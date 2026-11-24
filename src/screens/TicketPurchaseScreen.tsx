@@ -3048,8 +3048,8 @@ const styles = StyleSheet.create({
   providerButton: {
     flex: 1,
     minWidth: 0,
-    minHeight: 82,
-    padding: 14,
+    minHeight: 106,
+    padding: 16,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#333333",
@@ -3062,8 +3062,9 @@ const styles = StyleSheet.create({
     borderColor: "#2196F3",
   },
   providerLogo: {
-    width: 92,
-    height: 52,
+    width: "100%",
+    maxWidth: 150,
+    height: 68,
   },
   input: {
     backgroundColor: "#333333",
