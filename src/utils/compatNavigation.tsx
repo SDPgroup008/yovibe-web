@@ -33,7 +33,7 @@ export const useCompatNavigation = (): CompatNavigation => {
         'MapView': () => navigate('/map'),
         'CalendarView': () => navigate('/calendar'),
         'ProfileMain': () => navigate('/profile'),
-        'AddEvent': (params) => navigate('/events/add'),
+        'AddEvent': (params) => navigate(params?.venueId ? `/events/add/${encodeURIComponent(params.venueId)}` : '/events/add'),
         'TicketPurchase': (params) => navigate(`/events/tickets/${params?.eventId}`),
         'TicketScanner': (params) => navigate(`/events/scanner/${params?.eventId}`),
         'OrganiserDashboard': (params) => navigate(`/events/organiser/${params?.eventId}`),

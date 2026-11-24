@@ -124,6 +124,11 @@ export const routes: RouteDefinition[] = [
   },
   // Static sub-routes must come BEFORE the dynamic /events/:eventId
   {
+    path: '/events/add/:venueId',
+    component: withCompatNavigation(AddEventScreen),
+    exact: true
+  },
+  {
     path: '/events/add',
     component: withCompatNavigation(AddEventScreen),
     exact: true

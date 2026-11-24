@@ -287,19 +287,13 @@ const AddEventScreen: React.FC<any> = (props) => {
   // Load venues and auto-select for club owners
   useEffect(() => {
     const loadAndSelectVenue = async () => {
-      // If route params include venue info, use them directly
-      if (route.params?.venueId && route.params?.venueName) {
-        setSelectedVenueId(route.params.venueId)
-        setSelectedVenueName(route.params.venueName)
-        return
-      }
-      
       // For club_owners, fetch their venue by owner ID
       if (user?.userType === "club_owner") {
         try {
           const ownedVenues = await SupabaseService.getVenuesByOwner(user.id)
+          setVenues(ownedVenues.map(venue => ({ id: venue.slug || venue.id, slug: venue.slug, name: venue.name, countryCode: venue.countryCode })))
           if (ownedVenues.length > 0) {
-            const venue = ownedVenues[0]
+            const venue = ownedVenues.find(item => (item.slug || item.id) === route.params?.venueId) || ownedVenues[0]
             setSelectedVenueId(venue.slug || venue.id)
             setSelectedVenueName(venue.name)
             return
@@ -1246,9 +1240,14 @@ const AddEventScreen: React.FC<any> = (props) => {
         {user?.userType === "club_owner" && (
           <>
             <Text style={styles.label}>Venue</Text>
-            <View style={styles.venueInfo}>
+            <TouchableOpacity style={styles.venueInfo} onPress={() => setShowVenueSelector(!showVenueSelector)}>
               <Text style={styles.venueText}>{selectedVenueName || "No venue selected"}</Text>
-            </View>
+            </TouchableOpacity>
+            {showVenueSelector && venues.map(venue => (
+              <TouchableOpacity key={venue.id} style={styles.venueItem} onPress={() => handleVenueSelect(venue.slug || venue.id, venue.name)}>
+                <Text style={styles.venueItemText}>{venue.name}</Text>
+              </TouchableOpacity>
+            ))}
           </>
         )}
 
