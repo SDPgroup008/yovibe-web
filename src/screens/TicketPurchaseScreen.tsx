@@ -42,6 +42,41 @@ const CARD_RADIUS = 14
 
 const STEP_LABELS = ["Ticket", "Attendees", "Delivery", "Payment"] as const
 
+// pawaPay publishes these public brand assets for the enabled wallet providers.
+// Keep the provider code as the key: the active-configuration response remains
+// the source of truth for whether a route is actually available.
+const PAWAPAY_PROVIDER_LOGOS: Record<string, string> = {
+  MTN_MOMO_BEN: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  MOOV_BEN: "https://static-content.pawapay.io/provider_logos/moov_money.png",
+  MTN_MOMO_CMR: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  ORANGE_CMR: "https://static-content.pawapay.io/provider_logos/orange.png",
+  MTN_MOMO_CIV: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  ORANGE_CIV: "https://static-content.pawapay.io/provider_logos/orange.png",
+  MOOV_CIV: "https://static-content.pawapay.io/provider_logos/moov_money.png",
+  WAVE_CIV: "https://static-content.pawapay.io/provider_logos/wave.png",
+  AIRTEL_COD: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  ORANGE_COD: "https://static-content.pawapay.io/provider_logos/orange.png",
+  VODACOM_MPESA_COD: "https://static-content.pawapay.io/provider_logos/vodacom.png",
+  AIRTEL_GAB: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  MOOV_GAB: "https://static-content.pawapay.io/provider_logos/moov_money.png",
+  MPESA_KEN: "https://static-content.pawapay.io/provider_logos/mpesa.png",
+  AIRTEL_COG: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  MTN_MOMO_COG: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  AIRTEL_RWA: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  MTN_MOMO_RWA: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  FREE_SEN: "https://static-content.pawapay.io/provider_logos/free.png",
+  ORANGE_SEN: "https://static-content.pawapay.io/provider_logos/orange.png",
+  WAVE_SEN: "https://static-content.pawapay.io/provider_logos/wave.png",
+  ORANGE_SLE: "https://static-content.pawapay.io/provider_logos/orange.png",
+  AIRTEL_OAPI_UGA: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  MTN_MOMO_UGA: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  AIRTEL_OAPI_ZMB: "https://static-content.pawapay.io/provider_logos/airtel.png",
+  MTN_MOMO_ZMB: "https://static-content.pawapay.io/provider_logos/mtn.png",
+  ZAMTEL_ZMB: "https://static-content.pawapay.io/provider_logos/zamtel.png",
+}
+
+const providerLogo = (provider: string) => PAWAPAY_PROVIDER_LOGOS[provider]
+
 // Compact section header with a step number chip (purely visual).
 const StepSectionTitle: React.FC<{ step: number; title: string }> = ({ step, title }) => (
   <View style={styles.stepSectionTitleRow}>
@@ -53,7 +88,7 @@ const StepSectionTitle: React.FC<{ step: number; title: string }> = ({ step, tit
 )
 
 const TicketPurchaseScreen: React.FC = () => {
-  const { isLargeScreen } = useDeviceType()
+  const { isLargeScreen, isTablet } = useDeviceType()
   const navigation = useCompatNavigation()
   const { currentPath } = useRouter()
 
@@ -1283,13 +1318,17 @@ const handleInstallmentPurchase = async () => {
         </View>
 
         {/* ── Checkout progress ──────────────────────────────────── */}
-        <View style={[styles.stepper, isLargeScreen && styles.desktopStepper]}>
+        <View style={[
+          styles.stepper,
+          isLargeScreen && styles.desktopStepper,
+          !isLargeScreen && !isTablet && styles.stepperMobile,
+        ]}>
           {STEP_LABELS.map((label, i) => {
             const stepNum = i + 1
             const done = checkoutStep > stepNum
             const active = checkoutStep >= stepNum
             return (
-              <View key={label} style={styles.stepperItem}>
+              <View key={label} style={[styles.stepperItem, !isLargeScreen && !isTablet && styles.stepperItemMobile]}>
                 <View style={[styles.stepperDot, active && styles.stepperDotActive]}>
                   {done ? (
                     <Ionicons name="checkmark" size={12} color="#03121a" />
@@ -1297,8 +1336,12 @@ const handleInstallmentPurchase = async () => {
                     <Text style={[styles.stepperDotText, active && styles.stepperDotTextActive]}>{stepNum}</Text>
                   )}
                 </View>
-                <Text style={[styles.stepperLabel, active && styles.stepperLabelActive]}>{label}</Text>
-                {i < STEP_LABELS.length - 1 && <View style={[styles.stepperLine, done && styles.stepperLineActive]} />}
+                <Text style={[styles.stepperLabel, !isLargeScreen && !isTablet && styles.stepperLabelMobile, active && styles.stepperLabelActive]}>{label}</Text>
+                {i < STEP_LABELS.length - 1 && <View style={[
+                  styles.stepperLine,
+                  !isLargeScreen && !isTablet && styles.stepperLineMobile,
+                  done && styles.stepperLineActive,
+                ]} />}
               </View>
             )
           })}
@@ -1716,14 +1759,20 @@ const handleInstallmentPurchase = async () => {
           {paymentMethod === "mobile_money" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
         </TouchableOpacity>
 
-        {/* Credit Card */}
-        {currency === "UGX" && <TouchableOpacity
+        {/* Credit Card is always discoverable. Settlement is only enabled for
+            currencies configured on the current PesaPal merchant account. */}
+        <TouchableOpacity
           activeOpacity={0.8}
-          style={[styles.paymentOption, paymentMethod === "credit_card" && styles.paymentOptionSelected]}
+          style={[
+            styles.paymentOption,
+            paymentMethod === "credit_card" && styles.paymentOptionSelected,
+            currency !== "UGX" && styles.paymentOptionUnavailable,
+          ]}
           onPress={() => {
             if (!authoritativeConfigLoading) setPaymentMethod("credit_card")
           }}
-          disabled={authoritativeConfigLoading}
+          disabled={authoritativeConfigLoading || currency !== "UGX"}
+          accessibilityState={{ disabled: authoritativeConfigLoading || currency !== "UGX" }}
         >
           <View style={styles.paymentOptionMain}>
             <View style={[styles.paymentOptionIcon, paymentMethod === "credit_card" && styles.paymentOptionIconActive]}>
@@ -1731,22 +1780,31 @@ const handleInstallmentPurchase = async () => {
             </View>
             <View>
               <Text style={[styles.paymentOptionText, paymentMethod === "credit_card" && styles.paymentOptionTextSelected]}>Credit Card</Text>
-              <Text style={styles.paymentOptionSub}>Visa &amp; Mastercard</Text>
+              <Text style={styles.paymentOptionSub}>
+                {currency === "UGX" ? "Visa & Mastercard" : `Card checkout is not configured for ${currency} yet`}
+              </Text>
             </View>
           </View>
           {paymentMethod === "credit_card" && <Ionicons name="checkmark-circle" size={22} color="#00D4FF" />}
-        </TouchableOpacity>}
+        </TouchableOpacity>
 
         {/* Payment Details Form */}
         {paymentMethod === "mobile_money" && (
           <View style={styles.paymentForm}>
             <Text style={styles.paymentFormTitle}>Mobile Money Details</Text>
             <View style={styles.providerButtons}>
-              {routes.options.map(option => <TouchableOpacity key={option.provider}
-                style={[styles.providerButton, mobileMoneyProvider === option.provider && styles.providerButtonActive]}
-                onPress={() => setMobileMoneyProvider(option.provider)}>
-                <Text style={styles.providerButtonText}>{option.displayName}</Text>
-              </TouchableOpacity>)}
+              {routes.options.map(option => {
+                const logo = providerLogo(option.provider)
+                const selected = mobileMoneyProvider === option.provider
+                return <TouchableOpacity key={option.provider}
+                  style={[styles.providerButton, selected && styles.providerButtonActive]}
+                  onPress={() => setMobileMoneyProvider(option.provider)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${option.displayName} mobile money`}>
+                  {logo ? <Image source={{ uri: logo }} style={styles.providerLogo} resizeMode="contain" /> : <Ionicons name="phone-portrait-outline" size={18} color={selected ? "#FFFFFF" : "#AAB4C0"} />}
+                  <Text style={[styles.providerButtonText, selected && styles.providerButtonTextActive]}>{option.displayName}</Text>
+                </TouchableOpacity>
+              })}
             </View>
             <TextInput
               style={[styles.input, fieldErrors.mobileMoneyNumber && styles.inputError]}
@@ -2334,9 +2392,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     marginBottom: 16,
   },
+  stepperMobile: {
+    paddingHorizontal: 10,
+    justifyContent: "space-between",
+  },
   stepperItem: {
     flexDirection: "row",
     alignItems: "center",
+  },
+  stepperItemMobile: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "column",
+    alignItems: "center",
+    position: "relative",
   },
   stepperDot: {
     width: 26,
@@ -2370,6 +2439,13 @@ const styles = StyleSheet.create({
   stepperLabelActive: {
     color: "#FFFFFF",
   },
+  stepperLabelMobile: {
+    fontSize: 10,
+    lineHeight: 13,
+    marginTop: 5,
+    marginHorizontal: 0,
+    textAlign: "center",
+  },
   stepperLine: {
     flex: 1,
     height: 2,
@@ -2379,6 +2455,14 @@ const styles = StyleSheet.create({
   },
   stepperLineActive: {
     backgroundColor: "#00D4FF",
+  },
+  stepperLineMobile: {
+    position: "absolute",
+    top: 12,
+    left: "75%",
+    width: "50%",
+    minWidth: 0,
+    marginHorizontal: 0,
   },
   ticketSection: {
     padding: 16,
@@ -2878,6 +2962,9 @@ const styles = StyleSheet.create({
       ? { boxShadow: "0 0 18px rgba(0,212,255,0.15)" }
       : {}),
   },
+  paymentOptionUnavailable: {
+    opacity: 0.58,
+  },
   paymentOptionMain: {
     flexDirection: "row",
     alignItems: "center",
@@ -2971,6 +3058,7 @@ const styles = StyleSheet.create({
   },
   providerButton: {
     flex: 1,
+    minWidth: 0,
     padding: 12,
     alignItems: "center",
     backgroundColor: "#333333",
@@ -2988,6 +3076,11 @@ const styles = StyleSheet.create({
   },
   providerButtonTextActive: {
     color: "#FFFFFF",
+  },
+  providerLogo: {
+    width: 30,
+    height: 22,
+    marginBottom: 5,
   },
   input: {
     backgroundColor: "#333333",
