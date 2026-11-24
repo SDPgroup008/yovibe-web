@@ -276,7 +276,7 @@ const OrganiserDashboardScreen: React.FC = () => {
   }>({})
   const [isEditingPayment, setIsEditingPayment] = useState(false)
   const [editForm, setEditForm] = useState({
-    mobileProvider: "mtn" as "mtn" | "airtel",
+    mobileProvider: "mtn" as string,
     mobileNumber: "",
     mobileName: "",
     bankName: "",
@@ -941,7 +941,8 @@ const OrganiserDashboardScreen: React.FC = () => {
   const handleEditPayment = () => {
     if (event?.paymentMethods) {
       const mm = event.paymentMethods.mobileMoney?.[0]; const bank = event.paymentMethods.bankAccounts?.[0]
-      setEditForm({ mobileProvider: mm?.provider || "mtn", mobileNumber: mm?.number || "", mobileName: mm?.name || "", bankName: bank?.bankName || "", bankNumber: bank?.accountNumber || "", bankNameAccount: bank?.accountName || "" })
+      const savedProvider = mm?.provider === "mtn" ? "MTN_MOMO_UGA" : mm?.provider === "airtel" ? "AIRTEL_OAPI_UGA" : mm?.provider
+      setEditForm({ mobileProvider: savedProvider || "", mobileNumber: mm?.number || "", mobileName: mm?.name || "", bankName: bank?.bankName || "", bankNumber: bank?.accountNumber || "", bankNameAccount: bank?.accountName || "" })
     }
     setIsEditingPayment(true)
   }
@@ -950,6 +951,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (!event) return
     setPaymentFormErrors({})
     const errs: Record<string, string> = {}
+    if (editForm.mobileNumber && !payoutRoutes.options.some(option => option.provider === editForm.mobileProvider)) errs.mobileProvider = "Select an available provider for this event"
     if (editForm.mobileNumber && !editForm.mobileName) errs.mobileName = "Enter account holder name for mobile money"
     if (editForm.mobileName && !editForm.mobileNumber) errs.mobileNumber = "Enter mobile money number"
     if (editForm.bankName && !editForm.bankNumber) errs.bankNumber = "Enter account number for bank"
@@ -958,7 +960,7 @@ const OrganiserDashboardScreen: React.FC = () => {
     if (editForm.bankNameAccount && !editForm.bankName) errs.bankName = "Enter bank name"
     if (Object.keys(errs).length > 0) { setPaymentFormErrors(errs); setPaymentValidationErrors(Object.values(errs)); setPaymentValidationVisible(true); return }
     try {
-      const mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }> = []
+      const mobileMoney: Array<{ provider: string; number: string; name: string }> = []
       if (editForm.mobileNumber && editForm.mobileName) mobileMoney.push({ provider: editForm.mobileProvider, number: editForm.mobileNumber, name: editForm.mobileName })
       const bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }> = []
       if (editForm.bankName && editForm.bankNumber && editForm.bankNameAccount) bankAccounts.push({ bankName: editForm.bankName, accountNumber: editForm.bankNumber, accountName: editForm.bankNameAccount })
@@ -1868,8 +1870,7 @@ const OrganiserDashboardScreen: React.FC = () => {
             <View>
               <Text style={styles.dashboardLabel}>Mobile Money</Text>
               <View style={styles.inputContainer}>
-                <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'mtn' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'mtn' })}><Text style={styles.providerButtonText}>MTN</Text></TouchableOpacity>
-                <TouchableOpacity style={[styles.providerButton, editForm.mobileProvider === 'airtel' && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: 'airtel' })}><Text style={styles.providerButtonText}>Airtel</Text></TouchableOpacity>
+                {payoutRoutes.options.map(option => <TouchableOpacity key={option.provider} style={[styles.providerButton, editForm.mobileProvider === option.provider && styles.providerButtonActive]} onPress={() => setEditForm({ ...editForm, mobileProvider: option.provider })}><Text style={styles.providerButtonText}>{option.displayName}</Text></TouchableOpacity>)}
               </View>
               <TextInput style={[styles.input, paymentFormErrors.mobileNumber && styles.inputError]} placeholder="Phone Number" value={editForm.mobileNumber} onChangeText={(t) => { setEditForm({ ...editForm, mobileNumber: t }); setPaymentFormErrors(prev => { const n = {...prev}; delete n.mobileNumber; return n }) }} placeholderTextColor="#888" keyboardType="phone-pad" />
               {paymentFormErrors.mobileNumber && <Text style={{ color: "#FF4444", fontSize: 12, marginBottom: 4 }}>{paymentFormErrors.mobileNumber}</Text>}

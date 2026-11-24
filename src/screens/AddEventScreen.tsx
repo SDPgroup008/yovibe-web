@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import CountrySelector from "../components/CountrySelector"
+import { useMobileMoneyOptions } from "../hooks/useMobileMoneyOptions"
 import { DISCOVERY_COUNTRIES, type CountryCode } from "../config/countries"
 
 import React, { useState, useEffect } from "react"
@@ -239,6 +240,7 @@ const AddEventScreen: React.FC<any> = (props) => {
   const [congoCurrency, setCongoCurrency] = useState('CDF')
   const eventCountry = useCustomVenue ? customCountry : venues.find(v => v.id === selectedVenueId || v.slug === selectedVenueId)?.countryCode
   const eventCurrency = eventCountry === 'CD' ? congoCurrency : DISCOVERY_COUNTRIES.find(c => c.code === eventCountry)?.currencies[0]
+  const paymentRoutes = useMobileMoneyOptions(eventCountry, eventCurrency, 'PAYOUT')
   const [newTableSize, setNewTableSize] = useState("")
   const [showContactForm, setShowContactForm] = useState(false)
   const [ticketContacts, setTicketContacts] = useState<Array<{ number: string; type: "call" | "whatsapp" }>>([])
@@ -248,10 +250,10 @@ const AddEventScreen: React.FC<any> = (props) => {
   // Payment reception details (optional)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState<{
-    mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
+    mobileMoney: Array<{ provider: string; number: string; name: string }>
     bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
   }>({ mobileMoney: [], bankAccounts: [] })
-  const [newMobileMoneyProvider, setNewMobileMoneyProvider] = useState<"mtn" | "airtel">("mtn")
+  const [newMobileMoneyProvider, setNewMobileMoneyProvider] = useState("")
   const [newMobileMoneyNumber, setNewMobileMoneyNumber] = useState("")
   const [newMobileMoneyName, setNewMobileMoneyName] = useState("")
   const [newBankName, setNewBankName] = useState("")
@@ -588,6 +590,10 @@ const AddEventScreen: React.FC<any> = (props) => {
 
   // Payment method handlers
   const addMobileMoney = () => {
+    if (!paymentRoutes.options.some(option => option.provider === newMobileMoneyProvider)) {
+      Alert.alert("Error", "Select an available mobile money provider")
+      return
+    }
     if (!newMobileMoneyNumber.trim()) {
       Alert.alert("Error", "Please enter a mobile money number")
       return
@@ -606,7 +612,7 @@ const AddEventScreen: React.FC<any> = (props) => {
     })
     setNewMobileMoneyNumber("")
     setNewMobileMoneyName("")
-    setNewMobileMoneyProvider("mtn")
+    setNewMobileMoneyProvider("")
   }
 
   const removeMobileMoney = (index: number) => {
@@ -846,6 +852,9 @@ const AddEventScreen: React.FC<any> = (props) => {
     }
     if (!useCustomVenue && !selectedVenueId) {
       newErrors.venue = "Please select a venue for this event"
+    }
+    if (paymentMethods.mobileMoney.some(method => !paymentRoutes.options.some(option => option.provider === method.provider))) {
+      newErrors.venue = "Remove payment details that are unavailable for the selected country and currency"
     }
     if (useCustomVenue && !customVenueName.trim()) {
       newErrors.customVenueName = "Custom Venue Name is required"
@@ -1590,18 +1599,14 @@ const AddEventScreen: React.FC<any> = (props) => {
             {/* Mobile Money Section */}
             <Text style={styles.paymentSectionTitle}>Mobile Money</Text>
             <View style={styles.providerButtons}>
-              <TouchableOpacity
-                style={[styles.providerButton, newMobileMoneyProvider === "mtn" && styles.providerButtonActive]}
-                onPress={() => setNewMobileMoneyProvider("mtn")}
-              >
-                <Text style={[styles.providerButtonText, newMobileMoneyProvider === "mtn" && styles.providerButtonTextActive]}>MTN</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.providerButton, newMobileMoneyProvider === "airtel" && styles.providerButtonActive]}
-                onPress={() => setNewMobileMoneyProvider("airtel")}
-              >
-                <Text style={[styles.providerButtonText, newMobileMoneyProvider === "airtel" && styles.providerButtonTextActive]}>Airtel</Text>
-              </TouchableOpacity>
+              {paymentRoutes.options.map(option => (
+                <TouchableOpacity key={option.provider}
+                  style={[styles.providerButton, newMobileMoneyProvider === option.provider && styles.providerButtonActive]}
+                  onPress={() => setNewMobileMoneyProvider(option.provider)}>
+                  <Text style={[styles.providerButtonText, newMobileMoneyProvider === option.provider && styles.providerButtonTextActive]}>{option.displayName}</Text>
+                </TouchableOpacity>
+              ))}
+              {!paymentRoutes.options.length && <Text style={styles.providerButtonText}>{paymentRoutes.loading ? "Checking providers..." : paymentRoutes.error || "No payout providers available"}</Text>}
             </View>
             <TextInput
               style={styles.input}

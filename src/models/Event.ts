@@ -56,7 +56,7 @@ export interface Event {
   ticketContacts: Array<{ number: string; type: "call" | "whatsapp" }>
   attendees?: string[]
   paymentMethods?: {
-    mobileMoney: Array<{ provider: "mtn" | "airtel"; number: string; name: string }>
+    mobileMoney: Array<{ provider: string; number: string; name: string }>
     bankAccounts: Array<{ bankName: string; accountNumber: string; accountName: string }>
   }
   ticket_design?: {
