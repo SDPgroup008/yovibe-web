@@ -979,8 +979,9 @@ const AddEventScreen: React.FC<any> = (props) => {
       Alert.alert("Success", "Event created successfully")
       navigation.goBack()
     } catch (error) {
-      Alert.alert("Error", "Failed to create event")
-      console.error(error)
+      const message = error instanceof Error ? error.message : "Failed to create event"
+      Alert.alert("Error", message)
+      console.error("AddEventScreen: event creation failed", message)
     } finally {
       setLoading(false)
     }

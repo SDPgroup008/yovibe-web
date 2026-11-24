@@ -1262,7 +1262,15 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       throw new Error("Failed to create event due to repeated slug conflicts")
     } catch (error) {
-      console.error("SupabaseService: Error adding event:", error)
+      const databaseError = error as { code?: string; message?: string; details?: string; hint?: string }
+      // PostgREST errors otherwise appear as an unhelpful "Object" in web logs.
+      // Keep the diagnostic bounded: it contains no event payload or user data.
+      console.error("SupabaseService: Error adding event", {
+        code: databaseError?.code || null,
+        message: databaseError?.message || "Unknown error",
+        details: databaseError?.details || null,
+        hint: databaseError?.hint || null,
+      })
       throw error
     }
   }
