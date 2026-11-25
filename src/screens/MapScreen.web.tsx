@@ -20,6 +20,7 @@ import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import LocationService from "../services/LocationService"
 import { getLocalVibeDayKey, getMillisecondsUntilNextLocalDay } from "../utils/dailyVibe"
 import { useCountry } from "../contexts/CountryContext"
+import { useAuth } from "../contexts/AuthContext"
 import { isDiscoveryCountry } from "../config/countries"
 
 // ─── Module-level cache: survives component remounts ─────────────
@@ -198,15 +199,18 @@ const CountryDropdown: React.FC<{
   onSelect: (code: string) => void
   open: boolean
   onToggle: () => void
-}> = ({ selected, onSelect, open, onToggle }) => {
+  disabled?: boolean
+}> = ({ selected, onSelect, open, onToggle, disabled = false }) => {
   const current = COUNTRY_BOUNDS.find((c) => c.code === selected) || COUNTRY_BOUNDS[0]
   return (
     <View>
       <TouchableOpacity
-        style={[styles.countryBtn, open && styles.countryBtnOpen]}
+        style={[styles.countryBtn, open && styles.countryBtnOpen, disabled && styles.countryBtnDisabled]}
+        disabled={disabled}
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityLabel={`Select country: ${current.name}`}
+        accessibilityState={{ disabled }}
       >
         <Ionicons name="globe-outline" size={15} color="#22d3ee" />
         <Text style={styles.countryBtnText} numberOfLines={1}>{current.name}</Text>
@@ -307,6 +311,8 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
   const [showSearch, setShowSearch] = useState(false)
   const [showList, setShowList] = useState(false)
   const { country: selectedCountry, selectCountry } = useCountry()
+  const { user } = useAuth()
+  const canSelectCountry = user?.userType === "admin"
   const [selectedCity, setSelectedCity] = useState<string>("Kampala")
   const [openDropdown, setOpenDropdown] = useState<"city" | "country" | null>(null)
   const [userLocation, setUserLocation] = useState<UserMapLocation | null>(null)
@@ -776,6 +782,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                   onSelect={handleCountrySelect}
                   open={openDropdown === "country"}
                   onToggle={() => setOpenDropdown(openDropdown === "country" ? null : "country")}
+                  disabled={!canSelectCountry}
                 />
               </View>
               {selectedVenue ? (
@@ -879,6 +886,7 @@ const MapScreen: React.FC<MapScreenProps> = ({ navigation, route }) => {
                 onSelect={handleCountrySelect}
                 open={openDropdown === "country"}
                 onToggle={() => setOpenDropdown(openDropdown === "country" ? null : "country")}
+                disabled={!canSelectCountry}
               />
             </View>
 
@@ -1346,6 +1354,9 @@ const styles = StyleSheet.create({
   countryBtnOpen: {
     backgroundColor: "rgba(34, 211, 238, 0.2)",
     borderColor: "#22d3ee",
+  },
+  countryBtnDisabled: {
+    opacity: 0.72,
   },
   countryBtnText: {
     color: "#FFFFFF",
