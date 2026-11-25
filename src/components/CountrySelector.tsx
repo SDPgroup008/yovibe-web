@@ -3,7 +3,13 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { DISCOVERY_COUNTRIES, type CountrySelection, type CountryCode } from '../config/countries';
 import { useCountry } from '../contexts/CountryContext';
 
-export default function CountrySelector(props: { value?: CountryCode; onSelect?: (country: CountryCode) => void } = {}) {
+type CountrySelectorProps = {
+  value?: CountryCode;
+  onSelect?: (country: CountryCode) => void;
+  disabled?: boolean;
+};
+
+export default function CountrySelector(props: CountrySelectorProps = {}) {
   const discovery = useCountry();
   const country = props.value ?? discovery.country;
   const choices = props.onSelect ? DISCOVERY_COUNTRIES : [{ code: "ALL" as const, name: "All countries" }, ...DISCOVERY_COUNTRIES];
@@ -11,7 +17,14 @@ export default function CountrySelector(props: { value?: CountryCode; onSelect?:
   const choose = (code: CountrySelection) => { if (props.onSelect) { if (code !== "ALL") props.onSelect(code); } else discovery.selectCountry(code); setOpen(false); };
   return (
     <>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Choose country, currently ${country}`} onPress={() => setOpen(true)} style={styles.button}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Choose country, currently ${country}`}
+        accessibilityState={{ disabled: Boolean(props.disabled) }}
+        disabled={props.disabled}
+        onPress={() => setOpen(true)}
+        style={[styles.button, props.disabled && styles.buttonDisabled]}
+      >
         <Text style={styles.buttonText}>{country === 'ALL' ? 'All' : country} ▾</Text>
       </Pressable>
       <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
@@ -35,6 +48,7 @@ export default function CountrySelector(props: { value?: CountryCode; onSelect?:
 
 const styles = StyleSheet.create({
   button: { borderColor: '#00D4FF', borderWidth: 1, borderRadius: 8, paddingHorizontal: 7, paddingVertical: 6, marginRight: 7 },
+  buttonDisabled: { opacity: 0.72 },
   buttonText: { color: '#FFFFFF', fontWeight: '700' },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', padding: 24 },
   dialog: { backgroundColor: '#1A1A2E', borderRadius: 14, padding: 16, maxHeight: '80%', width: '100%', maxWidth: 440, alignSelf: 'center' },

@@ -412,7 +412,10 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
         url={seoUrl}
       />
       <View style={styles.header}>
-        <View style={styles.headerHeading}><CountrySelector /><Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text></View>
+        <View style={styles.headerHeading}>
+          <CountrySelector disabled={user?.userType !== "admin"} />
+          <Text style={styles.headerTitle} accessibilityRole="header">Upcoming Events</Text>
+        </View>
         <View style={styles.headerActions}>
           {deviceType.isLargeScreen && (!user || user.userType === "regular_user" || user.userType === "admin") && (
             <TouchableOpacity
