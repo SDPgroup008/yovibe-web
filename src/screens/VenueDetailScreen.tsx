@@ -26,6 +26,7 @@ import ImagePickerService from "../services/ImagePickerService"
 import LocationService from "../services/LocationService"
 import VenueSocialLinks from "../components/VenueSocialLinks"
 import { isValidVenueSocialUrl, normalizeVenueSocialUrl, validateVenueSocialLinks, venueSocialKeys, type VenueSocialErrors } from "../utils/venueSocialLinks"
+import { formatEventDate } from "../utils/eventDateTime"
 
 const VenueDetailScreen: React.FC = () => {
   const { isLargeScreen, isTablet } = useDeviceType()
@@ -769,9 +770,13 @@ const VenueDetailScreen: React.FC = () => {
                     <View style={styles.eventInfo}>
                       <Text style={styles.eventName}>{event.name}</Text>
                       <Text style={styles.eventDate}>
-                        {event.date && typeof (event.date as any).toDate === "function"
-                          ? (event.date as any).toDate().toDateString()
-                          : new Date(event.date).toDateString()}
+                        {formatEventDate(
+                          event.date && typeof (event.date as any).toDate === "function"
+                            ? (event.date as any).toDate()
+                            : new Date(event.date),
+                          event.countryCode,
+                          { weekday: "long", year: "numeric", month: "long", day: "numeric" },
+                        )}
                       </Text>
                       <Text style={[styles.eventArtists, { color: COLORS.primary }]}>{event.artists.join(", ")}</Text>
                     </View>
@@ -1030,9 +1035,13 @@ const VenueDetailScreen: React.FC = () => {
                   <View style={styles.eventInfo}>
                     <Text style={styles.eventName}>{event.name}</Text>
                     <Text style={styles.eventDate}>
-                      {event.date && typeof (event.date as any).toDate === "function"
-                        ? (event.date as any).toDate().toDateString()
-                        : new Date(event.date).toDateString()}
+                      {formatEventDate(
+                        event.date && typeof (event.date as any).toDate === "function"
+                          ? (event.date as any).toDate()
+                          : new Date(event.date),
+                        event.countryCode,
+                        { weekday: "long", year: "numeric", month: "long", day: "numeric" },
+                      )}
                     </Text>
                     <Text style={[styles.eventArtists, { color: COLORS.primary }]}>{event.artists.join(", ")}</Text>
                   </View>

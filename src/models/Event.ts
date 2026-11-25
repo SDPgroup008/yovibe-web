@@ -14,6 +14,8 @@ export interface Event {
   venueName: string
   description: string
   date: Date
+  /** End of a multi-day discovery event; absent for ordinary single-day events. */
+  endsAt?: Date
   time: string
   eventStatus?: "scheduled" | "cancelled" | "postponed"
   postponedTo?: Date

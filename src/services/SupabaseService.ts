@@ -991,7 +991,11 @@ class SupabaseService {
       today.setHours(0, 0, 0, 0);
 
       const query = () => {
-        let request = supabase.from("events").select("*").eq("is_deleted", false).gte("date", today.toISOString());
+        let request = supabase
+          .from("events")
+          .select("*")
+          .eq("is_deleted", false)
+          .or(`date.gte.${today.toISOString()},ends_at.gte.${today.toISOString()}`);
         if (country !== 'ALL') request = request.eq('country_code', country);
         return request.order('date', { ascending: true }).order('slug');
       };
@@ -1009,6 +1013,7 @@ class SupabaseService {
             name: doc.name,
             description: doc.description,
             date: new Date(doc.date),
+            endsAt: doc.ends_at ? new Date(doc.ends_at) : undefined,
             time: doc.time || "00:00",
             location: doc.location,
             venueName: doc.venue_name,
@@ -1044,7 +1049,11 @@ class SupabaseService {
       today.setHours(0, 0, 0, 0);
 
       const query = () => {
-        let request = supabase.from("events").select("venue_slug, event_status").eq("is_deleted", false).gte("date", today.toISOString());
+        let request = supabase
+          .from("events")
+          .select("venue_slug, event_status")
+          .eq("is_deleted", false)
+          .or(`date.gte.${today.toISOString()},ends_at.gte.${today.toISOString()}`);
         if (country !== 'ALL') request = request.eq('country_code', country);
         return request.order('slug');
       };
@@ -1099,6 +1108,7 @@ class SupabaseService {
         name: data.name,
         description: data.description,
         date: new Date(data.date),
+        endsAt: data.ends_at ? new Date(data.ends_at) : undefined,
         time: data.time || "00:00",
         location: data.location,
         venueName: data.venue_name,
@@ -1136,7 +1146,7 @@ class SupabaseService {
         .select("*, created_by_auth, ticket_design")
         .eq("venue_slug", venueSlug)
         .eq("is_deleted", false)
-        .gte("date", today.toISOString())
+        .or(`date.gte.${today.toISOString()},ends_at.gte.${today.toISOString()}`)
         .order("date", { ascending: true })
         .limit(10000);
 
@@ -1153,6 +1163,7 @@ class SupabaseService {
             name: doc.name,
             description: doc.description,
             date: new Date(doc.date),
+            endsAt: doc.ends_at ? new Date(doc.ends_at) : undefined,
             time: doc.time || "00:00",
             location: doc.location,
             venueName: doc.venue_name,
@@ -1338,6 +1349,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       if (data.name) updateData.name = data.name;
       if (data.description) updateData.description = data.description;
       if (data.date) updateData.date = data.date;
+      if (data.endsAt !== undefined) updateData.ends_at = data.endsAt ? data.endsAt.toISOString() : null;
       if (data.time) updateData.time = data.time;
       if (data.artists) updateData.artists = data.artists;
       if (data.posterImageUrl) updateData.poster_image_url = data.posterImageUrl;
@@ -1432,7 +1444,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
 
       const { data: events, error } = await supabase
         .from("events")
-        .select("slug, name, date, is_deleted")
+        .select("slug, name, date, ends_at, is_deleted")
         .eq("is_deleted", false);
 
       if (error) throw error;
@@ -1444,7 +1456,7 @@ async addEvent(eventData: Omit<Event, "id" | "slug">): Promise<string> {
       for (const event of events) {
         if (!event.date) continue;
 
-        const eventDate = new Date(event.date);
+        const eventDate = new Date(event.ends_at || event.date);
 
         // Expiry date = next day at 05:00 AM (matching Firebase logic)
         const expiryDate = new Date(eventDate);

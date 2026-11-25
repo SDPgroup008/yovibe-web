@@ -16,7 +16,10 @@ export type PublicEvent = {
   description?: string;
   poster_image_url?: string;
   date?: string;
+  ends_at?: string;
   time?: string;
+  country_code?: string;
+  currency?: string;
   event_status?: string;
   venue_slug?: string;
   venue_name?: string;
@@ -42,7 +45,7 @@ type EventDocument = { head: string; summary: string };
 
 const RESERVED_EVENT_SLUGS = new Set(['add', 'ticket-contacts', 'payment-callback']);
 const RESERVED_VENUE_SLUGS = new Set(['add-event', 'ticket-contacts']);
-const EVENT_SELECT = 'slug,name,description,poster_image_url,date,time,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees,created_at,organizer_name,created_by_type';
+const EVENT_SELECT = 'slug,name,description,poster_image_url,date,ends_at,time,country_code,currency,event_status,venue_slug,venue_name,location,artists,is_featured,is_free_entry,entry_fees,created_at,organizer_name,created_by_type';
 const VENUE_SELECT = 'slug,name,description,location,background_image_url';
 const FEATURED_EVENT_LIMIT = 6;
 const PAGE_SOCIAL_CONTENT: Record<SocialCardKind, { title: string; description: string }> = {
@@ -291,9 +294,15 @@ function dateAtKampalaTime(day: string, time: ClockTime): Date | null {
  * range actually contains one. An end before the start is an overnight event.
  */
 export function structuredEventTimes(event: PublicEvent): { start: Date; end?: Date } | null {
-  const day = dayInKampala(event.date);
   const storedDate = new Date(String(event.date || ''));
-  if (!day || Number.isNaN(storedDate.getTime())) return null;
+  if (Number.isNaN(storedDate.getTime())) return null;
+  const storedEnd = event.ends_at ? new Date(String(event.ends_at)) : null;
+  if (storedEnd && !Number.isNaN(storedEnd.getTime())) return { start: storedDate, end: storedEnd };
+  // Discovery events are stored as real UTC instants by the country scraper;
+  // do not reinterpret them as Kampala form dates.
+  if (event.country_code && event.country_code !== 'UG') return { start: storedDate };
+  const day = dayInKampala(event.date);
+  if (!day) return null;
   const range = textValue(event.time, 120).replace(/[–—]/g, '-').split(/\s+(?:to)\s+|\s*-\s*/i);
   const startClock = range[0] ? parseClockTime(range[0]) : null;
   const endClock = range.length === 2 ? parseClockTime(range[1]) : null;
@@ -358,7 +367,7 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
       '@type': 'Offer',
       name: tier.name,
       price: tier.price,
-      priceCurrency: 'UGX',
+      priceCurrency: textValue(event.currency, 8) || 'UGX',
       url: purchaseUrl,
       ...(validFrom ? { validFrom } : {}),
       ...(availability ? { availability } : {}),
@@ -378,7 +387,7 @@ export function buildEventDocument(event: PublicEvent, canonicalUrl: string, sol
     eventSchema.location = {
       '@type': 'Place',
       name: venueName,
-      address: { '@type': 'PostalAddress', addressLocality: locality || 'Kampala', addressCountry: 'UG' },
+      address: { '@type': 'PostalAddress', addressLocality: locality || 'Kampala', addressCountry: textValue(event.country_code, 4) || 'UG' },
     };
   }
   // Google requires Event.image. Use the approved poster when present and a

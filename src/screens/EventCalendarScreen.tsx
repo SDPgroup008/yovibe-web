@@ -12,6 +12,7 @@ import type { CalendarScreenProps } from "../navigation/types"
 import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { BREAKPOINTS, useResponsiveSize } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
+import { eventDateKey } from "../utils/eventDateTime"
 
 type CalendarTheme = {
   backgroundColor?: string
@@ -82,6 +83,7 @@ const normalizeEvent = (raw: any): Event => {
   if (!dateObj && e.createdAt) dateObj = toDateIfTimestamp(e.createdAt)
   if (!dateObj) dateObj = new Date()
   e.date = dateObj
+  if (e.endsAt) e.endsAt = toDateIfTimestamp(e.endsAt) || undefined
 
   // Preserve existing string time exactly as stored in Firestore
   if (typeof e.time === "string" && e.time.trim() !== "") {
@@ -156,7 +158,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
     const cache = readCalendarCache();
     return isCalendarCacheValid() && cache ? cache.events : [];
   })
-  const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split("T")[0])
+  const [selectedDate, setSelectedDate] = useState<string>(eventDateKey(new Date(), 'UG'))
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(() => !isCalendarCacheValid())
   const [refreshing, setRefreshing] = useState(false)
@@ -167,7 +169,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
 
     const marked: Record<string, any> = {}
     events.forEach((event) => {
-      const dateStr = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
+      const dateStr = eventDateKey(event.date instanceof Date ? event.date : new Date(event.date), event.countryCode)
       marked[dateStr] = {
         marked: true,
         dotColor: "#2196F3",
@@ -231,7 +233,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   }
 
   const filteredEvents = events.filter((event) => {
-    const eventDate = (event.date instanceof Date ? event.date : new Date(event.date)).toISOString().split("T")[0]
+    const eventDate = eventDateKey(event.date instanceof Date ? event.date : new Date(event.date), event.countryCode)
     return eventDate === selectedDate
   })
 

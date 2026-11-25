@@ -31,6 +31,7 @@ import { ResponsiveSkeleton } from "../components/SkeletonLoader";
 import LegalLinks from "../components/LegalLinks";
 import CountrySelector from "../components/CountrySelector";
 import { useCountry } from "../contexts/CountryContext";
+import { eventDateKey, formatEventDateRange } from "../utils/eventDateTime";
 
 // Responsive design hooks
 import { useGridColumns, useLayoutDimensions, useTypography, useSpacing, useDeviceType, BREAKPOINTS } from "../utils/ResponsiveDesign";
@@ -319,36 +320,23 @@ const EventsScreen: React.FC<EventsScreenProps> = ({ initialSearchQuery = "" }) 
     }
   };
 
-  const formatDateRange = (date: Date) => {
-    const options: Intl.DateTimeFormatOptions = { month: "short", day: "numeric" };
-    const formattedDate = date.toLocaleDateString("en-US", options).toUpperCase();
-
-    // Get day of week
-    const dayOfWeek = date.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
-
-    return `${dayOfWeek} ${formattedDate}`;
-  };
-
   // Check if event is today or tomorrow
-  const getDateLabel = (eventDate: Date): { label: string; isSpecial: boolean } => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const eventDay = new Date(eventDate);
-    eventDay.setHours(0, 0, 0, 0);
+  const getDateLabel = (event: Event): { label: string; isSpecial: boolean } => {
+    const todayKey = eventDateKey(new Date(), event.countryCode);
+    const tomorrowKey = eventDateKey(new Date(Date.now() + 24 * 60 * 60 * 1000), event.countryCode);
+    const eventKey = eventDateKey(event.date, event.countryCode);
 
-    if (eventDay.getTime() === today.getTime()) {
+    if (eventKey === todayKey) {
       return { label: "TODAY", isSpecial: true };
-    } else if (eventDay.getTime() === tomorrow.getTime()) {
+    } else if (eventKey === tomorrowKey) {
       return { label: "TOMORROW", isSpecial: true };
     }
-    return { label: formatDateRange(eventDate), isSpecial: false };
+    return { label: formatEventDateRange(event.date, event.endsAt, event.countryCode), isSpecial: false };
   };
 
   // Memoize renderEventItem to prevent recreation on every render
   const renderEventCard = useCallback((item: Event) => {
-    const dateInfo = getDateLabel(item.date);
+    const dateInfo = getDateLabel(item);
     
     return (
     <TouchableOpacity 

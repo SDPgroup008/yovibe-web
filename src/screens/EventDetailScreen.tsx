@@ -33,6 +33,7 @@ import TicketService from "../services/TicketService"
 import { publicSiteUrl } from "../config/runtime"
 import { buildEventSharePayload } from "../utils/eventShare"
 import ImagePickerService from "../services/ImagePickerService"
+import { formatEventDate, formatEventDateRange } from "../utils/eventDateTime"
 
 // Responsive setup for EventDetailScreen
 const { width: screenWidth } = Dimensions.get('window');
@@ -286,10 +287,7 @@ const EventDetailScreen: React.FC = () => {
     }
   }
 
-  const formatDateRange = (date: Date) => {
-    const options: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" }
-    return date.toLocaleDateString("en-US", options).toUpperCase()
-  }
+  const formatDateRange = (item: Event) => formatEventDateRange(item.date, item.endsAt, item.countryCode)
 
    // Handle venue navigation
    const handleVenuePress = () => {
@@ -367,7 +365,7 @@ const EventDetailScreen: React.FC = () => {
                   <View style={styles.eventHeaderInfo}>
                     <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
                     <Text style={styles.eventLocation}>
-                      {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
+                      {event.location || event.venueName.toUpperCase()} • {formatDateRange(event)}
                     </Text>
                     <View style={styles.eventMeta}>
                       {attendeeCount > 0 && (
@@ -425,7 +423,7 @@ const EventDetailScreen: React.FC = () => {
 
               <View style={styles.desktopDateContainer}>
                 <Ionicons name="calendar" size={20} color="#FFFFFF" />
-                <Text style={styles.desktopDateText}>{event.date.toDateString()}</Text>
+                <Text style={styles.desktopDateText}>{formatEventDate(event.date, event.countryCode, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
               </View>
 
               {/* Buy Tickets Button - For all featured events */}
@@ -507,7 +505,7 @@ const EventDetailScreen: React.FC = () => {
                 <View style={styles.eventHeaderInfo}>
                   <Text style={styles.eventName} accessibilityRole="header">{event.name}</Text>
                   <Text style={styles.eventLocation}>
-                    {event.location || event.venueName.toUpperCase()} • {formatDateRange(event.date)}
+                    {event.location || event.venueName.toUpperCase()} • {formatDateRange(event)}
                   </Text>
 
                   <View style={styles.eventMeta}>
@@ -596,7 +594,7 @@ const EventDetailScreen: React.FC = () => {
 
             <View style={styles.dateContainer}>
               <Ionicons name="calendar" size={20} color="#FFFFFF" />
-              <Text style={styles.dateText}>{event.date.toDateString()}</Text>
+            <Text style={styles.dateText}>{formatEventDate(event.date, event.countryCode, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</Text>
             </View>
 
             <TicketOptions event={event} />
