@@ -1,3 +1,5 @@
+import { describe, expect, it } from '@jest/globals'
+
 import { eventDateKey, eventTimeZone, formatEventDateRange } from '../eventDateTime'
 
 describe('eventDateTime', () => {
@@ -16,8 +18,12 @@ describe('eventDateTime', () => {
   })
 
   it('has a deterministic timezone for every new scraper market', () => {
+    expect(eventTimeZone('BF')).toBe('Africa/Ouagadougou')
     expect(eventTimeZone('BJ')).toBe('Africa/Porto-Novo')
     expect(eventTimeZone('CM')).toBe('Africa/Douala')
+    expect(eventTimeZone('GN')).toBe('Africa/Conakry')
+    expect(eventTimeZone('ML')).toBe('Africa/Bamako')
+    expect(eventTimeZone('TG')).toBe('Africa/Lome')
     expect(eventTimeZone('ZM')).toBe('Africa/Lusaka')
   })
 })

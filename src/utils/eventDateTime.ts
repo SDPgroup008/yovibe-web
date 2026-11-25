@@ -1,14 +1,18 @@
 const COUNTRY_TIME_ZONES: Record<string, string> = {
+  BF: 'Africa/Ouagadougou',
   BJ: 'Africa/Porto-Novo',
   CD: 'Africa/Kinshasa',
   CG: 'Africa/Brazzaville',
   CI: 'Africa/Abidjan',
   CM: 'Africa/Douala',
   GA: 'Africa/Libreville',
+  GN: 'Africa/Conakry',
   KE: 'Africa/Nairobi',
+  ML: 'Africa/Bamako',
   RW: 'Africa/Kigali',
   SL: 'Africa/Freetown',
   SN: 'Africa/Dakar',
+  TG: 'Africa/Lome',
   UG: 'Africa/Kampala',
   ZM: 'Africa/Lusaka',
 }

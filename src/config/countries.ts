@@ -1,15 +1,19 @@
 /** Countries supported for discovery. Payment availability is verified separately. */
 export const DISCOVERY_COUNTRIES = [
+  { code: 'BF', name: 'Burkina Faso', currencies: ['XOF'] },
   { code: 'BJ', name: 'Benin', currencies: ['XOF'] },
   { code: 'CM', name: 'Cameroon', currencies: ['XAF'] },
   { code: 'CI', name: "Côte d’Ivoire", currencies: ['XOF'] },
   { code: 'CD', name: 'Democratic Republic of the Congo', currencies: ['CDF', 'USD'] },
   { code: 'GA', name: 'Gabon', currencies: ['XAF'] },
+  { code: 'GN', name: 'Guinea', currencies: ['GNF'] },
   { code: 'KE', name: 'Kenya', currencies: ['KES'] },
+  { code: 'ML', name: 'Mali', currencies: ['XOF'] },
   { code: 'CG', name: 'Republic of the Congo', currencies: ['XAF'] },
   { code: 'RW', name: 'Rwanda', currencies: ['RWF'] },
   { code: 'SN', name: 'Senegal', currencies: ['XOF'] },
   { code: 'SL', name: 'Sierra Leone', currencies: ['SLE'] },
+  { code: 'TG', name: 'Togo', currencies: ['XOF'] },
   { code: 'UG', name: 'Uganda', currencies: ['UGX'] },
   { code: 'ZM', name: 'Zambia', currencies: ['ZMW'] },
 ] as const;
