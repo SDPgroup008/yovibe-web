@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, RefreshControl, useWindowDimensions, ImageBackground } from "react-native"
 import { Calendar } from "react-native-calendars"
 import { Ionicons } from "@expo/vector-icons"
@@ -13,6 +13,7 @@ import { SEOMetadata, SCREEN_SEO } from "../components/SEOMetadata"
 import { BREAKPOINTS, useResponsiveSize } from "../utils/ResponsiveDesign"
 import { ResponsiveSkeleton } from "../components/SkeletonLoader"
 import { eventDateKey } from "../utils/eventDateTime"
+import { useCountry } from "../contexts/CountryContext"
 
 type CalendarTheme = {
   backgroundColor?: string
@@ -145,6 +146,7 @@ const isCalendarCacheValid = () => {
 const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   // SEO Metadata for Calendar page
   const calendarSeo = SCREEN_SEO.calendar;
+  const { country, ready } = useCountry()
 
   // Responsive hooks
   const { width } = useWindowDimensions();
@@ -162,13 +164,20 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
   const [markedDates, setMarkedDates] = useState<Record<string, any>>({})
   const [loading, setLoading] = useState(() => !isCalendarCacheValid())
   const [refreshing, setRefreshing] = useState(false)
+  const countryEvents = useMemo(
+    () => !ready
+      ? []
+      : country === "ALL"
+      ? events
+      : events.filter((event) => (event.countryCode || "UG") === country),
+    [events, country, ready],
+  )
+  const isCalendarLoading = loading || !ready
 
   // ─── Generate markedDates whenever events or selectedDate changes ─────
   useEffect(() => {
-    if (events.length === 0) return;
-
     const marked: Record<string, any> = {}
-    events.forEach((event) => {
+    countryEvents.forEach((event) => {
       const dateStr = eventDateKey(event.date instanceof Date ? event.date : new Date(event.date), event.countryCode)
       marked[dateStr] = {
         marked: true,
@@ -183,7 +192,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
     }
 
     setMarkedDates(marked)
-  }, [events, selectedDate])
+  }, [countryEvents, selectedDate])
 
   // Initial data load only
   useEffect(() => {
@@ -232,7 +241,7 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
     setMarkedDates(newMarkedDates)
   }
 
-  const filteredEvents = events.filter((event) => {
+  const filteredEvents = countryEvents.filter((event) => {
     const eventDate = eventDateKey(event.date instanceof Date ? event.date : new Date(event.date), event.countryCode)
     return eventDate === selectedDate
   })
@@ -292,14 +301,14 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
           <View style={styles.eventsColumn}>
             <View style={styles.dateTitleContainer}>
               <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
-              {!loading && (
+              {!isCalendarLoading && (
                 <View style={styles.eventCountBadge}>
                   <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
                 </View>
               )}
             </View>
 
-            {loading ? (
+            {isCalendarLoading ? (
               <ResponsiveSkeleton variant="list" />
             ) : filteredEvents.length === 0 ? (
               <View style={styles.emptyContainer}>
@@ -388,14 +397,14 @@ const EventCalendarScreen: React.FC<CalendarScreenProps> = ({ navigation }) => {
       <View style={styles.eventsContainer}>
         <View style={styles.dateTitleContainer}>
           <Text style={styles.dateTitle}>Events on {new Date(selectedDate).toDateString()}</Text>
-          {!loading && (
+          {!isCalendarLoading && (
             <View style={styles.eventCountBadge}>
               <Text style={styles.eventCountText}>{filteredEvents.length}</Text>
             </View>
           )}
         </View>
 
-        {loading ? (
+        {isCalendarLoading ? (
           <ResponsiveSkeleton variant="list" />
         ) : filteredEvents.length === 0 ? (
           <View style={styles.emptyContainer}>
